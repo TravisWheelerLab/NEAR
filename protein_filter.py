@@ -55,7 +55,7 @@ from tensorflow.keras.layers import *
 
 def model2d(n_classes):
     model = Sequential()
-    model.add(Conv2D(75, (23, 31), input_shape=(None, None, 1), activation='relu', use_bias=True))
+    model.add(Conv2D(75, (31, 23), input_shape=(None, None, 1), activation='relu', use_bias=True))
     model.add(GlobalAveragePooling2D())
     model.add(Dense(50, activation='relu', use_bias=True))
     model.add(Dropout(0.2))
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     valid= './data/validation/*'
 
     batch_size = 64
-    shuffle_buffer = 100
+    shuffle_buffer = 1000
     max_sequence_length = 256
 
     train = utils.make_dataset(train,
@@ -124,13 +124,13 @@ if __name__ == '__main__':
     tpk.__name__ = 'tp{}'.format(k)
 
     # model/optimizer setup
-    opt = keras.optimizers.Adam(lr=0.01)
+    opt = keras.optimizers.Adam(lr=0.05)
+    n_classes = 858
     # Why the +1 again? Duh. Class count starts at 0.
     # model = model(n_classes+1)
-    # model = model2d(n_classes+1)
+    model = model2d(n_classes+1)
     # model = m.attn_model(maxlen, n_classes+1)
-    n_classes = 858
-    model = m.super_duper_kmer(max_sequence_length, n_classes+1)
+    #model = .super_duper_kmer(max_sequence_length, n_classes+1)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=opt,
             metrics=['accuracy', tpk])
     model.summary()
@@ -138,8 +138,8 @@ if __name__ == '__main__':
     tb = cbacks.TensorBoard(log_dir='./logs/')
 
     model.fit(train,
-              steps_per_epoch=5000,
-              epochs=300,
+              steps_per_epoch=680000//batch_size,
+              epochs=3,
               validation_data=validation,
               callbacks=[tb],
               verbose=1)

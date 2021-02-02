@@ -48,7 +48,7 @@ def super_duper_kmer(maxlen, n_classes, embed_dim=32, vocab_size=23):
 
     for ks in [8, 12, 16, 20, 24, 28, 32, 36]:
 
-        x = layers.Conv2D(64, (1, ks), padding='same')(inputs)
+        x = layers.Conv2D(64, (ks, 1), padding='same')(inputs)
         #x = layers.BatchNormalization()(x)
         x = act(x)
         # x = layers.Conv2D(64, ks, padding='same')(x)
