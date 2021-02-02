@@ -99,31 +99,21 @@ def oa(cmat):
 
 if __name__ == '__main__':
 
-    # data setup
-    files = sorted(glob('./fasta/*'))
-    neg = sorted(glob('./fasta/*neg*'))
-    files_ = []
+    train = './data/train/*'
+    test = './data/test/*'
+    valid= './data/validation/*'
 
-    for f in files:
-        if 'neg' not in f:
-            files_.append(f)
+    batch_size = 64
+    shuffle_buffer = 100
+    max_sequence_length = 256
 
-    files = files_
-
-    sequences, maxlen = utils.read_sequences(files)
-    maxlen = 120
-
-    features, targets, n_classes = utils.encode_sequences(sequences,
-            utils.encode_protein_as_one_hot_vector,
-            subsample=400,
-            maxlen=maxlen)
-
-    features = features.squeeze()
-
-
-    batch_size = 2
-    train, test, validation = utils.train_test_val_split(features, targets,
-            batch_size=batch_size, shuffle_len=1)
+    train = utils.make_dataset(train,
+            batch_size, shuffle_buffer, max_sequence_length)
+    train = train.repeat()
+    test = utils.make_dataset(test,
+            batch_size, shuffle_buffer, max_sequence_length)
+    validation  = utils.make_dataset(valid,
+            batch_size, shuffle_buffer, max_sequence_length)
 
     # top5 accuracy.
     tpk_metric = keras.metrics.sparse_top_k_categorical_accuracy
@@ -139,7 +129,8 @@ if __name__ == '__main__':
     # model = model(n_classes+1)
     # model = model2d(n_classes+1)
     # model = m.attn_model(maxlen, n_classes+1)
-    model = m.super_duper_kmer(maxlen, n_classes+1)
+    n_classes = 858
+    model = m.super_duper_kmer(max_sequence_length, n_classes+1)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=opt,
             metrics=['accuracy', tpk])
     model.summary()
