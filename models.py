@@ -39,7 +39,7 @@ class TokenAndPositionEmbedding(layers.Layer):
 
 def super_duper_kmer(maxlen, n_classes, embed_dim=32, vocab_size=23):
 
-    inputs = layers.Input(shape=(None, 23, 1))
+    inputs = layers.Input(shape=(None, None, 23))
     # embedding_layer = TokenAndPositionEmbedding(maxlen, vocab_size, embed_dim)
     # x = embedding_layer(inputs)
     gap = layers.GlobalAveragePooling2D()
@@ -63,18 +63,40 @@ def super_duper_kmer(maxlen, n_classes, embed_dim=32, vocab_size=23):
     return keras.Model(inputs=inputs, outputs=x)
 
 
-def attn_model(maxlen, n_classes, embed_dim=32, num_heads=6, ff_dim=512,
+def attn_model(maxlen, n_classes, embed_dim=32, num_heads=2, ff_dim=512,
         vocab_size=23):
     
     inputs = layers.Input(shape=(maxlen,))
     embedding_layer = TokenAndPositionEmbedding(maxlen, vocab_size, embed_dim)
+    act = layers.ReLU()
+    acts = []
+
     x = embedding_layer(inputs)
-    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
-    x = transformer_block(x)
-    x = layers.GlobalAveragePooling1D()(x)
+
+    for ks in [8, 12, 16, 20, 24, 28, 32, 36]:
+        # this needs to be optimized
+        x = layers.Conv1D(64, kernel_size=(ks), padding='same')(x)
+        x = act(x)
+        x = layers.Conv1D(64, kernel_size=(ks), padding='same')(x) + x
+        acts.append(x)
+
+    trans = []
+    embed_dim = 64
+    for act in acts:
+        act = TransformerBlock(embed_dim, num_heads, ff_dim)(act)
+        trans.append(act)
+
+    x = tf.concat(trans, axis=-1)
     x = layers.Dropout(0.1)(x)
     x = layers.Dense(1024, activation="relu")(x)
     x = layers.Dropout(0.1)(x)
+    x = tf.reduce_mean(x, axis=-1) # convention to represent sequence information as 
+    # the mean embedding vector... we'll see if this works.
     outputs = layers.Dense(n_classes, activation="softmax")(x)
     model = keras.Model(inputs=inputs, outputs=outputs)
+
     return model
+
+
+
+

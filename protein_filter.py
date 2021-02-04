@@ -106,14 +106,15 @@ if __name__ == '__main__':
     batch_size = 64
     shuffle_buffer = 1000
     max_sequence_length = 256
+    encode_as_image = False
 
     train = utils.make_dataset(train,
-            batch_size, shuffle_buffer, max_sequence_length)
+            batch_size, shuffle_buffer, max_sequence_length, encode_as_image)
     train = train.repeat()
     test = utils.make_dataset(test,
-            batch_size, shuffle_buffer, max_sequence_length)
+            batch_size, shuffle_buffer, max_sequence_length, encode_as_image)
     validation  = utils.make_dataset(valid,
-            batch_size, shuffle_buffer, max_sequence_length)
+            batch_size, shuffle_buffer, max_sequence_length, encode_as_image)
 
     # top5 accuracy.
     tpk_metric = keras.metrics.sparse_top_k_categorical_accuracy
@@ -124,22 +125,34 @@ if __name__ == '__main__':
     tpk.__name__ = 'tp{}'.format(k)
 
     # model/optimizer setup
-    opt = keras.optimizers.Adam(lr=0.05)
+    initial_learning_rate = 0.001
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate,
+        decay_steps=10000,
+        decay_rate=0.96,
+        staircase=True)
     n_classes = 858
     # Why the +1 again? Duh. Class count starts at 0.
     # model = model(n_classes+1)
-    model = model2d(n_classes+1)
+    #model = model2d(n_classes+1)
     # model = m.attn_model(maxlen, n_classes+1)
     #model = .super_duper_kmer(max_sequence_length, n_classes+1)
+
+    lr_schedule = utils.WarmUp(initial_learning_rate,
+            lr_schedule, 3000)
+
+    print(lr_schedule)
+
+    opt = keras.optimizers.Adam(learning_rate=lr_schedule)
+    model = m.attn_model(max_sequence_length, n_classes+1)
     model.compile(loss='sparse_categorical_crossentropy', optimizer=opt,
             metrics=['accuracy', tpk])
     model.summary()
-
     tb = cbacks.TensorBoard(log_dir='./logs/')
 
     model.fit(train,
               steps_per_epoch=680000//batch_size,
-              epochs=3,
+              epochs=100,
               validation_data=validation,
               callbacks=[tb],
               verbose=1)

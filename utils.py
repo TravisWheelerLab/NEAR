@@ -8,6 +8,7 @@ import tensorflow as tf
 import pdb
 
 from glob import glob
+from typing import Callable
 from random import shuffle, seed
 from collections import namedtuple
 from functools import partial
@@ -150,7 +151,8 @@ def ttv_split(sequences):
 def make_dataset(tfrecord_path,
         batch_size,
         buffer_size,
-        max_sequence_length): 
+        max_sequence_length,
+        encode_as_image): 
 
     '''
     I need to have tensors of uniform size. I need to implement
@@ -173,8 +175,12 @@ def make_dataset(tfrecord_path,
         protein = inputs.get('protein')
         if tf.greater(tf.shape(protein), max_sequence_length):
             protein = tf.slice(protein, begin=[0], size=[max_sequence_length])
-        return tf.expand_dims(tf.one_hot(protein, depth=LEN_PROTEIN_ALPHABET),
-                -1), inputs.get('label')
+        if encode_as_image:
+            oh = tf.expand_dims(tf.one_hot(protein, depth=LEN_PROTEIN_ALPHABET),
+                    -1)
+        else:
+            oh = protein
+        return oh, inputs.get('label')
 
 
     files = tf.io.gfile.glob(tfrecord_path)
@@ -183,14 +189,61 @@ def make_dataset(tfrecord_path,
 
     dataset = shards.interleave(tf.data.TFRecordDataset)
     dataset = dataset.shuffle(buffer_size=buffer_size)
-    dataset = dataset.map(map_func=parse_tfrecord, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.map(map_func=encode_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.padded_batch(batch_size,
-            padded_shapes=([max_sequence_length, 23, 1], []))
+    dataset = dataset.map(map_func=parse_tfrecord,
+            num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(map_func=encode_protein,
+            num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    if encode_as_image:
+        dataset = dataset.padded_batch(batch_size,
+                padded_shapes=([max_sequence_length, 23, 1], []))
+    else:
+        dataset = dataset.padded_batch(batch_size,
+                padded_shapes=([max_sequence_length], []))
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return dataset
 
+
+class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
+
+    def __init__(
+        self,
+        initial_learning_rate: float,
+        decay_schedule_fn: Callable,
+        warmup_steps: int,
+        power: float = 1.0,
+        name: str = None,
+    ):
+        super().__init__()
+        self.initial_learning_rate = initial_learning_rate
+        self.warmup_steps = warmup_steps
+        self.power = power
+        self.decay_schedule_fn = decay_schedule_fn
+        self.name = name
+
+    def __call__(self, step):
+        with tf.name_scope(self.name or "WarmUp") as name:
+            # Implements polynomial warmup. i.e., if global_step < warmup_steps, the
+            # learning rate will be `global_step/num_warmup_steps * init_lr`.
+            global_step_float = tf.cast(step, tf.float32)
+            warmup_steps_float = tf.cast(self.warmup_steps, tf.float32)
+            warmup_percent_done = global_step_float / warmup_steps_float
+            warmup_learning_rate = self.initial_learning_rate * tf.math.pow(warmup_percent_done, self.power)
+            return tf.cond(
+                global_step_float < warmup_steps_float,
+                lambda: warmup_learning_rate,
+                lambda: self.decay_schedule_fn(step - self.warmup_steps),
+                name=name,
+            )
+
+    def get_config(self):
+        return {
+            "initial_learning_rate": self.initial_learning_rate,
+            "decay_schedule_fn": self.decay_schedule_fn,
+            "warmup_steps": self.warmup_steps,
+            "power": self.power,
+            "name": self.name,
+        }
 
 
 if __name__ == '__main__':
@@ -208,7 +261,7 @@ if __name__ == '__main__':
     test = './data/test/*'
     valid = './data/valid/*'
 
-    train = make_dataset(train, 64, 1000, 256)
+    train = make_dataset(train, 64, 1000, 256, encode_as_image=False)
 
     for i, feat in enumerate(train):
         print(feat[0].shape, feat[1].shape)
