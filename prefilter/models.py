@@ -3,6 +3,7 @@ import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 
 class TransformerBlock(layers.Layer):
+
     def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
         super(TransformerBlock, self).__init__()
         self.att = layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
@@ -37,33 +38,7 @@ class TokenAndPositionEmbedding(layers.Layer):
         return x + positions
 
 
-def super_duper_kmer(maxlen, n_classes, embed_dim=32, vocab_size=23):
-
-    inputs = layers.Input(shape=(None, None, 23))
-    # embedding_layer = TokenAndPositionEmbedding(maxlen, vocab_size, embed_dim)
-    # x = embedding_layer(inputs)
-    gap = layers.GlobalAveragePooling2D()
-    act = layers.ReLU()
-    acts = []
-
-    for ks in [8, 12, 16, 20, 24, 28, 32, 36]:
-
-        x = layers.Conv2D(64, (ks, 1), padding='same')(inputs)
-        #x = layers.BatchNormalization()(x)
-        x = act(x)
-        # x = layers.Conv2D(64, ks, padding='same')(x)
-        # x = layers.BatchNormalization()(x)
-        # x = act(x)
-        gapped = gap(x)
-        acts.append(gapped)
-
-    x = tf.concat(acts, axis=-1)
-    x = layers.Dense(256, activation='relu')(x)
-    x = layers.Dense(n_classes, activation='softmax')(x)
-    return keras.Model(inputs=inputs, outputs=x)
-
-
-def attn_model(maxlen, n_classes, embed_dim=32, num_heads=2, ff_dim=256,
+def attn_model(maxlen, n_classes, multilabel, embed_dim=32, num_heads=2, ff_dim=256,
         vocab_size=23):
     
     inputs = layers.Input(shape=(maxlen,))
@@ -94,30 +69,102 @@ def attn_model(maxlen, n_classes, embed_dim=32, num_heads=2, ff_dim=256,
     x = layers.Dropout(0.1)(x)
     x = tf.reduce_mean(x, axis=-1) # convention to represent sequence information as 
     # the mean embedding vector... we'll see if this works.
-    outputs = layers.Dense(n_classes, activation="softmax")(x)
+
+    if multilabel:
+        outputs = layers.Dense(n_classes, activation="sigmoid")(x)
+    else:
+        outputs = layers.Dense(n_classes, activation="softmax")(x)
+
     model = keras.Model(inputs=inputs, outputs=outputs)
 
     return model
 
-
-def DeepNOG(n_classes: int, embedding_dim: int, kernel_sizes: list,
+def DeepFam(n_classes: int, 
+        embedding_dim: int,
+        kernel_sizes: list,
         dropout_p: float,
         vocab_size: int,
         filters: int,
         pooling_layer_type: str,
-        classification_nodes: int):
+        hidden_units: int,
+        multilabel: bool
+        ):
 
     inputs = layers.Input(shape=(None,))
     embedding = layers.Embedding(input_dim=vocab_size, output_dim=embedding_dim)
 
     # TODO: get adaptive pooling
     max_pool = layers.GlobalAveragePooling1D()
-    classification = layers.Dense(n_classes, activation='softmax')
+    hidden = layers.Dense(hidden_units, activation='relu')
+    batch_norm = layers.BatchNormalization(momentum=0.1)
+    if multilabel:
+        classification = layers.Dense(n_classes, activation='sigmoid')
+    else:
+        classification = layers.Dense(n_classes, activation='softmax')
+    dropout = layers.Dropout(rate=dropout_p)
+    act = layers.ReLU()
+
+    embedded = embedding(inputs)
+
+    activations = []
+    for kernel in kernel_sizes:
+        x = layers.Conv1D(filters,
+                kernel_size=kernel,
+                activation=None,
+                kernel_initializer='glorot_uniform')(embedded)
+        x = layers.BatchNormalization(momentum=0.1)(x)
+        x = act(x)
+        x = max_pool(x)
+        activations.append(x)
+
+    x = tf.concat(activations, axis=-1)
+
+    x = dropout(x)
+    x = hidden(x)
+    x = layers.BatchNormalization(momentum=0.1)(x)
+    x = act(x)
+    x = classification(x)
+
+    return keras.Model(inputs=inputs, outputs=x)
+
+def make_deepfam(n_classes, multilabel):
+    encoding_dim = 10
+    kernel_sizes = [8, 12, 16, 20, 24, 28, 32, 36]
+    n_filters = 150
+    dropout = 0.3
+    pooling_layer_type = 'max'
+    vocab_size = 23
+    n_filters  = 150
+    n_hidden = 2000
+    df = DeepFam(n_classes, encoding_dim, kernel_sizes, dropout, vocab_size,
+            n_filters, 'none', n_hidden, multilabel)
+    return df
+
+def DeepNOG(n_classes: int, embedding_dim: int, kernel_sizes: list,
+        dropout_p: float,
+        vocab_size: int,
+        filters: int,
+        pooling_layer_type: str,
+        classification_nodes: int,
+        multilabel: bool
+        ):
+
+    inputs = layers.Input(shape=(None,))
+    embedding = layers.Embedding(input_dim=vocab_size, output_dim=embedding_dim)
+
+    # TODO: get adaptive pooling
+    max_pool = layers.GlobalAveragePooling1D()
+    if multilabel:
+        classification = layers.Dense(n_classes, activation='sigmoid')
+    else:
+        classification = layers.Dense(n_classes, activation='softmax')
+
     dropout = layers.Dropout(rate=dropout_p)
 
     embedded = embedding(inputs)
 
     activations = []
+
     for kernel in kernel_sizes:
         x = layers.Conv1D(filters,
                 kernel_size=kernel,
@@ -127,13 +174,13 @@ def DeepNOG(n_classes: int, embedding_dim: int, kernel_sizes: list,
         activations.append(x)
 
     x = tf.concat(activations, axis=-1)
-    #x = dropout(x)
+    x = dropout(x)
     x = classification(x)
+
     return keras.Model(inputs=inputs, outputs=x)
 
 
-def make_deepnog(n_classes):
-
+def make_deepnog(n_classes, multilabel):
     encoding_dim = 10
     kernel_sizes = [8, 12, 16, 20, 24, 28, 32, 36]
     n_filters = 150
@@ -143,7 +190,7 @@ def make_deepnog(n_classes):
     n_filters  = 150
     n_hidden = 2000
     dn = DeepNOG(n_classes, encoding_dim, kernel_sizes, dropout, vocab_size,
-            n_filters, 'none', n_hidden)
+            n_filters, 'none', n_hidden, multilabel)
 
     return dn
 
@@ -151,5 +198,5 @@ def make_deepnog(n_classes):
 
 if __name__ == '__main__':
 
-    model = make_deepnog(858)
+    model = make_deepfam(858)
     model.summary()

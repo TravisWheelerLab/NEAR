@@ -1,17 +1,13 @@
 import os
 import json
-import re
-import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
+import numpy as np
 
 import pdb
 
 from glob import glob
 from typing import Callable
 from random import shuffle, seed
-from collections import namedtuple
-from functools import partial
 
 seed(1)
 
@@ -21,6 +17,7 @@ PROT_ALPHABET = { 'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6,
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 SEQUENCES_PER_SHARD = 450000
+N_CLASSES = 17646 # number of classes in our dataset as predicted by hmmsearch
 
 def read_fasta(fasta, label):
 
@@ -75,8 +72,12 @@ def serialize_example(label, protein):
     The bytes feature here could definitely be encoded as a 4 bit integer
     '''
 
-    feature = {'protein':_int64_feature(protein),
-               'label':_int64_feature([label])}
+    if isinstance(label, list):
+        feature = {'protein':_int64_feature(protein),
+                   'label':_int64_feature(label)}
+    else:
+        feature = {'protein':_int64_feature(protein),
+                   'label':_int64_feature([label])}
 
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
 
@@ -94,10 +95,67 @@ def shard_sequences(record_file_template, sequences):
         record_file = record_file_template.format(j, n_shards)
         with tf.io.TFRecordWriter(record_file) as writer:
             for i, (label, sequence) in enumerate(sharded_sequences):
-                tf_example = serialize_example(label,
-                        [PROT_ALPHABET[s] for s in sequence.upper()])
-
+                prot_seq = sequence.replace('\n', '').upper()
+                prot_seq = [PROT_ALPHABET[s] for s in prot_seq]
+                tf_example = serialize_example(label, prot_seq)
                 writer.write(tf_example)
+
+
+def read_sequences_from_json(json_file):
+    '''
+    json_file contains a dictionary of raw AA sequences mapped to their
+    associated classes, classified by hmmsearch with an MSA of your choice.
+   
+    Saves an json file mapping the Pfam accession ID reported by hmmsearch (this
+    isn't general, since we're only working with Pfam-trained HMMs available on
+    pfam.xfam.org) for easy lookup later on in the classification pipeline.
+
+    Returns a list of lists. Each list contains the raw AA sequence as its first
+    element and the list of hmmsearch determined labels (there can be more than
+    one if hmmsearch returns multiple good matches for an AA sequence). 
+
+    These lists will be passed to a subroutine that shards them to tfrecord
+    files on disk.
+    '''
+
+    with open(json_file, 'r') as f:
+        sequence_to_label = json.load(f)
+
+    name_to_integer_label = {}
+    integer_label = 0
+
+    fout = os.path.join(os.path.dirname(json_file), 'name-to-label.json')
+
+    if os.path.isfile(fout):
+        with open(fout, 'r') as f:
+            name_to_integer_label  = json.load(f)
+        integer_label = max(name_to_integer_label.values())
+
+    len_before = len(name_to_integer_label)
+
+    for seq in sequence_to_label.keys():
+        for label in sequence_to_label[seq]:
+            if label not in name_to_integer_label:
+                name_to_integer_label[label] = integer_label
+                integer_label += 1
+
+    if len_before != len(name_to_integer_label):
+        s = 'saving new labels, number of unique classes went from {} to {}'.format(len_before,
+                len(name_to_integer_label))
+        print(s)
+        with open(fout, 'w') as f:
+            # overwrite old file if it exists
+            json.dump(name_to_integer_label, f)
+
+    sequence_to_integer_label = []
+
+    for sequence, labels in sequence_to_label.items():
+        sequence_to_integer_label.append([[name_to_integer_label[l]
+            for l in labels], sequence])
+
+
+    shuffle(sequence_to_integer_label)
+    return sequence_to_integer_label
 
 
 def read_sequences_from_fasta(files, save_name_to_label=False):
@@ -105,6 +163,10 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     returns list of all sequences in the fasta files. 
     list is a list of two-element lists with the first element the class
     label and the second the protein sequence.
+
+    Assumes that each fasta file has the class name of the proteins as its
+    filename. TODO: implement logic that parses the fasta header to get a class
+    name.
 
     does not take care of train/dev/val splits. This is trivially
     implemented.
@@ -130,7 +192,6 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
 
 def ttv_split(sequences):
     '''
-
     all of these functions rely on all of the sequences fitting in memory for
     complete shuffling. Implementing out-of-memory shuffling of potentially
     hundreds of Gb of fasta files is trivially doable (requires some
@@ -152,20 +213,27 @@ def make_dataset(tfrecord_path,
         batch_size,
         buffer_size,
         max_sequence_length,
-        encode_as_image): 
+        encode_as_image,
+        multiple_labels):
 
     '''
     I need to have tensors of uniform size. I need to implement
     logic that pads or cuts off AA sequences according to sequence_length.
-    Is this going to be a problem for generalization? 
-    Will byte-pair encoding be the most useful thing to do here?
     '''
 
-    feature_description = {
-        'protein': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
-            allow_missing=True),
-        'label': tf.io.FixedLenFeature([], tf.int64, default_value=0),
-    }
+    if multiple_labels:
+        feature_description = {
+            'protein': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
+                allow_missing=True),
+            'label': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
+                allow_missing=True),
+        }
+    else:
+        feature_description = {
+            'protein': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
+                allow_missing=True),
+            'label': tf.io.FixedLenFeature([], tf.int64, default_value=0)
+        }
 
     def parse_tfrecord(example_proto):
         # Parse the input `tf.train.Example` proto using the dictionary above.
@@ -173,14 +241,21 @@ def make_dataset(tfrecord_path,
 
     def encode_protein(inputs):
         protein = inputs.get('protein')
+        label = inputs.get('label')
+
         if tf.greater(tf.shape(protein), max_sequence_length):
             protein = tf.slice(protein, begin=[0], size=[max_sequence_length])
         if encode_as_image:
             oh = tf.expand_dims(tf.one_hot(protein, depth=LEN_PROTEIN_ALPHABET),
-                    -1)
+                    -1) # one hot
         else:
             oh = protein
-        return oh, inputs.get('label')
+
+        if multiple_labels:
+
+            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
+
+        return oh, label
 
 
     files = tf.io.gfile.glob(tfrecord_path)
@@ -193,12 +268,16 @@ def make_dataset(tfrecord_path,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.map(map_func=encode_protein,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    if multiple_labels:
+        pad_label_kwarg = [N_CLASSES]
+    else:
+        pad_label_kwarg = []
     if encode_as_image:
         dataset = dataset.padded_batch(batch_size,
-                padded_shapes=([max_sequence_length, 23, 1], []))
+                padded_shapes=([max_sequence_length, 23, 1], pad_label_kwarg))
     else:
         dataset = dataset.padded_batch(batch_size,
-                padded_shapes=([max_sequence_length], []))
+                padded_shapes=([max_sequence_length], pad_label_kwarg))
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return dataset
@@ -247,22 +326,32 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
 
-    files = sorted(glob('./fasta/*'))
+    json_root = '../data/clustered-shuffle/json/'
+    data_root = '../data/clustered-shuffle/'
 
-    # sequences = read_sequences_from_fasta(files)
-    # train, test, valid = ttv_split(sequences)
+    # test = read_sequences_from_json(json_root + 'test-sequences-and-labels.json')
+    # train = read_sequences_from_json(json_root + 'train-sequences-and-labels.json')
+    # validation = read_sequences_from_json(json_root + 'val-sequences-and-labels.json')
 
-    # shard_sequences('./data/train/data-{}-of-{}.tfrecord', train)
-    # shard_sequences('./data/test/data-{}-of-{}.tfrecord', test)
-    # shard_sequences('./data/validation/data-{}-of-{}.tfrecord', valid)
+    # out_template = '/data-{}-of-{}.tfrecord'
 
-    train = './data/train/*'
-    test = './data/test/*'
-    valid = './data/valid/*'
+    # shard_sequences(data_root + 'train' +  out_template, train)
+    # shard_sequences(data_root + 'test' +  out_template, test)
+    # shard_sequences(data_root + 'validation' +  out_template, validation)
 
-    train = make_dataset(train, 64, 1000, 256, encode_as_image=False)
+    test = data_root + 'test/*'
+    train = data_root + 'train/*'
+    validation = data_root + 'validation/*'
 
-    for i, feat in enumerate(train):
-        print(feat[0].shape, feat[1].shape)
+    test = make_dataset(test, 16, 1000, 1024, encode_as_image=True, 
+            multiple_labels=True)
+    train = make_dataset(train, 16, 1000, 1024, encode_as_image=True, 
+            multiple_labels=True)
+    validation = make_dataset(validation, 16, 1000, 1024, encode_as_image=True, 
+            multiple_labels=True)
+
+    for feat, lab in test:
+        print(lab.shape)
         exit()
