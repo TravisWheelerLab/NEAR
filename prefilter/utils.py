@@ -253,7 +253,7 @@ def make_dataset(tfrecord_path,
 
         if multiple_labels:
 
-            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
+            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=1)
 
         return oh, label
 
@@ -268,16 +268,19 @@ def make_dataset(tfrecord_path,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.map(map_func=encode_protein,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
     if multiple_labels:
         pad_label_kwarg = [N_CLASSES]
     else:
         pad_label_kwarg = []
+
     if encode_as_image:
         dataset = dataset.padded_batch(batch_size,
                 padded_shapes=([max_sequence_length, 23, 1], pad_label_kwarg))
     else:
         dataset = dataset.padded_batch(batch_size,
                 padded_shapes=([max_sequence_length], pad_label_kwarg))
+
     dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     return dataset
@@ -345,13 +348,12 @@ if __name__ == '__main__':
     train = data_root + 'train/*'
     validation = data_root + 'validation/*'
 
-    test = make_dataset(test, 16, 1000, 1024, encode_as_image=True, 
+    test = make_dataset(test, 1, 1000, 1024, encode_as_image=True, 
             multiple_labels=True)
-    train = make_dataset(train, 16, 1000, 1024, encode_as_image=True, 
+    train = make_dataset(train, 1, 1000, 1024, encode_as_image=True, 
             multiple_labels=True)
-    validation = make_dataset(validation, 16, 1000, 1024, encode_as_image=True, 
+    validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=True, 
             multiple_labels=True)
 
     for feat, lab in test:
-        print(lab.shape)
-        exit()
+        print(np.unique(lab, return_counts=True))
