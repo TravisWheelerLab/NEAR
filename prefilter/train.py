@@ -5,9 +5,6 @@ import pdb
 import sys
 import pickle
 import random
-from random import shuffle
-from glob import glob
-from functools import partial, update_wrapper
 
 random.seed(1)
 
@@ -21,14 +18,24 @@ import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.callbacks as cbacks
 
+from random import shuffle
+from glob import glob
+from functools import partial, update_wrapper
+from argparse import ArgumentParser
+
 if __name__ == '__main__':
+    ap = ArgumentParser()
+    ap.add_argument('--deepfam', action='store_true')
+    ap.add_argument('--deepnog', action='store_true')
+    ap.add_argument('--attn', action='store_true')
+    args = ap.parse_args()
 
     data_root = '../data/clustered-shuffle/'
     test = data_root + 'test/*'
     train = data_root + 'train/*'
     valid = data_root + 'validation/*'
 
-    batch_size = 64
+    batch_size = 16
     shuffle_buffer = 1000
     max_sequence_length = 256
     encode_as_image = False
@@ -77,10 +84,16 @@ if __name__ == '__main__':
             lr_schedule, 3000)
 
     opt = keras.optimizers.Adam(learning_rate=lr_schedule)
-    # model = m.attn_model(max_sequence_length, n_classes, multilabel)
-    # model = m.make_deepnog(n_classes, multilabel)
 
-    model = m.make_deepfam(n_classes, multilabel)
+    if args.deepfam:
+        model = m.make_deepfam(n_classes, multilabel)
+    elif args.deepnog:
+        model = m.make_deepnog(n_classes, multilabel)
+    elif args.attn:
+        model = m.attn_model(max_sequence_length, n_classes, multilabel)
+    else:
+        raise ValueError('one of <deepnog, deepfam, attn> required as\
+                command-line-arg')
 
     if multilabel:
         model.compile(loss='binary_crossentropy', optimizer=opt,
