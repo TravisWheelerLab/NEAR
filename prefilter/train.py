@@ -24,22 +24,38 @@ from functools import partial, update_wrapper
 from argparse import ArgumentParser
 
 if __name__ == '__main__':
+
     ap = ArgumentParser()
+
     ap.add_argument('--deepfam', action='store_true')
     ap.add_argument('--deepnog', action='store_true')
     ap.add_argument('--attn', action='store_true')
+    ap.add_argument('--multilabel', action='store_false')
+    ap.add_argument('--epochs', type=int, default=10)
+    ap.add_argument('--batch-size', required=False, default=16, type=int)
+    ap.add_argument('--shuffle-buffer-size', required=False, default=1000,
+            type=int, help='num examples in the shuffle buffer, larger means\
+            more complete in-memory shuffling')
+    ap.add_argument('--max-sequence-length', required=False, default=256,
+            type=int, help='size to which sequences will be truncated or padded')
+
     args = ap.parse_args()
 
-    data_root = '../data/clustered-shuffle/'
+    if args.multilabel:
+        data_root = '../data/clustered-shuffle/'
+    else:
+        data_root = '../data/random-shuffle/'
+
     test = data_root + 'test/*'
     train = data_root + 'train/*'
     valid = data_root + 'validation/*'
 
-    batch_size = 16
-    shuffle_buffer = 1000
-    max_sequence_length = 256
+    batch_size = args.batch_size
+    shuffle_buffer = args.shuffle_buffer_size
+    max_sequence_length = args.max_sequence_length
     encode_as_image = False
-    multilabel = True
+    multilabel = args.multilabel
+    n_epochs = args.epochs
 
     train = utils.make_dataset(train,
                                batch_size,
@@ -85,12 +101,17 @@ if __name__ == '__main__':
 
     opt = keras.optimizers.Adam(learning_rate=lr_schedule)
 
+    model_dir = '../models/'
+
     if args.deepfam:
         model = m.make_deepfam(n_classes, multilabel)
+        model_name = 'deepfam.h5'
     elif args.deepnog:
         model = m.make_deepnog(n_classes, multilabel)
+        model_name = 'deepnog.h5'
     elif args.attn:
         model = m.attn_model(max_sequence_length, n_classes, multilabel)
+        model_name = 'attn.h5'
     else:
         raise ValueError('one of <deepnog, deepfam, attn> required as\
                 command-line-arg')
@@ -101,15 +122,21 @@ if __name__ == '__main__':
     else:
         model.compile(loss='sparse_categorical_crossentropy', optimizer=opt,
                 metrics=['accuracy', tpk])
+
     model.summary()
+
     tb = cbacks.TensorBoard(log_dir='./logs/')
 
     model.fit(train,
               steps_per_epoch=420141 // batch_size,
-              epochs=100,
+              epochs=n_epochs,
               validation_data=validation,
               callbacks=[tb],
               verbose=1)
+
+    model_name = os.path.join(model_dir, model_name)
+
+    model.save(model_name)
 
     test_stats = model.evaluate(test)
     print(test_stats)
