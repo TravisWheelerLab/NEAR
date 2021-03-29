@@ -68,9 +68,6 @@ def _int64_feature(value):
 
 
 def serialize_example(label, protein):
-    '''
-    The bytes feature here could definitely be encoded as a 4 bit integer
-    '''
 
     if isinstance(label, list):
         feature = {'protein':_int64_feature(protein),
@@ -108,14 +105,18 @@ def read_sequences_from_json(json_file):
    
     Saves an json file mapping the Pfam accession ID reported by hmmsearch (this
     isn't general, since we're only working with Pfam-trained HMMs available on
-    pfam.xfam.org) for easy lookup later on in the classification pipeline.
+    pfam.xfam.org) for easy lookup later on in the classification pipeline. This
+    json file is called 'name-to-label.json'.
 
-    Returns a list of lists. Each list contains the raw AA sequence as its first
-    element and the list of hmmsearch determined labels (there can be more than
-    one if hmmsearch returns multiple good matches for an AA sequence). 
+    Returns a list of lists. Each list contains the raw AA sequence as its
+    second element and the list of hmmsearch determined labels as its first
+    (there can be more than one if hmmsearch returns multiple good matches for
+    an AA sequence).
 
-    These lists will be passed to a subroutine that shards them to tfrecord
-    files on disk.
+    These lists will be passed to a subroutine that shards them into multiple
+    tfrecord files on disk. Shuffling is done once to the whole dataset (right
+    before the return call in this function), and when data are being sent to
+    the model via tensorflow's shuffle function.
     '''
 
     with open(json_file, 'r') as f:
@@ -253,7 +254,7 @@ def make_dataset(tfrecord_path,
 
         if multiple_labels:
 
-            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=1)
+            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
 
         return oh, label
 
@@ -270,7 +271,7 @@ def make_dataset(tfrecord_path,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     if multiple_labels:
-        pad_label_kwarg = [N_CLASSES]
+        pad_label_kwarg = [None]
     else:
         pad_label_kwarg = []
 
@@ -348,12 +349,23 @@ if __name__ == '__main__':
     train = data_root + 'train/*'
     validation = data_root + 'validation/*'
 
-    test = make_dataset(test, 1, 1000, 1024, encode_as_image=True, 
+    test = make_dataset(test, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=True)
-    train = make_dataset(train, 1, 1000, 1024, encode_as_image=True, 
+    train = make_dataset(train, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=True)
-    validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=True, 
+    validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=True)
 
+    model_path = '../models/deepnog-1107.h5'
+
+    def sched(lr):
+        return lr
+
+    wr = WarmUp(0.01, sched, 1000)
+    model = tf.keras.models.load_model(model_path, custom_objects={'WarmUp': wr})
+
+    print(model)
+
     for feat, lab in test:
-        print(np.unique(lab, return_counts=True))
+        preds = model.predict(feat)
+        print(np.where(lab[0] == 1))
