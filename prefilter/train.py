@@ -1,6 +1,7 @@
 import os
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 import re
+import time
 import pdb
 import sys
 import pickle
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     ap.add_argument('--deepfam', action='store_true')
     ap.add_argument('--deepnog', action='store_true')
     ap.add_argument('--attn', action='store_true')
-    ap.add_argument('--multilabel', action='store_false')
+    ap.add_argument('--no-multilabel', action='store_false')
     ap.add_argument('--epochs', type=int, default=10)
     ap.add_argument('--batch-size', required=False, default=16, type=int)
     ap.add_argument('--shuffle-buffer-size', required=False, default=1000,
@@ -38,13 +39,12 @@ if __name__ == '__main__':
             more complete in-memory shuffling')
     ap.add_argument('--max-sequence-length', required=False, default=256,
             type=int, help='size to which sequences will be truncated or padded')
+    ap.add_argument('--softmax', required=False, default=256,
+            type=int, help='size to which sequences will be truncated or padded')
 
     args = ap.parse_args()
 
-    if args.multilabel:
-        data_root = '../data/clustered-shuffle/'
-    else:
-        data_root = '../data/random-shuffle/'
+    data_root = '../data/subset-for-overfitting/'
 
     test = data_root + 'test/*'
     train = data_root + 'train/*'
@@ -54,24 +54,28 @@ if __name__ == '__main__':
     shuffle_buffer = args.shuffle_buffer_size
     max_sequence_length = args.max_sequence_length
     encode_as_image = False
-    multilabel = args.multilabel
+    multilabel = args.no_multilabel
     n_epochs = args.epochs
+    softmax = args.softmax
 
     train = utils.make_dataset(train,
                                batch_size,
                                shuffle_buffer,
                                max_sequence_length,
                                encode_as_image,
-                               multilabel)
+                               multilabel,
+                               softmax)
     train = train.repeat()
     test = utils.make_dataset(test,
                               batch_size,
                               shuffle_buffer,
                               max_sequence_length,
                               encode_as_image,
-                              multilabel)
+                              multilabel,
+                              softmax)
 
-    validation  = utils.make_dataset(valid,
+    # CHANGEME!!!!!!!!!
+    validation  = utils.make_dataset(data_root + 'test/*',
                                      batch_size,
                                      shuffle_buffer,
                                      max_sequence_length,
@@ -95,7 +99,7 @@ if __name__ == '__main__':
         decay_rate=0.96,
         staircase=True)
 
-    n_classes = 17646 # not true... need to change
+    n_classes = 17646 
     lr_schedule = utils.WarmUp(initial_learning_rate,
             lr_schedule, 3000)
 
@@ -105,16 +109,19 @@ if __name__ == '__main__':
 
     if args.deepfam:
         model = m.make_deepfam(n_classes, multilabel)
-        model_name = 'deepfam.h5'
+        model_name = 'deepfam{}.h5'
     elif args.deepnog:
         model = m.make_deepnog(n_classes, multilabel)
-        model_name = 'deepnog.h5'
+        model_name = 'deepnog{}.h5'
     elif args.attn:
         model = m.attn_model(max_sequence_length, n_classes, multilabel)
-        model_name = 'attn.h5'
+        model_name = 'attn{}.h5'
     else:
         raise ValueError('one of <deepnog, deepfam, attn> required as\
                 command-line-arg')
+
+    unique_time = str(int(time.time()))
+    model_name = model_name.format(unique_time)
 
     if multilabel:
         model.compile(loss='binary_crossentropy', optimizer=opt,
@@ -125,10 +132,13 @@ if __name__ == '__main__':
 
     model.summary()
 
-    tb = cbacks.TensorBoard(log_dir='./logs/')
+    logdir = os.path.join('logs', unique_time)
+    os.makedirs(logdir, exist_ok=True)
+
+    tb = cbacks.TensorBoard(log_dir=logdir)
 
     model.fit(train,
-              steps_per_epoch=420141 // batch_size,
+              steps_per_epoch=10000 // batch_size,
               epochs=n_epochs,
               validation_data=validation,
               callbacks=[tb],

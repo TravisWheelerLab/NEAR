@@ -215,7 +215,8 @@ def make_dataset(tfrecord_path,
         buffer_size,
         max_sequence_length,
         encode_as_image,
-        multiple_labels):
+        multiple_labels,
+        softmax):
 
     '''
     I need to have tensors of uniform size. I need to implement
@@ -253,8 +254,13 @@ def make_dataset(tfrecord_path,
             oh = protein
 
         if multiple_labels:
+            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
 
-            label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
+        elif multiple_labels and not softmax:
+            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
+            label_oh = label_oh / tf.cast(tf.math.count_nonzero(label_oh), tf.float32)
+        else:
+            pass
 
         return oh, label
 
@@ -350,11 +356,11 @@ if __name__ == '__main__':
     validation = data_root + 'validation/*'
 
     test = make_dataset(test, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
+            multiple_labels=False)
     train = make_dataset(train, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
+            multiple_labels=False)
     validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
+            multiple_labels=False)
 
     model_path = '../models/deepnog-1107.h5'
 
