@@ -256,11 +256,16 @@ def make_dataset(tfrecord_path,
         if multiple_labels:
             label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
 
+<<<<<<< HEAD
         elif multiple_labels and not softmax:
             label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
             label_oh = label_oh / tf.cast(tf.math.count_nonzero(label_oh), tf.float32)
         else:
             pass
+=======
+            # label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
+            label = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
+>>>>>>> 0a8e8e6c8eb4e0810ee1166450cb46b046c5d278
 
         return oh, label
 
@@ -355,23 +360,36 @@ if __name__ == '__main__':
     train = data_root + 'train/*'
     validation = data_root + 'validation/*'
 
+<<<<<<< HEAD
     test = make_dataset(test, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
     train = make_dataset(train, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
     validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
+=======
+    batch_size = 16
+    test = make_dataset(test, batch_size, 1000, 1024, encode_as_image=False, 
+            multiple_labels=True)
+    train = make_dataset(train, batch_size, 1000, 1024, encode_as_image=False, 
+            multiple_labels=True)
+    validation = make_dataset(validation, batch_size, 1000, 1024, encode_as_image=False, 
+            multiple_labels=True)
+>>>>>>> 0a8e8e6c8eb4e0810ee1166450cb46b046c5d278
 
-    model_path = '../models/deepnog-1107.h5'
+    model_path = '../models/alienware_deepnog.h5'
 
     def sched(lr):
         return lr
 
     wr = WarmUp(0.01, sched, 1000)
-    model = tf.keras.models.load_model(model_path, custom_objects={'WarmUp': wr})
+    # model = tf.keras.models.load_model(model_path, custom_objects={'WarmUp': wr})
 
-    print(model)
+    # print(model)
 
-    for feat, lab in test:
-        preds = model.predict(feat)
-        print(np.where(lab[0] == 1))
+    tot = 0
+    i = 0
+    unique = set()
+    for feat, lab in train:
+        unique.update(np.unique(lab))
+    print(unique)
