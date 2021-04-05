@@ -1,7 +1,8 @@
 import os
 import json
-import tensorflow as tf
+import torch
 import numpy as np
+
 
 import pdb
 
@@ -56,47 +57,6 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
 
     return one_hot_encoding
 
-def _bytes_feature(value):
-  """Returns a bytes_list from a string / byte."""
-  if isinstance(value, type(tf.constant(0))):
-    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
-  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-def _int64_feature(value):
-  """Returns an int64_list from a bool / enum / int / uint."""
-  return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
-
-
-def serialize_example(label, protein):
-
-    if isinstance(label, list):
-        feature = {'protein':_int64_feature(protein),
-                   'label':_int64_feature(label)}
-    else:
-        feature = {'protein':_int64_feature(protein),
-                   'label':_int64_feature([label])}
-
-    example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
-
-    return example_proto.SerializeToString()
-
-
-def shard_sequences(record_file_template, sequences):
-    '''
-    record_file_template looks something like this: sequences.{}-of-{}.tfrecord'
-    '''
-    shuffle(sequences)
-    n_shards = np.ceil(len(sequences) / SEQUENCES_PER_SHARD)
-    for j, i in enumerate(range(0, len(sequences), SEQUENCES_PER_SHARD)):
-        sharded_sequences = sequences[i:i+SEQUENCES_PER_SHARD]
-        record_file = record_file_template.format(j, n_shards)
-        with tf.io.TFRecordWriter(record_file) as writer:
-            for i, (label, sequence) in enumerate(sharded_sequences):
-                prot_seq = sequence.replace('\n', '').upper()
-                prot_seq = [PROT_ALPHABET[s] for s in prot_seq]
-                tf_example = serialize_example(label, prot_seq)
-                writer.write(tf_example)
-
 
 def read_sequences_from_json(json_file):
     '''
@@ -112,11 +72,6 @@ def read_sequences_from_json(json_file):
     second element and the list of hmmsearch determined labels as its first
     (there can be more than one if hmmsearch returns multiple good matches for
     an AA sequence).
-
-    These lists will be passed to a subroutine that shards them into multiple
-    tfrecord files on disk. Shuffling is done once to the whole dataset (right
-    before the return call in this function), and when data are being sent to
-    the model via tensorflow's shuffle function.
     '''
 
     with open(json_file, 'r') as f:
@@ -191,142 +146,28 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     return sequences
 
 
-def ttv_split(sequences):
-    '''
-    all of these functions rely on all of the sequences fitting in memory for
-    complete shuffling. Implementing out-of-memory shuffling of potentially
-    hundreds of Gb of fasta files is trivially doable (requires some
-    bookkeeping), but seeing as ~1M sequences fit as strings in a nested list in
-    240M, this won't be a problem on pretty much any server or even a powerful
-    laptop.
-    '''
+class ProteinSequenceDataset(torch.utils.Dataset):
 
-    shuffle(sequences)
-    train = sequences[:int(0.8*len(sequences))]
-    test = sequences[int(0.8*len(sequences)):]
-    valid = test[:len(test)//2]
-    test = test[len(test)//2:]
+    def __init__(self,
+            json_files,
+            max_sequence_length,
+            encode_as_image,
+            ):
 
-    return train, test, valid
+        sequences_and_labels = read_sequences_from_json(json_files) # list of lists
+        print(sequences_and_labels)
 
+    def _build_dataset(self, json_files):
 
-def make_dataset(tfrecord_path,
-        batch_size,
-        buffer_size,
-        max_sequence_length,
-        encode_as_image,
-        binary_multilabel,
-        multiclass):
-
-    if multiple_labels:
-        feature_description = {
-            'protein': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
-                allow_missing=True),
-            'label': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
-                allow_missing=True),
-        }
-    else:
-        feature_description = {
-            'protein': tf.io.FixedLenSequenceFeature([], tf.int64, default_value=0,
-                allow_missing=True),
-            'label': tf.io.FixedLenFeature([], tf.int64, default_value=0)
-        }
-
-    def parse_tfrecord(example_proto):
-        # Parse the input `tf.train.Example` proto using the dictionary above.
-        return tf.io.parse_single_example(example_proto, feature_description)
-
-    def encode_protein(inputs):
-        protein = inputs.get('protein')
-        label = inputs.get('label')
-
-        if tf.greater(tf.shape(protein), max_sequence_length):
-            protein = tf.slice(protein, begin=[0], size=[max_sequence_length])
-        if encode_as_image:
-            oh = tf.expand_dims(tf.one_hot(protein, depth=LEN_PROTEIN_ALPHABET),
-                    -1) # one hot
+        if len(json_files) > 1:
+            self.sequences_and_labels = read_sequences_from_json(json_files)
         else:
-            oh = protein
+            self.sequences_and_labels = []
+            for j in json_files:
+                self.sequences_and_labels.extend(read_sequences_from_json(json_files))
 
-        if binary_multilabel:
-            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
-        else:
-            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
-            # same encoding scheme, just make the labels soft by scaling by the
-            # number of non-zero labels
-            label_oh = label_oh / tf.cast(tf.math.count_nonzero(label_oh), tf.float32)
+        shuffle(self.sequences_and_labels)
 
-        return oh, label_oh
-
-
-    files = tf.io.gfile.glob(tfrecord_path)
-    files = tf.random.shuffle(files)
-    shards = tf.data.Dataset.from_tensor_slices(files)
-
-    dataset = shards.interleave(tf.data.TFRecordDataset)
-    dataset = dataset.shuffle(buffer_size=buffer_size)
-    dataset = dataset.map(map_func=parse_tfrecord,
-            num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.map(map_func=encode_protein,
-            num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-    if multiple_labels:
-        pad_label_kwarg = [None]
-    else:
-        pad_label_kwarg = []
-
-    if encode_as_image:
-        dataset = dataset.padded_batch(batch_size,
-                padded_shapes=([max_sequence_length, 23, 1], pad_label_kwarg))
-    else:
-        dataset = dataset.padded_batch(batch_size,
-                padded_shapes=([max_sequence_length], pad_label_kwarg))
-
-    dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-
-    return dataset
-
-
-class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
-
-    def __init__(
-        self,
-        initial_learning_rate: float,
-        decay_schedule_fn: Callable,
-        warmup_steps: int,
-        power: float = 1.0,
-        name: str = None,
-    ):
-        super().__init__()
-        self.initial_learning_rate = initial_learning_rate
-        self.warmup_steps = warmup_steps
-        self.power = power
-        self.decay_schedule_fn = decay_schedule_fn
-        self.name = name
-
-    def __call__(self, step):
-        with tf.name_scope(self.name or "WarmUp") as name:
-            # Implements polynomial warmup. i.e., if global_step < warmup_steps, the
-            # learning rate will be `global_step/num_warmup_steps * init_lr`.
-            global_step_float = tf.cast(step, tf.float32)
-            warmup_steps_float = tf.cast(self.warmup_steps, tf.float32)
-            warmup_percent_done = global_step_float / warmup_steps_float
-            warmup_learning_rate = self.initial_learning_rate * tf.math.pow(warmup_percent_done, self.power)
-            return tf.cond(
-                global_step_float < warmup_steps_float,
-                lambda: warmup_learning_rate,
-                lambda: self.decay_schedule_fn(step - self.warmup_steps),
-                name=name,
-            )
-
-    def get_config(self):
-        return {
-            "initial_learning_rate": self.initial_learning_rate,
-            "decay_schedule_fn": self.decay_schedule_fn,
-            "warmup_steps": self.warmup_steps,
-            "power": self.power,
-            "name": self.name,
-        }
 
 
 if __name__ == '__main__':
@@ -335,47 +176,10 @@ if __name__ == '__main__':
     json_root = '../data/clustered-shuffle/json/'
     data_root = '../data/clustered-shuffle/'
 
+    psd = ProteinSequenceDataset(json_root + "train_sequences.json")
+
+
+
     # test = read_sequences_from_json(json_root + 'test-sequences-and-labels.json')
     # train = read_sequences_from_json(json_root + 'train-sequences-and-labels.json')
     # validation = read_sequences_from_json(json_root + 'val-sequences-and-labels.json')
-
-    # out_template = '/data-{}-of-{}.tfrecord'
-
-    # shard_sequences(data_root + 'train' +  out_template, train)
-    # shard_sequences(data_root + 'test' +  out_template, test)
-    # shard_sequences(data_root + 'validation' +  out_template, validation)
-
-    test = data_root + 'test/*'
-    train = data_root + 'train/*'
-    validation = data_root + 'validation/*'
-
-    test = make_dataset(test, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=False)
-    train = make_dataset(train, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=False)
-    validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=False, 
-            multiple_labels=False)
-    batch_size = 16
-    test = make_dataset(test, batch_size, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
-    train = make_dataset(train, batch_size, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
-    validation = make_dataset(validation, batch_size, 1000, 1024, encode_as_image=False, 
-            multiple_labels=True)
-
-    model_path = '../models/alienware_deepnog.h5'
-
-    def sched(lr):
-        return lr
-
-    wr = WarmUp(0.01, sched, 1000)
-    # model = tf.keras.models.load_model(model_path, custom_objects={'WarmUp': wr})
-
-    # print(model)
-
-    tot = 0
-    i = 0
-    unique = set()
-    for feat, lab in train:
-        unique.update(np.unique(lab))
-    print(unique)
