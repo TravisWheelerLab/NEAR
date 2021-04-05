@@ -11,7 +11,7 @@ from random import shuffle, seed
 
 seed(1)
 
-PROT_ALPHABET = { 'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
+PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
              'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
              'T' : 17, 'V' : 18, 'W' : 19, 'X' : 20, 'Y' : 21, 'Z' : 22 }
 
@@ -46,7 +46,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # not the label, the actual encoding of the protein.
     # right now, it's a stack of vectors that are one-hot encoded with the character of the
     # alphabet
-    # Could this be vectorized? Yeah. But POITROAE
+    # Could this be vectorized? Yeah.
     for i, residue in enumerate(protein):
 
         if i > maxlen-1:
@@ -215,13 +215,8 @@ def make_dataset(tfrecord_path,
         buffer_size,
         max_sequence_length,
         encode_as_image,
-        multiple_labels,
-        softmax):
-
-    '''
-    I need to have tensors of uniform size. I need to implement
-    logic that pads or cuts off AA sequences according to sequence_length.
-    '''
+        binary_multilabel,
+        multiclass):
 
     if multiple_labels:
         feature_description = {
@@ -253,21 +248,15 @@ def make_dataset(tfrecord_path,
         else:
             oh = protein
 
-        if multiple_labels:
+        if binary_multilabel:
             label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
-
-<<<<<<< HEAD
-        elif multiple_labels and not softmax:
-            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
-            label_oh = label_oh / tf.cast(tf.math.count_nonzero(label_oh), tf.float32)
         else:
-            pass
-=======
-            # label = tf.reduce_sum(tf.one_hot(label, depth=N_CLASSES), axis=0)
-            label = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
->>>>>>> 0a8e8e6c8eb4e0810ee1166450cb46b046c5d278
+            label_oh = tf.reduce_max(tf.one_hot(label, depth=N_CLASSES), axis=0)
+            # same encoding scheme, just make the labels soft by scaling by the
+            # number of non-zero labels
+            label_oh = label_oh / tf.cast(tf.math.count_nonzero(label_oh), tf.float32)
 
-        return oh, label
+        return oh, label_oh
 
 
     files = tf.io.gfile.glob(tfrecord_path)
@@ -360,14 +349,12 @@ if __name__ == '__main__':
     train = data_root + 'train/*'
     validation = data_root + 'validation/*'
 
-<<<<<<< HEAD
     test = make_dataset(test, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
     train = make_dataset(train, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
     validation = make_dataset(validation, 1, 1000, 1024, encode_as_image=False, 
             multiple_labels=False)
-=======
     batch_size = 16
     test = make_dataset(test, batch_size, 1000, 1024, encode_as_image=False, 
             multiple_labels=True)
@@ -375,7 +362,6 @@ if __name__ == '__main__':
             multiple_labels=True)
     validation = make_dataset(validation, batch_size, 1000, 1024, encode_as_image=False, 
             multiple_labels=True)
->>>>>>> 0a8e8e6c8eb4e0810ee1166450cb46b046c5d278
 
     model_path = '../models/alienware_deepnog.h5'
 
