@@ -9,20 +9,21 @@ import random
 
 random.seed(1)
 
+import torch
+import pytorch_lightning as pl
+
 import utils as utils
 import models as m
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tensorflow as tf
-import tensorflow.keras as keras
-import tensorflow.keras.callbacks as cbacks
 
 from random import shuffle
 from glob import glob
 from functools import partial, update_wrapper
 from argparse import ArgumentParser
+
 
 n_classes = 17646 
 
@@ -47,80 +48,74 @@ if __name__ == '__main__':
 
     ap.add_argument('--epochs', type=int, default=10)
     ap.add_argument('--batch-size', required=False, default=16, type=int)
-    ap.add_argument('--shuffle-buffer-size', required=False, default=1000,
-            type=int, help='num examples in the shuffle buffer, larger means\
-            more complete in-memory shuffling')
     ap.add_argument('--max-sequence-length', required=False, default=256,
             type=int, help='size to which sequences will be truncated or padded')
+    ap.add_argument('--num-workers', required=False, default=4,
+            type=int, help='number of workers to use when loading data')
+    ap.add_argument('--encode-as-image', required=False, action='store_true')
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
-                    data is stored, in structure of <data-path>/<test, train, val>'
+                    data is stored, in structure of <data-path>/<test, train, val>')
+
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
 
     args = ap.parse_args()
 
-    data_root = ap.data_path
+    data_root = args.data_path
     batch_size = args.batch_size
-    shuffle_buffer = args.shuffle_buffer_size
     max_sequence_length = args.max_sequence_length
     binary_multilabel = args.binary_multilabel
     multiclass = args.multiclass
+    num_workers = args.num_workers
     n_epochs = args.epochs
+    encode_as_image = args.encode_as_image
 
     model_dir = args.model_dir
 
-    encode_as_image = False
 
-    test = os.path.join(data_root, 'test/*')
-    train = os.path.join(data_root, 'train/*')
-    valid = os.path.join(data_root, 'validation/*')
+    test = glob(os.path.join(data_root, '*test*'))
+    train = glob(os.path.join(data_root, '*train*'))
+    valid = glob(os.path.join(data_root, '*val*'))
 
-    train = utils.make_dataset(train,
-                               batch_size,
-                               shuffle_buffer,
+    train = utils.ProteinSequenceDataset(train,
                                max_sequence_length,
                                encode_as_image,
-                               binary_multilabel,
-                               multiclass)
-    train = train.repeat()
-    test = utils.make_dataset(test,
-                              batch_size,
-                              shuffle_buffer,
+                               utils.N_CLASSES,
+                               binary_multilabel)
+
+    test = utils.ProteinSequenceDataset(test,
                               max_sequence_length,
                               encode_as_image,
-                              binary_multilabel,
-                              multiclass)
+                              utils.N_CLASSES,
+                              binary_multilabel)
 
-    validation  = utils.make_dataset(valid,
-                                     batch_size,
-                                     shuffle_buffer,
+    validation  = utils.ProteinSequenceDataset(valid,
                                      max_sequence_length,
                                      encode_as_image,
-                                     binary_multilabel,
-                                     multiclass)
+                                     utils.N_CLASSES,
+                                     binary_multilabel)
 
-    # top-k accuracy.
-    tpk_metric = keras.metrics.sparse_top_k_categorical_accuracy
-    k = 5
-    tpk = partial(tpk_metric, k=k)
-    # for making the terminal output shorter.
-    tpk = update_wrapper(tpk, tpk_metric)
-    tpk.__name__ = 'tp{}'.format(k)
-
-    # model/optimizer setup
-
-    initial_learning_rate = 0.0001
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate,
-        decay_steps=10000,
-        decay_rate=0.96,
-        staircase=True)
-
-    opt = keras.optimizers.Adam(learning_rate=lr_schedule)
+    train = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True,
+            num_workers=num_workers)
+    test = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=True,
+            num_workers=num_workers)
+    valid = torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=True,
+            num_workers=num_workers)
 
     if args.deepfam:
-        model = m.make_deepfam(n_classes, binary_multilabel)
+        deepfam_config = {
+                'n_classes':utils.N_CLASSES,
+                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+                'n_filters': 150,
+                'dropout': 0.3,
+                'vocab_size': 23,
+                'hidden_units': 2000,
+                'multilabel_classification': binary_multilabel,
+                'lr':1e-3,
+                'alphabet_size':len(utils.PROT_ALPHABET)
+                }
+        model = m.DeepFam(deepfam_config)
         model_name = 'deepfam{}.h5'
     elif args.deepnog:
         model = m.make_deepnog(n_classes, binary_multilabel)
@@ -135,30 +130,13 @@ if __name__ == '__main__':
     unique_time = str(int(time.time()))
     model_name = model_name.format(unique_time)
 
-    if binary_multilabel:
-        model.compile(loss='binary_crossentropy', optimizer=opt,
-                metrics=['accuracy'])
-    else:
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=opt,
-                metrics=['accuracy', tpk])
-
-    model.summary()
-
     logdir = os.path.join('logs', unique_time)
     os.makedirs(logdir, exist_ok=True)
 
-    tb = cbacks.TensorBoard(log_dir=logdir)
-
-    model.fit(train,
-              steps_per_epoch=420000 // batch_size,
-              epochs=n_epochs,
-              validation_data=validation,
-              callbacks=[tb],
-              verbose=1)
-
+    trainer = pl.Trainer(overfit_batches=0.01)
+    trainer.fit(model, train, validation)
     model_name = os.path.join(model_dir, model_name)
-
-    model.save(model_name)
+    torch.save(model, model_name)
 
     test_stats = model.evaluate(test)
     print(test_stats)

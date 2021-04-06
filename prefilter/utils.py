@@ -41,7 +41,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # Each row in the array is a separate character, encoded as 
     # a one-hot vector
 
-    protein = protein.upper()
+    protein = protein.upper().replace('\n', '')
     one_hot_encoding = np.zeros((1, maxlen, LEN_PROTEIN_ALPHABET))
 
     # not the label, the actual encoding of the protein.
@@ -146,21 +146,43 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     return sequences
 
 
-class ProteinSequenceDataset(torch.utils.Dataset):
+class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self,
             json_files,
             max_sequence_length,
             encode_as_image,
+            n_classes,
+            multilabel,
             ):
 
-        sequences_and_labels = read_sequences_from_json(json_files) # list of lists
-        print(sequences_and_labels)
+
+        self.max_sequence_length = max_sequence_length
+        self.multilabel = multilabel
+        self.n_classes = n_classes
+        self.encode_as_image = encode_as_image
+
+        self._build_dataset(json_files)
+
+    def _encoding_func(self, x):
+        labels, seq = x
+
+        oh = encode_protein_as_one_hot_vector(seq, self.max_sequence_length)
+        if not self.encode_as_image:
+            oh = np.argmax(oh, axis=-1)
+
+        if self.multilabel:
+            label = np.zeros((self.n_classes, ))
+            label[np.asarray(labels)] = 1
+            labels = label
+
+        return [oh, label]
+
 
     def _build_dataset(self, json_files):
 
-        if len(json_files) > 1:
-            self.sequences_and_labels = read_sequences_from_json(json_files)
+        if len(json_files) == 1:
+            self.sequences_and_labels = read_sequences_from_json(json_files[0])
         else:
             self.sequences_and_labels = []
             for j in json_files:
@@ -169,15 +191,33 @@ class ProteinSequenceDataset(torch.utils.Dataset):
         shuffle(self.sequences_and_labels)
 
 
+    def __len__(self):
+
+        return len(self.sequences_and_labels)
+
+    def __getitem__(self, idx):
+
+        x, y = self._encoding_func(self.sequences_and_labels[idx])
+        return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y) 
+
 
 if __name__ == '__main__':
+
     import matplotlib.pyplot as plt
 
     json_root = '../data/clustered-shuffle/json/'
     data_root = '../data/clustered-shuffle/'
 
-    psd = ProteinSequenceDataset(json_root + "train_sequences.json")
+    json_files = glob('../data/clustered-shuffle/json/*train*')
 
+    psd = ProteinSequenceDataset(json_files, 1024, True, N_CLASSES, True)
+
+    dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
+            num_workers=4)
+
+    for x,y in dataloader:
+        print(x.shape)
+        break
 
 
     # test = read_sequences_from_json(json_root + 'test-sequences-and-labels.json')
