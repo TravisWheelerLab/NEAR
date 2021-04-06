@@ -65,6 +65,8 @@ if __name__ == '__main__':
 
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
+    ap.add_argument('--model-name', type=str, required=True, help='the name of\
+            the model you want to train')
 
     ap.add_argument('--focal-loss', action='store_true', help='whether or not \
             to use focal loss, defined in losses.py')
@@ -80,6 +82,7 @@ if __name__ == '__main__':
     n_epochs = args.epochs
     encode_as_image = args.encode_as_image
     focal_loss = args.focal_loss
+    model_name_suffix = args.model_name
 
     model_dir = args.model_dir
 
