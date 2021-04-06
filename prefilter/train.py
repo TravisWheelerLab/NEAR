@@ -1,4 +1,7 @@
 import os
+
+from pytorch_lightning.metrics import functional as FM
+
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 import re
 import time
@@ -20,6 +23,7 @@ import numpy as np
 
 
 from random import shuffle
+from sklearn.metrics import confusion_matrix
 from glob import glob
 from functools import partial, update_wrapper
 from argparse import ArgumentParser
@@ -78,17 +82,17 @@ if __name__ == '__main__':
     train = glob(os.path.join(data_root, '*train*'))
     valid = glob(os.path.join(data_root, '*val*'))
 
-    train = utils.ProteinSequenceDataset(train,
-                               max_sequence_length,
-                               encode_as_image,
-                               utils.N_CLASSES,
-                               binary_multilabel)
-
     test = utils.ProteinSequenceDataset(test,
                               max_sequence_length,
                               encode_as_image,
                               utils.N_CLASSES,
                               binary_multilabel)
+
+    train = utils.ProteinSequenceDataset(train,
+                               max_sequence_length,
+                               encode_as_image,
+                               utils.N_CLASSES,
+                               binary_multilabel)
 
     validation  = utils.ProteinSequenceDataset(valid,
                                      max_sequence_length,
@@ -96,11 +100,11 @@ if __name__ == '__main__':
                                      utils.N_CLASSES,
                                      binary_multilabel)
 
-    train = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True,
+    train = torch.utils.data.DataLoader(train, batch_size=batch_size,
             num_workers=num_workers)
-    test = torch.utils.data.DataLoader(test, batch_size=batch_size, shuffle=True,
+    test = torch.utils.data.DataLoader(test, batch_size=batch_size, 
             num_workers=num_workers)
-    valid = torch.utils.data.DataLoader(valid, batch_size=batch_size, shuffle=True,
+    valid = torch.utils.data.DataLoader(validation, batch_size=batch_size,
             num_workers=num_workers)
 
     if args.deepfam:
@@ -116,6 +120,8 @@ if __name__ == '__main__':
                 'alphabet_size':len(utils.PROT_ALPHABET)
                 }
         model = m.DeepFam(deepfam_config)
+        model.train_dataloader = train
+        model.val_dataloader = valid
         model_name = 'deepfam{}.h5'
     elif args.deepnog:
         model = m.make_deepnog(n_classes, binary_multilabel)
@@ -133,10 +139,25 @@ if __name__ == '__main__':
     logdir = os.path.join('logs', unique_time)
     os.makedirs(logdir, exist_ok=True)
 
-    trainer = pl.Trainer(overfit_batches=0.01)
-    trainer.fit(model, train, validation)
-    model_name = os.path.join(model_dir, model_name)
-    torch.save(model, model_name)
 
-    test_stats = model.evaluate(test)
-    print(test_stats)
+    trainer = pl.Trainer(gpus=1, max_epochs=20)
+
+    trainer.fit(model, train, valid)
+    model_name = os.path.join(model_dir, model_name)
+    test = train
+
+    with torch.no_grad():
+        for batch in test:
+            x, y= batch
+            preds = model.class_act(model(x))
+            gt = (preds >= 0.5).numpy()
+
+            xx = np.round(preds.numpy().ravel())
+            yy = y.numpy().ravel()
+            print(xx.shape)
+            print(yy.shape)
+            print(confusion_matrix(xx, yy))
+
+    torch.save(model, model_name)
+        # test_stats = model(test)
+        # print(test_stats)

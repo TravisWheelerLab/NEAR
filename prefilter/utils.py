@@ -163,6 +163,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self.encode_as_image = encode_as_image
 
         self._build_dataset(json_files)
+        # self.sequences_and_labels = self.sequences_and_labels[:10]
+        # self.sequences_and_labels *= 100
 
     def _encoding_func(self, x):
         labels, seq = x
@@ -208,7 +210,7 @@ if __name__ == '__main__':
     json_root = '../data/clustered-shuffle/json/'
     data_root = '../data/clustered-shuffle/'
 
-    json_files = glob('../data/clustered-shuffle/json/*train*')
+    json_files = glob('../data/clustered-shuffle/json/*val*')
 
     psd = ProteinSequenceDataset(json_files, 1024, True, N_CLASSES, True)
 
@@ -217,7 +219,6 @@ if __name__ == '__main__':
 
     for x,y in dataloader:
         print(x.shape)
-        break
 
 
     # test = read_sequences_from_json(json_root + 'test-sequences-and-labels.json')

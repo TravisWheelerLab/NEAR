@@ -111,6 +111,7 @@ class DeepFam(pl.LightningModule):
         self.hidden_units = model_dict['hidden_units']
         self.multilabel_classification =  model_dict['multilabel_classification']
         self.lr =  model_dict['lr']
+        self.batch_size = None
 
         # One-Hot-Encoding Layer
         # Convolutional Layers
@@ -205,11 +206,18 @@ class DeepFam(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        x_hat = self.forward(x)
-        loss = self.loss_func(x_hat, y)
+        y_hat = self.forward(x)
+        loss = self.loss_func(y_hat, y)
         self.log('train loss', loss)
         return loss
     
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.forward(x)
+        loss = self.loss_func(y_hat, y)
+        self.log('test loss', loss)
+        return loss
+
     def configure_optimizers(self):
 
         return torch.optim.Adam(self.parameters(), lr=self.lr)
