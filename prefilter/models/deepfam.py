@@ -14,80 +14,6 @@ from .deepnog import AminoAcidWordEmbedding
 
 __all__ = ['DeepFam']
 
-
-class PseudoOneHotEncoding(nn.Module):
-    """ Encode amino acids with DeepFam-style pseudo one hot.
-
-    Each amino acid is encoded as a vector of length 21.
-    Ambiguous characters interpolate between the possible values,
-    e.g. J = 0.5 I + 0.5 L.
-
-    See Also
-    --------
-    See DeepFam paper Section 2.1.1 for details on the encoding scheme at
-    `<https://academic.oup.com/bioinformatics/article/34/13/i254/5045722#118270045>`_.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.num_classes = 27  # i.e. 26 letters ExtendedIUPAC plus zero-padding
-        self.alphabet_size = 21  # after encoding
-
-    def forward(self, sequence):
-        """ Embedd a given sequence.
-
-        Parameters
-        ----------
-        sequence : Tensor
-            The sequence or a batch of sequences to embed. They are assumed to
-            be translated to numerical values given a generated vocabulary
-            (see gen_amino_acid_vocab in dataset.py).
-            Must correspond to the following alphabet:
-            Index    0  3  6  9 12 15 18 21 24 27
-            Letter   _ACDEFGHIKLMNPQRSTVWYXBZJUO
-
-        Returns
-        -------
-        x : Tensor
-            The sequence (densely) embedded in a space of dimension
-            embedding_dim.
-        """
-        # Fix type mismatch on Windows
-        x = sequence.long()
-        device = x.device
-
-        x = one_hot(x, num_classes=self.num_classes)
-        # Cut away one-hot encoding for zero padding as well as O & U
-        x = x[:, :, 1:25].float()
-        # Indices for b, z, j arrays below:
-        # Index    0  3  6  9 12 15 18 21 24
-        # Letter   ACDEFGHIKLMNPQRSTVWYXBZJ
-        # Treat B: D or N
-        b = torch.zeros((1, 24), device=device)
-        b[0, 2] = 0.5
-        b[0, 11] = 0.5
-        b_found = (x[:, :, 21] == 1).nonzero(as_tuple=False)
-        x[b_found[:, 0], b_found[:, 1]] = b
-        # Treat Z: E or Q
-        z = torch.zeros((1, 24), device=device)
-        z[0, 3] = 0.5
-        z[0, 13] = 0.5
-        z_found = (x[:, :, 22] == 1).nonzero(as_tuple=False)
-        x[z_found[:, 0], z_found[:, 1]] = z
-        # Treat J: I or L
-        j = torch.zeros((1, 24), device=device)
-        j[0, 7] = 0.5
-        j[0, 9] = 0.5
-        j_found = (x[:, :, 23] == 1).nonzero(as_tuple=False)
-        x[j_found[:, 0], j_found[:, 1]] = j
-        # Cut away B, Z, J to obtain
-        # Index    0  3  6  9 12 15 18 21
-        # Letter   ACDEFGHIKLMNPQRSTVWYX
-        x = x[:, :, :21]
-
-        return x
-
-
 class DeepFam(pl.LightningModule):
     """ Convolutional network for protein family prediction.
 
@@ -111,7 +37,9 @@ class DeepFam(pl.LightningModule):
         self.hidden_units = model_dict['hidden_units']
         self.multilabel_classification =  model_dict['multilabel_classification']
         self.lr =  model_dict['lr']
-        self.batch_size = None
+        self.optim = model_dict['optim']
+        self.loss_func = model_dict['loss_func']
+
 
         # One-Hot-Encoding Layer
         # Convolutional Layers
@@ -165,10 +93,8 @@ class DeepFam(pl.LightningModule):
         # Classification activation layer
         if self.multilabel_classification:
             self.class_act = nn.Sigmoid()
-            self.loss_func = nn.BCEWithLogitsLoss()
         else:
             self.class_act = nn.Softmax(dim=1)
-            self.loss_func = F.nll_loss
 
     def forward(self, x):
         """ Forward a batch of sequences through network.
@@ -220,4 +146,4 @@ class DeepFam(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
+        return self.optim(self.parameters(), lr=self.lr)

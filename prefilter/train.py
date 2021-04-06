@@ -17,6 +17,7 @@ import pytorch_lightning as pl
 
 import utils as utils
 import models as m
+import losses as l
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,9 +61,13 @@ if __name__ == '__main__':
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
                     data is stored, in structure of <data-path>/<test, train, val>')
+    ap.add_argument('--lr', type=str, default=1e-3, help='learning rate')
 
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
+
+    ap.add_argument('--focal-loss', action='store_true', help='whether or not \
+            to use focal loss, defined in losses.py')
 
     args = ap.parse_args()
 
@@ -74,6 +79,7 @@ if __name__ == '__main__':
     num_workers = args.num_workers
     n_epochs = args.epochs
     encode_as_image = args.encode_as_image
+    focal_loss = args.focal_loss
 
     model_dir = args.model_dir
 
@@ -117,7 +123,9 @@ if __name__ == '__main__':
                 'hidden_units': 2000,
                 'multilabel_classification': binary_multilabel,
                 'lr':1e-3,
-                'alphabet_size':len(utils.PROT_ALPHABET)
+                'alphabet_size':len(utils.PROT_ALPHABET),
+                'optim':torch.optim.Adam,
+                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss()
                 }
         model = m.DeepFam(deepfam_config)
         model.train_dataloader = train
@@ -138,9 +146,9 @@ if __name__ == '__main__':
 
     logdir = os.path.join('logs', unique_time)
     os.makedirs(logdir, exist_ok=True)
+    tboard = pl.loggers.tensorboard.TensorBoardLogger(logdir)
 
-
-    trainer = pl.Trainer(gpus=1, max_epochs=20)
+    trainer = pl.Trainer(gpus=1, max_epochs=20, logger=tboard)
 
     trainer.fit(model, train, valid)
     model_name = os.path.join(model_dir, model_name)
