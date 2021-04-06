@@ -19,12 +19,10 @@ import utils as utils
 import models as m
 import losses as l
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 
 from random import shuffle
-from sklearn.metrics import confusion_matrix
 from glob import glob
 from functools import partial, update_wrapper
 from argparse import ArgumentParser
