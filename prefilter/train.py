@@ -8,6 +8,7 @@ import time
 import pdb
 import sys
 import pickle
+import numpy as np
 import random
 
 random.seed(1)
@@ -15,14 +16,13 @@ random.seed(1)
 import torch
 import pytorch_lightning as pl
 
-import utils as utils
+import utils as u
 import models as m
 import losses as l
 
-import numpy as np
-
 
 from random import shuffle
+from sklearn.metrics import confusion_matrix
 from glob import glob
 from functools import partial, update_wrapper
 from argparse import ArgumentParser
@@ -36,6 +36,7 @@ if __name__ == '__main__':
     ap = ArgumentParser()
 
     model_group = ap.add_mutually_exclusive_group(required=True)
+
     model_group.add_argument('--deepfam', action='store_true')
     model_group.add_argument('--deepnog', action='store_true')
     model_group.add_argument('--attn', action='store_true')
@@ -63,6 +64,7 @@ if __name__ == '__main__':
 
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
+
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
@@ -89,22 +91,22 @@ if __name__ == '__main__':
     train = glob(os.path.join(data_root, '*train*'))
     valid = glob(os.path.join(data_root, '*val*'))
 
-    test = utils.ProteinSequenceDataset(test,
+    test = u.ProteinSequenceDataset(test,
                               max_sequence_length,
                               encode_as_image,
-                              utils.N_CLASSES,
+                              u.N_CLASSES,
                               binary_multilabel)
 
-    train = utils.ProteinSequenceDataset(train,
+    train = u.ProteinSequenceDataset(train,
                                max_sequence_length,
                                encode_as_image,
-                               utils.N_CLASSES,
+                               u.N_CLASSES,
                                binary_multilabel)
 
-    validation  = utils.ProteinSequenceDataset(valid,
+    validation  = u.ProteinSequenceDataset(valid,
                                      max_sequence_length,
                                      encode_as_image,
-                                     utils.N_CLASSES,
+                                     u.N_CLASSES,
                                      binary_multilabel)
 
     train = torch.utils.data.DataLoader(train, batch_size=batch_size,
@@ -116,7 +118,7 @@ if __name__ == '__main__':
 
     if args.deepfam:
         deepfam_config = {
-                'n_classes':utils.N_CLASSES,
+                'n_classes':u.N_CLASSES,
                 'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
                 'n_filters': 150,
                 'dropout': 0.3,
@@ -124,7 +126,7 @@ if __name__ == '__main__':
                 'hidden_units': 2000,
                 'multilabel_classification': binary_multilabel,
                 'lr':1e-3,
-                'alphabet_size':len(utils.PROT_ALPHABET),
+                'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss()
                 }
@@ -133,7 +135,22 @@ if __name__ == '__main__':
         model.val_dataloader = valid
         model_name = 'deepfam{}.h5'
     elif args.deepnog:
-        model = m.make_deepnog(n_classes, binary_multilabel)
+        deepnog_config = {
+                'n_classes':u.N_CLASSES,
+                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+                'encoding_dim':len(u.PROT_ALPHABET),
+                'n_filters': 150,
+                'dropout': 0.3,
+                'pooling_layer_type':'avg',
+                'vocab_size': 23,
+                'hidden_units': 2000,
+                'multilabel_classification': binary_multilabel,
+                'lr':1e-3,
+                'alphabet_size':len(u.PROT_ALPHABET),
+                'optim':torch.optim.Adam,
+                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss()
+                }
+        model = m.DeepNOG(deepnog_config)
         model_name = 'deepnog{}.h5'
     elif args.attn:
         model = m.attn_model(max_sequence_length, n_classes, binary_multilabel)
@@ -143,7 +160,7 @@ if __name__ == '__main__':
                 command-line-arg')
 
     unique_time = str(int(time.time()))
-    model_name = model_name.format(unique_time)
+    model_name = model_name.format(unique_time) + "_" + model_name_suffix
 
     logdir = os.path.join('logs', unique_time)
     os.makedirs(logdir, exist_ok=True)
@@ -168,5 +185,3 @@ if __name__ == '__main__':
             print(confusion_matrix(xx, yy))
 
     torch.save(model, model_name)
-        # test_stats = model(test)
-        # print(test_stats)

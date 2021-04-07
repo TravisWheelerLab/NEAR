@@ -3,7 +3,6 @@ import json
 import torch
 import numpy as np
 
-
 import pdb
 
 from glob import glob
@@ -11,6 +10,8 @@ from typing import Callable
 from random import shuffle, seed
 
 seed(1)
+
+__all__ = ['ProteinSequenceDataset']
 
 PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
              'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
@@ -201,6 +202,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         x, y = self._encoding_func(self.sequences_and_labels[idx])
         return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y) 
+
+
 
 
 if __name__ == '__main__':

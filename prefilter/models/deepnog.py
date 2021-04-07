@@ -10,55 +10,17 @@ Description: Convolutional networks for protein orthologous group assignment.
 import torch
 import torch.nn as nn
 import numpy as np
-
-#from ..data import gen_amino_acid_vocab
-
-
-__all__ = ['AminoAcidWordEmbedding',
-           'DeepNOG',
-           ]
-
-class AminoAcidWordEmbedding(nn.Module):
-    """ PyTorch nn.Embedding where each amino acid is considered one word.
-
-    Parameters
-    ----------
-    embedding_dim: int
-        Embedding dimensionality.
-    """
-
-    def __init__(self, embedding_dim=10):
-        super(AminoAcidWordEmbedding, self).__init__()
-        # Get protein sequence vocabulary
-        self.vocab = gen_amino_acid_vocab()
-        # Create embedding (initialized randomly)
-        embeds = nn.Embedding(len(self.vocab) // 2 + 1, embedding_dim)
-        self.embedding = embeds
-
-    def forward(self, sequence):
-        """ Embed a given sequence.
-
-        Parameters
-        ----------
-        sequence : Tensor
-            The sequence or a batch of sequences to embed. They are assumed to
-            be translated to numerical values given a generated vocabulary
-            (see gen_amino_acid_vocab in dataset.py)
-
-        Returns
-        -------
-        x : Tensor
-            The sequence (densely) embedded in a space of dimension
-            embedding_dim.
-        """
-        # Fix type mismatch on Windows
-        x = sequence.long()
-
-        x = self.embedding(x)
-        return x
+import pytorch_lightning as pl
 
 
-class DeepNOG(nn.Module):
+# from ..data import gen_amino_acid_vocab
+
+
+__all__ = [ 'DeepNOG']
+
+
+class DeepNOG(pl.LightningModule):
+
     """ Convolutional network for protein orthologous group prediction.
 
     Compared to DeepFam, this architecture provides:
@@ -114,8 +76,11 @@ class DeepNOG(nn.Module):
             dropout = model_dict['dropout']
             pooling_layer_type = model_dict['pooling_layer_type']
 
-        # Encoding of amino acid sequence to vector space
-        self.encoding = AminoAcidWordEmbedding(embedding_dim=encoding_dim)
+        self.multilabel_classification =  model_dict['multilabel_classification']
+        self.lr =  model_dict['lr']
+        self.optim = model_dict['optim']
+        self.loss_func = model_dict['loss_func']
+        
         # Convolutional Layers
         for i, kernel in enumerate(kernel_sizes):
             conv_layer = nn.Conv1d(in_channels=encoding_dim,
@@ -144,8 +109,11 @@ class DeepNOG(nn.Module):
             in_features=n_filters * len(kernel_sizes),
             out_features=self.n_classes)
 
-        # Softmax-Layer
-        self.softmax = nn.Softmax(dim=1)
+        # Classification activation layer
+        if self.multilabel_classification:
+            self.class_act = nn.Sigmoid()
+        else:
+            self.class_act = nn.Softmax(dim=1)
 
         # Threshold for deciding below which confidence NN should be undecided
         if 'threshold' in model_dict:
@@ -166,9 +134,6 @@ class DeepNOG(nn.Module):
         out : Tensor, shape (batch_size, n_classes)
             Confidence of sequence(s) being in one of the n_classes.
         """
-        # Amino acid embedding
-        x = self.encoding(x).permute(0, 2, 1).contiguous()
-
         # Convolution with variable kernel sizes and adaptive max pooling
         max_pool_layer = []
         for i in range(self.n_conv_layers):
@@ -187,3 +152,21 @@ class DeepNOG(nn.Module):
         # NOTE: v1.2.0 removed the softmax here. Must now be performed in
         # inference module (otherwise, cross entropy loss requires hacks)
         return x
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.forward(x)
+        loss = self.loss_func(y_hat, y)
+        self.log('train loss', loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.forward(x)
+        loss = self.loss_func(y_hat, y)
+        self.log('test loss', loss)
+        return loss
+
+    def configure_optimizers(self):
+
+        return self.optim(self.parameters(), lr=self.lr)

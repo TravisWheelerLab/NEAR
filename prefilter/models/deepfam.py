@@ -10,7 +10,6 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from torch.nn.functional import one_hot
 
-from .deepnog import AminoAcidWordEmbedding
 
 __all__ = ['DeepFam']
 
