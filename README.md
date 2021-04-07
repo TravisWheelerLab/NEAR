@@ -1,3 +1,3 @@
 # prefilter
 
-figure out ways to emulate HMMER, before running the whole thing.
+Let's emulate hmmer using NNs. 
