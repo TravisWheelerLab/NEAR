@@ -7,13 +7,12 @@ from typing import Union
 import numpy as np
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
 from torch.nn.functional import one_hot
 
 
 __all__ = ['DeepFam']
 
-class DeepFam(pl.LightningModule):
+class DeepFam(nn.Module):
     """ Convolutional network for protein family prediction.
 
     PyTorch lightning implementation of DeepFam architecture (original: TensorFlow).
@@ -38,7 +37,6 @@ class DeepFam(pl.LightningModule):
         self.lr =  model_dict['lr']
         self.optim = model_dict['optim']
         self.loss_func = model_dict['loss_func']
-
 
         # One-Hot-Encoding Layer
         # Convolutional Layers
@@ -89,11 +87,6 @@ class DeepFam(pl.LightningModule):
         self.linear1.bias.data.fill_(0.01)
         self.classification1.bias.data.fill_(0.01)
 
-        # Classification activation layer
-        if self.multilabel_classification:
-            self.class_act = nn.Sigmoid()
-        else:
-            self.class_act = nn.Softmax(dim=1)
 
     def forward(self, x):
         """ Forward a batch of sequences through network.
@@ -128,21 +121,3 @@ class DeepFam(pl.LightningModule):
         x = self.classification1(x)
         # no softmax here
         return x
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_func(y_hat, y)
-        self.log('train loss', loss)
-        return loss
-    
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_func(y_hat, y)
-        self.log('test loss', loss)
-        return loss
-
-    def configure_optimizers(self):
-
-        return self.optim(self.parameters(), lr=self.lr)

@@ -10,7 +10,6 @@ Description: Convolutional networks for protein orthologous group assignment.
 import torch
 import torch.nn as nn
 import numpy as np
-import pytorch_lightning as pl
 
 
 # from ..data import gen_amino_acid_vocab
@@ -19,7 +18,7 @@ import pytorch_lightning as pl
 __all__ = [ 'DeepNOG']
 
 
-class DeepNOG(pl.LightningModule):
+class DeepNOG(nn.Module):
 
     """ Convolutional network for protein orthologous group prediction.
 
@@ -80,7 +79,9 @@ class DeepNOG(pl.LightningModule):
         self.lr =  model_dict['lr']
         self.optim = model_dict['optim']
         self.loss_func = model_dict['loss_func']
-        
+        self.train_metrics = model_dict['metrics'].clone()
+        self.valid_metrics = model_dict['metrics'].clone()
+
         # Convolutional Layers
         for i, kernel in enumerate(kernel_sizes):
             conv_layer = nn.Conv1d(in_channels=encoding_dim,
@@ -108,12 +109,6 @@ class DeepNOG(pl.LightningModule):
         self.classification1 = nn.Linear(
             in_features=n_filters * len(kernel_sizes),
             out_features=self.n_classes)
-
-        # Classification activation layer
-        if self.multilabel_classification:
-            self.class_act = nn.Sigmoid()
-        else:
-            self.class_act = nn.Softmax(dim=1)
 
         # Threshold for deciding below which confidence NN should be undecided
         if 'threshold' in model_dict:
@@ -152,21 +147,3 @@ class DeepNOG(pl.LightningModule):
         # NOTE: v1.2.0 removed the softmax here. Must now be performed in
         # inference module (otherwise, cross entropy loss requires hacks)
         return x
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_func(y_hat, y)
-        self.log('train loss', loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.forward(x)
-        loss = self.loss_func(y_hat, y)
-        self.log('test loss', loss)
-        return loss
-
-    def configure_optimizers(self):
-
-        return self.optim(self.parameters(), lr=self.lr)
