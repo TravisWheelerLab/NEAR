@@ -186,18 +186,7 @@ if __name__ == '__main__':
 
     trainer.fit(model, train, valid)
     model_name = os.path.join(model_dir, model_name)
-    test = train
 
-    with torch.no_grad():
-        for batch in test:
-            x, y = batch
-            preds = model.class_act(model(x))
-            gt = (preds >= 0.5).numpy()
-
-            xx = np.round(preds.numpy().ravel())
-            yy = y.numpy().ravel()
-            print(xx.shape)
-            print(yy.shape)
-            print(confusion_matrix(xx, yy))
+    trainer.test(model, test)
 
     torch.save(model, model_name)

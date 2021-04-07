@@ -25,8 +25,8 @@ class ClassificationTask(pl.LightningModule):
 
 
     def forward(self, x):
+        return self.model(x)
 
-        return self.forward(x)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -44,6 +44,15 @@ class ClassificationTask(pl.LightningModule):
         self.log_dict(self.valid_metrics, on_step=True, on_epoch=True)
         return loss
 
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.model(x)
+        loss = self.loss_func(y_hat, y)
+        self.valid_metrics(self.class_act(y_hat).ravel(), y.long().ravel())
+        self.log_dict(self.valid_metrics, on_step=True, on_epoch=True)
+        return loss
+
+
     def configure_optimizers(self):
 
         return self.optim(self.parameters(), lr=self.lr)
@@ -53,6 +62,8 @@ def configure_metrics():
 
     metric_collection = pl.metrics.MetricCollection([
         pl.metrics.Accuracy(),
+        pl.metrics.Recall(),
+        pl.metrics.Precision()
         ])
 
     return metric_collection
