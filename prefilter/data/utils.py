@@ -168,6 +168,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         # self.sequences_and_labels *= 100
 
     def _encoding_func(self, x):
+        # TODO: implement more logic here to use variable encodings.
+
         labels, seq = x
 
         oh = encode_protein_as_one_hot_vector(seq, self.max_sequence_length)

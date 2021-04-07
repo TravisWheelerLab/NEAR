@@ -3,9 +3,9 @@ import torch.nn as nn
 
 from .deepfam import *
 from .deepnog import *
+from .attn import *
 
 class ClassificationTask(pl.LightningModule):
-
 
     def __init__(self, model, model_dict):
         super().__init__()

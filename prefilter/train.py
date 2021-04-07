@@ -105,6 +105,7 @@ if __name__ == '__main__':
             num_workers=num_workers)
 
     if args.deepfam:
+
         deepfam_config = {
                 'n_classes':u.N_CLASSES,
                 'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
@@ -119,9 +120,12 @@ if __name__ == '__main__':
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
                 'metrics':m.configure_metrics()
                 }
+
         model = m.ClassificationTask(m.DeepFam(deepfam_config), deepfam_config)
         model_name = 'deepfam{}.h5'
+
     elif args.deepnog:
+
         deepnog_config = {
                 'n_classes':u.N_CLASSES,
                 'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
@@ -138,12 +142,36 @@ if __name__ == '__main__':
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
                 'metrics':m.configure_metrics()
                 }
+
         model = m.ClassificationTask(m.DeepNOG(deepnog_config), deepnog_config)
         model_name = 'deepnog{}.h5'
+
     elif args.attn:
-        model = m.attn_model(max_sequence_length, n_classes, binary_multilabel)
+
+        attn_config = {
+                'n_classes':u.N_CLASSES,
+                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+                'encoding_dim':len(u.PROT_ALPHABET),
+                'n_filters': 150,
+                'dropout': 0.3,
+                'pooling_layer_type':'avg',
+                'qkv_embed_dim': 16,
+                'hidden_units': 2000,
+                'multilabel_classification': binary_multilabel,
+                'alphabet_size':len(u.PROT_ALPHABET),
+                'lr':1e-3,
+                'optim':torch.optim.Adam,
+                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'metrics':m.configure_metrics(),
+                'mha_embed_dim':32,
+                'num_heads':2,
+                }
+
+        model = m.ClassificationTask(m.AttentionModel(attn_config), attn_config)
         model_name = 'attn{}.h5'
+
     else:
+
         raise ValueError('one of <deepnog, deepfam, attn> required as\
                 command-line-arg')
 
@@ -162,7 +190,7 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         for batch in test:
-            x, y= batch
+            x, y = batch
             preds = model.class_act(model(x))
             gt = (preds >= 0.5).numpy()
 
