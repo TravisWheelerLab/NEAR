@@ -10,7 +10,11 @@ import data.utils as u
 import models as m
 import losses as l
 
-from sklearn.metrics import confusion_matrix
+try:
+    from sklearn.metrics import confusion_matrix
+except:
+    print('cant import sklearn')
+
 from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Recall
 from glob import glob
 from argparse import ArgumentParser
@@ -48,7 +52,7 @@ if __name__ == '__main__':
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
                     data is stored, in structure of <data-path>/<test, train, val>')
-    ap.add_argument('--lr', type=str, default=1e-3, help='learning rate')
+    ap.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
@@ -72,6 +76,7 @@ if __name__ == '__main__':
     encode_as_image = args.encode_as_image
     focal_loss = args.focal_loss
     model_name_suffix = args.model_name
+    init_lr = args.lr
 
     model_dir = args.model_dir
 
@@ -115,7 +120,7 @@ if __name__ == '__main__':
                 'vocab_size': 23,
                 'hidden_units': 2000,
                 'multilabel_classification': binary_multilabel,
-                'lr':1e-3,
+                'lr':init_lr,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
@@ -137,7 +142,7 @@ if __name__ == '__main__':
                 'vocab_size': 23,
                 'hidden_units': 2000,
                 'multilabel_classification': binary_multilabel,
-                'lr':1e-3,
+                'lr':init_lr,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
@@ -160,7 +165,7 @@ if __name__ == '__main__':
                 'hidden_units': 200,
                 'multilabel_classification': binary_multilabel,
                 'alphabet_size':len(u.PROT_ALPHABET),
-                'lr':1e-3,
+                'lr':init_lr,
                 'optim':torch.optim.Adam,
                 'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
                 'metrics':m.configure_metrics(),
