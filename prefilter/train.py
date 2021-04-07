@@ -63,6 +63,7 @@ if __name__ == '__main__':
 
     data_root = args.data_path
     batch_size = args.batch_size
+    num_epochs = args.epochs
     max_sequence_length = args.max_sequence_length
     binary_multilabel = args.binary_multilabel
     multiclass = args.multiclass
@@ -156,7 +157,7 @@ if __name__ == '__main__':
                 'dropout': 0.3,
                 'pooling_layer_type':'avg',
                 'qkv_embed_dim': 16,
-                'hidden_units': 2000,
+                'hidden_units': 200,
                 'multilabel_classification': binary_multilabel,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'lr':1e-3,
@@ -178,11 +179,7 @@ if __name__ == '__main__':
     unique_time = str(int(time.time()))
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
 
-    logdir = os.path.join('logs', unique_time)
-    os.makedirs(logdir, exist_ok=True)
-    tboard = pl.loggers.tensorboard.TensorBoardLogger(logdir)
-
-    trainer = pl.Trainer(gpus=1, max_epochs=20, logger=tboard)
+    trainer = pl.Trainer(gpus=1, max_epochs=num_epochs)
 
     trainer.fit(model, train, valid)
     model_name = os.path.join(model_dir, model_name)

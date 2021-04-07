@@ -2,3 +2,4 @@ data/*
 models/*
 prefilter/logs/*
 prefilter/lightning_logs/*
+trained_models/*
