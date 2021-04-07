@@ -3,7 +3,6 @@ import torch.nn as nn
 
 from .deepfam import *
 from .deepnog import *
-from .metrics import *
 
 class ClassificationTask(pl.LightningModule):
 
@@ -48,3 +47,12 @@ class ClassificationTask(pl.LightningModule):
     def configure_optimizers(self):
 
         return self.optim(self.parameters(), lr=self.lr)
+
+
+def configure_metrics():
+
+    metric_collection = pl.metrics.MetricCollection([
+        pl.metrics.Accuracy(),
+        ])
+
+    return metric_collection

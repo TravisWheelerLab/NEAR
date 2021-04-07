@@ -1,30 +1,18 @@
 import os
-
-from pytorch_lightning.metrics import functional as FM
-
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-import re
 import time
 import pdb
-import sys
-import pickle
 import numpy as np
-import random
-
-random.seed(1)
-
 import torch
 import pytorch_lightning as pl
 
-import utils as u
+import data.utils as u
 import models as m
 import losses as l
 
-
-from random import shuffle
 from sklearn.metrics import confusion_matrix
+from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Recall
 from glob import glob
-from functools import partial, update_wrapper
 from argparse import ArgumentParser
 
 
@@ -128,11 +116,10 @@ if __name__ == '__main__':
                 'lr':1e-3,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
-                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss()
+                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'metrics':m.configure_metrics()
                 }
-        model = m.DeepFam(deepfam_config)
-        model.train_dataloader = train
-        model.val_dataloader = valid
+        model = m.ClassificationTask(m.DeepFam(deepfam_config), deepfam_config)
         model_name = 'deepfam{}.h5'
     elif args.deepnog:
         deepnog_config = {
@@ -148,9 +135,10 @@ if __name__ == '__main__':
                 'lr':1e-3,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
-                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss()
+                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'metrics':m.configure_metrics()
                 }
-        model = m.DeepNOG(deepnog_config)
+        model = m.ClassificationTask(m.DeepNOG(deepnog_config), deepnog_config)
         model_name = 'deepnog{}.h5'
     elif args.attn:
         model = m.attn_model(max_sequence_length, n_classes, binary_multilabel)
