@@ -33,12 +33,12 @@ if __name__ == '__main__':
     model_group.add_argument('--deepnog', action='store_true')
     model_group.add_argument('--attn', action='store_true')
 
-    loss_group = ap.add_mutually_exclusive_group(required=True)
-    loss_group.add_argument('--binary-multilabel', action='store_true',
+    label_group = ap.add_mutually_exclusive_group(required=True)
+    label_group.add_argument('--binary-multilabel', action='store_true',
             help='sigmoid activation with N_CLASSES nodes on the last layer,\
             useful for doing multi-label classification')
 
-    loss_group.add_argument('--multiclass',
+    label_group.add_argument('--multiclass',
             type=int, help='multiclass classification. Each sequence classified\
             (w/ softmax activation) into one of N_CLASSES')
 
@@ -60,8 +60,13 @@ if __name__ == '__main__':
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
-    ap.add_argument('--focal-loss', action='store_true', help='whether or not \
+    loss_group = ap.add_mutually_exclusive_group(required=True)
+    loss_group.add_argument('--focal-loss', action='store_true', help='whether or not \
             to use focal loss, defined in losses.py')
+    loss_group.add_argument('--bce-loss', action='store_true', help='whether or not \
+            to use regular BCE loss')
+    loss_group.add_argument('--xent-loss', action='store_true', help='whether or not \
+            to use categorical xent')
 
     args = ap.parse_args()
 
@@ -74,7 +79,11 @@ if __name__ == '__main__':
     num_workers = args.num_workers
     n_epochs = args.epochs
     encode_as_image = args.encode_as_image
+
     focal_loss = args.focal_loss
+    bce_loss = args.bce_loss
+    xent_loss = args.xent_loss
+
     model_name_suffix = args.model_name
     init_lr = args.lr
 
@@ -110,6 +119,17 @@ if __name__ == '__main__':
     valid = torch.utils.data.DataLoader(validation, batch_size=batch_size,
             num_workers=num_workers)
 
+    loss_func = None
+    if focal_loss:
+        loss_func = l.FocalLoss()
+    elif bce_loss: 
+        loss_func = torch.nn.BCEWithLogitsLoss()
+    elif xent_loss: 
+        loss_func = torch.nn.CategoricalCrossEntropyWithLogits()
+    else:
+        pass
+
+
     if args.deepfam:
 
         deepfam_config = {
@@ -123,7 +143,7 @@ if __name__ == '__main__':
                 'lr':init_lr,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
-                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'loss_func':loss_func,
                 'metrics':m.configure_metrics()
                 }
 
@@ -145,7 +165,7 @@ if __name__ == '__main__':
                 'lr':init_lr,
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
-                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'loss_func':loss_func,
                 'metrics':m.configure_metrics()
                 }
 
@@ -167,7 +187,7 @@ if __name__ == '__main__':
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'lr':init_lr,
                 'optim':torch.optim.Adam,
-                'loss_func':torch.nn.BCEWithLogitsLoss() if not focal_loss else l.FocalLoss(),
+                'loss_func':loss_func,
                 'metrics':m.configure_metrics(),
                 'mha_embed_dim':32,
                 'num_heads':2,
