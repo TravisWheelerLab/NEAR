@@ -60,6 +60,9 @@ if __name__ == '__main__':
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
+    ap.add_argument('--store-threshold-curve', action='store_true')
+    ap.add_argument('--log-freq', type=int, default=2)
+
     loss_group = ap.add_mutually_exclusive_group(required=True)
     loss_group.add_argument('--focal-loss', action='store_true', help='whether or not \
             to use focal loss, defined in losses.py')
@@ -79,6 +82,8 @@ if __name__ == '__main__':
     num_workers = args.num_workers
     n_epochs = args.epochs
     encode_as_image = args.encode_as_image
+    store_threshold_curve = args.store_threshold_curve
+    log_freq = args.log_freq
 
     focal_loss = args.focal_loss
     bce_loss = args.bce_loss
@@ -144,7 +149,9 @@ if __name__ == '__main__':
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
                 'loss_func':loss_func,
-                'metrics':m.configure_metrics()
+                'metrics':m.configure_metrics(),
+                'threshold_curve':store_threshold_curve,
+                'log_freq':log_freq
                 }
 
         model = m.ClassificationTask(m.DeepFam(deepfam_config), deepfam_config)
@@ -157,6 +164,7 @@ if __name__ == '__main__':
                 'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
                 'encoding_dim':len(u.PROT_ALPHABET),
                 'n_filters': 150,
+                'log_freq':log_freq,
                 'dropout': 0.3,
                 'pooling_layer_type':'avg',
                 'vocab_size': 23,
@@ -166,7 +174,8 @@ if __name__ == '__main__':
                 'alphabet_size':len(u.PROT_ALPHABET),
                 'optim':torch.optim.Adam,
                 'loss_func':loss_func,
-                'metrics':m.configure_metrics()
+                'metrics':m.configure_metrics(),
+                'threshold_curve':store_threshold_curve
                 }
 
         model = m.ClassificationTask(m.DeepNOG(deepnog_config), deepnog_config)
@@ -191,6 +200,8 @@ if __name__ == '__main__':
                 'metrics':m.configure_metrics(),
                 'mha_embed_dim':32,
                 'num_heads':2,
+                'log_freq':log_freq,
+                'threshold_curve':store_threshold_curve
                 }
 
         model = m.ClassificationTask(m.AttentionModel(attn_config), attn_config)
@@ -204,7 +215,7 @@ if __name__ == '__main__':
     unique_time = str(int(time.time()))
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
 
-    trainer = pl.Trainer(gpus=1, max_epochs=num_epochs)
+    trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, overfit_batches=0.1)
 
     trainer.fit(model, train, valid)
     model_name = os.path.join(model_dir, model_name)
