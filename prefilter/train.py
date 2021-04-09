@@ -237,7 +237,6 @@ if __name__ == '__main__':
         model = m.ClassificationTask(m.ProtCNN(protcnn_config), protcnn_config)
         model_name = 'protcnn{}.h5'
 
-
     else:
 
         raise ValueError('one of <deepnog, deepfam, attn> required as\
@@ -257,4 +256,4 @@ if __name__ == '__main__':
 
     trainer.test(model, test)
 
-    torch.save(model, model_name)
+    torch.save(model.state_dict(), model_name)
