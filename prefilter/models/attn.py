@@ -2,7 +2,21 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = ['AttentionModel']
+from data.utils import PROT_ALPHABET
+
+__all__ = ['AttentionModel', 'ATTN_CONFIG']
+
+ATTN_CONFIG = {
+        'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+        'vocab_size':len(PROT_ALPHABET),
+        'n_filters': 150,
+        'dropout': 0.3,
+        'pooling_layer_type':'avg',
+        'qkv_embed_dim': 16,
+        'hidden_units': 200,
+        'mha_embed_dim':32,
+        'num_heads':2,
+        }
 
 class AttentionModel(nn.Module):
 
@@ -11,27 +25,20 @@ class AttentionModel(nn.Module):
         super().__init__()
 
         self.n_classes = model_dict['n_classes']
-        self.alphabet_size = model_dict['alphabet_size']
+        self.vocab_size = model_dict['vocab_size']
         self.kernel_sizes = model_dict['kernel_size']
         self.n_filters = model_dict['n_filters']
         self.dropout = model_dict['dropout']
         self.hidden_units = model_dict['hidden_units']
-        self.multilabel_classification =  model_dict['multilabel_classification']
-        self.hidden_units = model_dict['hidden_units']
-        self.lr =  model_dict['lr']
-        self.optim = model_dict['optim']
-        self.loss_func = model_dict['loss_func']
         self.mha_embed_dim = model_dict['mha_embed_dim']
         self.num_heads = model_dict['num_heads']
         self.pooling_layer_type = model_dict['pooling_layer_type']
         self.qkv_embed_dim = model_dict['qkv_embed_dim']
 
-
-
         # One-Hot-Encoding Layer
         # Convolutional Layers
         for i, kernel in enumerate(self.kernel_sizes):
-            conv_layer = nn.Conv1d(in_channels=self.alphabet_size,
+            conv_layer = nn.Conv1d(in_channels=self.vocab_size,
                                    out_channels=self.n_filters,
                                    kernel_size=kernel)
             self.add_module(f'conv{i + 1}', conv_layer)

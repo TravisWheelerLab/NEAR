@@ -22,9 +22,7 @@ from argparse import ArgumentParser
 
 n_classes = 17646 
 
-
-if __name__ == '__main__':
-
+def setup_parser():
     ap = ArgumentParser()
 
     model_group = ap.add_mutually_exclusive_group(required=True)
@@ -36,13 +34,12 @@ if __name__ == '__main__':
 
     label_group = ap.add_mutually_exclusive_group(required=True)
 
-    label_group.add_argument('--binary-multilabel', action='store_true',
+    label_group.add_argument('--multilabel', action='store_true',
             help='sigmoid activation with N_CLASSES nodes on the last layer,\
             useful for doing multi-label classification')
 
     label_group.add_argument('--multiclass',
-            type=int, help='multiclass classification. Each sequence classified\
-            (w/ softmax activation) into one of N_CLASSES')
+            type=int, help='multiclass classification. Each sequence classified\ (w/ softmax activation) into one of N_CLASSES')
 
     ap.add_argument('--epochs', type=int, default=10)
     ap.add_argument('--batch-size', required=False, default=16, type=int)
@@ -64,8 +61,9 @@ if __name__ == '__main__':
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
-    ap.add_argument('--store-threshold-curve', action='store_true')
+    ap.add_argument('--threshold-curve', action='store_true')
     ap.add_argument('--log-freq', type=int, default=2)
+    ap.add_argument('--n-classes', type=int, default=u.N_CLASSES)
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
 
@@ -78,28 +76,34 @@ if __name__ == '__main__':
 
     args = ap.parse_args()
 
+    return args
+
+
+if __name__ == '__main__':
+
+    args = setup_parser()
+
     data_root = args.data_path
     batch_size = args.batch_size
     num_epochs = args.epochs
     max_sequence_length = args.max_sequence_length
-    binary_multilabel = args.binary_multilabel
+    multilabel = args.multilabel
     multiclass = args.multiclass
     num_workers = args.num_workers
     n_epochs = args.epochs
     encode_as_image = args.encode_as_image
-    store_threshold_curve = args.store_threshold_curve
+    threshold_curve = args.threshold_curve
     log_freq = args.log_freq
     n_gpus = args.n_gpus
+    n_classes = args.n_classes
 
     focal_loss = args.focal_loss
     bce_loss = args.bce_loss
     xent_loss = args.xent_loss
-
     model_name_suffix = args.model_name
     init_lr = args.lr
 
     model_dir = args.model_dir
-
 
     test = glob(os.path.join(data_root, '*test*'))
     train = glob(os.path.join(data_root, '*train*'))
@@ -109,19 +113,19 @@ if __name__ == '__main__':
                               max_sequence_length,
                               encode_as_image,
                               u.N_CLASSES,
-                              binary_multilabel)
+                              multilabel)
 
     train = u.ProteinSequenceDataset(train,
-                               max_sequence_length,
-                               encode_as_image,
-                               u.N_CLASSES,
-                               binary_multilabel)
+                              max_sequence_length,
+                              encode_as_image,
+                              u.N_CLASSES,
+                              multilabel)
 
     validation  = u.ProteinSequenceDataset(valid,
-                                     max_sequence_length,
-                                     encode_as_image,
-                                     u.N_CLASSES,
-                                     binary_multilabel)
+                              max_sequence_length,
+                              encode_as_image,
+                              u.N_CLASSES,
+                              multilabel)
 
     train = torch.utils.data.DataLoader(train, batch_size=batch_size,
             num_workers=num_workers)
@@ -130,7 +134,6 @@ if __name__ == '__main__':
     valid = torch.utils.data.DataLoader(validation, batch_size=batch_size,
             num_workers=num_workers)
 
-    loss_func = None
     if focal_loss:
         loss_func = l.FocalLoss()
     elif bce_loss: 
@@ -140,101 +143,42 @@ if __name__ == '__main__':
     else:
         pass
 
+    arg_dict = vars(args)
+    arg_dict['metrics'] = m.configure_metrics()
+    arg_dict['loss_func'] = loss_func
+    arg_dict['optim'] = torch.optim.Adam
+    arg_dict['lr'] = init_lr
 
     if args.deepfam:
 
-        deepfam_config = {
-                'n_classes':u.N_CLASSES,
-                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
-                'n_filters': 150,
-                'dropout': 0.3,
-                'vocab_size': 23,
-                'hidden_units': 2000,
-                'multilabel_classification': binary_multilabel,
-                'lr':init_lr,
-                'alphabet_size':len(u.PROT_ALPHABET),
-                'optim':torch.optim.Adam,
-                'loss_func':loss_func,
-                'metrics':m.configure_metrics(),
-                'threshold_curve':store_threshold_curve,
-                'log_freq':log_freq
-                }
-
-        model = m.ClassificationTask(m.DeepFam(deepfam_config), deepfam_config)
+        conf = m.DEEPFAM_CONFIG
+        conf['n_classes'] = n_classes
+        model = m.DeepFam(conf)
+        model = m.ClassificationTask(model, arg_dict)
         model_name = 'deepfam{}.h5'
 
     elif args.deepnog:
 
-        deepnog_config = {
-                'n_classes':u.N_CLASSES,
-                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
-                'encoding_dim':len(u.PROT_ALPHABET),
-                'n_filters': 150,
-                'log_freq':log_freq,
-                'dropout': 0.3,
-                'pooling_layer_type':'avg',
-                'vocab_size': 23,
-                'hidden_units': 2000,
-                'multilabel_classification': binary_multilabel,
-                'lr':init_lr,
-                'alphabet_size':len(u.PROT_ALPHABET),
-                'optim':torch.optim.Adam,
-                'loss_func':loss_func,
-                'metrics':m.configure_metrics(),
-                'threshold_curve':store_threshold_curve
-                }
-
-        model = m.ClassificationTask(m.DeepNOG(deepnog_config), deepnog_config)
+        conf = m.DEEPNOG_CONFIG
+        conf['n_classes'] = n_classes
+        model = m.DeepNOG(conf)
+        model = m.ClassificationTask(model, arg_dict)
         model_name = 'deepnog{}.h5'
 
     elif args.attn:
 
-        attn_config = {
-                'n_classes':u.N_CLASSES,
-                'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
-                'encoding_dim':len(u.PROT_ALPHABET),
-                'n_filters': 150,
-                'dropout': 0.3,
-                'pooling_layer_type':'avg',
-                'qkv_embed_dim': 16,
-                'hidden_units': 200,
-                'multilabel_classification': binary_multilabel,
-                'alphabet_size':len(u.PROT_ALPHABET),
-                'lr':init_lr,
-                'optim':torch.optim.Adam,
-                'loss_func':loss_func,
-                'metrics':m.configure_metrics(),
-                'mha_embed_dim':32,
-                'num_heads':2,
-                'log_freq':log_freq,
-                'threshold_curve':store_threshold_curve
-                }
-
-        model = m.ClassificationTask(m.AttentionModel(attn_config), attn_config)
+        conf = m.ATTN_CONFIG
+        conf['n_classes'] = n_classes
+        model = m.AttentionModel(conf)
+        model = m.ClassificationTask(model, arg_dict)
         model_name = 'attn{}.h5'
 
     elif args.protcnn:
 
-        protcnn_config = {
-                'n_classes':u.N_CLASSES,
-                'dilation_rate':3,
-                'initial_dilation_rate':2,
-                'n_filters': 150,
-                'alphabet_size':len(u.PROT_ALPHABET),
-                'pooling_layer_type':'avg',
-                'kernel_size':21,
-                'multilabel_classification': binary_multilabel,
-                'n_res_blocks':1,
-                'bottleneck_factor':0.5,
-                'lr':init_lr,
-                'optim':torch.optim.Adam,
-                'loss_func':loss_func,
-                'metrics':m.configure_metrics(),
-                'log_freq':log_freq,
-                'threshold_curve':store_threshold_curve
-                }
-
-        model = m.ClassificationTask(m.ProtCNN(protcnn_config), protcnn_config)
+        conf = m.PROTCNN_CONFIG
+        conf['n_classes'] = n_classes
+        model = m.ProtCNN(conf)
+        model = m.ClassificationTask(model, arg_dict)
         model_name = 'protcnn{}.h5'
 
     else:
@@ -244,15 +188,15 @@ if __name__ == '__main__':
 
     unique_time = str(int(time.time()))
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
+    model_name = os.path.join(model_dir, model_name)
 
     if n_gpus > 1:
         trainer = pl.Trainer(gpus=[i for i in range(n_gpus)],
-                max_epochs=num_epochs, overfit_batches=0.1, accelerator='ddp')
+                max_epochs=num_epochs, accelerator='ddp')
     else:
-        trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, overfit_batches=0.1)
+        trainer = pl.Trainer(gpus=1, max_epochs=num_epochs)
 
     trainer.fit(model, train, valid)
-    model_name = os.path.join(model_dir, model_name)
 
     trainer.test(model, test)
 

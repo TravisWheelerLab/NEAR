@@ -11,12 +11,19 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from data.utils import PROT_ALPHABET
 
-# from ..data import gen_amino_acid_vocab
+__all__ = ['DeepNOG', 'DEEPNOG_CONFIG']
 
-
-__all__ = [ 'DeepNOG']
-
+DEEPNOG_CONFIG = {
+        'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+        'encoding_dim':len(PROT_ALPHABET),
+        'n_filters': 150,
+        'dropout': 0.3,
+        'pooling_layer_type':'avg',
+        'vocab_size': 23,
+        'hidden_units': 2000,
+        }
 
 class DeepNOG(nn.Module):
 
@@ -55,32 +62,12 @@ class DeepNOG(nn.Module):
     def __init__(self, model_dict):
         super().__init__()
 
-        # Read hyperparameter dictionary
-        try:  # for inference these values are already available in the model
-            state = model_dict['model_state_dict']
-            self.n_classes = state['classification1.weight'].shape[0]
-            encoding_dim = state['encoding.embedding.weight'].shape[1]
-            kernel_sizes = [v.shape[-1] for k, v in state.items() if 'conv' in k and 'weight' in k]
-            n_filters = state['conv1.weight'].shape[0]
-            dropout = model_dict.get('dropout', 0.3)
-            pooling_layer_type = model_dict.get('pooling_layer_type', 'max')
-        except KeyError:  # set up the model for training
-            try:  # legacy format, that allowed for multitask learning
-                self.n_classes = model_dict['n_classes'][0]
-            except TypeError:  # single task
-                self.n_classes = model_dict['n_classes']
-            encoding_dim = model_dict['encoding_dim']
-            kernel_sizes = model_dict['kernel_size']
-            n_filters = model_dict['n_filters']
-            dropout = model_dict['dropout']
-            pooling_layer_type = model_dict['pooling_layer_type']
-
-        self.multilabel_classification =  model_dict['multilabel_classification']
-        self.lr =  model_dict['lr']
-        self.optim = model_dict['optim']
-        self.loss_func = model_dict['loss_func']
-        self.train_metrics = model_dict['metrics'].clone()
-        self.valid_metrics = model_dict['metrics'].clone()
+        self.n_classes = model_dict['n_classes']
+        encoding_dim = model_dict['encoding_dim']
+        kernel_sizes = model_dict['kernel_size']
+        n_filters = model_dict['n_filters']
+        dropout = model_dict['dropout']
+        pooling_layer_type = model_dict['pooling_layer_type']
 
         # Convolutional Layers
         for i, kernel in enumerate(kernel_sizes):

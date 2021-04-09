@@ -3,8 +3,22 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
+from data.utils import PROT_ALPHABET
 
-__all__ = ['ProtCNN']
+
+__all__ = ['ProtCNN', 'PROTCNN_CONFIG']
+
+
+PROTCNN_CONFIG = {
+        'dilation_rate':3,
+        'initial_dilation_rate':2,
+        'n_filters': 150,
+        'vocab_size':len(PROT_ALPHABET),
+        'pooling_layer_type':'avg',
+        'kernel_size':21,
+        'n_res_blocks':1,
+        'bottleneck_factor':0.5,
+        }
 
 
 class ResidualBlock(nn.Module):
@@ -59,7 +73,7 @@ class ProtCNN(nn.Module):
         super().__init__()
 
         self.n_classes = model_dict['n_classes']
-        self.alphabet_size = model_dict['alphabet_size']
+        self.vocab_size = model_dict['vocab_size']
         self.n_res_blocks = model_dict['n_res_blocks']
         self.initial_dilation_rate = model_dict['initial_dilation_rate']
         self.dilation_rate = model_dict['dilation_rate']
@@ -68,7 +82,7 @@ class ProtCNN(nn.Module):
         self.pool_type = model_dict['pooling_layer_type']
         self.kernel_size = model_dict['kernel_size']
 
-        self.initial_conv = nn.Conv1d(in_channels=self.alphabet_size,
+        self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                      out_channels=self.n_filters,
                                      kernel_size=self.kernel_size,
                                      padding=self.kernel_size-1,

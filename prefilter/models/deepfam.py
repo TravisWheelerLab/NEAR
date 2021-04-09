@@ -8,9 +8,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.functional import one_hot
+from data import utils as u
 
 
-__all__ = ['DeepFam']
+__all__ = ['DeepFam', 'DEEPFAM_CONFIG']
+
+DEEPFAM_CONFIG = {
+        'kernel_size': [8, 12, 16, 20, 24, 28, 32, 36],
+        'n_filters': 150,
+        'dropout': 0.3,
+        'vocab_size': 23,
+        'hidden_units': 2000,
+        }
+
 
 class DeepFam(nn.Module):
     """ Convolutional network for protein family prediction.
@@ -28,20 +38,16 @@ class DeepFam(nn.Module):
         super().__init__()
 
         self.n_classes = model_dict['n_classes']
-        self.alphabet_size = model_dict['alphabet_size']
+        self.vocab_size = model_dict['vocab_size']
         self.kernel_sizes = model_dict['kernel_size']
         self.n_filters = model_dict['n_filters']
         self.dropout = model_dict['dropout']
         self.hidden_units = model_dict['hidden_units']
-        self.multilabel_classification =  model_dict['multilabel_classification']
-        self.lr =  model_dict['lr']
-        self.optim = model_dict['optim']
-        self.loss_func = model_dict['loss_func']
 
         # One-Hot-Encoding Layer
         # Convolutional Layers
         for i, kernel in enumerate(self.kernel_sizes):
-            conv_layer = nn.Conv1d(in_channels=self.alphabet_size,
+            conv_layer = nn.Conv1d(in_channels=self.vocab_size,
                                    out_channels=self.n_filters,
                                    kernel_size=kernel)
             # Initialize Convolution Layer, gain = 1.0 to match tensorflow implementation

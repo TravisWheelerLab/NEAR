@@ -39,7 +39,7 @@ class ClassificationTask(pl.LightningModule):
 
         self.model = model
 
-        if self.multilabel_classification:
+        if self.multilabel:
             self.class_act = nn.Sigmoid()
         else:
             self.class_act = nn.Softmax(dim=1)
