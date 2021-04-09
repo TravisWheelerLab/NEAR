@@ -6,6 +6,7 @@ import numpy as np
 from .deepfam import *
 from .deepnog import *
 from .attn import *
+from .cnn_resnet import *
 
 try:
     import matplotlib.pyplot as plt
@@ -13,6 +14,7 @@ try:
     good_import_matplotlib = True
 except:
     good_import_matplotlib = False
+    print('couldn\'t import matplotlib')
 
 
 class ClassificationTask(pl.LightningModule):
@@ -33,8 +35,6 @@ class ClassificationTask(pl.LightningModule):
             setattr(self, key, val) # lazy lazy
 
         if self.threshold_curve:
-            self.train_prcurve = PRCurve(self.device)
-            self.valid_prcurve = PRCurve(self.device)
             self.test_prcurve =  PRCurve(self.device)
 
         self.model = model
@@ -58,10 +58,7 @@ class ClassificationTask(pl.LightningModule):
         self.train_metrics(preds, y)
         self.train_confmat.update(preds, y)
 
-        if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
-            self.train_prcurve.update(preds, y)
-
-        self.log_dict(self.train_metrics, on_step=True, on_epoch=False)
+        self.log_dict(self.train_metrics)
         self.log('train loss', loss)
 
         return loss
@@ -76,10 +73,7 @@ class ClassificationTask(pl.LightningModule):
         self.valid_metrics(preds, y)
         self.valid_confmat.update(preds, y)
 
-        if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
-            self.valid_prcurve.update(preds, y)
-
-        self.log_dict(self.valid_metrics, on_step=True, on_epoch=False)
+        self.log_dict(self.valid_metrics)
         self.log('valid loss', loss)
 
         return loss
@@ -95,10 +89,10 @@ class ClassificationTask(pl.LightningModule):
         self.test_metrics(preds, y)
         self.test_confmat.update(preds, y)
 
-        if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
+        if self.threshold_curve:
             self.test_prcurve.update(preds, y)
 
-        self.log_dict(self.test_metrics, on_step=True, on_epoch=False)
+        self.log_dict(self.test_metrics)
         self.log('test loss', loss)
 
         return loss
@@ -110,26 +104,20 @@ class ClassificationTask(pl.LightningModule):
         cmat = self.train_confmat.compute().detach().cpu().numpy().astype(np.int)
         if good_import_matplotlib:
             self._log_cmat(cmat, 'train_cmat')
-            if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
-                th, ps, rs = self.train_prcurve.compute()
-                self._log_threshold_curve(th, ps, rs, 'train')
 
     def validation_epoch_end(self, outs):
 
         cmat = self.valid_confmat.compute().detach().cpu().numpy().astype(np.int)
         if good_import_matplotlib:
             self._log_cmat(cmat, 'val_cmat')
-            if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
-                th, ps, rs = self.train_prcurve.compute()
-                self._log_threshold_curve(th, ps, rs, 'train')
 
     def test_epoch_end(self, outs):
         cmat = self.test_confmat.compute().detach().cpu().numpy().astype(np.int)
         if good_import_matplotlib:
             self._log_cmat(cmat, 'test_cmat')
-            if self.threshold_curve and (self.current_epoch + 1) % self.log_freq == 0:
-                th, ps, rs = self.train_prcurve.compute()
-                self._log_threshold_curve(th, ps, rs, 'train')
+            if self.threshold_curve:
+                th, ps, rs = self.test_prcurve.compute()
+                self._log_threshold_curve(th, ps, rs, 'test')
 
     def _log_cmat(self, confmat, name):
 
@@ -174,10 +162,8 @@ class PRCurve(pl.metrics.Metric):
         thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
         self.precision_and_recall_accumulators = {}
         for th in thresholds:
-            p = pl.metrics.Precision(num_classes=2, average='micro',
-                    is_multiclass=True).to(device)
-            r = pl.metrics.Recall(num_classes=2, average='micro',
-                    is_multiclass=True).to(device)
+            p = pl.metrics.Precision().to(device)
+            r = pl.metrics.Recall().to(device)
             self.precision_and_recall_accumulators[th] = [p, r]
 
     def update(self, preds, target):
@@ -190,13 +176,12 @@ class PRCurve(pl.metrics.Metric):
             recall.update(p, t)
 
     def compute(self):
+
         th = list(self.precision_and_recall_accumulators.keys())
         ps = []
         rs = []
-
         for p, r in self.precision_and_recall_accumulators.values():
             ps.append(p.compute().cpu().detach().numpy())
             rs.append(r.compute().cpu().detach().numpy())
 
         return th, ps, rs
-

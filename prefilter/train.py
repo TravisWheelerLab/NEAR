@@ -32,6 +32,7 @@ if __name__ == '__main__':
     model_group.add_argument('--deepfam', action='store_true')
     model_group.add_argument('--deepnog', action='store_true')
     model_group.add_argument('--attn', action='store_true')
+    model_group.add_argument('--resnet', action='store_true')
 
     label_group = ap.add_mutually_exclusive_group(required=True)
     label_group.add_argument('--binary-multilabel', action='store_true',
@@ -206,6 +207,31 @@ if __name__ == '__main__':
 
         model = m.ClassificationTask(m.AttentionModel(attn_config), attn_config)
         model_name = 'attn{}.h5'
+
+    elif args.resnet:
+
+        protcnn_config = {
+                'n_classes':u.N_CLASSES,
+                'dilation_rate':3,
+                'initial_dilation_rate':2,
+                'n_filters': 150,
+                'alphabet_size':len(u.PROT_ALPHABET),
+                'pooling_layer_type':'avg',
+                'kernel_size':21,
+                'multilabel_classification': binary_multilabel,
+                'n_res_blocks':1,
+                'bottleneck_factor':0.5,
+                'lr':init_lr,
+                'optim':torch.optim.Adam,
+                'loss_func':loss_func,
+                'metrics':m.configure_metrics(),
+                'log_freq':log_freq,
+                'threshold_curve':store_threshold_curve
+                }
+
+        model = m.ClassificationTask(m.ProtCNN(protcnn_config), protcnn_config)
+        model_name = 'resnet{}.h5'
+
 
     else:
 
