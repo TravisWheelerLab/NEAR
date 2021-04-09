@@ -6,7 +6,7 @@ import numpy as np
 from .deepfam import *
 from .deepnog import *
 from .attn import *
-from .cnn_resnet import *
+from .protcnn import *
 
 try:
     import matplotlib.pyplot as plt

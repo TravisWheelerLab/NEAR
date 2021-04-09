@@ -32,9 +32,10 @@ if __name__ == '__main__':
     model_group.add_argument('--deepfam', action='store_true')
     model_group.add_argument('--deepnog', action='store_true')
     model_group.add_argument('--attn', action='store_true')
-    model_group.add_argument('--resnet', action='store_true')
+    model_group.add_argument('--protcnn', action='store_true')
 
     label_group = ap.add_mutually_exclusive_group(required=True)
+
     label_group.add_argument('--binary-multilabel', action='store_true',
             help='sigmoid activation with N_CLASSES nodes on the last layer,\
             useful for doing multi-label classification')
@@ -65,6 +66,7 @@ if __name__ == '__main__':
     ap.add_argument('--log-freq', type=int, default=2)
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
+
     loss_group.add_argument('--focal-loss', action='store_true', help='whether or not \
             to use focal loss, defined in losses.py')
     loss_group.add_argument('--bce-loss', action='store_true', help='whether or not \
@@ -208,7 +210,7 @@ if __name__ == '__main__':
         model = m.ClassificationTask(m.AttentionModel(attn_config), attn_config)
         model_name = 'attn{}.h5'
 
-    elif args.resnet:
+    elif args.protcnn:
 
         protcnn_config = {
                 'n_classes':u.N_CLASSES,
@@ -230,7 +232,7 @@ if __name__ == '__main__':
                 }
 
         model = m.ClassificationTask(m.ProtCNN(protcnn_config), protcnn_config)
-        model_name = 'resnet{}.h5'
+        model_name = 'protcnn{}.h5'
 
 
     else:
