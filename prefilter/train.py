@@ -247,7 +247,8 @@ if __name__ == '__main__':
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
 
     if n_gpus > 1:
-        trainer = pl.Trainer(gpus=[i for i in range(n_gpus)], max_epochs=num_epochs, overfit_batches=0.1)
+        trainer = pl.Trainer(gpus=[i for i in range(n_gpus)],
+                max_epochs=num_epochs, overfit_batches=0.1, accelerator='ddp')
     else:
         trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, overfit_batches=0.1)
 
