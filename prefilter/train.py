@@ -59,6 +59,8 @@ if __name__ == '__main__':
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
 
+    ap.add_argument('--n-gpus', type=str, required=True, help='number of gpus to use')
+
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
@@ -87,6 +89,7 @@ if __name__ == '__main__':
     encode_as_image = args.encode_as_image
     store_threshold_curve = args.store_threshold_curve
     log_freq = args.log_freq
+    n_gpus = args.n_gpus
 
     focal_loss = args.focal_loss
     bce_loss = args.bce_loss
@@ -243,7 +246,7 @@ if __name__ == '__main__':
     unique_time = str(int(time.time()))
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
 
-    trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, overfit_batches=0.1)
+    trainer = pl.Trainer(gpus=n_gpus, max_epochs=num_epochs, overfit_batches=0.1)
 
     trainer.fit(model, train, valid)
     model_name = os.path.join(model_dir, model_name)
