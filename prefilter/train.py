@@ -59,7 +59,7 @@ if __name__ == '__main__':
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
 
-    ap.add_argument('--n-gpus', type=str, required=True, help='number of gpus to use')
+    ap.add_argument('--n-gpus', type=int, required=True, help='number of gpus to use')
 
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
