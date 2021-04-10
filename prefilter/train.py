@@ -51,7 +51,8 @@ def setup_parser():
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
                     data is stored, in structure of <data-path>/<test, train, val>')
-    ap.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    ap.add_argument('--lr', type=float, default=1e-3, 
+            help='initial learning rate')
 
     ap.add_argument('--model-dir', type=str, required=True, help='where to save\
     trained models')
