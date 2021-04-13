@@ -75,6 +75,12 @@ def setup_parser():
     loss_group.add_argument('--xent-loss', action='store_true', help='whether or not \
             to use categorical xent')
 
+    ap.add_argument('--gamma', type=float, default=0.2, help='factor to decay lr by every\
+            step-size epochs')
+    ap.add_argument('--step-size', type=float, default=2, help='lr is decayed by gamma\
+            every step-size epochs')
+
+
     args = ap.parse_args()
 
     return args
@@ -95,6 +101,8 @@ if __name__ == '__main__':
     encode_as_image = args.encode_as_image
     threshold_curve = args.threshold_curve
     log_freq = args.log_freq
+    step_size = args.step_size
+    gamma = args.gamma
     n_gpus = args.n_gpus
     n_classes = args.n_classes
 
@@ -148,8 +156,6 @@ if __name__ == '__main__':
     arg_dict['metrics'] = m.configure_metrics()
     arg_dict['loss_func'] = loss_func
     arg_dict['optim'] = torch.optim.Adam
-    arg_dict['lr'] = init_lr
-    arg_dict['log_freq'] = log_freq
 
     if args.deepfam:
 

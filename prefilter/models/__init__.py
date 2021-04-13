@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch.nn as nn
+import torch
 import pandas as pd
 import numpy as np
 
@@ -19,21 +20,19 @@ except:
 
 class ClassificationTask(pl.LightningModule):
 
-    def __init__(self, model, model_dict):
+    def __init__(self, model, args):
         super().__init__()
         
-        self.train_metrics = model_dict['metrics'].clone()
-        self.valid_metrics = model_dict['metrics'].clone()
-        self.test_metrics = model_dict['metrics'].clone()
-        self.log_freq = model_dict['log_freq']
+        self.train_metrics = args['metrics'].clone()
+        self.valid_metrics = args['metrics'].clone()
+        self.test_metrics = args['metrics'].clone()
+        
+        for key, val in args.items():
+            setattr(self, key, val)
 
         self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
         self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
         self.test_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
-
-
-        for key, val in model_dict.items():
-            setattr(self, key, val) # lazy lazy
 
         if self.threshold_curve:
             self.test_prcurve =  PRCurve(self.device)
@@ -153,7 +152,10 @@ class ClassificationTask(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        return self.optim(self.parameters(), lr=self.lr)
+        optim = self.optim(self.parameters(), lr=self.lr)
+        schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=self.step_size, gamma=self.gamma)
+        return [optim], [schedule]
+
 
 
 def configure_metrics():
