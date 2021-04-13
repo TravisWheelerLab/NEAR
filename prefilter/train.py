@@ -65,7 +65,7 @@ def setup_parser():
     ap.add_argument('--threshold-curve', action='store_true')
     ap.add_argument('--log-freq', type=int, default=2)
     ap.add_argument('--n-classes', type=int, default=u.N_CLASSES)
-    ap.add_argument('--log-dir', type=str, required=True)
+    ap.add_argument('--log-dir', type=str, default=None)
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
 
@@ -200,7 +200,8 @@ if __name__ == '__main__':
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
     model_name = os.path.join(model_dir, model_name)
 
-    log_dir = os.path.join(os.getcwd(), 'lightning_logs', log_dir)
+    if log_dir is not None:
+        log_dir = os.path.join(os.getcwd(), 'lightning_logs', log_dir)
 
     if n_gpus > 1:
         trainer = pl.Trainer(gpus=[i for i in range(n_gpus)],

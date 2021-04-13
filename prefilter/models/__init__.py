@@ -158,7 +158,6 @@ class ClassificationTask(pl.LightningModule):
         return [optim], [schedule]
 
 
-
 def configure_metrics():
 
     metric_collection = pl.metrics.MetricCollection([
