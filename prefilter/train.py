@@ -137,11 +137,11 @@ if __name__ == '__main__':
                               multilabel)
 
     train = torch.utils.data.DataLoader(train, batch_size=batch_size,
-            num_workers=num_workers)
+            num_workers=num_workers, drop_last=True)
     test = torch.utils.data.DataLoader(test, batch_size=batch_size, 
-            num_workers=num_workers)
+            num_workers=num_workers, drop_last=True)
     valid = torch.utils.data.DataLoader(validation, batch_size=batch_size,
-            num_workers=num_workers)
+            num_workers=num_workers, drop_last=True)
 
     if focal_loss:
         loss_func = l.FocalLoss()
