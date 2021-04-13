@@ -25,6 +25,7 @@ class ClassificationTask(pl.LightningModule):
         self.train_metrics = model_dict['metrics'].clone()
         self.valid_metrics = model_dict['metrics'].clone()
         self.test_metrics = model_dict['metrics'].clone()
+        self.log_freq = model_dict['log_freq']
 
         self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
         self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
@@ -36,6 +37,8 @@ class ClassificationTask(pl.LightningModule):
 
         if self.threshold_curve:
             self.test_prcurve =  PRCurve(self.device)
+            self.train_prcurve =  PRCurve(self.device)
+            self.valid_prcurve =  PRCurve(self.device)
 
         self.model = model
 
@@ -61,6 +64,9 @@ class ClassificationTask(pl.LightningModule):
         self.log_dict(self.train_metrics)
         self.log('train loss', loss)
 
+        if self.log_freq == self.current_epoch and self.threshold_curve:
+            self.train_prcurve.update(preds, y)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -75,6 +81,9 @@ class ClassificationTask(pl.LightningModule):
 
         self.log_dict(self.valid_metrics)
         self.log('valid loss', loss)
+
+        if self.log_freq == self.current_epoch and self.threshold_curve:
+            self.valid_prcurve.update(preds, y)
 
         return loss
 
@@ -104,12 +113,18 @@ class ClassificationTask(pl.LightningModule):
         cmat = self.train_confmat.compute().detach().cpu().numpy().astype(np.int)
         if good_import_matplotlib:
             self._log_cmat(cmat, 'train_cmat')
+            if self.threshold_curve and self.log_freq == self.current_epoch:
+                th, ps, rs = self.train_prcurve.compute()
+                self._log_threshold_curve(th, ps, rs, 'train')
 
     def validation_epoch_end(self, outs):
 
         cmat = self.valid_confmat.compute().detach().cpu().numpy().astype(np.int)
         if good_import_matplotlib:
             self._log_cmat(cmat, 'val_cmat')
+            if self.threshold_curve and self.log_freq == self.current_epoch:
+                th, ps, rs = self.valid_prcurve.compute()
+                self._log_threshold_curve(th, ps, rs, 'valid')
 
     def test_epoch_end(self, outs):
         cmat = self.test_confmat.compute().detach().cpu().numpy().astype(np.int)

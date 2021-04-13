@@ -149,6 +149,7 @@ if __name__ == '__main__':
     arg_dict['loss_func'] = loss_func
     arg_dict['optim'] = torch.optim.Adam
     arg_dict['lr'] = init_lr
+    arg_dict['log_freq'] = log_freq
 
     if args.deepfam:
 
