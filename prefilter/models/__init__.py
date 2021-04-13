@@ -40,6 +40,7 @@ class ClassificationTask(pl.LightningModule):
             self.valid_prcurve =  PRCurve(self.device)
 
         self.model = model
+        self.save_hyperparameters()
 
         if self.multilabel:
             self.class_act = nn.Sigmoid()

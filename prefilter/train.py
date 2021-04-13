@@ -206,6 +206,9 @@ if __name__ == '__main__':
 
     trainer.fit(model, train, valid)
 
-    trainer.test(model, test)
+    results = trainer.test(model, test)
+    p = results['Precision']
+    r = results['Recall']
+    model_name += '{:.3f}_{:.3f}'.format(p, r)
 
     torch.save(model.state_dict(), model_name)
