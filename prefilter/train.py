@@ -41,31 +41,43 @@ def setup_parser():
     label_group.add_argument('--multiclass',
             type=int, help='multiclass classification. Each sequence classified\ (w/ softmax activation) into one of N_CLASSES')
 
-    ap.add_argument('--epochs', type=int, default=10)
+    ap.add_argument('--epochs', type=int, default=10,
+            help='max. number of epochs to train')
     ap.add_argument('--batch-size', required=False, default=16, type=int)
     ap.add_argument('--max-sequence-length', required=False, default=256,
             type=int, help='size to which sequences will be truncated or padded')
     ap.add_argument('--num-workers', required=False, default=4,
             type=int, help='number of workers to use when loading data')
-    ap.add_argument('--encode-as-image', required=False, action='store_true')
+    ap.add_argument('--encode-as-image', required=False, action='store_true',
+            help='whether or not to encode residues as one-hot vector ')
+    # TODO: fix encode-as-image argument to encode-as-one-hot
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
-                    data is stored, in structure of <data-path>/<test, train, val>')
+                    data is stored. Requires structure to be <data-path>/<test, train, val>.json')
     ap.add_argument('--lr', type=float, default=1e-3, 
             help='initial learning rate')
 
-    ap.add_argument('--model-dir', type=str, required=True, help='where to save\
-    trained models')
+    ap.add_argument('--model-dir', type=str, required=True,
+                     help='where to save trained models')
 
     ap.add_argument('--n-gpus', type=int, required=True, help='number of gpus to use')
 
     ap.add_argument('--model-name', type=str, required=True, help='the name of\
             the model you want to train')
 
-    ap.add_argument('--threshold-curve', action='store_true')
-    ap.add_argument('--log-freq', type=int, default=2)
-    ap.add_argument('--n-classes', type=int, default=u.N_CLASSES)
-    ap.add_argument('--log-dir', type=str, default=None)
+    ap.add_argument('--threshold-curve', action='store_true',
+            help='whether or not to save precision and recall on test set\
+                    as a function of different probability thresholds. Only\
+                    works if you have matplotlib installed')
+    ap.add_argument('--log-freq', type=int, default=2,
+                    help='when to log the threshold_curve graph')
+    ap.add_argument('--n-classes', type=int, default=u.N_CLASSES, )
+    ap.add_argument('--log-dir', type=str, default=None,
+            help='where to save tensorboard logs')
+    ap.add_argument('--tune-batch-size', action='store_true',
+            help='use pt-lightning to get the largest batch size')
+    ap.add_argument('--tune-initial-lr', action='store_true')
+            help='use pt-lightning to get a guess for a good initial learning rate')
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
 
@@ -79,7 +91,7 @@ def setup_parser():
     ap.add_argument('--gamma', type=float, default=0.2, help='factor to decay lr by every\
             step-size epochs')
     ap.add_argument('--step-size', type=float, default=2, help='lr is decayed by gamma\
-            every step-size epochs')
+            every step-size epochs, in a staircase fashion')
 
 
     args = ap.parse_args()
@@ -107,6 +119,8 @@ if __name__ == '__main__':
     gamma = args.gamma
     n_gpus = args.n_gpus
     n_classes = args.n_classes
+    tune_batch_size = args.tune_batch_size
+    tune_initial_lr = args.tune_initial_lr
 
     focal_loss = args.focal_loss
     bce_loss = args.bce_loss
@@ -120,30 +134,6 @@ if __name__ == '__main__':
     train = glob(os.path.join(data_root, '*train*'))
     valid = glob(os.path.join(data_root, '*val*'))
 
-    test = u.ProteinSequenceDataset(test,
-                              max_sequence_length,
-                              encode_as_image,
-                              u.N_CLASSES,
-                              multilabel)
-
-    train = u.ProteinSequenceDataset(train,
-                              max_sequence_length,
-                              encode_as_image,
-                              u.N_CLASSES,
-                              multilabel)
-
-    validation  = u.ProteinSequenceDataset(valid,
-                              max_sequence_length,
-                              encode_as_image,
-                              u.N_CLASSES,
-                              multilabel)
-
-    train = torch.utils.data.DataLoader(train, batch_size=batch_size,
-            num_workers=num_workers, drop_last=True)
-    test = torch.utils.data.DataLoader(test, batch_size=batch_size, 
-            num_workers=num_workers, drop_last=True)
-    valid = torch.utils.data.DataLoader(validation, batch_size=batch_size,
-            num_workers=num_workers, drop_last=True)
 
     if focal_loss:
         loss_func = l.FocalLoss()
@@ -155,9 +145,12 @@ if __name__ == '__main__':
         pass
 
     arg_dict = vars(args)
+
     arg_dict['metrics'] = m.configure_metrics()
     arg_dict['loss_func'] = loss_func
-    arg_dict['optim'] = torch.optim.Adam
+    arg_dict['test_files'] = test
+    arg_dict['train_files'] = train
+    arg_dict['valid_files'] = valid
 
     if args.deepfam:
 
@@ -203,15 +196,36 @@ if __name__ == '__main__':
     if log_dir is not None:
         log_dir = os.path.join(os.getcwd(), 'lightning_logs', log_dir)
 
+    
+    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='step')
+
     if n_gpus > 1:
         trainer = pl.Trainer(gpus=[i for i in range(n_gpus)],
-                max_epochs=num_epochs, accelerator='ddp', default_root_dir=log_dir)
+                max_epochs=num_epochs, accelerator='ddp', default_root_dir=log_dir,
+                callbacks=[lr_monitor])
     else:
-        trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, default_root_dir=log_dir)
+        trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, default_root_dir=log_dir,
+                callbacks=[lr_monitor])
 
-    trainer.fit(model, train, valid)
+    if tune_batch_size:
 
-    results = trainer.test(model, test)
+        tuner = pl.tuner.tuning.Tuner(trainer)
+        new_batch_size = tuner.scale_batch_size(model)
+        model.hparams.batch_size = new_batch_size
+        print('Tuned batch size to {}'.format(new_batch_size))
+
+    if tune_initial_lr:
+
+        lr_finder = trainer.tuner.lr_find(model)
+        new_learning_rate = lr_finder.suggestion()
+        model.hparams.lr = new_learning_rate
+        print('Tuned learning rate to {}'.format(new_learning_rate))
+
+
+    trainer.fit(model)
+
+    results = trainer.test(model)
+
     p = results['Precision']
     r = results['Recall']
     model_name += '{:.3f}_{:.3f}'.format(p, r)

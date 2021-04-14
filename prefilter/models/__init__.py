@@ -8,6 +8,7 @@ from .deepfam import *
 from .deepnog import *
 from .attn import *
 from .protcnn import *
+from data import utils as u
 
 try:
     import matplotlib.pyplot as plt
@@ -28,7 +29,7 @@ class ClassificationTask(pl.LightningModule):
         self.test_metrics = args['metrics'].clone()
         
         for key, val in args.items():
-            setattr(self, key, val)
+            setattr(self, key, val) # easier than typing everything out
 
         self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
         self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
@@ -40,16 +41,19 @@ class ClassificationTask(pl.LightningModule):
             self.valid_prcurve =  PRCurve(self.device)
 
         self.model = model
-        self.save_hyperparameters()
+        self.save_hyperparameters(args)
 
         if self.multilabel:
             self.class_act = nn.Sigmoid()
         else:
             self.class_act = nn.Softmax(dim=1)
 
+        self._create_datasets()
+
 
     def forward(self, x):
         return self.model(x)
+
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -153,9 +157,59 @@ class ClassificationTask(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        optim = self.optim(self.parameters(), lr=self.lr)
-        schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=self.step_size, gamma=self.gamma)
-        return [optim], [schedule]
+        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        # this is tuned for Adam 
+        _, beta2 = optim.param_groups[0]['betas']
+        # from ``on the adequacy of untuned warmup for adaptive optimization'''
+        n_warmup_steps = int(2/(1-beta2))
+        batches_per_epoch = np.floor(len(self.train_dataloader()) // self.batch_size)
+        decay_steps = self.step_size*batches_per_epoch
+        def lr_warmup(step):
+            if step < n_warmup_steps:
+                return self.lr * step/n_warmup_steps
+            else:
+
+                return self.lr * self.gamma ** int(step / decay_steps)
+
+        schedule = torch.optim.lr_scheduler.LambdaLR(optim, lr_warmup)
+        return [optim], [{'scheduler':schedule, 'interval':'step', 'frequency':1,
+            'reduce_on_plateau':False}]
+
+    def _create_datasets(self):
+
+        self.test_psd = u.ProteinSequenceDataset(self.test_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  u.N_CLASSES,
+                                  self.multilabel)
+
+        self.train_psd = u.ProteinSequenceDataset(self.train_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  u.N_CLASSES,
+                                  self.multilabel)
+
+        self.valid_psd = u.ProteinSequenceDataset(self.valid_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  u.N_CLASSES,
+                                  self.multilabel)
+
+
+    def train_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.train_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
+
+    def test_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.test_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
+
+    def val_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.valid_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
 
 
 def configure_metrics():
@@ -186,7 +240,7 @@ class PRCurve(pl.metrics.Metric):
     def update(self, preds, target):
 
         for th, (precision, recall) in self.precision_and_recall_accumulators.items():
-            p = preds.clone().cpu()
+            p = preds.clone().cpu() # i don't know why it has to be on CPU 
             t = target.cpu()
             p[p >= th] = 1
             precision.update(p, t)
