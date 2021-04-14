@@ -11,15 +11,13 @@ from random import shuffle, seed
 
 seed(1)
 
-__all__ = ['ProteinSequenceDataset']
+__all__ = ['ProteinSequenceDataset', 'get_n_classes']
 
 PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
              'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
              'T' : 17, 'V' : 18, 'W' : 19, 'X' : 20, 'Y' : 21, 'Z' : 22 }
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
-SEQUENCES_PER_SHARD = 450000
-N_CLASSES = 17646 # number of classes in our dataset as predicted by hmmsearch
 
 def read_fasta(fasta, label):
 
@@ -154,17 +152,21 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             json_files,
             max_sequence_length,
             encode_as_image,
-            n_classes,
             multilabel,
-            name_to_label_mapping
+            name_to_label_mapping,
+            n_classes=None
             ):
 
 
         self.max_sequence_length = max_sequence_length
         self.multilabel = multilabel
-        self.n_classes = n_classes
         self.encode_as_image = encode_as_image
         self.name_to_label_mapping = name_to_label_mapping
+
+        if n_classes is None:
+            self.n_classes = get_n_classes(self.name_to_label_mapping)
+        else:
+            self.n_classes = n_classes
 
         self._build_dataset(json_files)
 
@@ -210,6 +212,17 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         x, y = self._encoding_func(self.sequences_and_labels[idx])
         return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y) 
 
+
+def get_n_classes(name_to_label_mapping):
+
+    with open(name_to_label_mapping, 'r') as f:
+        dct = json.load(f)
+    s = set()
+    for accession_id in dct.values():
+        s.add(accession_id)
+
+    n_classes = len(s)
+    return n_classes
 
 
 

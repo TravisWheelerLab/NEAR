@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.functional import one_hot
-from data import utils as u
+from utils import utils as u
 
 
 __all__ = ['DeepFam', 'DEEPFAM_CONFIG']

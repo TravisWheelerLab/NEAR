@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from data.utils import PROT_ALPHABET
+from utils.utils import PROT_ALPHABET
 
 __all__ = ['DeepNOG', 'DEEPNOG_CONFIG']
 

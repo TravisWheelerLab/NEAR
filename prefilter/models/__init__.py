@@ -8,7 +8,7 @@ from .deepfam import *
 from .deepnog import *
 from .attn import *
 from .protcnn import *
-from data import utils as u
+from utils import utils as u
 
 try:
     import matplotlib.pyplot as plt
@@ -180,20 +180,23 @@ class ClassificationTask(pl.LightningModule):
         self.test_psd = u.ProteinSequenceDataset(self.test_files,
                                   self.max_sequence_length,
                                   self.encode_as_image,
-                                  u.N_CLASSES,
-                                  self.multilabel)
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
 
         self.train_psd = u.ProteinSequenceDataset(self.train_files,
                                   self.max_sequence_length,
                                   self.encode_as_image,
-                                  u.N_CLASSES,
-                                  self.multilabel)
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
 
         self.valid_psd = u.ProteinSequenceDataset(self.valid_files,
                                   self.max_sequence_length,
                                   self.encode_as_image,
-                                  u.N_CLASSES,
-                                  self.multilabel)
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
 
 
     def train_dataloader(self):

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import pytorch_lightning as pl
 
-import data.utils as u
+import utils.utils as u
 import models as m
 import losses as l
 
@@ -20,7 +20,6 @@ from glob import glob
 from argparse import ArgumentParser
 
 
-n_classes = 17646 
 
 def setup_parser():
     ap = ArgumentParser()
@@ -48,9 +47,11 @@ def setup_parser():
             type=int, help='size to which sequences will be truncated or padded')
     ap.add_argument('--num-workers', required=False, default=4,
             type=int, help='number of workers to use when loading data')
+    # TODO: fix encode-as-image argument to encode-as-one-hot
     ap.add_argument('--encode-as-image', required=False, action='store_true',
             help='whether or not to encode residues as one-hot vector ')
-    # TODO: fix encode-as-image argument to encode-as-one-hot
+    ap.add_argument('--name-to-label-mapping', default='all-name-to-label.json',
+            help='file containing the name-to-label mapping for pfam accession ids')
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
                     data is stored. Requires structure to be <data-path>/<test, train, val>.json')
@@ -71,7 +72,6 @@ def setup_parser():
                     works if you have matplotlib installed')
     ap.add_argument('--log-freq', type=int, default=2,
                     help='when to log the threshold_curve graph')
-    ap.add_argument('--n-classes', type=int, default=u.N_CLASSES, )
     ap.add_argument('--log-dir', type=str, default=None,
             help='where to save tensorboard logs')
     ap.add_argument('--tune-batch-size', action='store_true',
@@ -118,7 +118,6 @@ if __name__ == '__main__':
     step_size = args.step_size
     gamma = args.gamma
     n_gpus = args.n_gpus
-    n_classes = args.n_classes
     tune_batch_size = args.tune_batch_size
     tune_initial_lr = args.tune_initial_lr
 
@@ -129,6 +128,8 @@ if __name__ == '__main__':
     init_lr = args.lr
 
     model_dir = args.model_dir
+
+    n_classes = u.get_n_classes(args.name_to_label_mapping)
 
     test = glob(os.path.join(data_root, '*test*'))
     train = glob(os.path.join(data_root, '*train*'))
@@ -151,6 +152,7 @@ if __name__ == '__main__':
     arg_dict['test_files'] = test
     arg_dict['train_files'] = train
     arg_dict['valid_files'] = valid
+    arg_dict['n_classes'] = n_classes
 
     if args.deepfam:
 
