@@ -224,7 +224,7 @@ if __name__ == '__main__':
 
     trainer.fit(model)
 
-    results = trainer.test(model)
+    results = trainer.test(model)[0]
 
     p = results['Precision']
     r = results['Recall']
