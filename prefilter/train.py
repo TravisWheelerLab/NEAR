@@ -76,7 +76,7 @@ def setup_parser():
             help='where to save tensorboard logs')
     ap.add_argument('--tune-batch-size', action='store_true',
             help='use pt-lightning to get the largest batch size')
-    ap.add_argument('--tune-initial-lr', action='store_true')
+    ap.add_argument('--tune-initial-lr', action='store_true',
             help='use pt-lightning to get a guess for a good initial learning rate')
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
