@@ -59,7 +59,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     return one_hot_encoding
 
 
-def read_sequences_from_json(json_file):
+def read_sequences_from_json(json_file, fout=None):
     '''
     json_file contains a dictionary of raw AA sequences mapped to their
     associated classes, classified by hmmsearch with an MSA of your choice.
@@ -81,7 +81,8 @@ def read_sequences_from_json(json_file):
     name_to_integer_label = {}
     integer_label = 0
 
-    fout = os.path.join(os.path.dirname(json_file), 'name-to-label.json')
+    if fout is None:
+        fout = os.path.join(os.path.dirname(json_file), 'name-to-label.json')
 
     if os.path.isfile(fout):
         with open(fout, 'r') as f:
@@ -155,6 +156,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             encode_as_image,
             n_classes,
             multilabel,
+            name_to_label_mapping
             ):
 
 
@@ -162,10 +164,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self.multilabel = multilabel
         self.n_classes = n_classes
         self.encode_as_image = encode_as_image
+        self.name_to_label_mapping = name_to_label_mapping
 
         self._build_dataset(json_files)
-        # self.sequences_and_labels = self.sequences_and_labels[:10]
-        # self.sequences_and_labels *= 100
 
     def _encoding_func(self, x):
         # TODO: implement more logic here to use variable encodings.
@@ -185,13 +186,16 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
 
     def _build_dataset(self, json_files):
+        if not isinstance(json_files, list):
+            json_files = [json_files]
 
         if len(json_files) == 1:
-            self.sequences_and_labels = read_sequences_from_json(json_files[0])
+            self.sequences_and_labels = read_sequences_from_json(json_files[0], self.name_to_label_mapping)
         else:
             self.sequences_and_labels = []
             for j in json_files:
-                self.sequences_and_labels.extend(read_sequences_from_json(json_files))
+                self.sequences_and_labels.extend(read_sequences_from_json(j,
+                    self.name_to_label_mapping))
 
         shuffle(self.sequences_and_labels)
 
@@ -199,6 +203,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
     def __len__(self):
 
         return len(self.sequences_and_labels)
+
 
     def __getitem__(self, idx):
 
@@ -212,20 +217,33 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
 
-    json_root = '../data/clustered-shuffle/json/'
-    data_root = '../data/clustered-shuffle/'
+    dirs = ['profmark0.2','profmark0.3','profmark0.4','profmark0.5','profmark0.6','profmark0.7',
+          'profmark0.8','profmark0.9']
 
-    json_files = glob('../data/clustered-shuffle/json/*val*')
+    all_files = []
+    for d in dirs:
+        for split in ['test', 'train', 'val']:
 
-    psd = ProteinSequenceDataset(json_files, 1024, True, N_CLASSES, True)
+            ppath = os.path.join('../../data/pmark-outputs', d, 'json', '*'+split+'*')
+            json_files = glob(ppath)[0]
+            all_files.append(json_files)
+            print(os.path.basename(json_files), end=' ')
+            psd = ProteinSequenceDataset(json_files, 1024, True, N_CLASSES, True,
+                    'all-name-to-label.json')
+            print(len(psd))
+            continue
 
-    dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
-            num_workers=4)
+            dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
+                    num_workers=4)
 
-    for x,y in dataloader:
-        print(x.shape)
+            for x,y in dataloader:
+                print(x.shape)
 
+    print(all_files)
+    psd = ProteinSequenceDataset(all_files, 1024, True, 18049, True, 'all_name_to_label.json')
+    print(len(psd))
 
-    # test = read_sequences_from_json(json_root + 'test-sequences-and-labels.json')
-    # train = read_sequences_from_json(json_root + 'train-sequences-and-labels.json')
-    # validation = read_sequences_from_json(json_root + 'val-sequences-and-labels.json')
+    # dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
+    #         num_workers=4)
+
+    # print(len(dataloader))
