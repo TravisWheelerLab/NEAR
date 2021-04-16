@@ -12,6 +12,7 @@ import torch.nn as nn
 import numpy as np
 
 from utils.utils import PROT_ALPHABET
+from .standard import ClassificationTask
 
 __all__ = ['DeepNOG', 'DEEPNOG_CONFIG']
 
@@ -25,7 +26,7 @@ DEEPNOG_CONFIG = {
         'hidden_units': 2000,
         }
 
-class DeepNOG(nn.Module):
+class DeepNOG(ClassificationTask):
 
     """ Convolutional network for protein orthologous group prediction.
 
@@ -59,8 +60,9 @@ class DeepNOG(nn.Module):
     last available in  `deepnog 1.2.2`.
     """
 
-    def __init__(self, model_dict):
-        super().__init__()
+    def __init__(self, model_dict, arg_dict):
+
+        super().__init__(arg_dict)
 
         self.n_classes = model_dict['n_classes']
         encoding_dim = model_dict['encoding_dim']

@@ -157,7 +157,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             n_classes=None
             ):
 
-
         self.max_sequence_length = max_sequence_length
         self.multilabel = multilabel
         self.encode_as_image = encode_as_image

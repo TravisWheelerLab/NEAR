@@ -8,8 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.functional import one_hot
-from utils import utils as u
-
+from .standard import ClassificationTask
 
 __all__ = ['DeepFam', 'DEEPFAM_CONFIG']
 
@@ -22,7 +21,7 @@ DEEPFAM_CONFIG = {
         }
 
 
-class DeepFam(nn.Module):
+class DeepFam(ClassificationTask):
     """ Convolutional network for protein family prediction.
 
     PyTorch lightning implementation of DeepFam architecture (original: TensorFlow).
@@ -34,8 +33,8 @@ class DeepFam(nn.Module):
         the model.
     """
 
-    def __init__(self, model_dict):
-        super().__init__()
+    def __init__(self, model_dict, task_args):
+        super().__init__(task_args)
 
         self.n_classes = model_dict['n_classes']
         self.vocab_size = model_dict['vocab_size']

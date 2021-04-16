@@ -5,6 +5,7 @@ import pdb
 import numpy as np
 import torch
 import pytorch_lightning as pl
+from pytorch_lightning import Trainer
 
 import utils.utils as u
 import models as m
@@ -18,8 +19,6 @@ except:
 from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Recall
 from glob import glob
 from argparse import ArgumentParser
-
-
 
 def setup_parser():
     ap = ArgumentParser()
@@ -135,7 +134,6 @@ if __name__ == '__main__':
     train = glob(os.path.join(data_root, '*train*'))
     valid = glob(os.path.join(data_root, '*val*'))
 
-
     if focal_loss:
         loss_func = l.FocalLoss()
     elif bce_loss: 
@@ -158,32 +156,30 @@ if __name__ == '__main__':
 
         conf = m.DEEPFAM_CONFIG
         conf['n_classes'] = n_classes
-        model = m.DeepFam(conf)
-        model = m.ClassificationTask(model, arg_dict)
+        model = m.DeepFam(conf, arg_dict)
         model_name = 'deepfam{}.h5'
 
     elif args.deepnog:
 
         conf = m.DEEPNOG_CONFIG
         conf['n_classes'] = n_classes
-        model = m.DeepNOG(conf)
-        model = m.ClassificationTask(model, arg_dict)
+        model = m.DeepNOG(conf, arg_dict)
         model_name = 'deepnog{}.h5'
 
     elif args.attn:
 
+        # currently this is not working due to CPU/GPU mismatches
+
         conf = m.ATTN_CONFIG
         conf['n_classes'] = n_classes
-        model = m.AttentionModel(conf)
-        model = m.ClassificationTask(model, arg_dict)
+        model = m.AttentionModel(conf, arg_dict)
         model_name = 'attn{}.h5'
 
     elif args.protcnn:
 
         conf = m.PROTCNN_CONFIG
         conf['n_classes'] = n_classes
-        model = m.ProtCNN(conf)
-        model = m.ClassificationTask(model, arg_dict)
+        model = m.ProtCNN(conf, arg_dict)
         model_name = 'protcnn{}.h5'
 
     else:
@@ -195,19 +191,21 @@ if __name__ == '__main__':
     model_name = model_name.format(unique_time) + "_" + model_name_suffix
     model_name = os.path.join(model_dir, model_name)
 
-    if log_dir is not None:
-        log_dir = os.path.join(os.getcwd(), 'lightning_logs', log_dir)
-
+    if log_dir is None:
+        log_dir = os.getcwd()
+    else:
+        log_dir = os.path.join('lighting_logs', log_dir)
     
-    lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='step')
+    lr_callback = pl.callbacks.LearningRateMonitor(logging_interval='step')
+    log_every_n_steps = 50
 
     if n_gpus > 1:
-        trainer = pl.Trainer(gpus=[i for i in range(n_gpus)],
+        trainer = Trainer(gpus=[i for i in range(n_gpus)],
                 max_epochs=num_epochs, accelerator='ddp', default_root_dir=log_dir,
-                callbacks=[lr_monitor])
+                callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
     else:
-        trainer = pl.Trainer(gpus=1, max_epochs=num_epochs, default_root_dir=log_dir,
-                callbacks=[lr_monitor])
+        trainer = Trainer(gpus=1, max_epochs=num_epochs, default_root_dir=log_dir,
+                callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
 
     if tune_batch_size:
 
@@ -226,10 +224,8 @@ if __name__ == '__main__':
 
     trainer.fit(model)
 
-    results = trainer.test(model)[0]
-
-    p = results['Precision']
-    r = results['Recall']
-    model_name += '{:.3f}_{:.3f}'.format(p, r)
+    # p = results['Precision']
+    # r = results['Recall']
+    # model_name += '_val_{:.3f}_{:.3f}'.format(p, r)
 
     torch.save(model.state_dict(), model_name)

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 from utils.utils import PROT_ALPHABET
+from .standard import ClassificationTask
 
 
 __all__ = ['ProtCNN', 'PROTCNN_CONFIG']
@@ -56,7 +57,7 @@ class ResidualBlock(nn.Module):
         return out + x
 
 
-class ProtCNN(nn.Module):
+class ProtCNN(ClassificationTask):
     """ 
     Convolutional network for protein family prediction.
 
@@ -69,8 +70,9 @@ class ProtCNN(nn.Module):
         the model.
     """
 
-    def __init__(self, model_dict):
-        super().__init__()
+    def __init__(self, model_dict, task_args):
+
+        super().__init__(task_args)
 
         self.n_classes = model_dict['n_classes']
         self.vocab_size = model_dict['vocab_size']
@@ -134,9 +136,6 @@ class ProtCNN(nn.Module):
             raise ValueError('pool type must be one of <max,avg>')
 
         self.classification = nn.Linear(self.n_filters, self.n_classes)
-
-
-
 
     def forward(self, x):
         """ Forward a batch of sequences through network.

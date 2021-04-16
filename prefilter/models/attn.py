@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 from utils.utils import PROT_ALPHABET
+from .standard import ClassificationTask
 
 __all__ = ['AttentionModel', 'ATTN_CONFIG']
 
@@ -18,11 +19,11 @@ ATTN_CONFIG = {
         'num_heads':2,
         }
 
-class AttentionModel(nn.Module):
+class AttentionModel(ClassificationTask):
 
-    def __init__(self, model_dict):
+    def __init__(self, model_dict, arg_dict):
 
-        super().__init__()
+        super().__init__(arg_dict)
 
         self.n_classes = model_dict['n_classes']
         self.vocab_size = model_dict['vocab_size']
@@ -55,7 +56,6 @@ class AttentionModel(nn.Module):
 
         self.n_conv_layers = len(self.kernel_sizes)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Max-Pooling Layer, yields same output as MaxPooling Layer for sequences of size 1000
         # as used in DeepFam but makes the NN applicable to arbitrary sequence lengths
@@ -67,9 +67,9 @@ class AttentionModel(nn.Module):
             raise ValueError(f'Unknown pooling_layer_type: '
                              f'{pooling_layer_type}')
 
-        self.qkv_embeddings = [nn.Linear(1, self.mha_embed_dim, bias=False).to(self.device),
-                               nn.Linear(1, self.mha_embed_dim, bias=False).to(self.device),
-                               nn.Linear(1, self.mha_embed_dim, bias=False).to(self.device)]
+        self.qkv_embeddings = [nn.Linear(1, self.mha_embed_dim, bias=False),
+                               nn.Linear(1, self.mha_embed_dim, bias=False),
+                               nn.Linear(1, self.mha_embed_dim, bias=False)]
 
         self.activation1 = nn.ReLU()
 
