@@ -194,7 +194,7 @@ if __name__ == '__main__':
     if log_dir is None:
         log_dir = os.getcwd()
     else:
-        log_dir = os.path.join('lighting_logs', log_dir)
+        log_dir = os.path.join('lightning_logs', log_dir)
     
     lr_callback = pl.callbacks.LearningRateMonitor(logging_interval='step')
     log_every_n_steps = 50
