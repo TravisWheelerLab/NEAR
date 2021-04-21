@@ -1,6 +1,7 @@
 *sh
 data/*
 models/*
+*json
 prefilter/logs/*
 prefilter/lightning_logs/*
 trained_models/*
