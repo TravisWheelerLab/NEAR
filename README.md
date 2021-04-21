@@ -1,3 +1,3 @@
 # prefilter
 
-Let's emulate hmmer using NNs. 
+Passing good candidates to the forward/backward algorithm using NNs.
