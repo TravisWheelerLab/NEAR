@@ -4,10 +4,13 @@ import torch
 import numpy as np
 
 import pdb
+import time
 
 from glob import glob
 from typing import Callable
 from random import shuffle, seed
+from collections import defaultdict
+
 
 seed(1)
 
@@ -146,6 +149,83 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     return sequences
 
 
+class Word2VecStyleDataset(torch.utils.data.Dataset):
+    
+    def __init__(self,
+            json_files,
+            max_sequence_length,
+            name_to_label_mapping,
+            n_negative_samples=5,
+            n_classes=None
+            ):
+
+        self.max_sequence_length = max_sequence_length
+        self.name_to_label_mapping = name_to_label_mapping
+        self.n_negative_samples = n_negative_samples
+
+        if n_classes is None:
+            self.n_classes = get_n_classes(self.name_to_label_mapping)
+        else:
+            self.n_classes = n_classes
+
+        self._build_dataset(json_files)
+
+    def _encoding_func(self, x):
+        oh = encode_protein_as_one_hot_vector(x, self.max_sequence_length)
+        oh = np.argmax(oh, axis=-1)
+        return oh.squeeze()
+
+    def _sample_example(self):
+
+        idx = int(np.random.rand()*len(self.sequences))
+        target_sequence = self.sequences[idx]
+        # grab a random sequence
+        x = self.sequences_and_labels[target_sequence] #... and all of the
+        # labels that come along with it (pfam ids)
+
+        target_family = np.random.choice(x, size=1)[0]
+        y = self.labels_and_sequences[target_family]
+        context_sequence = np.random.choice(y, size=1)[0]
+
+        # k, now sample self.n_negative_samples
+        negative_examples = []
+        i = 0
+        while len(negative_examples) < self.n_negative_samples:
+            negative_examples = np.random.choice(self.pfam_names, size=self.n_negative_samples)
+            i +=1 
+            if target_family in set(negative_examples):
+                negative_examples = []
+
+        negatives = []
+        for negative in negative_examples:
+            negatives.append(np.random.choice(self.labels_and_sequences[negative], size=1)[0])
+
+        target = torch.tensor(self._encoding_func(target_sequence))
+        context = torch.tensor(self._encoding_func(context_sequence))
+        negatives = torch.tensor([self._encoding_func(x) for x in negatives])
+        return target, context, negatives
+
+
+    def _build_dataset(self, json_file):
+
+        with open(json_file, 'r') as src:
+            self.sequences_and_labels = json.load(src)
+
+        self.labels_and_sequences = defaultdict(list)
+        for prot_seq, accession_ids in self.sequences_and_labels.items():
+            for i in accession_ids:
+                self.labels_and_sequences[i].append(prot_seq)
+
+        self.sequences = list(self.sequences_and_labels.keys())
+        self.pfam_names = list(self.labels_and_sequences.keys())
+
+    def __len__(self):
+        return len(self.sequences_and_labels)
+
+    def __getitem__(self, idx):
+        x = self._sample_example()
+        return x
+
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self,
@@ -232,30 +312,12 @@ if __name__ == '__main__':
     dirs = ['profmark0.2','profmark0.3','profmark0.4','profmark0.5','profmark0.6','profmark0.7',
           'profmark0.8','profmark0.9']
 
-    all_files = []
-    for d in dirs:
-        for split in ['test', 'train', 'val']:
+    root ='../../data/pmark-outputs/profmark0.6/json/train-sequences-and-labels.json' 
+    dset = Word2VecStyleDataset(root, 256,
+            '../../data/pmark-outputs/profmark0.6/json/name-to-label.json')
 
-            ppath = os.path.join('../../data/pmark-outputs', d, 'json', '*'+split+'*')
-            json_files = glob(ppath)[0]
-            all_files.append(json_files)
-            print(os.path.basename(json_files), end=' ')
-            psd = ProteinSequenceDataset(json_files, 1024, True, N_CLASSES, True,
-                    'all-name-to-label.json')
-            print(len(psd))
-            continue
-
-            dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
-                    num_workers=4)
-
-            for x,y in dataloader:
-                print(x.shape)
-
-    print(all_files)
-    psd = ProteinSequenceDataset(all_files, 1024, True, 18049, True, 'all_name_to_label.json')
-    print(len(psd))
-
-    # dataloader = torch.utils.data.DataLoader(psd, batch_size=4, shuffle=True, 
-    #         num_workers=4)
-
-    # print(len(dataloader))
+    s = time.time()
+    x, y,z = dset[1]
+    dset = torch.utils.data.DataLoader(dset, batch_size=1024)
+    for x, y, z in dset:
+        print(x.shape, y.shape, z.shape)

@@ -16,6 +16,168 @@ except:
     good_import_matplotlib = False
     print('couldn\'t import matplotlib')
 
+class Word2VecTask(pl.LightningModule):
+
+    def __init__(self, args):
+
+        super(ClassificationTask, self).__init__()
+        
+        self.train_metrics = args['metrics'].clone()
+        self.valid_metrics = args['metrics'].clone()
+        self.test_metrics = args['metrics'].clone()
+        
+        for key, val in args.items():
+            setattr(self, key, val) # easier than typing everything out
+
+        self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+        self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+        self.test_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+
+        self.save_hyperparameters(args)
+
+        self.class_act = nn.Sigmoid()
+
+        self._create_datasets()
+
+
+    def forward(self, x):
+        raise NotImplementedError()
+
+    def get_dots(self, targets, in_context, out_of_context):
+
+        targets_embed = self.forward(targets)
+        context_embed = self.forward(in_context) # shape: batch size by embedding dimension
+        negatives_embed = self.forward(out_of_context) # shape: batch_size x num_negatives x
+        # embedding dimension
+
+        pos_dots = (targets_embed*context_embed).sum(axis=1).squeeze() # both targets_embed and 
+        # context_embed should be batch_sizexembedding dim, so doing an element-wise
+        # multiplication then summing along embedding dimension gives us the dot product 
+        # of every target+context vector in the batch
+        neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(axis=-1)).squeeze()
+        return pos_dots, neg_dots
+
+
+    def training_step(self, batch, batch_idx):
+
+        targets, in_context, out_of_context, y = batch
+
+        pos_dots, neg_dots = self.get_dots(targets, in_context, out_of_context)
+
+        y_hat = torch.cat((pos_dots, neg_dots), axis=0)
+
+        loss = self.loss_func(y_hat, y) # should be binary xent
+        preds = self.class_act(y_hat).ravel()
+        y = y.long().ravel()
+
+        self.train_metrics(preds, y)
+        self.train_confmat.update(preds, y)
+
+        self.log_dict(self.train_metrics)
+        self.log('train loss', loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+
+        targets, in_context, out_of_context, y = batch
+
+        pos_dots, neg_dots = self.get_dots(targets, in_context, out_of_context)
+
+        y_hat = torch.cat((pos_dots, neg_dots), axis=0)
+
+        loss = self.loss_func(y_hat, y) # should be binary xent
+        preds = self.class_act(y_hat).ravel()
+        y = y.long().ravel()
+
+        self.valid_metrics(preds, y)
+        self.valid_confmat.update(preds, y)
+
+        self.log_dict(self.valid_metrics)
+        self.log('valid loss', loss)
+
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        targets, in_context, out_of_context, y = batch
+
+        pos_dots, neg_dots = self.get_dots(targets, in_context, out_of_context)
+
+        y_hat = torch.cat((pos_dots, neg_dots), axis=0)
+
+        loss = self.loss_func(y_hat, y) # should be binary xent
+        preds = self.class_act(y_hat).ravel()
+        y = y.long().ravel()
+
+        self.test_metrics(preds, y)
+        self.test_confmat.update(preds, y)
+
+        self.log_dict(self.test_metrics)
+        self.log('test loss', loss)
+        return loss
+
+    # values returned by this func are stored over an epoch
+
+    def _create_datasets(self):
+
+        self.test_psd = u.ProteinSequenceDataset(self.test_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
+
+        self.train_psd = u.ProteinSequenceDataset(self.train_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
+
+        self.valid_psd = u.ProteinSequenceDataset(self.valid_files,
+                                  self.max_sequence_length,
+                                  self.encode_as_image,
+                                  self.multilabel,
+                                  self.name_to_label_mapping,
+                                  self.n_classes)
+
+
+    def train_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.train_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
+
+    def test_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.test_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
+
+    def val_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.valid_psd, batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True)
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        # this is tuned for Adam 
+        _, beta2 = optim.param_groups[0]['betas']
+        # from ``on the adequacy of untuned warmup for adaptive optimization'''
+        n_warmup_steps = 100 #int(2/(1-beta2))
+        batches_per_epoch = len(self.train_dataloader())
+        decay_steps = 20000
+
+        def lr_schedule(step):
+
+            if step < n_warmup_steps:
+                x = self.lr * (step+1)/n_warmup_steps
+                return x
+            else:
+                x = self.lr * self.gamma ** int(step / decay_steps)
+                return x
+
+        mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
+        sched = {'scheduler':mysched, 'interval':'step'} 
+        return [optim], [sched]
+
 
 class ClassificationTask(pl.LightningModule):
 
