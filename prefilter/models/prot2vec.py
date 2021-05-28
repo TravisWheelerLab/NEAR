@@ -7,7 +7,7 @@ from utils.utils import PROT_ALPHABET
 from .standard import ClassificationTask
 
 
-__all__ = ['ProtCNN', 'PROTCNN_CONFIG']
+__all__ = ['Prot2Vec', 'PROTCNN_CONFIG']
 
 
 PROTCNN_CONFIG = {
@@ -57,17 +57,10 @@ class ResidualBlock(nn.Module):
         return out + x
 
 
-class ProtCNN(ClassificationTask):
+class Prot2Vec(ClassificationTask):
     """ 
     Convolutional network for protein family prediction.
 
-    PyTorch lightning implementation of the Resnet in 
-    'Using Deep Learning to Annotate the Protein Universe'
-    Parameters
-    ----------
-    model_dict : dict
-        Dictionary storing the hyperparameters and learned parameters of
-        the model.
     """
 
     def __init__(self, model_dict, task_args):
