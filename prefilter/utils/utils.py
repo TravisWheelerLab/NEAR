@@ -172,8 +172,8 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 
     def _encoding_func(self, x):
         oh = encode_protein_as_one_hot_vector(x, self.max_sequence_length)
-        oh = np.argmax(oh, axis=-1)
-        return oh.squeeze()
+        #oh = np.argmax(oh, axis=-1)
+        return oh.squeeze().transpose(1, 0)
 
     def _sample_example(self):
 
@@ -192,7 +192,7 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         i = 0
         while len(negative_examples) < self.n_negative_samples:
             negative_examples = np.random.choice(self.pfam_names, size=self.n_negative_samples)
-            i +=1 
+            i += 1 
             if target_family in set(negative_examples):
                 negative_examples = []
 
@@ -203,7 +203,10 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         target = torch.tensor(self._encoding_func(target_sequence))
         context = torch.tensor(self._encoding_func(context_sequence))
         negatives = torch.tensor([self._encoding_func(x) for x in negatives])
-        return target, context, negatives
+        labels = [1]
+        labels.extend([0]*self.n_negative_samples)
+        labels = torch.tensor([labels])
+        return target.float(), context.float(), negatives.float(), labels.float()
 
 
     def _build_dataset(self, json_file):
