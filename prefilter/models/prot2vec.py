@@ -4,13 +4,13 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 from utils.utils import PROT_ALPHABET
-from .standard import ClassificationTask
+from .standard import Word2VecTask
 
 
-__all__ = ['Prot2Vec', 'PROTCNN_CONFIG']
+__all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
 
 
-PROTCNN_CONFIG = {
+PROT2VEC_CONFIG = {
         'dilation_rate':3,
         'initial_dilation_rate':2,
         'n_filters': 150,
@@ -19,6 +19,7 @@ PROTCNN_CONFIG = {
         'kernel_size':21,
         'n_res_blocks':1,
         'bottleneck_factor':0.5,
+        'embedding_dim':300
         }
 
 
@@ -57,7 +58,7 @@ class ResidualBlock(nn.Module):
         return out + x
 
 
-class Prot2Vec(ClassificationTask):
+class Prot2Vec(Word2VecTask):
     """ 
     Convolutional network for protein family prediction.
 
@@ -67,7 +68,6 @@ class Prot2Vec(ClassificationTask):
 
         super().__init__(task_args)
 
-        self.n_classes = model_dict['n_classes']
         self.vocab_size = model_dict['vocab_size']
         self.n_res_blocks = model_dict['n_res_blocks']
         self.initial_dilation_rate = model_dict['initial_dilation_rate']
@@ -76,6 +76,7 @@ class Prot2Vec(ClassificationTask):
         self.bottleneck_factor = model_dict['bottleneck_factor']
         self.pool_type = model_dict['pooling_layer_type']
         self.kernel_size = model_dict['kernel_size']
+        self.embedding_dim = model_dict['embedding_dim']
 
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                      out_channels=self.n_filters,
@@ -128,7 +129,7 @@ class Prot2Vec(ClassificationTask):
         else:
             raise ValueError('pool type must be one of <max,avg>')
 
-        self.classification = nn.Linear(self.n_filters, self.n_classes)
+        self.embedding = nn.Linear(self.n_filters, self.embedding_dim)
 
     def forward(self, x):
         """ Forward a batch of sequences through network.
@@ -156,6 +157,6 @@ class Prot2Vec(ClassificationTask):
             x = layer(x)
 
         x = self.pool(x)
-        x = self.classification(x.squeeze())
+        x = self.embedding(x.squeeze())
 
         return x

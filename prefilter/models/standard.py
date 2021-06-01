@@ -20,7 +20,7 @@ class Word2VecTask(pl.LightningModule):
 
     def __init__(self, args):
 
-        super(ClassificationTask, self).__init__()
+        super(Word2VecTask, self).__init__()
         
         self.train_metrics = args['metrics'].clone()
         self.valid_metrics = args['metrics'].clone()
@@ -44,19 +44,26 @@ class Word2VecTask(pl.LightningModule):
         raise NotImplementedError()
 
     def get_dots(self, targets, in_context, out_of_context):
+        b, n_neg, c, d = out_of_context.shape
 
+        out_of_context = torch.reshape(out_of_context, (b*n_neg, c, d)) #
+        # does this reshaping work? I want to forward a batch of
+        # sequences thru the model, but each example in the mini-batch 
+        # actually consists of 5 sequences.
         targets_embed = self.forward(targets)
         context_embed = self.forward(in_context) # shape: batch size by embedding dimension
         negatives_embed = self.forward(out_of_context) # shape: batch_size x num_negatives x
+
+        negatives_embed = torch.reshape(negatives_embed, (b, n_neg, self.embedding_dim))
         # embedding dimension
 
         pos_dots = (targets_embed*context_embed).sum(axis=1).squeeze() # both targets_embed and 
         # context_embed should be batch_sizexembedding dim, so doing an element-wise
         # multiplication then summing along embedding dimension gives us the dot product 
         # of every target+context vector in the batch
-        neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(axis=-1)).squeeze()
-        return pos_dots, neg_dots
-
+        neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(2)).squeeze()
+        # want an batch_size*n_negatives 
+        return pos_dots, neg_dots.ravel()
 
     def training_step(self, batch, batch_idx):
 
@@ -65,10 +72,10 @@ class Word2VecTask(pl.LightningModule):
         pos_dots, neg_dots = self.get_dots(targets, in_context, out_of_context)
 
         y_hat = torch.cat((pos_dots, neg_dots), axis=0)
-
+        y = y.ravel()
         loss = self.loss_func(y_hat, y) # should be binary xent
         preds = self.class_act(y_hat).ravel()
-        y = y.long().ravel()
+        y = y.int()
 
         self.train_metrics(preds, y)
         self.train_confmat.update(preds, y)
@@ -84,6 +91,7 @@ class Word2VecTask(pl.LightningModule):
         pos_dots, neg_dots = self.get_dots(targets, in_context, out_of_context)
 
         y_hat = torch.cat((pos_dots, neg_dots), axis=0)
+        y = y.ravel()
 
         loss = self.loss_func(y_hat, y) # should be binary xent
         preds = self.class_act(y_hat).ravel()
@@ -119,26 +127,18 @@ class Word2VecTask(pl.LightningModule):
 
     def _create_datasets(self):
 
-        self.test_psd = u.ProteinSequenceDataset(self.test_files,
-                                  self.max_sequence_length,
-                                  self.encode_as_image,
-                                  self.multilabel,
-                                  self.name_to_label_mapping,
-                                  self.n_classes)
 
-        self.train_psd = u.ProteinSequenceDataset(self.train_files,
+        self.test_psd = u.Word2VecStyleDataset(self.test_files,
                                   self.max_sequence_length,
-                                  self.encode_as_image,
-                                  self.multilabel,
-                                  self.name_to_label_mapping,
-                                  self.n_classes)
+                                  self.name_to_label_mapping)
 
-        self.valid_psd = u.ProteinSequenceDataset(self.valid_files,
+        self.train_psd = u.Word2VecStyleDataset(self.train_files,
                                   self.max_sequence_length,
-                                  self.encode_as_image,
-                                  self.multilabel,
-                                  self.name_to_label_mapping,
-                                  self.n_classes)
+                                  self.name_to_label_mapping)
+
+        self.valid_psd = u.Word2VecStyleDataset(self.valid_files,
+                                  self.max_sequence_length,
+                                  self.name_to_label_mapping)
 
 
     def train_dataloader(self):
@@ -157,6 +157,10 @@ class Word2VecTask(pl.LightningModule):
                 num_workers=self.num_workers, drop_last=True)
 
     def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optim
+
+    def configure_optimizers_with_warmup(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
         # this is tuned for Adam 
         _, beta2 = optim.param_groups[0]['betas']

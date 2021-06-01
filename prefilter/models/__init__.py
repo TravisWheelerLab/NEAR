@@ -3,5 +3,6 @@ from .deepnog import *
 from .attn import *
 from .protcnn import *
 from .standard import *
+from .prot2vec import *
 
 # idk what else goes in this file
