@@ -156,26 +156,26 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
             max_sequence_length,
             name_to_label_mapping,
             n_negative_samples=5,
-            n_classes=None
+            evaluating=False
             ):
 
         self.max_sequence_length = max_sequence_length
         self.name_to_label_mapping = name_to_label_mapping
         self.n_negative_samples = n_negative_samples
-
-        if n_classes is None:
-            self.n_classes = get_n_classes(self.name_to_label_mapping)
-        else:
-            self.n_classes = n_classes
+        self.evaluating = evaluating
 
         self._build_dataset(json_files)
+        if not self.evaluating:
+            self.sample_func = self._sample_w2v_batch
+        else:
+            self.sample_func = self._iterate
 
     def _encoding_func(self, x):
         oh = encode_protein_as_one_hot_vector(x, self.max_sequence_length)
         #oh = np.argmax(oh, axis=-1)
         return oh.squeeze().transpose(1, 0)
 
-    def _sample_example(self):
+    def _sample_w2v_batch(self, idx):
 
         idx = int(np.random.rand()*len(self.sequences))
         target_sequence = self.sequences[idx]
@@ -208,6 +208,9 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         labels = torch.tensor([labels])
         return target.float(), context.float(), negatives.float(), labels.float()
 
+    def _iterate(self, idx):
+        seq, labels = self.sequences[idx], self.pfam_names[idx]
+        return torch.tensor(self._encoding_func(seq)), labels
 
     def _build_dataset(self, json_file):
 
@@ -220,13 +223,13 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
                 self.labels_and_sequences[i].append(prot_seq)
 
         self.sequences = list(self.sequences_and_labels.keys())
-        self.pfam_names = list(self.labels_and_sequences.keys())
+        self.pfam_names = list(self.sequences_and_labels.values())
 
     def __len__(self):
         return len(self.sequences_and_labels)
 
     def __getitem__(self, idx):
-        x = self._sample_example()
+        x = self.sample_func(idx)
         return x
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):

@@ -130,15 +130,18 @@ class Word2VecTask(pl.LightningModule):
 
         self.test_psd = u.Word2VecStyleDataset(self.test_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping)
+                                  self.name_to_label_mapping,
+                                  evaluating=False)
 
         self.train_psd = u.Word2VecStyleDataset(self.train_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping)
+                                  self.name_to_label_mapping,
+                                  evaluating=False)
 
         self.valid_psd = u.Word2VecStyleDataset(self.valid_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping)
+                                  self.name_to_label_mapping,
+                                  evaluating=False)
 
 
     def train_dataloader(self):

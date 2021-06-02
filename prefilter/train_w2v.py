@@ -44,6 +44,7 @@ if __name__ == '__main__':
     arg_dict['gamma'] = 1
 
     model = m.Prot2Vec(m.PROT2VEC_CONFIG, arg_dict)
-    num_epochs = 1
+    num_epochs = 10
     trainer = Trainer(gpus=1, max_epochs=num_epochs)
     trainer.fit(model)
+    torch.save(model.state_dict(), 'first-pass-at-prot2vec.pt')
