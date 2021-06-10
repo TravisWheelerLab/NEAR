@@ -1,7 +1,9 @@
 *sh
+*pycache*
 data/*
 models/*
 *json
+*pt
 prefilter/logs/*
 prefilter/lightning_logs/*
 trained_models/*

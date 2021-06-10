@@ -18,26 +18,24 @@ except:
 
 class Word2VecTask(pl.LightningModule):
 
-    def __init__(self, args):
+    def __init__(self, evaluating, args):
 
         super(Word2VecTask, self).__init__()
-        
-        self.train_metrics = args['metrics'].clone()
-        self.valid_metrics = args['metrics'].clone()
-        self.test_metrics = args['metrics'].clone()
         
         for key, val in args.items():
             setattr(self, key, val) # easier than typing everything out
 
-        self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
-        self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
-        self.test_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
-
-        self.save_hyperparameters(args)
+        if not evaluating:
+            self.train_metrics = args['metrics'].clone()
+            self.valid_metrics = args['metrics'].clone()
+            self.test_metrics = args['metrics'].clone()
+            self.train_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+            self.valid_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+            self.test_confmat = pl.metrics.ConfusionMatrix(num_classes=2)
+            self.save_hyperparameters(args)
+            self._create_datasets()
 
         self.class_act = nn.Sigmoid()
-
-        self._create_datasets()
 
 
     def forward(self, x):
@@ -75,13 +73,11 @@ class Word2VecTask(pl.LightningModule):
         y = y.ravel()
         loss = self.loss_func(y_hat, y) # should be binary xent
         preds = self.class_act(y_hat).ravel()
-        y = y.int()
+        #y = y.int()
 
-        self.train_metrics(preds, y)
-        self.train_confmat.update(preds, y)
-
-        self.log_dict(self.train_metrics)
-        self.log('train loss', loss)
+        #self.train_metrics(preds, y)
+        #self.log_dict(self.train_metrics)
+        #self.log('train loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):

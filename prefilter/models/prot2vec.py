@@ -33,6 +33,8 @@ class ResidualBlock(nn.Module):
         super(ResidualBlock, self).__init__()
 
         out_channels = int(out_channels*bottleneck_factor)
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
         self.conv1 = nn.Conv1d(
             in_channels, out_channels, kernel_size=kernel_size, stride=stride,
@@ -50,12 +52,36 @@ class ResidualBlock(nn.Module):
         self.up_bottleneck = nn.Conv1d(out_channels, int(out_channels/bottleneck_factor),
                 kernel_size=1, stride=1, padding=0)
 
+    def _masked_forward(self, x, mask):
 
-    def forward(self, x):
+        x[mask.expand(-1, self.in_channels, -1)] = 0
+
+        out = self.conv1(x)
+        out[mask.expand(-1, self.out_channels, -1)] = 0
+        out = F.relu(self.bn1(out))
+
+        out[mask.expand(-1, self.out_channels, -1)] = 0
+        out = self.conv2(out)
+
+        out[mask.expand(-1, self.out_channels, -1)] = 0
+        out = F.relu(self.bn2(out))
+
+        out[mask.expand(-1, self.out_channels, -1)] = 0
+        out = self.up_bottleneck(out)
+
+        return out + x
+
+    def _forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
         out = F.relu(self.bn2(self.conv2(out)))
         out = self.up_bottleneck(out)
         return out + x
+
+    def forward(self, x, mask=None):
+        if mask is None:
+            return self._forward(x)
+        else:
+            return self._masked_forward(x, mask)
 
 
 class Prot2Vec(Word2VecTask):
@@ -64,9 +90,9 @@ class Prot2Vec(Word2VecTask):
 
     """
 
-    def __init__(self, model_dict, task_args):
+    def __init__(self, model_dict, task_args, evaluating=False):
 
-        super().__init__(task_args)
+        super().__init__(evaluating, task_args)
 
         self.vocab_size = model_dict['vocab_size']
         self.n_res_blocks = model_dict['n_res_blocks']
@@ -131,7 +157,43 @@ class Prot2Vec(Word2VecTask):
 
         self.embedding = nn.Linear(self.n_filters, self.embedding_dim)
 
-    def forward(self, x):
+    def _masked_forward(self, x, mask):
+        """
+        Before each convolution or batch normalization operation, we zero-out
+        the features in any location that corresponds to padding in the input
+        sequence 
+        """
+        out = self.initial_conv(x)
+        out[mask.expand(-1, self.n_filters, -1)] = 0
+        x = F.relu(self.bn1(out))
+        x[mask.expand(-1, self.n_filters, -1)] = 0
+        x = self.dilated1(x)
+        x[mask.expand(-1, int(self.n_filters*self.bottleneck_factor), -1)] = 0
+        x = F.relu(self.bn2(x))
+        x[mask.expand(-1, int(self.n_filters*self.bottleneck_factor), -1)] = 0
+        x = self.bottleneck1(x) + out
+        for layer in self.encoding_network:
+            x = layer(x, mask) # takes care of masking in the function
+        x = self.pool(x)
+        x = self.embedding(x.squeeze())
+        return x
+
+    def _forward(self, x):
+        out = self.initial_conv(x)
+
+        x = F.relu(self.bn1(out))
+        x = self.dilated1(x)
+        x = F.relu(self.bn2(x))
+        x = self.bottleneck1(x) + out
+
+        for layer in self.encoding_network:
+            x = layer(x)
+
+        x = self.pool(x)
+        x = self.embedding(x.squeeze())
+        return x
+
+    def forward(self, x, mask=None):
         """ Forward a batch of sequences through network.
 
         Parameters
@@ -146,17 +208,8 @@ class Prot2Vec(Word2VecTask):
         out : Tensor, shape (batch_size, n_classes)
             Confidence of sequence(s) being in one of the n_classes.
         """
-        out = self.initial_conv(x)
+        if mask is None:
+            return self._forward(x)
+        else:
+            return self._masked_forward(x, mask)
 
-        x = F.relu(self.bn1(out))
-        x = self.dilated1(x)
-        x = F.relu(self.bn2(x))
-        x = self.bottleneck1(x) + out
-
-        for layer in self.encoding_network:
-            x = layer(x)
-
-        x = self.pool(x)
-        x = self.embedding(x.squeeze())
-
-        return x
