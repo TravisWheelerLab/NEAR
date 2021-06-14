@@ -212,4 +212,3 @@ class Prot2Vec(Word2VecTask):
             return self._forward(x)
         else:
             return self._masked_forward(x, mask)
-

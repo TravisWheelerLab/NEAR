@@ -19,13 +19,12 @@ from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Rec
 from glob import glob
 from argparse import ArgumentParser
 
-if __name__ == '__main__':
-
+if __name__ == '__main__': 
     pmark = 0.7
     root = '../data/subset-for-overfitting/json/'
     max_sequence_length = 256
     name_to_label_mapping = root + 'name-to-label.json'
-    train = root + 'test-subset.json'
+    train = root + 'train-subset.json'
     test = root + 'test-subset.json'
     valid = root + 'test-subset.json'
 
@@ -42,6 +41,7 @@ if __name__ == '__main__':
     arg_dict['batch_size'] = 32
     arg_dict['num_workers'] = 1
     arg_dict['gamma'] = 1
+    arg_dict['n_negative_samples'] = 5
 
     model = m.Prot2Vec(m.PROT2VEC_CONFIG, arg_dict)
     num_epochs = 100

@@ -23,7 +23,7 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
             json_files,
             max_sequence_length,
             name_to_label_mapping,
-            n_negative_samples=5,
+            n_negative_samples,
             evaluating=False
             ):
 
@@ -33,10 +33,10 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         self.evaluating = evaluating
         self._build_dataset(json_files)
 
-        if not self.evaluating:
-            self.sample_func = self._sample_w2v_batch
-        else:
+        if self.evaluating:
             self.sample_func = self._iterate
+        else:
+            self.sample_func = self._sample_w2v_batch
 
     def _encoding_func(self, x):
         return utils.encode_protein_as_one_hot_vector(x, self.max_sequence_length)

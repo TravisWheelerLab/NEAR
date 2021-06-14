@@ -10,6 +10,7 @@ from pytorch_lightning import Trainer
 from collections import defaultdict
 
 import utils.utils as u
+from utils.datasets import Word2VecStyleDataset
 import models as m
 import losses as l
 
@@ -20,85 +21,95 @@ def collate_fn(batch):
         labels.append(b[1])
     return features, labels
 
+def cosine_sim(a, b):
+    a = a.detach().cpu().numpy()
+    b = b.detach().cpu().numpy()
+
+    return np.dot(a,b)/(np.linalg.norm(a)*np.linalg.norm(b))
+
+def get_embeddings_per_family(dataset, model, device='cuda'):
+
+    name_to_embed = defaultdict(list)
+    for batch in dataset:
+        features, mask, labels = batch
+        features = features.to(device)
+        mask = mask.to(device)
+        embedding = model(features, mask).to(device)
+        for i, label_set in enumerate(labels):
+            for family in label_set:
+                name_to_embed[family].append(embedding[i])
+
+    return name_to_embed
+
+def get_closest(target, others):
+    pass
+
+# i = 0
+# s = time.time()
+
 if __name__ == '__main__':
 
-    pmark = 0.7
-    root = '../data/pmark-outputs/profmark{}/json/'.format(pmark)
-    max_sequence_length = 256
+    root = '../data/subset-for-overfitting/json/'
     name_to_label_mapping = root + 'name-to-label.json'
-    train_files = root + 'train-sequences-and-labels.json'
-    test_files = root + 'test-sequences-and-labels.json'
-    valid_files = root + 'val-sequences-and-labels.json'
+    test = root + 'test-subset.json'
+    train = root + 'train-subset.json'
 
-    train = u.Word2VecStyleDataset(train_files,
-                                   max_sequence_length,
-                                   name_to_label_mapping,
-                                   evaluating=True)
-    test = u.Word2VecStyleDataset(test_files,
-                                   max_sequence_length,
-                                   name_to_label_mapping,
-                                   evaluating=True)
+    test_dset = Word2VecStyleDataset(test, None, name_to_label_mapping,
+            n_negative_samples=5, evaluating=True)
 
-    train = torch.utils.data.DataLoader(train, 
-            batch_size=32, shuffle=True,
-            collate_fn=collate_fn)
-    test = torch.utils.data.DataLoader(test, 
-            batch_size=32, shuffle=True,
-            collate_fn=collate_fn)
+    train_dset = Word2VecStyleDataset(train, None, name_to_label_mapping,
+            n_negative_samples=5, evaluating=True)
 
+    test = torch.utils.data.DataLoader(test_dset, batch_size=32,
+            collate_fn=u.pad_batch)
+    train = torch.utils.data.DataLoader(train_dset, batch_size=32,
+            collate_fn=u.pad_batch)
 
     arg_dict = {}
-    arg_dict['metrics'] = m.configure_metrics()
-    arg_dict['test_files'] = test_files
-    arg_dict['train_files'] = train_files
-    arg_dict['valid_files'] = valid_files
-    arg_dict['max_sequence_length'] = max_sequence_length
-    arg_dict['name_to_label_mapping'] = name_to_label_mapping
-    arg_dict['lr'] = 1e-3
-    arg_dict['batch_size'] = 32
-    arg_dict['num_workers'] = 1
-    arg_dict['gamma'] = 1
+    model = m.Prot2Vec(m.PROT2VEC_CONFIG,
+           arg_dict,
+           evaluating=True).to('cuda')
 
-    model = m.Prot2Vec(m.PROT2VEC_CONFIG, arg_dict)
-    model.load_state_dict(torch.load('./first-pass-at-prot2vec.pt'))
-    model.eval()
-    model = model.cuda()
+    model.load_state_dict(torch.load('overfit-on-subset.pt'))
 
-    pfam_id_to_mean_embedding = defaultdict(list)
-    i = 0
-    for x, y in train: 
-        embeddings = model(x.cuda().float())
-        for embedding, pfam_ids in zip(embeddings, y):
-            for pfam_id in pfam_ids:
-                pfam_id_to_mean_embedding[pfam_id].append(embedding.detach().cpu().numpy())
-        i += 1
-        if i > 0:
-            break
+    test_to_embed = get_embeddings_per_family(test, model)
+    train_to_embed = get_embeddings_per_family(train, model)
+    test_labels = list(test_to_embed.keys())
+    train_labels = list(train_to_embed.keys())
 
-    ls = list(map(len, list(pfam_id_to_mean_embedding.values())))
-    pfam_id_to_mean_embedding_ = {}
-    for k, v in pfam_id_to_mean_embedding.items():
-        x = np.mean(np.stack(v), axis=0)
-        pfam_id_to_mean_embedding_[k] = x
+    intersection = set(train_labels).intersection(set(test_labels))
 
-    mean_train = np.stack(list(pfam_id_to_mean_embedding_.values()))
-    train_labels = list(pfam_id_to_mean_embedding_.keys())
 
-    mean_train = mean_train / np.linalg.norm(mean_train, axis=0)
-    i = 0
-    num_correct = 0
-    num_incorrect = 0
-    for x, y in train:
-        embeddings = model(x.cuda().float()).detach().cpu().numpy()
-        embeddings = embeddings / np.linalg.norm(embeddings, axis=0)
-        preds = np.matmul(embeddings, mean_train.T)
-        preds = np.argmax(preds, axis=1)
-        for pred_idx, yy  in zip(preds, y):
-            num_correct += train_labels[pred_idx] in set(yy)
-            num_incorrect += train_labels[pred_idx] not in set(yy)
-            #if correct:
-            #    #s = 'predicted to be (nn in cosine sim) {}, actually {}'
-            #    #print(s.format(train_labels[pred_idx], yy))
-            #    num_correct += 1
+    tot = 0
+    no = 0
+    for protein_family in intersection:
+        test_embeddings = test_to_embed[protein_family]
+        for test_embedding in test_embeddings:
+            max_sim = 0
+            for train_family, train_embed in train_to_embed.items():
+                if train_family not in intersection:
+                    continue
+                for train_embedding in train_embed:
+                    c = cosine_sim(test_embedding, train_embedding) 
+                    if c > max_sim:
+                        max_sim = c
+                        closest_match = train_family
 
-    print(num_correct, num_incorrect)
+            tot += closest_match == protein_family
+            no += closest_match != protein_family
+    print(tot)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

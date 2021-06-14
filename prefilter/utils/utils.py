@@ -11,8 +11,10 @@ from random import shuffle, seed
 
 seed(1)
 
-__all__ = ['get_n_classes', 'pad_sequences_to_max_length_in_batch',
-        'encode_protein_as_one_hot_vector']
+__all__ = ['get_n_classes',
+           'pad_word2vec_batch',
+           'encode_protein_as_one_hot_vector',
+           'pad_batch']
 
 PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
              'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
@@ -141,6 +143,7 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     shuffle(sequences)
     return sequences
 
+
 def get_n_classes(name_to_label_mapping):
 
     with open(name_to_label_mapping, 'r') as f:
@@ -153,6 +156,7 @@ def get_n_classes(name_to_label_mapping):
     return n_classes
 
 def _pad_sequences(sequences):
+
     mxlen = np.max([s.shape[-1] for s in sequences])
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
@@ -165,21 +169,37 @@ def _pad_sequences(sequences):
     masks = np.stack(masks)
     return torch.tensor(padded_batch).float(), torch.tensor(masks).bool()
 
+def pad_batch(batch):
+    targets = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    targets, targets_mask = _pad_sequences(targets)
+    return targets, targets_mask, labels
 
-def pad_sequences_to_max_length_in_batch(batch):
+def pad_word2vec_batch(batch):
     targets = [b[0] for b in batch]
     contexts = [b[1] for b in batch]
+    targets, targets_mask = _pad_sequences(targets)
+    contexts, contexts_mask = _pad_sequences(contexts)
     negatives = []
     labels = []
     for b in batch:
         negatives.extend(b[2])
         labels.extend(b[3])
-    targets, targets_mask = _pad_sequences(targets)
-    contexts, contexts_mask = _pad_sequences(contexts)
     negatives, negatives_mask = _pad_sequences(negatives)
 
     return (targets, targets_mask, contexts, contexts_mask, negatives,
-                negatives_mask, labels)
+                negatives_mask, torch.stack(labels))
+
+
+
+def convert_fasta_to_json(fasta, concatenate_all=False):
+
+    if not isinstance(fasta, list):
+        fasta = [fasta]
+
+    for f in fasta:
+        sequences
+
 
 if __name__ == '__main__':
     pass

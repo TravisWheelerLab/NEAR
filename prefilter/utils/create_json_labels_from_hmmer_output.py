@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 from argparse import ArgumentParser
 
-def convert_hmmer_domtblout_to_json_labels(fname,  fout):
+def convert_hmmer_domtblout_to_json_labels(fname):
     '''ingets a hmmer domtblout file'''
     df = pd.read_csv(fname, skiprows=3,sep='\s+', engine='python')
 
@@ -15,11 +15,6 @@ def convert_hmmer_domtblout_to_json_labels(fname,  fout):
         seq_name = row[0]
         family = row[4]
         seq_name_to_family[seq_name].append(family)
-
-    # l = list(map(len, list(seq_name_to_family.values())))
-
-    with open(fout, 'w') as f:
-        json.dump(seq_name_to_family, f)
 
     return seq_name_to_family
 
@@ -31,11 +26,12 @@ def create_name_to_seq_dict(fasta_file):
     for line in lines:
         name = line[:line.find('\n')]
         seq = line[line.find('\n')+1:].rstrip('\n')
+        seq = seq.replace('\n', '')
         name_to_seq[name] = seq
     return name_to_seq
 
 
-def save_labels(json_file_with_name_to_labels, fasta_file_with_sequences,
+def save_labels(seq_to_labels, fasta_file_with_sequences,
         out_fname):
 
     nts = create_name_to_seq_dict(fasta_file_with_sequences) # name to sequence
@@ -50,15 +46,12 @@ def save_labels(json_file_with_name_to_labels, fasta_file_with_sequences,
 
     nts = nts_
 
-    with open(json_file_with_name_to_labels, 'r') as f:
-        seq_to_labels = json.load(f) # sequence name to label
-
     fstl = {} # fasta sequence to label
     for seq, labels in seq_to_labels.items():
         try:
             fstl[nts[seq]] = labels
         except KeyError as e:
-            print(e)
+            print('keyerror', e)
 
     with open(out_fname, 'w') as f:
         json.dump(fstl, f)
@@ -75,18 +68,8 @@ if __name__ == '__main__':
 
     args = ap.parse_args()
 
-    fout = os.path.splitext(os.path.basename(args.domtblout))[0] + '_labels.json'
+    sequences_and_labels = convert_hmmer_domtblout_to_json_labels(args.domtblout)
 
-    # use hmmer output to map sequence names to family
-    if not os.path.isfile(fout):
-        convert_hmmer_domtblout_to_json_labels(args.domtblout, fout)
-    else:
-        print("domtblout {} already converted to json {}".format(args.domtblout,
-            fout))
-
-
-    # subprocess.popen?
-    # name_to_sequence = create_name_to_seq_dict(fasta_from_esl_sfetch)
-    save_labels(fout, 
+    save_labels(sequences_and_labels, 
                 args.sequences,
                 args.label_fname)
