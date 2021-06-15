@@ -4,7 +4,9 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import torch.nn as nn
 
-from utils.utils import PROT_ALPHABET
+
+import utils.datasets as datasets
+from utils.utils import PROT_ALPHABET, pad_word2vec_batch
 
 
 __all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
@@ -19,7 +21,7 @@ PROT2VEC_CONFIG = {
         'kernel_size':21,
         'n_res_blocks':1,
         'bottleneck_factor':0.5,
-        'embedding_dim':300
+        'embedding_dim':4
         }
 
 
@@ -90,17 +92,19 @@ class Prot2Vec(pl.LightningModule):
 
     """
 
-    def __init__(self, model_dict, task_args, evaluating=False):
+    def __init__(self, args, evaluating=False):
 
         super().__init__()
 
-        for k, v in model_dict:
+        for k, v in args.items():
             setattr(self, k, v)
+
+        self._setup_layers()
 
         if not evaluating:
             self._create_datasets()
 
-    def setup_layers(self):
+    def _setup_layers(self):
 
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                      out_channels=self.n_filters,
@@ -136,9 +140,9 @@ class Prot2Vec(pl.LightningModule):
 
             self.encoding_network.append(r)
 
-        if self.pool_type == 'max':
+        if self.pooling_layer_type == 'max':
             self.pool = nn.MaxPool1d()
-        if self.pool_type == 'avg':
+        if self.pooling_layer_type == 'avg':
             self.pool = nn.AdaptiveAvgPool1d(output_size=1)
         else:
             raise ValueError('pool type must be one of <max,avg>')
@@ -208,6 +212,7 @@ class Prot2Vec(pl.LightningModule):
             out_of_context_mask):
 
         targets_embed = self.forward(targets, targets_mask)
+
         context_embed = self.forward(in_context, in_context_mask)
         negatives_embed = self.forward(out_of_context, out_of_context_mask) 
         negatives_embed = torch.reshape(negatives_embed, (self.batch_size,
@@ -220,55 +225,37 @@ class Prot2Vec(pl.LightningModule):
 
     def _compute_loss_and_preds(self, batch):
 
-        targets, targets_mask, contexts, contexts_mask, negatives, negatives_mask, y = batch
+        targets, targets_mask, contexts, contexts_mask, negatives,\
+        negatives_mask, labels = batch
 
         pos_dots, neg_dots = self._get_dots(targets, targets_mask,
                 contexts, contexts_mask,
                 negatives, negatives_mask)
 
-        y_hat = torch.cat((pos_dots, neg_dots), axis=0)
-        y = y.ravel()
+        logits = torch.cat((pos_dots, neg_dots), axis=0)
+        loss = self.loss_func(logits, labels.ravel()) 
+        preds = self.class_act(logits).ravel()
 
-        loss = self.loss_func(y_hat, y) # should be binary xent
-        preds = self.class_act(y_hat).ravel()
-        y = y.long().ravel()
-
-        return loss, preds, y, y_hat, pos_dots, neg_dots
+        return loss, preds, labels, logits, pos_dots, neg_dots
 
     def training_step(self, batch, batch_idx):
 
-        loss, preds, y, y_hat, pos_dots, neg_dots\
+        loss, preds, labels, logits, pos_dots, neg_dots\
                 = self._compute_loss_and_preds(batch)
-
-        y_hat = y_hat.float()
-        y = y.float()
-        loss = self.loss_func(y_hat, y) # should be binary xent
-        preds = self.class_act(y_hat).ravel()
         return loss
 
     def validation_step(self, batch, batch_idx):
 
-        loss, preds, y, y_hat, pos_dots, neg_dots\
+        loss, preds, labels, logits, pos_dots, neg_dots\
                 = self._compute_loss_and_preds(batch)
-
-        self.valid_metrics(preds, y)
-        self.valid_confmat.update(preds, y)
-
-        self.log_dict(self.valid_metrics)
-        self.log('valid loss', loss)
-
+        
         return loss
 
     def test_step(self, batch, batch_idx):
 
-        loss, preds, y, y_hat, pos_dots, neg_dots\
+        loss, preds, labels, logits, pos_dots, neg_dots\
                 = self._compute_loss_and_preds(batch)
 
-        self.test_metrics(preds, y)
-        self.test_confmat.update(preds, y)
-
-        self.log_dict(self.test_metrics)
-        self.log('test loss', loss)
         return loss
 
     # values returned by this func are stored over an epoch
@@ -276,23 +263,20 @@ class Prot2Vec(pl.LightningModule):
     def _create_datasets(self):
 
 
-        self.test_psd = datasets.Word2VecStyleDataset(self.test_files,
+        self.test_data = datasets.Word2VecStyleDataset(self.test_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping,
                                   evaluating=False,
                                   n_negative_samples=self.n_negative_samples
                                   )
 
-        self.train_psd = datasets.Word2VecStyleDataset(self.train_files,
+        self.train_data = datasets.Word2VecStyleDataset(self.train_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping,
                                   evaluating=False,
                                   n_negative_samples=self.n_negative_samples
                                   )
 
-        self.valid_psd = datasets.Word2VecStyleDataset(self.valid_files,
+        self.valid_data = datasets.Word2VecStyleDataset(self.valid_files,
                                   self.max_sequence_length,
-                                  self.name_to_label_mapping,
                                   evaluating=False,
                                   n_negative_samples=self.n_negative_samples
                                   )
@@ -300,26 +284,26 @@ class Prot2Vec(pl.LightningModule):
 
     def train_dataloader(self):
 
-        return torch.utils.data.DataLoader(self.train_psd, 
+        return torch.utils.data.DataLoader(self.train_data, 
                 batch_size=self.batch_size,
                 num_workers=self.num_workers, drop_last=True,
-                collate_fn=utils.pad_word2vec_batch)
+                collate_fn=pad_word2vec_batch)
 
     def test_dataloader(self):
 
-        return torch.utils.data.DataLoader(self.test_psd,
+        return torch.utils.data.DataLoader(self.test_data,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 drop_last=True,
-                collate_fn=utils.pad_word2vec_batch)
+                collate_fn=pad_word2vec_batch)
 
     def val_dataloader(self):
 
-        return torch.utils.data.DataLoader(self.valid_psd,
+        return torch.utils.data.DataLoader(self.valid_data,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 drop_last=True,
-                collate_fn=utils.pad_word2vec_batch)
+                collate_fn=pad_word2vec_batch)
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)

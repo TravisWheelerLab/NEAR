@@ -22,13 +22,11 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
     def __init__(self,
             json_files,
             max_sequence_length,
-            name_to_label_mapping,
             n_negative_samples,
             evaluating=False
             ):
 
         self.max_sequence_length = max_sequence_length
-        self.name_to_label_mapping = name_to_label_mapping
         self.n_negative_samples = n_negative_samples
         self.evaluating = evaluating
         self._build_dataset(json_files)
