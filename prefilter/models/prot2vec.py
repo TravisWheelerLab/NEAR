@@ -1,10 +1,10 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import pytorch_lightning as pl
 import torch.nn as nn
 
 from utils.utils import PROT_ALPHABET
-from .standard import Word2VecTask
 
 
 __all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
@@ -84,7 +84,7 @@ class ResidualBlock(nn.Module):
             return self._masked_forward(x, mask)
 
 
-class Prot2Vec(Word2VecTask):
+class Prot2Vec(pl.LightningModule):
     """ 
     Convolutional network for protein family prediction.
 
@@ -92,33 +92,21 @@ class Prot2Vec(Word2VecTask):
 
     def __init__(self, model_dict, task_args, evaluating=False):
 
-        super().__init__(evaluating, task_args)
+        super().__init__()
 
-        self.vocab_size = model_dict['vocab_size']
-        self.n_res_blocks = model_dict['n_res_blocks']
-        self.initial_dilation_rate = model_dict['initial_dilation_rate']
-        self.dilation_rate = model_dict['dilation_rate']
-        self.n_filters = model_dict['n_filters']
-        self.bottleneck_factor = model_dict['bottleneck_factor']
-        self.pool_type = model_dict['pooling_layer_type']
-        self.kernel_size = model_dict['kernel_size']
-        self.embedding_dim = model_dict['embedding_dim']
+        for k, v in model_dict:
+            setattr(self, k, v)
+
+        if not evaluating:
+            self._create_datasets()
+
+    def setup_layers(self):
 
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                      out_channels=self.n_filters,
                                      kernel_size=self.kernel_size,
                                      padding=self.kernel_size-1,
                                      dilation=self.initial_dilation_rate)
-        # model:
-        # one-hot (Lx20)
-        # initial conv (LxF) (no dilation (?)) (or is it 2 dilation?)
-        # resblock (LxF) (
-        # bottleneck: (LxF) 
-        # resblock (LxF//2)
-        # bottleneck (LxF)
-          
-        # bottleneck: down, larger kernel, up. A larger kernel size is sandwiched between two 
-        # bottleneck layers
 
         self.bn1 = nn.BatchNorm1d(self.n_filters)
 
@@ -144,7 +132,7 @@ class Prot2Vec(Word2VecTask):
                               self.n_filters,
                               self.dilation_rate,
                               self.bottleneck_factor,
-                              self.kernel_size).to('cuda')
+                              self.kernel_size)
 
             self.encoding_network.append(r)
 
@@ -156,6 +144,7 @@ class Prot2Vec(Word2VecTask):
             raise ValueError('pool type must be one of <max,avg>')
 
         self.embedding = nn.Linear(self.n_filters, self.embedding_dim)
+        self.class_act = nn.Sigmoid()
 
     def _masked_forward(self, x, mask):
         """
@@ -212,3 +201,149 @@ class Prot2Vec(Word2VecTask):
             return self._forward(x)
         else:
             return self._masked_forward(x, mask)
+
+    def _get_dots(self, targets, targets_mask, 
+            in_context, in_context_mask,
+            out_of_context,
+            out_of_context_mask):
+
+        targets_embed = self.forward(targets, targets_mask)
+        context_embed = self.forward(in_context, in_context_mask)
+        negatives_embed = self.forward(out_of_context, out_of_context_mask) 
+        negatives_embed = torch.reshape(negatives_embed, (self.batch_size,
+            self.n_negative_samples, self.embedding_dim))
+
+
+        pos_dots = (targets_embed*context_embed).sum(axis=1).squeeze() 
+        neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(2)).squeeze()
+        return pos_dots, neg_dots.ravel()
+
+    def _compute_loss_and_preds(self, batch):
+
+        targets, targets_mask, contexts, contexts_mask, negatives, negatives_mask, y = batch
+
+        pos_dots, neg_dots = self._get_dots(targets, targets_mask,
+                contexts, contexts_mask,
+                negatives, negatives_mask)
+
+        y_hat = torch.cat((pos_dots, neg_dots), axis=0)
+        y = y.ravel()
+
+        loss = self.loss_func(y_hat, y) # should be binary xent
+        preds = self.class_act(y_hat).ravel()
+        y = y.long().ravel()
+
+        return loss, preds, y, y_hat, pos_dots, neg_dots
+
+    def training_step(self, batch, batch_idx):
+
+        loss, preds, y, y_hat, pos_dots, neg_dots\
+                = self._compute_loss_and_preds(batch)
+
+        y_hat = y_hat.float()
+        y = y.float()
+        loss = self.loss_func(y_hat, y) # should be binary xent
+        preds = self.class_act(y_hat).ravel()
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+
+        loss, preds, y, y_hat, pos_dots, neg_dots\
+                = self._compute_loss_and_preds(batch)
+
+        self.valid_metrics(preds, y)
+        self.valid_confmat.update(preds, y)
+
+        self.log_dict(self.valid_metrics)
+        self.log('valid loss', loss)
+
+        return loss
+
+    def test_step(self, batch, batch_idx):
+
+        loss, preds, y, y_hat, pos_dots, neg_dots\
+                = self._compute_loss_and_preds(batch)
+
+        self.test_metrics(preds, y)
+        self.test_confmat.update(preds, y)
+
+        self.log_dict(self.test_metrics)
+        self.log('test loss', loss)
+        return loss
+
+    # values returned by this func are stored over an epoch
+
+    def _create_datasets(self):
+
+
+        self.test_psd = datasets.Word2VecStyleDataset(self.test_files,
+                                  self.max_sequence_length,
+                                  self.name_to_label_mapping,
+                                  evaluating=False,
+                                  n_negative_samples=self.n_negative_samples
+                                  )
+
+        self.train_psd = datasets.Word2VecStyleDataset(self.train_files,
+                                  self.max_sequence_length,
+                                  self.name_to_label_mapping,
+                                  evaluating=False,
+                                  n_negative_samples=self.n_negative_samples
+                                  )
+
+        self.valid_psd = datasets.Word2VecStyleDataset(self.valid_files,
+                                  self.max_sequence_length,
+                                  self.name_to_label_mapping,
+                                  evaluating=False,
+                                  n_negative_samples=self.n_negative_samples
+                                  )
+
+
+    def train_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.train_psd, 
+                batch_size=self.batch_size,
+                num_workers=self.num_workers, drop_last=True,
+                collate_fn=utils.pad_word2vec_batch)
+
+    def test_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.test_psd,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                drop_last=True,
+                collate_fn=utils.pad_word2vec_batch)
+
+    def val_dataloader(self):
+
+        return torch.utils.data.DataLoader(self.valid_psd,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                drop_last=True,
+                collate_fn=utils.pad_word2vec_batch)
+
+    def configure_optimizers(self):
+        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optim
+
+    def configure_optimizers_with_warmup(self):
+        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        # this is tuned for Adam 
+        _, beta2 = optim.param_groups[0]['betas']
+        # from ``on the adequacy of untuned warmup for adaptive optimization'''
+        n_warmup_steps = 100 #int(2/(1-beta2))
+        batches_per_epoch = len(self.train_dataloader())
+        decay_steps = 20000
+
+        def lr_schedule(step):
+
+            if step < n_warmup_steps:
+                x = self.lr * (step+1)/n_warmup_steps
+                return x
+            else:
+                x = self.lr * self.gamma ** int(step / decay_steps)
+                return x
+
+        mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
+        sched = {'scheduler':mysched, 'interval':'step'} 
+        return [optim], [sched]
+
