@@ -34,9 +34,7 @@ if [[ ! -f $DOMTBLOUT ]]; then
 	echo "$DOMTBLOUT already created, not running hmmsearch"
 fi
 
-
-python3  create_json_labels_from_hmmer_output.py\
+python3 create_json_labels_from_hmmer_output.py\
     --domtblout $DOMTBLOUT\
     --sequences $FASTA_FILENAME\
     --label-fname $JSON_OUT
-

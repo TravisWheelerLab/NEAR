@@ -43,10 +43,10 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 
         target_sequence = self.sequences[int(np.random.rand()*len(self.sequences))]
         # grab a random sequence
-        x = self.sequences_and_labels[target_sequence] #... and all of the
+        set_of_positive_labels = self.sequences_and_labels[target_sequence] #... and all of the
         # labels that come along with it (pfam ids)
 
-        target_family = x[int(np.random.rand()*len(x))]
+        target_family = set_of_positive_labels[int(np.random.rand()*len(set_of_positive_labels))]
         # choose targets with probability proportional
         # to the number of sequences in that family
 
@@ -67,7 +67,7 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
                 else:
                     negative_family = x[0]
 
-                if target_family != negative_family:
+                if negative_family not in set_of_positive_labels:
                     negative_examples.append(negative_family)
 
         if len(negative_examples) > self.n_negative_samples:
@@ -91,10 +91,15 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         seq, labels = self.sequences[idx], self.pfam_names[idx]
         return torch.tensor(self._encoding_func(seq)), labels
 
-    def _build_dataset(self, json_file):
+    def _build_dataset(self, json_files):
 
-        with open(json_file, 'r') as src:
-            self.sequences_and_labels = json.load(src)
+        if not isinstance(json_files, list):
+            json_files = [json_files]
+        self.sequences_and_labels = {}
+        for f in json_files:
+            with open(f, 'r') as src:
+                dct = json.load(src)
+                self.sequences_and_labels.update(dct)
 
         self.labels_and_sequences = defaultdict(list)
         for prot_seq, accession_ids in self.sequences_and_labels.items():

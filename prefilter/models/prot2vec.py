@@ -96,13 +96,17 @@ class Prot2Vec(pl.LightningModule):
 
         super().__init__()
 
+
         for k, v in args.items():
             setattr(self, k, v)
 
-        self._setup_layers()
-
         if not evaluating:
             self._create_datasets()
+
+        self.vocab_size = args['vocab_size']
+
+        self._setup_layers()
+
 
     def _setup_layers(self):
 
@@ -242,6 +246,10 @@ class Prot2Vec(pl.LightningModule):
 
         loss, preds, labels, logits, pos_dots, neg_dots\
                 = self._compute_loss_and_preds(batch)
+        self.log('loss', loss.item())
+        self.log('accuracy', torch.sum(torch.round(preds.ravel()) ==
+            labels.ravel())/torch.numel(preds))
+
         return loss
 
     def validation_step(self, batch, batch_idx):

@@ -18,7 +18,7 @@ __all__ = ['get_n_classes',
 
 PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
              'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
-             'T' : 17, 'V' : 18, 'W' : 19, 'X' : 20, 'Y' : 21, 'Z' : 22 }
+             'T' : 17, 'V' : 18, 'W' : 19, 'X' : 20, 'Y' : 21, 'Z' : 22}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
@@ -44,6 +44,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # a one-hot vector
 
     protein = protein.upper().replace('\n', '')
+
     if maxlen is not None:
         one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, maxlen))
         protein = protein[:maxlen]
@@ -51,7 +52,10 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
         one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, len(protein)))
 
     for i, residue in enumerate(protein):
-        one_hot_encoding[PROT_ALPHABET[residue], i] = 1
+        try:
+            one_hot_encoding[PROT_ALPHABET[residue], i] = 1
+        except KeyError:
+            one_hot_encoding[PROT_ALPHABET['X'], i] = 1 # X is "any amino acid"
 
     return one_hot_encoding
 
@@ -174,6 +178,7 @@ def pad_batch(batch):
     labels = [b[1] for b in batch]
     targets, targets_mask = _pad_sequences(targets)
     return targets, targets_mask, labels
+
 
 def pad_word2vec_batch(batch):
     targets = [b[0] for b in batch]

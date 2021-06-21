@@ -4,7 +4,9 @@ import pdb
 import numpy as np
 import torch
 import pytorch_lightning as pl
+
 from pytorch_lightning import Trainer
+from glob import glob
 
 import utils.utils as u
 import models as m
@@ -21,29 +23,28 @@ from argparse import ArgumentParser
 
 if __name__ == '__main__': 
 
-    root = '../data/subset-for-overfitting/'
-    name_to_label_mapping = root + 'name-to-label.json'
-    train = root + 'train-subset.json'
-    test = root + 'test-subset.json'
+    root = '/home/tom/pfam-carbs/1k/'
+    train = glob(os.path.join(root, "*train.json"))
+    test = glob(os.path.join(root, "*test-split.json"))
 
+    train = test
     loss_func = torch.nn.BCEWithLogitsLoss()
     args = m.PROT2VEC_CONFIG
-
     args['loss_func'] = loss_func
     args['test_files'] = test
     args['train_files'] = train
     args['valid_files'] = test
     args['max_sequence_length'] = None
-    args['lr'] = 1e-2
-    args['batch_size'] = 2
+    args['lr'] = 1e-3
+    args['batch_size'] = 32
     args['num_workers'] = 1
     args['gamma'] = 1
     args['n_negative_samples'] = 5
 
     model = m.Prot2Vec(args)
-    num_epochs = 1000
+    num_epochs = 200
     trainer = Trainer(gpus=1, max_epochs=num_epochs,
-            check_val_every_n_epoch=1000)
+            check_val_every_n_epoch=1000,
+            default_root_dir='/home/tom/Dropbox/')
     trainer.fit(model)
-    torch.save(model.state_dict(), 'overfit-on-subset.pt')
-
+    torch.save(model.state_dict(), 'overfit-for-testing-weekend.pt')
