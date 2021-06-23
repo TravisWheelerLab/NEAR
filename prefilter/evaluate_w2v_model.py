@@ -92,25 +92,32 @@ def get_closest_n_embeddings(query, targets, target_names, n=100):
     return target_names[idx.detach().cpu().numpy()]
 
 def intersection_of_sets(matches, true_labels):
+
     x = len(set(matches).intersection(set(true_labels)))
     return x
-
 
 if __name__ == '__main__':
 
     device = 'cuda'
 
-    train_files = glob('/home/tom/pfam-carbs/1k/*train.json')
-    test_files = glob('/home/tom/pfam-carbs/1k/*test-split.json')
+    train_files = glob('/home/tom/pfam-carbs/small-dataset/*train.json')
+    test_files = glob('/home/tom/pfam-carbs/small-dataset/*test-split.json')
 
-    print(len(train_files), len(test_files))
 
-    model_path = './overfit-for-testing-weekend.pt'
+    model_path = './with-normalization.pt'
 
-    model = m.Prot2Vec(m.PROT2VEC_CONFIG, True)
+    conf = m.PROT2VEC_CONFIG
+    conf['normalize'] = True
+
+    model = m.Prot2Vec(conf, evaluating=True)
     model.load_state_dict(torch.load(model_path))
+
     model = model.cuda()
-    model = model.eval()
+    model.eval()
+
+    tot = 0
+    for p in model.parameters():
+        tot += torch.numel(p)
 
     test_dataset = SimpleSequenceIterator(test_files)
     train_dataset = SimpleSequenceIterator(train_files)
@@ -124,35 +131,35 @@ if __name__ == '__main__':
                                             batch_size=32, shuffle=False,
                                             collate_fn=utils.pad_batch)
 
-
     train_families, train_embeddings = get_embeddings_per_family(train_data, 
             model)
 
     train_embeddings = torch.tensor(train_embeddings).to(device)
+    print(train_embeddings.shape)
 
     tot = 0
     count = 0
 
-    for features, mask, labels in test_data:
+    with torch.no_grad():
 
-        with torch.no_grad():
+        for features, mask, labels in test_data:
 
             query = model(features.cuda(), mask.cuda()).unsqueeze(0)
 
-        match_names = get_closest_n_embeddings(query, 
-                                 train_embeddings,
-                                 train_families,
-                                 10000)
+            match_names = get_closest_n_embeddings(query, 
+                                     train_embeddings,
+                                     train_families,
+                                     100000)
 
-        query = query.detach().cpu().numpy()
+            query = query.detach().cpu().numpy()
 
-        del query
+            del query
 
-        for true_labels, matches in zip(labels, match_names):
+            for true_labels, matches in zip(labels, match_names):
 
-            x = intersection_of_sets(matches, true_labels)
-            tot += 1
-            count += x / len(true_labels)
+                x = intersection_of_sets(matches, true_labels)
+                tot += 1
+                count += x / len(true_labels)
 
-        print(tot)
-    print(tot, count, count / tot)
+            print(tot)
+        print(tot, count, count / tot)

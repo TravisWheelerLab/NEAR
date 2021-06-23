@@ -196,15 +196,5 @@ def pad_word2vec_batch(batch):
                 negatives_mask, torch.stack(labels))
 
 
-
-def convert_fasta_to_json(fasta, concatenate_all=False):
-
-    if not isinstance(fasta, list):
-        fasta = [fasta]
-
-    for f in fasta:
-        sequences
-
-
 if __name__ == '__main__':
     pass

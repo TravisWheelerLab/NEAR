@@ -10,7 +10,7 @@ from glob import glob
 from random import shuffle
 from collections import defaultdict
 
-from . import utils as utils
+import utils as utils
 
 __all__ = ['Word2VecStyleDataset',
            'ProteinSequenceDataset',
@@ -187,17 +187,19 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
 
-    dirs = ['profmark0.2','profmark0.3','profmark0.4','profmark0.5','profmark0.6','profmark0.7',
-          'profmark0.8','profmark0.9']
+    root = '/home/tom/pfam-carbs/small-dataset/'
+    root = glob(os.path.join(root, "*train.json"))
+    dset = Word2VecStyleDataset(root, None, 5)
 
-    root ='../../data/pmark-outputs/profmark0.6/json/train-sequences-and-labels.json' 
-    dset = Word2VecStyleDataset(root, None,
-            '../../data/pmark-outputs/profmark0.6/json/name-to-label.json')
-
-    dset = torch.utils.data.DataLoader(dset, batch_size=1024,
-            collate_fn=utils.pad_sequences_to_max_length_in_batch)
+    dset = torch.utils.data.DataLoader(dset, batch_size=32,
+            collate_fn=utils.pad_word2vec_batch)
     i = 0
+
     s = time.time()
+    cnt = 0
     for x in dset:
+        cnt += 1
         print(x[0].shape)
-    print(time.time() - s)
+        pass
+        
+    print(time.time() - s, (time.time()-s)/cnt)
