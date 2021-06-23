@@ -8,9 +8,7 @@ import torch.nn as nn
 import utils.datasets as datasets
 from utils.utils import PROT_ALPHABET, pad_word2vec_batch
 
-
 __all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
-
 
 PROT2VEC_CONFIG = {
         'dilation_rate':3,
@@ -18,10 +16,10 @@ PROT2VEC_CONFIG = {
         'n_filters': 150,
         'vocab_size':len(PROT_ALPHABET),
         'pooling_layer_type':'avg',
-        'kernel_size':21,
-        'n_res_blocks':1,
+        'kernel_size':3,
+        'n_res_blocks':4,
         'bottleneck_factor':0.5,
-        'embedding_dim':4
+        'embedding_dim':128
         }
 
 
@@ -29,7 +27,7 @@ class ResidualBlock(nn.Module):
 
     expansion = 1
 
-    def __init__(self, in_channels, out_channels, dilation,
+    def __init__(self, in_channels, out_channels, 
             bottleneck_factor, kernel_size, stride=1):
 
         super(ResidualBlock, self).__init__()
@@ -40,18 +38,17 @@ class ResidualBlock(nn.Module):
 
         self.conv1 = nn.Conv1d(
             in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-            padding=kernel_size+9,
-            dilation=dilation)
+                padding=1)
 
         self.bn1 = nn.BatchNorm1d(out_channels)
 
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size,
-                               stride=stride, padding=kernel_size+9,
-                               dilation=dilation)
+                               stride=stride, padding=1)
 
         self.bn2 = nn.BatchNorm1d(out_channels)
 
-        self.up_bottleneck = nn.Conv1d(out_channels, int(out_channels/bottleneck_factor),
+        self.up_bottleneck = nn.Conv1d(out_channels, 
+                int(out_channels/bottleneck_factor),
                 kernel_size=1, stride=1, padding=0)
 
     def _masked_forward(self, x, mask):
@@ -96,7 +93,6 @@ class Prot2Vec(pl.LightningModule):
 
         super().__init__()
 
-
         for k, v in args.items():
             setattr(self, k, v)
 
@@ -106,6 +102,9 @@ class Prot2Vec(pl.LightningModule):
         self.vocab_size = args['vocab_size']
 
         self._setup_layers()
+        self.hparams = args
+
+        self.save_hyperparameters()
 
 
     def _setup_layers(self):
@@ -113,17 +112,14 @@ class Prot2Vec(pl.LightningModule):
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                      out_channels=self.n_filters,
                                      kernel_size=self.kernel_size,
-                                     padding=self.kernel_size-1,
-                                     dilation=self.initial_dilation_rate)
+                                     padding=1)
 
         self.bn1 = nn.BatchNorm1d(self.n_filters)
 
         self.dilated1 = nn.Conv1d(in_channels=self.n_filters,
                 out_channels=int(self.n_filters*self.bottleneck_factor),
                 kernel_size=self.kernel_size,
-                dilation=self.dilation_rate,
-                padding=self.kernel_size+9,
-                stride=1)
+                padding=1, stride=1)
 
         self.bn2 = nn.BatchNorm1d(int(self.n_filters*self.bottleneck_factor))
         self.bottleneck1 = nn.Conv1d(in_channels=int(self.n_filters*self.bottleneck_factor),
@@ -138,7 +134,6 @@ class Prot2Vec(pl.LightningModule):
 
             r = ResidualBlock(self.n_filters,
                               self.n_filters,
-                              self.dilation_rate,
                               self.bottleneck_factor,
                               self.kernel_size)
 
@@ -160,6 +155,7 @@ class Prot2Vec(pl.LightningModule):
         the features in any location that corresponds to padding in the input
         sequence 
         """
+
         out = self.initial_conv(x)
         out[mask.expand(-1, self.n_filters, -1)] = 0
         x = F.relu(self.bn1(out))
@@ -173,6 +169,7 @@ class Prot2Vec(pl.LightningModule):
             x = layer(x, mask) # takes care of masking in the function
         x = self.pool(x)
         x = self.embedding(x.squeeze())
+
         return x
 
     def _forward(self, x):
@@ -206,9 +203,16 @@ class Prot2Vec(pl.LightningModule):
             Confidence of sequence(s) being in one of the n_classes.
         """
         if mask is None:
-            return self._forward(x)
+            embeddings = self._forward(x)
         else:
-            return self._masked_forward(x, mask)
+            embeddings = self._masked_forward(x, mask)
+
+        if self.normalize:
+            return torch.nn.functional.normalize(embeddings, dim=-1, p=2)
+
+        else:
+            return embeddings
+
 
     def _get_dots(self, targets, targets_mask, 
             in_context, in_context_mask,
@@ -219,6 +223,7 @@ class Prot2Vec(pl.LightningModule):
 
         context_embed = self.forward(in_context, in_context_mask)
         negatives_embed = self.forward(out_of_context, out_of_context_mask) 
+
         negatives_embed = torch.reshape(negatives_embed, (self.batch_size,
             self.n_negative_samples, self.embedding_dim))
 
@@ -314,26 +319,19 @@ class Prot2Vec(pl.LightningModule):
                 collate_fn=pad_word2vec_batch)
 
     def configure_optimizers(self):
+
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optim
 
-    def configure_optimizers_with_warmup(self):
+    def configure_optimizers_decay(self):
+
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
-        # this is tuned for Adam 
-        _, beta2 = optim.param_groups[0]['betas']
-        # from ``on the adequacy of untuned warmup for adaptive optimization'''
-        n_warmup_steps = 100 #int(2/(1-beta2))
-        batches_per_epoch = len(self.train_dataloader())
-        decay_steps = 20000
+        decay_steps = 4000
 
         def lr_schedule(step):
 
-            if step < n_warmup_steps:
-                x = self.lr * (step+1)/n_warmup_steps
-                return x
-            else:
-                x = self.lr * self.gamma ** int(step / decay_steps)
-                return x
+            x = self.lr * self.gamma ** int(step / decay_steps)
+            return x
 
         mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
         sched = {'scheduler':mysched, 'interval':'step'} 
