@@ -26,8 +26,13 @@ if __name__ == '__main__':
 
     ap = ArgumentParser()
     ap.add_argument('--log_dir', required=True)
-    args = ap.parse_args()
-    log_dir = args.log_dir
+    ap.add_argument('--gpus', required=False,
+            type=int, default=1)
+    ap.add_argument('--batch_size', required=False,
+            type=int, default=8)
+
+    parser_args = ap.parse_args()
+    log_dir = parser_args.log_dir
 
     root = '../data/small-dataset'
     train = glob(os.path.join(root, "*train.json"))
@@ -42,7 +47,7 @@ if __name__ == '__main__':
     args['normalize'] = True
     args['max_sequence_length'] = None
     args['lr'] = 1e-3
-    args['batch_size'] = 4
+    args['batch_size'] = parser_args.batch_size
     args['num_workers'] = 10
     args['gamma'] = 0.9
     args['n_negative_samples'] = 5
@@ -51,10 +56,13 @@ if __name__ == '__main__':
     num_epochs = 500
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
-    trainer = Trainer(gpus=1, max_epochs=num_epochs,
-            check_val_every_n_epoch=10,
-            default_root_dir=log_dir,
-            callbacks=[lr_monitor])
+
+    trainer = Trainer(gpus=parser_args.gpus,
+                      max_epochs=num_epochs,
+                      check_val_every_n_epoch=10,
+                      default_root_dir=log_dir,
+                      callbacks=[lr_monitor],
+                      accelerator='ddp')
 
     trainer.fit(model)
 
