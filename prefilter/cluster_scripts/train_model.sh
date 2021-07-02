@@ -2,8 +2,7 @@
 
 #SBATCH --partition=wheeler_lab_gpu
 #SBATCH --job-name=prot2vec
-#SBATCH --output=prot2vec.out
-#SBATCH --error=prot2vec.err
+#SBATCH --output=why.out
 #SBATCH --gres=gpu:2
 
 source $HOME/anaconda/bin/activate/

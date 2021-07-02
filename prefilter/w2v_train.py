@@ -66,4 +66,4 @@ if __name__ == '__main__':
 
     trainer.fit(model)
 
-    torch.save(model.state_dict(), 'with-normalization-small-dataset-50.pt')
+    torch.save(model.state_dict(), 'with-normalization-small-dataset-2-500ep.pt')
