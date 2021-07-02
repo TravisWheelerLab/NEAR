@@ -31,24 +31,24 @@ if __name__ == '__main__':
     loss_func = torch.nn.BCEWithLogitsLoss()
     args = m.PROT2VEC_CONFIG
     args['loss_func'] = loss_func
-    args['test_files'] = test
-    args['train_files'] = train
-    args['valid_files'] = test
+    args['test_files'] = test[:10]
+    args['train_files'] = train[:10]
+    args['valid_files'] = test[:10]
     args['normalize'] = True
     args['max_sequence_length'] = None
-    args['lr'] = 1e-4
-    args['batch_size'] = 8
+    args['lr'] = 1e-3
+    args['batch_size'] = 4
     args['num_workers'] = 10
     args['gamma'] = 0.9
     args['n_negative_samples'] = 5
 
     model = m.Prot2Vec(args)
-    num_epochs = 50
+    num_epochs = 500
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
     trainer = Trainer(gpus=1, max_epochs=num_epochs,
             check_val_every_n_epoch=10,
-            default_root_dir='/home/tc229954/share',
+            default_root_dir='/home/tom/Dropbox',
             callbacks=[lr_monitor])
 
     trainer.fit(model)

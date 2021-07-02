@@ -13,11 +13,11 @@ __all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
 PROT2VEC_CONFIG = {
         'dilation_rate':3,
         'initial_dilation_rate':2,
-        'n_filters': 150,
+        'n_filters': 512,
         'vocab_size':len(PROT_ALPHABET),
         'pooling_layer_type':'avg',
         'kernel_size':3,
-        'n_res_blocks':4,
+        'n_res_blocks':10,
         'bottleneck_factor':0.5,
         'embedding_dim':128
         }
@@ -102,7 +102,6 @@ class Prot2Vec(pl.LightningModule):
         self.vocab_size = args['vocab_size']
 
         self._setup_layers()
-        self.hparams = args
 
         self.save_hyperparameters()
 

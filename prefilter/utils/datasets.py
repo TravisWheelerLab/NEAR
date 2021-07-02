@@ -41,9 +41,16 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 
     def _sample_w2v_batch(self, idx):
 
-        target_sequence = self.sequences[int(np.random.rand()*len(self.sequences))]
-        # grab a random sequence
-        set_of_positive_labels = self.sequences_and_labels[target_sequence] #... and all of the
+        set_of_positive_labels = []
+
+        while len(set_of_positive_labels) == 0:
+
+            target_sequence = self.sequences[int(np.random.rand()*len(self.sequences))]
+            # grab a random sequence
+            set_of_positive_labels = self.sequences_and_labels[target_sequence] #... and all of the
+        # i need to figure out why some sequences have 0 labels associated with
+        # them...
+
         # labels that come along with it (pfam ids)
 
         target_family = set_of_positive_labels[int(np.random.rand()*len(set_of_positive_labels))]
@@ -64,8 +71,12 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
                 x = self.pfam_names[idx]
                 if len(x) > 1:
                     negative_family = x[int(np.random.rand()*len(x))]
-                else:
+                elif len(x) == 1:
                     negative_family = x[0]
+                else:
+                    # this shouldn't happen. But it only happens a few
+                    # times.
+                    continue
 
                 if negative_family not in set_of_positive_labels:
                     negative_examples.append(negative_family)
