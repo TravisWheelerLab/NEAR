@@ -4,17 +4,35 @@ import os
 import numpy as np
 
 from glob import glob
+from argparse import ArgumentParser
 
-if __name__ == '__main__':
+def parser():
 
-    dirs = sys.argv[1]
+    ap = ArgumentParser()
+    ap.add_argument('--directory', required=True,
+            help='directory containing test files')
+    ap.add_argument('--glob_str', required=False,
+            help='glob string to pick out test files',
+            default='*test.json')
+    args = ap.parse_args()
+    return args
 
-    test_files = glob(os.path.join(dirs, '*test.json'))
+def split_files(test_files, args):
+
+    '''
+    Splits a json file containing sequences and their hmmer labels into two
+    files, each containing half of the sequences as in the original file (50/50
+    split). Names one half <original-file>valid-split.json and the other half
+    <origina-file>test-split.json.
+    '''
+
+    suffix = args.glob_str
+    suffix = suffix.replace('*', '')
 
     for f in test_files:
 
-        valid_filename = f.replace('test.json', 'valid-split.json')
-        test_filename = f.replace('test.json', 'test-split.json')
+        valid_filename = f.replace(suffix, 'valid-split.json')
+        test_filename = f.replace(suffix, 'test-split.json')
         with open(f, 'r') as src:
             sequence_to_label = json.load(src)
 
@@ -40,3 +58,15 @@ if __name__ == '__main__':
             print('only 1 seq in test, not splitting into valid (but saving nonetheless!)')
             with open(test_filename, 'w') as dst:
                 json.dump(sequence_to_label, dst)
+
+
+def main(args):
+
+    test_files = glob(os.path.join(args.directory, args.glob_str))
+    split_files(test_files, args)
+
+if __name__ == '__main__':
+
+    args = parser()
+    main(args)
+
