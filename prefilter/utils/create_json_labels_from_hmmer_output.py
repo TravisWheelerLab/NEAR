@@ -82,12 +82,12 @@ def save_labels(seq_name_to_labels,
 
     sequence_to_labels = {} # fasta sequence to label
 
-    for seq_name, labels in seq_name_to_labels.items():
+    for seq_name, sequence in sequence_name_to_sequence.items():
 
         try:
 
-            sequence = sequence_name_to_sequence[seq_name]
-            sequence_to_labels[sequence] = labels
+            labels = seq_name_to_labels[seq_name]
+            sequence_to_labels[sequence] = list(set(labels))
 
         except KeyError as e:
             print('keyerror', e, seq_name)

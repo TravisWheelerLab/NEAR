@@ -24,7 +24,7 @@ from argparse import ArgumentParser
 
 if __name__ == '__main__': 
 
-    root = '/home/tom/pfam-carbs/small-dataset/'
+    root = '../data/small-dataset'
     train = glob(os.path.join(root, "*train.json"))
     test = glob(os.path.join(root, "*test-split.json"))
 
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     lr_monitor = LearningRateMonitor(logging_interval='step')
     trainer = Trainer(gpus=1, max_epochs=num_epochs,
             check_val_every_n_epoch=10,
-            default_root_dir='/home/tom/Dropbox/',
+            default_root_dir='/home/tc229954/share',
             callbacks=[lr_monitor])
 
     trainer.fit(model)

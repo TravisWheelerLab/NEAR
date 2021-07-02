@@ -1,7 +1,15 @@
 *pycache*
-data/*
 models/*
 *json
+*.hmm
+*.afa
+*.fa
+*.txt
+*.sto
+*.out
+*.err
+*.ddgm
+*.domtblout
 *pt
 prefilter/logs/*
 prefilter/lightning_logs/*

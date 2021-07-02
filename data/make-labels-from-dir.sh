@@ -4,12 +4,7 @@ DIRECTORY=$1
 HMM_DATABASE=$2
 PID=$3
 
-if [[ $# != 3 ]]; then
-    echo "usage: make-labels-from-dir.sh <directory-to-analyze> <hmm-database>\
-    <percent-id-threshold-to-analyze>"
-
 for ali in $DIRECTORY/*afa;
-
 do 
     extension="${ali##*.}"
     filename="${ali%.*}"
