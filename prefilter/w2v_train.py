@@ -23,13 +23,15 @@ from glob import glob
 from argparse import ArgumentParser
 
 if __name__ == '__main__': 
-
     ap = ArgumentParser()
+
     ap.add_argument('--log_dir', required=True)
     ap.add_argument('--gpus', required=False,
             type=int, default=1)
     ap.add_argument('--batch_size', required=False,
             type=int, default=8)
+    ap.add_argument('--epochs', required=False,
+            type=int, default=10)
 
     parser_args = ap.parse_args()
     log_dir = parser_args.log_dir
@@ -39,11 +41,13 @@ if __name__ == '__main__':
     test = glob(os.path.join(root, "*test-split.json"))
 
     loss_func = torch.nn.BCEWithLogitsLoss()
+
     args = m.PROT2VEC_CONFIG
     args['loss_func'] = loss_func
-    args['test_files'] = test[:10]
-    args['train_files'] = train[:10]
-    args['valid_files'] = test[:10]
+    args['test_files'] = test[:2]
+    args['train_files'] = train
+    args['valid_files'] = test[:2]
+
     args['normalize'] = True
     args['max_sequence_length'] = None
     args['lr'] = 1e-3
@@ -53,7 +57,7 @@ if __name__ == '__main__':
     args['n_negative_samples'] = 5
 
     model = m.Prot2Vec(args)
-    num_epochs = 500
+    num_epochs = parser_args.epochs
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
@@ -66,4 +70,4 @@ if __name__ == '__main__':
 
     trainer.fit(model)
 
-    torch.save(model.state_dict(), 'with-normalization-small-dataset-2-500ep.pt')
+    torch.save(model.state_dict(), 'with-normalization-small-dataset-all-1000-ep.pt')
