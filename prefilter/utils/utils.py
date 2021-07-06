@@ -179,6 +179,28 @@ def pad_batch(batch):
     targets, targets_mask = _pad_sequences(targets)
     return targets, targets_mask, labels
 
+def pad_word2vec_batch_with_string(batch):
+    targets = [b[0] for b in batch]
+    contexts = [b[1] for b in batch]
+    positive_prots = [b[4] for b in batch]
+    context_prots = [b[5] for b in batch]
+    targets, targets_mask = _pad_sequences(targets)
+    contexts, contexts_mask = _pad_sequences(contexts)
+    negatives = []
+    negative_sequences = []
+    labels = []
+
+    for b in batch:
+        negatives.extend(b[2])
+        negative_sequences.extend(b[6])
+        labels.extend(b[3])
+
+    negatives, negatives_mask = _pad_sequences(negatives)
+
+    return (targets, targets_mask, contexts, contexts_mask, negatives,
+                negatives_mask, torch.stack(labels), positive_prots,
+                context_prots, negative_sequences)
+
 
 def pad_word2vec_batch(batch):
     targets = [b[0] for b in batch]
@@ -186,10 +208,13 @@ def pad_word2vec_batch(batch):
     targets, targets_mask = _pad_sequences(targets)
     contexts, contexts_mask = _pad_sequences(contexts)
     negatives = []
+    negative_sequences = []
     labels = []
+
     for b in batch:
         negatives.extend(b[2])
         labels.extend(b[3])
+
     negatives, negatives_mask = _pad_sequences(negatives)
 
     return (targets, targets_mask, contexts, contexts_mask, negatives,

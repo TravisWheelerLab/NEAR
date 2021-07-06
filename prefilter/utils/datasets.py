@@ -23,12 +23,14 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
             json_files,
             max_sequence_length,
             n_negative_samples,
-            evaluating=False
+            evaluating=False,
+            return_protein_strings=False
             ):
 
         self.max_sequence_length = max_sequence_length
         self.n_negative_samples = n_negative_samples
         self.evaluating = evaluating
+        self.return_protein_strings = return_protein_strings
         self._build_dataset(json_files)
 
         if self.evaluating:
@@ -91,12 +93,17 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 
         target = torch.tensor(self._encoding_func(target_sequence))
         context = torch.tensor(self._encoding_func(context_sequence))
-        negatives = [torch.tensor(self._encoding_func(x)) for x in negatives]
+        negative_encodings = [torch.tensor(self._encoding_func(x)) for x in negatives]
         labels = [1]
         labels.extend([0]*self.n_negative_samples)
         labels = torch.tensor([labels])
-        return (target.float(), context.float(), negatives,
-                        labels.float())
+        if self.return_protein_strings:
+            return (target.float(), context.float(), negative_encodings,
+                            labels.float(), target_sequence, context_sequence, 
+                            negatives)
+        else:
+            return (target.float(), context.float(), negative_encodings,
+                            labels.float())
 
     def _iterate(self, idx):
         seq, labels = self.sequences[idx], self.pfam_names[idx]
@@ -184,26 +191,25 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
 
     def __len__(self):
+
         return len(self.sequences_and_labels)
 
     def __getitem__(self, idx):
-
         x, y = self._encoding_func(self.sequences_and_labels[idx])
         return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y) 
-
-
 
 
 if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
+    import pdb
 
-    root = '/home/tom/pfam-carbs/small-dataset/'
+    root = '../../data/small-dataset/'
     root = glob(os.path.join(root, "*train.json"))
-    dset = Word2VecStyleDataset(root, None, 5)
+    dset = Word2VecStyleDataset(root, None, 5, return_protein_strings=True)
 
     dset = torch.utils.data.DataLoader(dset, batch_size=32,
-            collate_fn=utils.pad_word2vec_batch)
+            collate_fn=utils.pad_word2vec_batch_with_string)
     i = 0
 
     s = time.time()
@@ -212,5 +218,4 @@ if __name__ == '__main__':
         cnt += 1
         print(x[0].shape)
         pass
-        
     print(time.time() - s, (time.time()-s)/cnt)
