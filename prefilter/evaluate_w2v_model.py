@@ -88,12 +88,19 @@ def get_closest_n_embeddings(query, targets, target_names, n=100):
 
     idx = torch.argsort(cosine_similarities, 
                         axis=1,
-                        descending=True).squeeze()[:, :n]
+                        descending=True).squeeze()
+
+    if idx.ndim > 1:
+        idx = idx[:, :n]
+    else:
+        idx = idx[:n]
+
     return target_names[idx.detach().cpu().numpy()]
 
 def intersection_of_sets(matches, true_labels):
 
     x = len(set(matches).intersection(set(true_labels)))
+
     return x
 
 if __name__ == '__main__':
@@ -101,10 +108,20 @@ if __name__ == '__main__':
     device = 'cuda'
 
     train_files = glob('/home/tom/pfam-carbs/small-dataset/*train.json')
-    test_files = glob('/home/tom/pfam-carbs/small-dataset/*test-split.json')
+    
+    test_files = glob('../data/small-dataset/*test-split.json')
 
+    train_files = ['../data/small-dataset/NlpE-train.json',
+                   '../data/small-dataset/DUF627-0.5-train.json']
+    test_files =  ['../data/small-dataset/NlpE-0.5-test-split.json',]
+              #    '../data/small-dataset/DUF627-0.5-test-split.json']
 
-    model_path = './with-normalization.pt'
+    if len(test_files) == 0 or len(train_files) == 0:
+        print('one of train or test had zero length. exiting')
+        exit(0)
+
+    model_path = './with-normalization-small-dataset-2files-500ep.pt'
+    # model_path = './with-normalization-small-dataset-50.pt'
 
     conf = m.PROT2VEC_CONFIG
     conf['normalize'] = True
@@ -123,7 +140,7 @@ if __name__ == '__main__':
     train_dataset = SimpleSequenceIterator(train_files)
 
     test_data = torch.utils.data.DataLoader(test_dataset,
-                                            batch_size=32,
+                                            batch_size=1,
                                             shuffle=False,
                                             collate_fn=utils.pad_batch)
 
@@ -135,31 +152,54 @@ if __name__ == '__main__':
             model)
 
     train_embeddings = torch.tensor(train_embeddings).to(device)
-    print(train_embeddings.shape)
 
     tot = 0
     count = 0
+    intersection_bool_count = 0
+    intersection_pct_count = 0
+    top_n = 100
 
     with torch.no_grad():
 
         for features, mask, labels in test_data:
+
 
             query = model(features.cuda(), mask.cuda()).unsqueeze(0)
 
             match_names = get_closest_n_embeddings(query, 
                                      train_embeddings,
                                      train_families,
-                                     100000)
+                                     top_n)
 
             query = query.detach().cpu().numpy()
 
-            del query
+            if match_names.ndim > 1:
 
-            for true_labels, matches in zip(labels, match_names):
+                for true_labels, matches in zip(labels, match_names):
+                    x = intersection_of_sets(matches, true_labels)
+                    tot += 1
+                    count += x / len(true_labels)
 
-                x = intersection_of_sets(matches, true_labels)
+            else:
+
+                labels = labels[0]
+                x = intersection_of_sets(match_names, labels)
                 tot += 1
-                count += x / len(true_labels)
+                intersection_pct_count += x / len(labels)
+                print('===')
+                print(len(labels), set(match_names))
+                print(labels)
+                intersection_bool_count += 1 if x else 0
 
-            print(tot)
-        print(tot, count, count / tot)
+
+            # print(tot)
+        s =  'sequences tested: {}, sequences in train: {}'
+        s += '\nnumber of test sequences with their closest neighbor'
+        s += '\nin train having at least one of the same labels'
+        s += '\nin the top {} nearest neighbors: {}'
+        s += '\nthe overlap b/t sets of labels between closest'
+        s += '\ntrain and test embeddings is {} (best is {})'
+        s = s.format(tot, train_embeddings.shape[0], top_n, 
+                intersection_bool_count, intersection_pct_count,
+                tot) 
+        print(s)
