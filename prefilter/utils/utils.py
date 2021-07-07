@@ -22,13 +22,16 @@ PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
-def _read_fasta(fasta, label):
+def _read_fasta(fasta, label, return_index=True):
 
     def _parse_line(line):
         idx = line.find('\n')
         family = line[:idx]
         sequence = line[idx+1:].replace('\n', '')
-        return [label, sequence]
+        if return_index:
+            return [label, sequence]
+        else:
+            return sequence
 
     with open(fasta, 'r') as f:
         names_and_sequences = f.read()
@@ -116,7 +119,7 @@ def read_sequences_from_json(json_file, fout=None):
     return sequence_to_integer_label
 
 
-def read_sequences_from_fasta(files, save_name_to_label=False):
+def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True):
     ''' 
     returns list of all sequences in the fasta files. 
     list is a list of two-element lists with the first element the class
@@ -133,12 +136,18 @@ def read_sequences_from_fasta(files, save_name_to_label=False):
     name_to_label = {}
     cnt = 0
     sequences = []
+    
+    if not isinstance(files, list):
+        files = [files]
 
     for f in files:
-        seq = _read_fasta(f, cnt)
+        seq = _read_fasta(f, cnt, return_index=return_index)
         name_to_label[os.path.basename(f)] = cnt
         cnt += 1
-        sequences.extend(filter(lambda x: len(x[1]), seq))
+        if return_index:
+            sequences.extend(filter(lambda x: len(x[1]), seq))
+        else:
+            sequences.extend(filter(lambda x: len(x), seq))
 
     if save_name_to_label:
         with open('name_to_class_code.json', 'w') as f:

@@ -51,7 +51,8 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         features = utils.encode_protein_as_one_hot_vector(self.sequences[idx])
         return features, self.labels[idx]
 
-def get_embeddings_per_family(dataloader, model, unwrap=False, device='cuda'):
+
+def get_mean_embedding_per_family(dataloader, model, device='cuda'):
 
     family_to_embedding = defaultdict(list)
 
@@ -69,12 +70,44 @@ def get_embeddings_per_family(dataloader, model, unwrap=False, device='cuda'):
     embeddings = []
 
     for family in family_to_embedding:
+
+        mean_embedding = np.mean(np.stack(family_to_embedding[family], axis=1),
+                axis=1)
+
+        families.append(family)
+        embeddings.append(mean_embedding)
+
+    return np.array(families), np.array(embeddings)
+
+
+def get_embeddings_per_sequence(dataloader, model, device='cuda'):
+
+    family_to_embedding = defaultdict(list)
+
+    with torch.no_grad():
+
+        for batch in dataloader:
+
+            features, features_mask, labels = batch
+            embeddings = model(features.to(device), features_mask.to(device))
+            embeddings = embeddings.detach().cpu().numpy()
+            for families, embedding in zip(labels, embeddings):
+                for family in families:
+                    family_to_embedding[family].append(embedding)
+
+    families = []
+    embeddings = []
+
+    for family in family_to_embedding:
+
         embeddings.extend(np.stack(family_to_embedding[family]))
         families.extend([family]*len(family_to_embedding[family]))
 
     return np.array(families), np.array(embeddings)
 
+
 def get_closest_n_embeddings(query, targets, target_names, n=100):
+
     '''
     query: vector of shape 1xembedding dim
     targets: matrix of shape n_targetsxembedding dim
@@ -97,24 +130,39 @@ def get_closest_n_embeddings(query, targets, target_names, n=100):
 
     return target_names[idx.detach().cpu().numpy()]
 
+
 def intersection_of_sets(matches, true_labels):
 
     x = len(set(matches).intersection(set(true_labels)))
 
     return x
 
+
+def create_consensus_embeddings(consensus_files, model, device='cuda'):
+
+    for f in consensus_files:
+        sequences = utils.read_sequences_from_fasta(f, return_index=False)
+        print(sequences)
+
+
+
 if __name__ == '__main__':
 
-    device = 'cuda'
+    device = 'cpu'
 
-    train_files = glob('/home/tom/pfam-carbs/small-dataset/*train.json')
+    consensus = glob('../data/consensus_sequences/*fa')
+    create_consensus_embeddings(consensus, None, device)
+
+    train_files = glob('../data/small-dataset/*train.json')
+    print(len(train_files))
     
     test_files = glob('../data/small-dataset/*test-split.json')
 
-    train_files = ['../data/small-dataset/NlpE-train.json',
-                   '../data/small-dataset/DUF627-0.5-train.json']
-    test_files =  ['../data/small-dataset/NlpE-0.5-test-split.json',]
-              #    '../data/small-dataset/DUF627-0.5-test-split.json']
+    # train_files = ['../data/small-dataset/NlpE-train.json',
+    #               '../data/small-dataset/DUF627-0.5-train.json']
+
+    test_files =  ['../data/small-dataset/NlpE-0.5-test-split.json',
+                   '../data/small-dataset/DUF627-0.5-test-split.json']
 
     if len(test_files) == 0 or len(train_files) == 0:
         print('one of train or test had zero length. exiting')
@@ -129,7 +177,7 @@ if __name__ == '__main__':
     model = m.Prot2Vec(conf, evaluating=True)
     model.load_state_dict(torch.load(model_path))
 
-    model = model.cuda()
+    model = model.to(device)
     model.eval()
 
     tot = 0
@@ -148,8 +196,8 @@ if __name__ == '__main__':
                                             batch_size=32, shuffle=False,
                                             collate_fn=utils.pad_batch)
 
-    train_families, train_embeddings = get_embeddings_per_family(train_data, 
-            model)
+    train_families, train_embeddings = get_mean_embedding_per_family(train_data, 
+            model, device=device)
 
     train_embeddings = torch.tensor(train_embeddings).to(device)
 
@@ -157,14 +205,14 @@ if __name__ == '__main__':
     count = 0
     intersection_bool_count = 0
     intersection_pct_count = 0
-    top_n = 100
+    top_n = 1000
 
     with torch.no_grad():
 
         for features, mask, labels in test_data:
 
 
-            query = model(features.cuda(), mask.cuda()).unsqueeze(0)
+            query = model(features.to(device), mask.to(device)).unsqueeze(0)
 
             match_names = get_closest_n_embeddings(query, 
                                      train_embeddings,
@@ -186,11 +234,7 @@ if __name__ == '__main__':
                 x = intersection_of_sets(match_names, labels)
                 tot += 1
                 intersection_pct_count += x / len(labels)
-                print('===')
-                print(len(labels), set(match_names))
-                print(labels)
                 intersection_bool_count += 1 if x else 0
-
 
             # print(tot)
         s =  'sequences tested: {}, sequences in train: {}'
