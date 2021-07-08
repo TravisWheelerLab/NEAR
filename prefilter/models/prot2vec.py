@@ -4,23 +4,12 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import torch.nn as nn
 
+from functools import partial
 
 import utils.datasets as datasets
 from utils.utils import PROT_ALPHABET, pad_word2vec_batch
 
-__all__ = ['Prot2Vec', 'PROT2VEC_CONFIG']
-
-PROT2VEC_CONFIG = {
-        'dilation_rate':3,
-        'initial_dilation_rate':2,
-        'n_filters': 512,
-        'vocab_size':len(PROT_ALPHABET),
-        'pooling_layer_type':'avg',
-        'kernel_size':3,
-        'n_res_blocks':10,
-        'bottleneck_factor':0.5,
-        'embedding_dim':128
-        }
+__all__ = ['Prot2Vec']
 
 
 class ResidualBlock(nn.Module):
@@ -89,17 +78,51 @@ class Prot2Vec(pl.LightningModule):
 
     """
 
-    def __init__(self, args, evaluating=False):
+    def __init__(self,
+                 res_block_n_filters,
+                 vocab_size,
+                 pooling_layer_type,
+                 res_block_kernel_size,
+                 n_res_blocks,
+                 res_bottleneck_factor,
+                 embedding_dim,
+                 loss_func,
+                 test_files,
+                 train_files,
+                 valid_files,
+                 normalize_output_embedding,
+                 max_sequence_length,
+                 initial_learning_rate,
+                 batch_size,
+                 num_workers,
+                 gamma,
+                 n_negative_samples,
+                 evaluating=False):
 
         super().__init__()
 
-        for k, v in args.items():
-            setattr(self, k, v)
+        self.res_block_n_filters = res_block_n_filters
+        self.vocab_size = vocab_size
+        self.pooling_layer_type = pooling_layer_type
+        self.res_block_kernel_size = res_block_kernel_size
+        self.n_res_blocks = n_res_blocks
+        self.res_bottleneck_factor = res_bottleneck_factor
+        self.embedding_dim = embedding_dim
+        self.loss_func = loss_func
+        self.test_files = test_files
+        self.train_files = train_files
+        self.valid_files = valid_files
+        self.normalize_output_embedding = normalize_output_embedding
+        self.max_sequence_length = max_sequence_length
+        self.initial_learning_rate = initial_learning_rate
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.gamma = gamma
+        self.n_negative_samples = n_negative_samples
+        self.evaluating = evaluating
 
-        if not evaluating:
+        if not self.evaluating:
             self._create_datasets()
-
-        self.vocab_size = args['vocab_size']
 
         self._setup_layers()
 
@@ -109,20 +132,20 @@ class Prot2Vec(pl.LightningModule):
     def _setup_layers(self):
 
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
-                                     out_channels=self.n_filters,
-                                     kernel_size=self.kernel_size,
+                                     out_channels=self.res_block_n_filters,
+                                     kernel_size=self.res_block_kernel_size,
                                      padding=1)
 
-        self.bn1 = nn.BatchNorm1d(self.n_filters)
+        self.bn1 = nn.BatchNorm1d(self.res_block_n_filters)
 
-        self.dilated1 = nn.Conv1d(in_channels=self.n_filters,
-                out_channels=int(self.n_filters*self.bottleneck_factor),
-                kernel_size=self.kernel_size,
+        self.dilated1 = nn.Conv1d(in_channels=self.res_block_n_filters,
+                out_channels=int(self.res_block_n_filters*self.res_bottleneck_factor),
+                kernel_size=self.res_block_kernel_size,
                 padding=1, stride=1)
 
-        self.bn2 = nn.BatchNorm1d(int(self.n_filters*self.bottleneck_factor))
-        self.bottleneck1 = nn.Conv1d(in_channels=int(self.n_filters*self.bottleneck_factor),
-                out_channels=self.n_filters,
+        self.bn2 = nn.BatchNorm1d(int(self.res_block_n_filters*self.res_bottleneck_factor))
+        self.bottleneck1 = nn.Conv1d(in_channels=int(self.res_block_n_filters*self.res_bottleneck_factor),
+                out_channels=self.res_block_n_filters,
                 kernel_size=1,
                 stride=1,
                 padding=0)
@@ -131,21 +154,24 @@ class Prot2Vec(pl.LightningModule):
 
         for _ in range(self.n_res_blocks):
 
-            r = ResidualBlock(self.n_filters,
-                              self.n_filters,
-                              self.bottleneck_factor,
-                              self.kernel_size)
+            r = ResidualBlock(self.res_block_n_filters,
+                              self.res_block_n_filters,
+                              self.res_bottleneck_factor,
+                              self.res_block_kernel_size)
 
             self.encoding_network.append(r)
 
         if self.pooling_layer_type == 'max':
-            self.pool = nn.MaxPool1d()
-        if self.pooling_layer_type == 'avg':
+            self.pool = nn.AdaptiveMaxPool1d(output_size=1)
+
+        elif self.pooling_layer_type == 'avg':
             self.pool = nn.AdaptiveAvgPool1d(output_size=1)
+
         else:
+            print(self.pooling_layer_type)
             raise ValueError('pool type must be one of <max,avg>')
 
-        self.embedding = nn.Linear(self.n_filters, self.embedding_dim)
+        self.embedding = nn.Linear(self.res_block_n_filters, self.embedding_dim)
         self.class_act = nn.Sigmoid()
 
     def _masked_forward(self, x, mask):
@@ -156,13 +182,15 @@ class Prot2Vec(pl.LightningModule):
         """
 
         out = self.initial_conv(x)
-        out[mask.expand(-1, self.n_filters, -1)] = 0
+        out[mask.expand(-1, self.res_block_n_filters, -1)] = 0
         x = F.relu(self.bn1(out))
-        x[mask.expand(-1, self.n_filters, -1)] = 0
+        x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
         x = self.dilated1(x)
-        x[mask.expand(-1, int(self.n_filters*self.bottleneck_factor), -1)] = 0
+        x[mask.expand(-1,
+            int(self.res_block_n_filters*self.res_bottleneck_factor), -1)] = 0
         x = F.relu(self.bn2(x))
-        x[mask.expand(-1, int(self.n_filters*self.bottleneck_factor), -1)] = 0
+        x[mask.expand(-1,
+            int(self.res_block_n_filters*self.res_bottleneck_factor), -1)] = 0
         x = self.bottleneck1(x) + out
         for layer in self.encoding_network:
             x = layer(x, mask) # takes care of masking in the function
@@ -206,10 +234,12 @@ class Prot2Vec(pl.LightningModule):
         else:
             embeddings = self._masked_forward(x, mask)
 
-        if self.normalize:
+        if self.normalize_output_embedding:
+
             return torch.nn.functional.normalize(embeddings, dim=-1, p=2)
 
         else:
+
             return embeddings
 
 
@@ -298,7 +328,8 @@ class Prot2Vec(pl.LightningModule):
 
         return torch.utils.data.DataLoader(self.train_data, 
                 batch_size=self.batch_size,
-                num_workers=self.num_workers, drop_last=True,
+                num_workers=self.num_workers, 
+                drop_last=True,
                 collate_fn=pad_word2vec_batch)
 
     def test_dataloader(self):
@@ -319,20 +350,21 @@ class Prot2Vec(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optim = torch.optim.Adam(self.parameters(),
+                lr=self.initial_learning_rate)
         return optim
 
     def configure_optimizers_decay(self):
 
-        optim = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optim = torch.optim.Adam(self.parameters(),
+                lr=self.initial_learning_rate)
         decay_steps = 4000
 
         def lr_schedule(step):
 
-            x = self.lr * self.gamma ** int(step / decay_steps)
+            x = self.initial_learning_rate * self.gamma ** int(step / decay_steps)
             return x
 
         mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
         sched = {'scheduler':mysched, 'interval':'step'} 
         return [optim], [sched]
-
