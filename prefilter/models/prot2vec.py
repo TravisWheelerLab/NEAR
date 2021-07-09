@@ -26,8 +26,11 @@ class ResidualBlock(nn.Module):
         self.out_channels = out_channels
 
         self.conv1 = nn.Conv1d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-                padding=1)
+                     in_channels,
+                     out_channels,
+                     kernel_size=kernel_size,
+                     stride=stride,
+                     padding=1)
 
         self.bn1 = nn.BatchNorm1d(out_channels)
 
@@ -86,7 +89,6 @@ class Prot2Vec(pl.LightningModule):
                  n_res_blocks,
                  res_bottleneck_factor,
                  embedding_dim,
-                 loss_func,
                  test_files,
                  train_files,
                  valid_files,
@@ -108,7 +110,6 @@ class Prot2Vec(pl.LightningModule):
         self.n_res_blocks = n_res_blocks
         self.res_bottleneck_factor = res_bottleneck_factor
         self.embedding_dim = embedding_dim
-        self.loss_func = loss_func
         self.test_files = test_files
         self.train_files = train_files
         self.valid_files = valid_files
@@ -121,12 +122,15 @@ class Prot2Vec(pl.LightningModule):
         self.n_negative_samples = n_negative_samples
         self.evaluating = evaluating
 
+
         if not self.evaluating:
             self._create_datasets()
 
         self._setup_layers()
 
         self.save_hyperparameters()
+
+        self.loss_func = torch.nn.BCEWithLogitsLoss()
 
 
     def _setup_layers(self):
@@ -193,7 +197,7 @@ class Prot2Vec(pl.LightningModule):
             int(self.res_block_n_filters*self.res_bottleneck_factor), -1)] = 0
         x = self.bottleneck1(x) + out
         for layer in self.encoding_network:
-            x = layer(x, mask) # takes care of masking in the function
+            x = layer(x, mask) 
         x = self.pool(x)
         x = self.embedding(x.squeeze())
 
@@ -280,9 +284,9 @@ class Prot2Vec(pl.LightningModule):
 
         loss, preds, labels, logits, pos_dots, neg_dots\
                 = self._compute_loss_and_preds(batch)
-        self.log('loss', loss.item())
-        self.log('accuracy', torch.sum(torch.round(preds.ravel()) ==
-            labels.ravel())/torch.numel(preds))
+        # self.log('loss', loss.item())
+        # self.log('accuracy', torch.sum(torch.round(preds.ravel()) ==
+        #     labels.ravel())/torch.numel(preds))
 
         return loss
 
