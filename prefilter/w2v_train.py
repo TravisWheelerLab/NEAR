@@ -35,17 +35,18 @@ def parser():
     ap.add_argument('--embedding_dim', type=int, required=True)
     ap.add_argument('--data_path', type=str, required=True)
     ap.add_argument('--normalize_output_embedding', action='store_true')
-    ap.add_argument('--max_sequence_length', default=None, type=int)
+    ap.add_argument('--max_sequence_length', default=None)
     ap.add_argument('--initial_learning_rate', type=float, required=True)
     ap.add_argument('--batch_size', type=int, required=True)
     ap.add_argument('--num_workers', type=int, required=True)
     ap.add_argument('--gamma', type=float, required=True)
     ap.add_argument('--n_negative_samples', type=int, required=True)
     ap.add_argument('--evaluating', action='store_true')
+    ap.add_argument('--device', type=str, required=True)
     ap.add_argument('--pooling_layer_type', type=str, required=True)
     ap.add_argument('--check_val_every_n_epoch', type=int, required=True)
     ap.add_argument('--model_name', type=str, required=True)
-    ap.add_argument('--auto_lr_find', action='store_true')
+
     return ap.parse_args()
 
 if __name__ == '__main__': 
@@ -57,8 +58,10 @@ if __name__ == '__main__':
     train = glob(os.path.join(root, "*train.json"))
     test = glob(os.path.join(root, "*test-split.json"))
 
+    loss_func = torch.nn.BCEWithLogitsLoss()
+
     test_files = test[:2]
-    train_files = train[:2]
+    train_files = train[:len(train)//2]
     valid_files = test[:2]
 
     model = m.Prot2Vec(
@@ -69,6 +72,7 @@ if __name__ == '__main__':
         n_res_blocks=args.n_res_blocks,
         res_bottleneck_factor=args.res_bottleneck_factor,
         embedding_dim=args.embedding_dim,
+        loss_func=loss_func,
         test_files=test_files,
         train_files=train_files,
         valid_files=valid_files,
@@ -91,10 +95,11 @@ if __name__ == '__main__':
                       check_val_every_n_epoch=args.check_val_every_n_epoch,
                       default_root_dir=log_dir,
                       callbacks=[lr_monitor],
-                      accelerator='ddp',
-                      auto_lr_find=args.auto_lr_find,
-                      overfit_batches=1)
+                      accelerator='ddp')
 
     trainer.fit(model)
+    print('hi')
+
+    print(os.path.join(trainer.log_dir, args.model_name))
     torch.save(model.state_dict(),
             os.path.join(trainer.log_dir, args.model_name))

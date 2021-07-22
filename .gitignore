@@ -10,8 +10,6 @@ models/*
 *.err
 *.ddgm
 *.domtblout
-*npy
-*tsv
 *pt
 prefilter/logs/*
 prefilter/lightning_logs/*

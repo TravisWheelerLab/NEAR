@@ -11,25 +11,50 @@ def parser():
     ap.add_argument('--embedding_names', required=True, type=str)
     ap.add_argument('--np', action='store_true')
     ap.add_argument('--output_dir' , required=True, type=str)
-    ap.add_argument('--prefix' , required=False, default=None, type=str)
+    ap.add_argument('--prefix' , required=True, type=str)
 
     return ap.parse_args()
 
-def save_tsv_np(embedding_npy, metadata_npy):
-    out_embedding = os.path.splitext(os.path.basename(embedding_npy))[0] + '.tsv'
-    out_metadata = os.path.splitext(os.path.basename(metadata_npy))[0] + '.tsv'
-    file_embedding = open(out_embedding, 'w')
-    file_metadata = open(out_metadata, 'w')
+def save_tsv_np(embedding_npy, metadata_npy, output_dir, prefix):
 
-    words = np.load(metadata_npy)
-    embeddings = np.load(embedding_npy)
+    os.makedirs(output_dir, exist_ok=True)
 
-    for word, embedding in zip(words, embeddings):
-        file_embedding.write('\t'.join([str(e) for e in embedding]) + '\n')
-        file_metadata.write(word + '\n')
+    if metadata_npy != 'None':
 
-    file_embedding.close()
-    file_metadata.close()
+        out_embedding = os.path.splitext(os.path.basename(embedding_npy))[0] + '.tsv'
+        out_metadata = os.path.splitext(os.path.basename(metadata_npy))[0] + '.tsv'
+        file_embedding = open(out_embedding, 'w')
+        file_metadata = open(out_metadata, 'w')
+
+        words = np.load(metadata_npy)
+        embeddings = np.load(embedding_npy)
+
+        for word, embedding in zip(words, embeddings):
+            file_embedding.write('\t'.join([str(e) for e in embedding]) + '\n')
+            file_metadata.write(prefix + word + '\n')
+
+        file_embedding.close()
+        file_metadata.close()
+
+    else:
+        out_embedding = os.path.splitext(os.path.basename(embedding_npy))[0] + '.tsv'
+        out_embedding = os.path.join(output_dir, out_embedding)
+
+        if os.path.isfile(out_embedding):
+            return
+
+        out_metadata = os.path.splitext(os.path.basename(embedding_npy))[0] + '-metadata'+ '.tsv'
+        out_metadata = os.path.join(output_dir, out_metadata)
+
+        embedding = np.load(embedding_npy)
+        label = prefix + os.path.splitext(os.path.basename(embedding_npy))[0]
+
+        with open(out_embedding, 'w') as dst:
+            dst.write('\t'.join([str(e.item()) for e in embedding]) + '\n')
+
+        with open(out_metadata, 'w') as dst:
+            dst.write(label + '\n')
+
 
 def save_tsv_pt(embedding_pt, output_dir, prefix):
     '''
@@ -45,8 +70,10 @@ def save_tsv_pt(embedding_pt, output_dir, prefix):
         label = prefix + label
 
     out_embedding = os.path.splitext(os.path.basename(embedding_pt))[0] + '.tsv'
+
     if os.path.isfile(out_embedding):
         return
+
     out_metadata = os.path.splitext(os.path.basename(embedding_pt))[0] + '-metadata'+ '.tsv'
     out_embedding = os.path.join(output_dir, out_embedding)
     out_metadata = os.path.join(output_dir, out_metadata)
@@ -66,6 +93,6 @@ if __name__ == '__main__':
 
     args = parser()
     if args.np:
-        save_tsv_np(args.embeddings, args.embedding_names)
+        save_tsv_np(args.embeddings, args.embedding_names, args.output_dir, args.prefix)
     else:
         save_tsv_pt(args.embeddings, args.output_dir, args.prefix)

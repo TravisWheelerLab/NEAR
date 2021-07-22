@@ -86,6 +86,7 @@ def main(args):
     ]
 
     with torch.no_grad():
+
         for batch_idx, (labels, strs, toks) in enumerate(data_loader):
             print(
                 f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
@@ -136,8 +137,6 @@ def main(args):
                     result,
                     args.output_file,
                 )
-                if batch_idx > 3:
-                    break
 
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ import json
 import pdb
 import numpy as np
 import torch
-import yaml
 
 from collections import defaultdict
 from glob import glob
@@ -51,8 +50,7 @@ def _load_sequences_from_fasta(fasta_files):
 
 class SimpleSequenceIterator(torch.utils.data.Dataset):
 
-    def __init__(self, json_files=None, fasta_files=None,
-            one_hot=True):
+    def __init__(self, json_files=None, fasta_files=None):
 
         if json_files is not None:
             sequences_and_labels = _load_sequences_from_json(json_files)
@@ -68,7 +66,6 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         self.numel = len(sequences_and_labels)
         self.lengths = list(map(len, sequences_and_labels.keys()))
         self.idx = 0
-        self.one_hot = one_hot
 
         del sequences_and_labels
 
@@ -77,11 +74,8 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         return self.numel
 
     def __getitem__(self, idx):
-        if self.one_hot:
-            features = utils.encode_protein_as_one_hot_vector(self.sequences[idx])
-        else:
-            features = self.sequences[idx]
 
+        features = utils.encode_protein_as_one_hot_vector(self.sequences[idx])
         return features, self.labels[idx]
 
 
@@ -123,17 +117,12 @@ def get_embeddings_per_sequence(dataloader, model, device='cuda'):
             features, features_mask, labels = batch
             embeddings = model(features.to(device), features_mask.to(device))
             embeddings = embeddings.detach().cpu().numpy()
-            if embeddings.ndim == 1:
-                for family in labels[0]:
-                    family_to_embedding[family].append(embeddings)
-            else:
-
-                for families, embedding in zip(labels, embeddings):
-                    if isinstance(families, str):
-                        family_to_embedding[families].append(embedding)
-                    else:
-                        for family in families:
-                            family_to_embedding[family].append(embedding)
+            for families, embedding in zip(labels, embeddings):
+                if isinstance(families, str):
+                    family_to_embedding[families].append(embedding)
+                else:
+                    for family in families:
+                        family_to_embedding[family].append(embedding)
 
     families = []
     embeddings = []
@@ -211,6 +200,9 @@ def compute_nearest_neighbors(test_data, train_families, train_embeddings,
             else:
 
                 labels = labels[0]
+                print('===')
+                print(set(labels))
+                print(set(match_names))
 
                 x = intersection_of_sets(match_names, labels)
                 tot += 1
@@ -227,66 +219,60 @@ def compute_nearest_neighbors(test_data, train_families, train_embeddings,
         s = s.format(tot, train_embeddings.shape[0], top_n, 
                 intersection_bool_count, intersection_pct_count,
                 tot) 
-
         print(s)
 
-def load_model(logs_dir):
 
-    yaml_path = os.path.join(logs_dir, 'hparams.yaml')
-    model_path = os.path.join(logs_dir, 'model.pt')
+def main():
 
-    with open(yaml_path, 'r') as src:
-        hparams = yaml.safe_load(src)
+    device = 'cpu'
 
-    model = m.Prot2Vec(**hparams)
-    model.load_state_dict(torch.load(model_path))
+    consensus_sequences = glob("../data/consensus_sequences/*fa")
 
-    return model, hparams
+    new = []
 
+    for f in consensus_sequences:
 
-def main(model, hparams):
+        if 'PF04170' in f:
+            new.append(f)
+        if 'PF04781' in f:
+            new.append(f)
+        if 'PF14863' in f:
+            new.append(f)
+        if 'PF14863' in f:
+            new.append(f)
 
-    device = 'cuda'
+    shuffle(consensus_sequences)
+    new.extend(consensus_sequences[:200])
+    print(len(consensus_sequences))
+    # consensus_sequences = new
 
-    train_files = hparams['train_files']
-    all_files = glob('../data/small-dataset/*train*')
-    test_files = []
+    train_files = ['../data/small-dataset/NlpE-train.json',
+                  '../data/small-dataset/DUF627-0.5-train.json']
 
-    for t in train_files:
-        if '0.5' not in os.path.basename(t):
-            tt = t.replace('train', '0.5-test-split') 
-        else:
-            tt = t.replace('train', 'test-split')
-        if os.path.isfile(tt):
-            test_files.append(tt)
-    
-    # grab ten random files 
-
-    shuffle(all_files)
-    train_files.extend(all_files[:10])
+    test_files =  ['../data/small-dataset/NlpE-0.5-test-split.json',
+                   '../data/small-dataset/DUF627-0.5-test-split.json']
 
     if len(test_files) == 0 or len(train_files) == 0:
         print('one of train or test had zero length. exiting')
         exit(0)
 
-    model.eval().to(device)
+    model_path = './with-normalization-small-dataset-2files-500ep.pt'
+    # model_path = './with-normalization-small-dataset-50.pt'
 
-    consensus_files = glob('../data/consensus_sequences/*fa')
-    print(len(consensus_files))
-    consensus_files = [c for c in consensus_files if 'PF' in c]
-    print(len(consensus_files))
+    conf = m.PROT2VEC_CONFIG
+    conf['normalize'] = True
+
+    model = m.Prot2Vec(conf, evaluating=True)
+    model.load_state_dict(torch.load(model_path))
+
+    model = model.to(device)
+    model.eval()
 
     test_dataset = SimpleSequenceIterator(json_files=test_files)
-    train_dataset = SimpleSequenceIterator(json_files=train_files)
-    consensus_dataset = SimpleSequenceIterator(fasta_files=consensus_files)
+    train_dataset = SimpleSequenceIterator(fasta_files=consensus_sequences)
 
     test_data =  torch.utils.data.DataLoader(test_dataset,
                                              batch_size=1,
-                                             shuffle=False,
-                                             collate_fn=utils.pad_batch)
-
-    consensus_data = torch.utils.data.DataLoader(consensus_dataset,
-                                             batch_size=32,
                                              shuffle=False,
                                              collate_fn=utils.pad_batch)
 
@@ -295,41 +281,16 @@ def main(model, hparams):
                                              shuffle=False,
                                              collate_fn=utils.pad_batch)
 
-    consensus_families, consensus_embeddings = get_embeddings_per_sequence(consensus_data, 
-                                                         model, device=device)
+    train_families, train_embeddings = get_embeddings_per_sequence(train_data, 
+            model, device=device)
 
-    print(consensus_embeddings.shape)
-    np.save('mean_consensus_embeddings.npy', consensus_embeddings)
-    np.save('mean_consensus_embeddings_names.npy', consensus_families)
+    train_embeddings = torch.tensor(train_embeddings).to(device)
 
-    # train_families, train_embeddings = get_mean_embedding_per_family(train_data, 
-    #         model, device=device)
-
-    # print(train_embeddings.shape, train_families.shape)
-
-    # print(train_embeddings.shape)
-    # print('number of train sequences {}'.format(train_embeddings.shape[0]))
-
-    # train_embeddings = torch.tensor(train_embeddings).to(device)
-
-    # compute_nearest_neighbors(test_data, train_families, train_embeddings,
-    #         model,
-    #         device=device)
-
-
-    # np.save('mean_train_embeddings.npy', train_embeddings.cpu().numpy())
-    # np.save('mean_train_embeddings_names.npy', train_families)
-
-    # test_families, test_embeddings = get_embeddings_per_sequence(test_data,
-    #                                                 model, device=device)
-    # print(test_embeddings.shape, test_families.shape)
-    #         
-    # np.save('test_embeddings.npy', test_embeddings)
-    # np.save('mean_test_embeddings_names.npy', test_families)
+    compute_nearest_neighbors(test_data, train_families, train_embeddings,
+            model,
+            device=device)
 
 
 if __name__ == '__main__':
 
-    path = '/home/tom/Dropbox/lightning_logs/lightning_logs/version_48/'
-    model, hparams = load_model(path)
-    main(model, hparams)
+    main()
