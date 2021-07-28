@@ -5,14 +5,33 @@ import os
 from collections import defaultdict
 from argparse import ArgumentParser
 
-def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False):
+def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
+        evalue_threshold=None):
     '''ingests a hmmer domtblout file'''
 
-    df = pd.read_csv(fname, skiprows=3, sep='\s+', engine='python')
+    df = None
+
+    try:
+        df = pd.read_csv(fname, skiprows=3, sep='\s+', engine='python')
+
+    except FileNotFoundError:
+        # annoying workaround for unknown file name
+        for replace_str in ['-0', '-train', '-test']:
+            fname_new = fname.replace(replace_str, '')
+            try:
+                df = pd.read_csv(fname_new, skiprows=3, sep='\s+',
+                        engine='python')
+                break
+            except FileNotFoundError:
+                continue
+
+    if df is None:
+        print("couldn't find domtblout at", fname)
+        exit(1)
 
     seq_name_to_family = defaultdict(list)
 
-    if single_best_score:
+    if single_best_score == True or evalue_threshold is not None:
 
         cnt = 0
         for _, row in df.iterrows():
@@ -26,14 +45,21 @@ def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False):
             except (ValueError, TypeError):
                 cnt += 1
                 continue
-            seq_name_to_family[seq_name].append((family, score))
+            if evalue_threshold is None:
+                seq_name_to_family[seq_name].append((family, score))
+            elif score < evalue_threshold:
+                seq_name_to_family[seq_name].append((family, score))
+            else:
+                pass
 
-        for seq_name in seq_name_to_family:
-            maxidx = np.argmin([s[1] for s in seq_name_to_family[seq_name]])
-            best_family = [s[0] for s in seq_name_to_family[seq_name]][maxidx]
-            seq_name_to_family[seq_name] = [best_family]
+        if single_best_score:
 
-        print('had to throw out {} rows'.format(cnt))
+            for seq_name in seq_name_to_family:
+                maxidx = np.argmin([s[1] for s in seq_name_to_family[seq_name]])
+                best_family = [s[0] for s in seq_name_to_family[seq_name]][maxidx]
+                seq_name_to_family[seq_name] = [best_family]
+
+        # print('had to throw out {} rows'.format(cnt))
 
     else:
 
@@ -95,10 +121,10 @@ def save_labels(seq_name_to_labels,
         except KeyError as e:
             print('keyerror', e, seq_name)
 
-    #with open(out_fname, 'w') as f:
-    #    json.dump(sequence_to_labels, f, indent=2)
+    with open(out_fname, 'w') as f:
+        json.dump(sequence_to_labels, f, indent=2)
 
-if __name__ == '__main__':
+def parser():
 
     ap = ArgumentParser()
     ap.add_argument('--domtblout',
@@ -117,18 +143,35 @@ if __name__ == '__main__':
                     names to\
                     labels',
                     required=True) 
+
     ap.add_argument('--single-best-score', 
                     action='store_true',
                     help='whether or not to save the single best score')
 
+    ap.add_argument('--overwrite', 
+                    action='store_true',
+                    help='overwrite json files?')
+
+    ap.add_argument('--evalue-threshold', 
+                    type=float,
+                    default=1e-5,
+                    help='overwrite json files?')
 
     args = ap.parse_args()
-    if os.path.isfile(args.label_fname):
+
+    return args
+
+if __name__ == '__main__':
+
+    args = parser()
+
+    if os.path.isfile(args.label_fname) and not args.overwrite:
         print('already created {}, not creating new json\
                 labels'.format(args.label_fname))
     else:
+
         sequences_and_labels = convert_hmmer_domtblout_to_json_labels(args.domtblout,
-                args.single_best_score)
+                args.single_best_score, args.evalue_threshold) 
 
         save_labels(sequences_and_labels, 
                     args.sequences,
