@@ -15,32 +15,34 @@ Original file is located at
 """
 
 # Commented out IPython magic to ensure Python compatibility.
-#!git clone https://github.com/google-research/proteinfer
+# !git clone https://github.com/google-research/proteinfer
 # %cd proteinfer
-#!pip3 install -qr  requirements.txt
+# !pip3 install -qr  requirements.txt
+
+import json
+
+import numpy as np
 
 import inference
 
-import json
-import numpy as np
-
 # Get a savedmodel
-#!wget -qN https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/models/single_domain_per_sequence_zipped_models/seed_random_32.0/5356760.tar.gz
+# !wget -qN https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/models/single_domain_per_sequence_zipped_models/seed_random_32.0/5356760.tar.gz
 # unzip
-#!tar xzf 5356760.tar.gz
+# !tar xzf 5356760.tar.gz
 # Get the vocabulary for the savedmodel, which tells you which output index means which family
-#!wget https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/models/single_domain_per_sequence_zipped_models/trained_model_pfam_32.0_vocab.json
+# !wget https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/models/single_domain_per_sequence_zipped_models/trained_model_pfam_32.0_vocab.json
 
 # Find the unzipped path
-#!ls *5356760*
+# !ls *5356760*
 
 # Load savedmodel
 inferrer = inference.Inferrer(
-    'trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760', use_tqdm=True, batch_size=32, activation_type="confidences"
+    'trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760', use_tqdm=True, batch_size=32,
+    activation_type="confidences"
 )
 # Load vocab
 with open('trained_model_pfam_32.0_vocab.json') as f:
-  vocab = json.loads(f.read())
+    vocab = json.loads(f.read())
 
 # Run inference
 hemoglobin = 'MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR'
@@ -50,4 +52,4 @@ activations = inferrer.get_activations([globin_domain])
 # Find what the most likely class is
 print(np.argmax(activations))
 
-vocab[8505] # PF00042 is family Globin
+vocab[8505]  # PF00042 is family Globin

@@ -1,26 +1,22 @@
 import os
-import time
 import pdb
 import numpy as np
 import torch
-import pytorch_lightning as pl
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor
-from glob import glob
 
 import utils.utils as u
 import models as m
-import losses as l
 
 try:
     from sklearn.metrics import confusion_matrix
 except:
     print('cant import sklearn')
 
-from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Recall
 from glob import glob
 from argparse import ArgumentParser
+
 
 def parser():
     ap = ArgumentParser()
@@ -49,7 +45,8 @@ def parser():
 
     return ap.parse_args()
 
-if __name__ == '__main__': 
+
+if __name__ == '__main__':
     args = parser()
 
     log_dir = args.log_dir
@@ -61,7 +58,7 @@ if __name__ == '__main__':
     loss_func = torch.nn.BCEWithLogitsLoss()
 
     test_files = test[:2]
-    train_files = train[:len(train)//2]
+    train_files = train[:len(train) // 2]
     valid_files = test[:2]
 
     model = m.Prot2Vec(
@@ -84,7 +81,7 @@ if __name__ == '__main__':
         gamma=args.gamma,
         n_negative_samples=args.n_negative_samples,
         evaluating=args.evaluating,
-        )
+    )
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
@@ -102,4 +99,4 @@ if __name__ == '__main__':
 
     print(os.path.join(trainer.log_dir, args.model_name))
     torch.save(model.state_dict(),
-            os.path.join(trainer.log_dir, args.model_name))
+               os.path.join(trainer.log_dir, args.model_name))

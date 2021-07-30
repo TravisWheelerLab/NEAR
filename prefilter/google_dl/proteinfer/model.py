@@ -1,27 +1,25 @@
 import os
-import numpy as np
-import torch
-import pytorch_lightning as pl
-
-from glob import glob
 from argparse import ArgumentParser
+from glob import glob
 
-import utils as utils
+import pytorch_lightning as pl
+import torch
+
 from datasets import Word2VecStyleDataset
+
 
 class Model(pl.LightningModule):
 
     def __init__(self,
-            embedding_dimension,
-            fc1,
-            fc2,
-            test_files,
-            train_files,
-            initial_learning_rate,
-            batch_size,
-            n_negative_samples
-            ):
-
+                 embedding_dimension,
+                 fc1,
+                 fc2,
+                 test_files,
+                 train_files,
+                 initial_learning_rate,
+                 batch_size,
+                 n_negative_samples
+                 ):
         super(Model, self).__init__()
 
         self.embedding_dim = embedding_dimension
@@ -34,7 +32,6 @@ class Model(pl.LightningModule):
         self.test_files = test_files
         self.save_hyperparameters()
 
-
         self.loss_func = torch.nn.BCEWithLogitsLoss()
         self.class_act = torch.nn.Sigmoid()
 
@@ -42,22 +39,18 @@ class Model(pl.LightningModule):
         self.layer_2 = torch.nn.Linear(fc1, fc2)
         self.embedding = torch.nn.Linear(fc2, embedding_dimension)
 
-
     def _get_dots(self, batch):
-
         targets, in_context, out_of_context = batch
 
         targets_embed = self.forward(targets)
 
         context_embed = self.forward(in_context)
-        negatives_embed = self.forward(out_of_context) 
+        negatives_embed = self.forward(out_of_context)
 
+        negatives_embed = torch.reshape(negatives_embed,
+                                        (self.batch_size, self.n_negative_samples, self.embedding_dim))
 
-        negatives_embed = torch.reshape(negatives_embed, 
-                          (self.batch_size, self.n_negative_samples, self.embedding_dim))
-
-
-        pos_dots = (targets_embed*context_embed).sum(axis=1).squeeze() 
+        pos_dots = (targets_embed * context_embed).sum(axis=1).squeeze()
 
         targets_embed = targets_embed.transpose(-2, -1)
 
@@ -66,31 +59,27 @@ class Model(pl.LightningModule):
         return pos_dots, neg_dots.ravel()
 
     def _loss_and_preds(self, batch):
-
         pos_dots, neg_dots = self._get_dots(batch)
 
         pos_dots = pos_dots.ravel()
         neg_dots = neg_dots.ravel()
 
         labels = torch.cat((torch.ones(pos_dots.shape[0]),
-                torch.zeros(neg_dots.shape[0]))).to('cuda')
+                            torch.zeros(neg_dots.shape[0]))).to('cuda')
 
         logits = torch.cat((pos_dots, neg_dots), axis=0)
-        loss = self.loss_func(logits, labels.ravel()) 
+        loss = self.loss_func(logits, labels.ravel())
         preds = torch.round(self.class_act(logits).ravel())
 
         acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
-        
+
         return loss, preds, acc
 
-
     def forward(self, x):
-
         x = torch.nn.functional.relu(self.layer_1(x))
         x = torch.nn.functional.relu(self.layer_2(x))
         x = self.embedding(x)
         return x
-
 
     def training_step(self, batch, batch_idx):
         loss, preds, acc = self._loss_and_preds(batch)
@@ -108,7 +97,8 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(),
-                lr=self.initial_learning_rate)
+                                lr=self.initial_learning_rate)
+
 
 def parser():
     ap = ArgumentParser()
@@ -127,10 +117,10 @@ def parser():
     ap.add_argument("--data_path", type=str, required=True)
     return ap.parse_args()
 
+
 # need to put this in inferrer
 
 if __name__ == '__main__':
-
     files = glob('../../small-dataset/json/*test*')
 
     args = parser()
@@ -149,15 +139,15 @@ if __name__ == '__main__':
     test_files = glob(os.path.join(root, "*test*.json"))
     test_files = test_files[:2]
     test = Word2VecStyleDataset(json_files=test_files,
-                                 max_sequence_length=None,
-                                 n_negative_samples=args.n_negative_samples,
-                                 evaluating=False,
-                                 encoding_func=None)
+                                max_sequence_length=None,
+                                n_negative_samples=args.n_negative_samples,
+                                evaluating=False,
+                                encoding_func=None)
 
     test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
                                        shuffle=False, drop_last=True)
     train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
-                                       shuffle=True, drop_last=True)
+                                        shuffle=True, drop_last=True)
 
     model = Model(args.embedding_dim,
                   args.layer_1_nodes,
@@ -167,7 +157,6 @@ if __name__ == '__main__':
                   args.initial_learning_rate,
                   args.batch_size,
                   args.n_negative_samples)
-
 
     trainer = pl.Trainer(
         gpus=args.gpus,

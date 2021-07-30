@@ -1,49 +1,30 @@
 import tensorflow as tf
+
 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
 sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 import os
-import numpy as np
 import torch
 import pytorch_lightning as pl
 
 from glob import glob
 from argparse import ArgumentParser
 
-import utils as utils
 from datasets import ProteinSequenceDataset
 
-def get_test_files_from_train(train_files):
-
-    json_files = glob(os.path.join(os.path.dirname(train_files[0]), "*test*"))
-    test_files = []
-
-    for f in train_files:
-        fout = os.path.splitext(os.path.basename(f))[0]
-        fout = fout.replace('-train', '')
-        test_f = [s for s in json_files if fout in s]
-        if len(test_f) == 1:
-            test_files.append(test_f[0])
-        else:
-            print(test_f, f)
-            print(len(test_f))
-            exit()
-
-    return test_files
 
 class Model(pl.LightningModule):
 
     def __init__(self,
-            n_classes,
-            fc1,
-            fc2,
-            test_files,
-            train_files,
-            class_code_mapping,
-            initial_learning_rate,
-            batch_size,
-            pos_weight=1
-            ):
-
+                 n_classes,
+                 fc1,
+                 fc2,
+                 test_files,
+                 train_files,
+                 class_code_mapping,
+                 initial_learning_rate,
+                 batch_size,
+                 pos_weight=1
+                 ):
         super(Model, self).__init__()
 
         self.n_classes = n_classes
@@ -67,23 +48,20 @@ class Model(pl.LightningModule):
         self.classification = torch.nn.Linear(fc2, n_classes)
 
     def forward(self, x):
-
         x = torch.nn.functional.relu(self.layer_1(x))
         x = torch.nn.functional.relu(self.layer_2(x))
         x = self.classification(x)
         return x
 
     def _loss_and_preds(self, batch):
-
         x, y = batch
         logits = model(x).ravel()
         labels = y.ravel()
         preds = torch.round(self.class_act(logits))
         loss = self.loss_func(logits, labels)
-        acc = (torch.sum(preds == labels)/torch.numel(preds)).item()
+        acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
 
         return loss, preds, acc
-
 
     def training_step(self, batch, batch_idx):
         loss, preds, acc = self._loss_and_preds(batch)
@@ -102,7 +80,8 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(),
-                lr=self.initial_learning_rate)
+                                lr=self.initial_learning_rate)
+
 
 def parser():
     ap = ArgumentParser()
@@ -122,10 +101,10 @@ def parser():
     ap.add_argument("--pos_weight", type=float, required=True)
     return ap.parse_args()
 
+
 # need to put this in inferrer
 
 if __name__ == '__main__':
-
     args = parser()
 
     log_dir = args.log_dir
@@ -153,7 +132,7 @@ if __name__ == '__main__':
     test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
                                        shuffle=False, drop_last=True)
     train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
-                                       shuffle=True, drop_last=True)
+                                        shuffle=True, drop_last=True)
 
     model = Model(n_classes,
                   args.layer_1_nodes,
@@ -167,8 +146,8 @@ if __name__ == '__main__':
                   )
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor='val_loss',
-            save_top_k=5)
+        monitor='val_loss',
+        save_top_k=5)
 
     trainer = pl.Trainer(
         gpus=args.gpus,

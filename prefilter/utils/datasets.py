@@ -1,14 +1,12 @@
-import os
 import json
-import torch
-import numpy as np
-
-import pdb
+import os
 import time
-
+from collections import defaultdict
 from glob import glob
 from random import shuffle
-from collections import defaultdict
+
+import numpy as np
+import torch
 
 import utils as utils
 
@@ -18,14 +16,14 @@ __all__ = ['Word2VecStyleDataset',
 
 
 class Word2VecStyleDataset(torch.utils.data.Dataset):
-    
+
     def __init__(self,
-            json_files,
-            max_sequence_length,
-            n_negative_samples,
-            evaluating=False,
-            return_protein_strings=False
-            ):
+                 json_files,
+                 max_sequence_length,
+                 n_negative_samples,
+                 evaluating=False,
+                 return_protein_strings=False
+                 ):
 
         self.max_sequence_length = max_sequence_length
         self.n_negative_samples = n_negative_samples
@@ -46,33 +44,32 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
         set_of_positive_labels = []
 
         while len(set_of_positive_labels) == 0:
-
-            target_sequence = self.sequences[int(np.random.rand()*len(self.sequences))]
+            target_sequence = self.sequences[int(np.random.rand() * len(self.sequences))]
             # grab a random sequence
-            set_of_positive_labels = self.sequences_and_labels[target_sequence] #... and all of the
+            set_of_positive_labels = self.sequences_and_labels[target_sequence]  # ... and all of the
         # i need to figure out why some sequences have 0 labels associated with
         # them...
 
         # labels that come along with it (pfam ids)
 
-        target_family = set_of_positive_labels[int(np.random.rand()*len(set_of_positive_labels))]
+        target_family = set_of_positive_labels[int(np.random.rand() * len(set_of_positive_labels))]
         # choose targets with probability proportional
         # to the number of sequences in that family
 
         y = self.labels_and_sequences[target_family]
-        context_sequence = y[int(np.random.rand()*len(y))]
+        context_sequence = y[int(np.random.rand() * len(y))]
 
         # k, now sample self.n_negative_samples
         negative_examples = []
         i = 0
         while len(negative_examples) < self.n_negative_samples:
-            negative_idx = np.array([int(np.random.rand()*len(self.pfam_names)) for _ in
-                   range(self.n_negative_samples)])
+            negative_idx = np.array([int(np.random.rand() * len(self.pfam_names)) for _ in
+                                     range(self.n_negative_samples)])
 
             for idx in negative_idx:
                 x = self.pfam_names[idx]
                 if len(x) > 1:
-                    negative_family = x[int(np.random.rand()*len(x))]
+                    negative_family = x[int(np.random.rand() * len(x))]
                 elif len(x) == 1:
                     negative_family = x[0]
                 else:
@@ -88,22 +85,22 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 
         negatives = []
         for negative in negative_examples:
-            x = self.labels_and_sequences[negative][int(np.random.rand()*len(self.labels_and_sequences[negative]))]
+            x = self.labels_and_sequences[negative][int(np.random.rand() * len(self.labels_and_sequences[negative]))]
             negatives.append(x)
 
         target = torch.tensor(self._encoding_func(target_sequence))
         context = torch.tensor(self._encoding_func(context_sequence))
         negative_encodings = [torch.tensor(self._encoding_func(x)) for x in negatives]
         labels = [1]
-        labels.extend([0]*self.n_negative_samples)
+        labels.extend([0] * self.n_negative_samples)
         labels = torch.tensor([labels])
         if self.return_protein_strings:
             return (target.float(), context.float(), negative_encodings,
-                            labels.float(), target_sequence, context_sequence, 
-                            negatives)
+                    labels.float(), target_sequence, context_sequence,
+                    negatives)
         else:
             return (target.float(), context.float(), negative_encodings,
-                            labels.float())
+                    labels.float())
 
     def _iterate(self, idx):
         seq, labels = self.sequences[idx], self.pfam_names[idx]
@@ -138,13 +135,13 @@ class Word2VecStyleDataset(torch.utils.data.Dataset):
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self,
-            json_files,
-            max_sequence_length,
-            encode_as_image,
-            multilabel,
-            name_to_label_mapping,
-            n_classes=None
-            ):
+                 json_files,
+                 max_sequence_length,
+                 encode_as_image,
+                 multilabel,
+                 name_to_label_mapping,
+                 n_classes=None
+                 ):
 
         self.max_sequence_length = max_sequence_length
         self.multilabel = multilabel
@@ -168,12 +165,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             oh = np.argmax(oh, axis=-1)
 
         if self.multilabel:
-            label = np.zeros((self.n_classes, ))
+            label = np.zeros((self.n_classes,))
             label[np.asarray(labels)] = 1
             labels = label
 
         return [oh, label]
-
 
     def _build_dataset(self, json_files):
         if not isinstance(json_files, list):
@@ -185,10 +181,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             self.sequences_and_labels = []
             for j in json_files:
                 self.sequences_and_labels.extend(read_sequences_from_json(j,
-                    self.name_to_label_mapping))
+                                                                          self.name_to_label_mapping))
 
         shuffle(self.sequences_and_labels)
-
 
     def __len__(self):
 
@@ -196,20 +191,17 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         x, y = self._encoding_func(self.sequences_and_labels[idx])
-        return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y) 
+        return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y)
 
 
 if __name__ == '__main__':
-
-    import matplotlib.pyplot as plt
-    import pdb
 
     root = '../../data/small-dataset/'
     root = glob(os.path.join(root, "*train.json"))
     dset = Word2VecStyleDataset(root, None, 5, return_protein_strings=True)
 
     dset = torch.utils.data.DataLoader(dset, batch_size=32,
-            collate_fn=utils.pad_word2vec_batch_with_string)
+                                       collate_fn=utils.pad_word2vec_batch_with_string)
     i = 0
 
     s = time.time()
@@ -218,4 +210,4 @@ if __name__ == '__main__':
         cnt += 1
         print(x[0].shape)
         pass
-    print(time.time() - s, (time.time()-s)/cnt)
+    print(time.time() - s, (time.time() - s) / cnt)

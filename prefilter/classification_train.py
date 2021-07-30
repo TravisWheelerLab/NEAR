@@ -16,9 +16,9 @@ try:
 except:
     print('cant import sklearn')
 
-from pytorch_lightning.metrics import MetricCollection, Accuracy, Precision, Recall
 from glob import glob
 from argparse import ArgumentParser
+
 
 def setup_parser():
     ap = ArgumentParser()
@@ -33,32 +33,33 @@ def setup_parser():
     label_group = ap.add_mutually_exclusive_group(required=True)
 
     label_group.add_argument('--multilabel', action='store_true',
-            help='sigmoid activation with N_CLASSES nodes on the last layer,\
+                             help='sigmoid activation with N_CLASSES nodes on the last layer,\
             useful for doing multi-label classification')
 
     label_group.add_argument('--multiclass',
-            type=int, help='multiclass classification. Each sequence classified\ (w/ softmax activation) into one of N_CLASSES')
+                             type=int,
+                             help='multiclass classification. Each sequence classified\ (w/ softmax activation) into one of N_CLASSES')
 
     ap.add_argument('--epochs', type=int, default=10,
-            help='max. number of epochs to train')
+                    help='max. number of epochs to train')
     ap.add_argument('--batch-size', required=False, default=16, type=int)
     ap.add_argument('--max-sequence-length', required=False, default=256,
-            type=int, help='size to which sequences will be truncated or padded')
+                    type=int, help='size to which sequences will be truncated or padded')
     ap.add_argument('--num-workers', required=False, default=4,
-            type=int, help='number of workers to use when loading data')
+                    type=int, help='number of workers to use when loading data')
     # TODO: fix encode-as-image argument to encode-as-one-hot
     ap.add_argument('--encode-as-image', required=False, action='store_true',
-            help='whether or not to encode residues as one-hot vector ')
+                    help='whether or not to encode residues as one-hot vector ')
     ap.add_argument('--name-to-label-mapping', default='all-name-to-label.json',
-            help='file containing the name-to-label mapping for pfam accession ids')
+                    help='file containing the name-to-label mapping for pfam accession ids')
 
     ap.add_argument('--data-path', type=str, required=True, help='where the\
                     data is stored. Requires structure to be <data-path>/<test, train, val>.json')
-    ap.add_argument('--lr', type=float, default=1e-3, 
-            help='initial learning rate')
+    ap.add_argument('--lr', type=float, default=1e-3,
+                    help='initial learning rate')
 
     ap.add_argument('--model-dir', type=str, required=True,
-                     help='where to save trained models')
+                    help='where to save trained models')
 
     ap.add_argument('--n-gpus', type=int, required=True, help='number of gpus to use')
 
@@ -66,17 +67,17 @@ def setup_parser():
             the model you want to train')
 
     ap.add_argument('--threshold-curve', action='store_true',
-            help='whether or not to save precision and recall on test set\
+                    help='whether or not to save precision and recall on test set\
                     as a function of different probability thresholds. Only\
                     works if you have matplotlib installed')
     ap.add_argument('--log-freq', type=int, default=2,
                     help='when to log the threshold_curve graph')
     ap.add_argument('--log-dir', type=str, default=None,
-            help='where to save tensorboard logs')
+                    help='where to save tensorboard logs')
     ap.add_argument('--tune-batch-size', action='store_true',
-            help='use pt-lightning to get the largest batch size')
+                    help='use pt-lightning to get the largest batch size')
     ap.add_argument('--tune-initial-lr', action='store_true',
-            help='use pt-lightning to get a guess for a good initial learning rate')
+                    help='use pt-lightning to get a guess for a good initial learning rate')
 
     loss_group = ap.add_mutually_exclusive_group(required=True)
 
@@ -91,7 +92,6 @@ def setup_parser():
             step-size epochs')
     ap.add_argument('--step-size', type=float, default=2, help='lr is decayed by gamma\
             every step-size epochs, in a staircase fashion')
-
 
     args = ap.parse_args()
 
@@ -136,9 +136,9 @@ if __name__ == '__main__':
 
     if focal_loss:
         loss_func = l.FocalLoss()
-    elif bce_loss: 
+    elif bce_loss:
         loss_func = torch.nn.BCEWithLogitsLoss()
-    elif xent_loss: 
+    elif xent_loss:
         loss_func = torch.nn.CategoricalCrossEntropyWithLogits()
     else:
         pass
@@ -195,32 +195,29 @@ if __name__ == '__main__':
         log_dir = os.getcwd()
     else:
         log_dir = os.path.join('lightning_logs', log_dir)
-    
+
     lr_callback = pl.callbacks.LearningRateMonitor(logging_interval='step')
     log_every_n_steps = 50
 
     if n_gpus > 1:
         trainer = Trainer(gpus=[i for i in range(n_gpus)],
-                max_epochs=num_epochs, accelerator='ddp', default_root_dir=log_dir,
-                callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
+                          max_epochs=num_epochs, accelerator='ddp', default_root_dir=log_dir,
+                          callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
     else:
         trainer = Trainer(gpus=1, max_epochs=num_epochs, default_root_dir=log_dir,
-                callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
+                          callbacks=[lr_callback], log_every_n_steps=log_every_n_steps)
 
     if tune_batch_size:
-
         tuner = pl.tuner.tuning.Tuner(trainer)
         new_batch_size = tuner.scale_batch_size(model)
         model.hparams.batch_size = new_batch_size
         print('Tuned batch size to {}'.format(new_batch_size))
 
     if tune_initial_lr:
-
         lr_finder = trainer.tuner.lr_find(model)
         new_learning_rate = lr_finder.suggestion()
         model.hparams.lr = new_learning_rate
         print('Tuned learning rate to {}'.format(new_learning_rate))
-
 
     trainer.fit(model)
 

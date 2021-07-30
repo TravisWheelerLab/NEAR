@@ -24,9 +24,9 @@ import pandas as pd
 import sklearn
 import tqdm
 
+import evaluation
 import inference
 import utils
-import evaluation
 
 
 def read_blast_table(filename):
@@ -58,12 +58,12 @@ def stats_by_group(df):
     EPSILON = 1e-10
     result = df[['tp', 'fp', 'fn']].sum().reset_index().assign(
         precision=lambda x: (x['tp'] + EPSILON) /
-        (x['tp'] + x['fp'] + EPSILON),
+                            (x['tp'] + x['fp'] + EPSILON),
         recall=lambda x: (x['tp'] + EPSILON) /
-        (x['tp'] + x['fn'] + EPSILON)).assign(
-            f1=lambda x: 2 * x['precision'] * x['recall'] /
-            (x['precision'] + x['recall'] + EPSILON),
-            count=lambda x: x['tp'] + x['fn'])
+                         (x['tp'] + x['fn'] + EPSILON)).assign(
+        f1=lambda x: 2 * x['precision'] * x['recall'] /
+                     (x['precision'] + x['recall'] + EPSILON),
+        count=lambda x: x['tp'] + x['fn'])
     result['proportion'] = result['count'] / np.sum(result['count'])
     result['proportion_text'] = (result['proportion'] *
                                  100).round(2).astype(str) + "%"
@@ -243,15 +243,15 @@ def get_pr_curve_df(predictions_df,
         output_dfs.append(
             pd.DataFrame({
                 'group':
-                group_name,
+                    group_name,
                 'precision':
-                precisions,
+                    precisions,
                 'recall':
-                recalls,
+                    recalls,
                 'threshold':
-                thresholds,
+                    thresholds,
                 'f1':
-                2 * precisions * recalls / (precisions + recalls)
+                    2 * precisions * recalls / (precisions + recalls)
             }))
     return pd.concat(output_dfs)
 

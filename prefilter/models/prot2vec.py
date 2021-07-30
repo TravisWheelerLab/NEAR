@@ -1,33 +1,29 @@
-import numpy as np
 import torch
-import torch.nn.functional as F
 import pytorch_lightning as pl
+import torch
 import torch.nn as nn
-
-from functools import partial
-
+import torch.nn.functional as F
 import utils.datasets as datasets
-from utils.utils import PROT_ALPHABET, pad_word2vec_batch
+from utils.utils import pad_word2vec_batch
 
 __all__ = ['Prot2Vec']
 
 
 class ResidualBlock(nn.Module):
-
     expansion = 1
 
-    def __init__(self, in_channels, out_channels, 
-            bottleneck_factor, kernel_size, stride=1):
+    def __init__(self, in_channels, out_channels,
+                 bottleneck_factor, kernel_size, stride=1):
 
         super(ResidualBlock, self).__init__()
 
-        out_channels = int(out_channels*bottleneck_factor)
+        out_channels = int(out_channels * bottleneck_factor)
         self.in_channels = in_channels
         self.out_channels = out_channels
 
         self.conv1 = nn.Conv1d(
             in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-                padding=1)
+            padding=1)
 
         self.bn1 = nn.BatchNorm1d(out_channels)
 
@@ -36,9 +32,9 @@ class ResidualBlock(nn.Module):
 
         self.bn2 = nn.BatchNorm1d(out_channels)
 
-        self.up_bottleneck = nn.Conv1d(out_channels, 
-                int(out_channels/bottleneck_factor),
-                kernel_size=1, stride=1, padding=0)
+        self.up_bottleneck = nn.Conv1d(out_channels,
+                                       int(out_channels / bottleneck_factor),
+                                       kernel_size=1, stride=1, padding=0)
 
     def _masked_forward(self, x, mask):
 
@@ -128,32 +124,30 @@ class Prot2Vec(pl.LightningModule):
 
         self.save_hyperparameters()
 
-
     def _setup_layers(self):
 
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
-                                     out_channels=self.res_block_n_filters,
-                                     kernel_size=self.res_block_kernel_size,
-                                     padding=1)
+                                      out_channels=self.res_block_n_filters,
+                                      kernel_size=self.res_block_kernel_size,
+                                      padding=1)
 
         self.bn1 = nn.BatchNorm1d(self.res_block_n_filters)
 
         self.dilated1 = nn.Conv1d(in_channels=self.res_block_n_filters,
-                out_channels=int(self.res_block_n_filters*self.res_bottleneck_factor),
-                kernel_size=self.res_block_kernel_size,
-                padding=1, stride=1)
+                                  out_channels=int(self.res_block_n_filters * self.res_bottleneck_factor),
+                                  kernel_size=self.res_block_kernel_size,
+                                  padding=1, stride=1)
 
-        self.bn2 = nn.BatchNorm1d(int(self.res_block_n_filters*self.res_bottleneck_factor))
-        self.bottleneck1 = nn.Conv1d(in_channels=int(self.res_block_n_filters*self.res_bottleneck_factor),
-                out_channels=self.res_block_n_filters,
-                kernel_size=1,
-                stride=1,
-                padding=0)
+        self.bn2 = nn.BatchNorm1d(int(self.res_block_n_filters * self.res_bottleneck_factor))
+        self.bottleneck1 = nn.Conv1d(in_channels=int(self.res_block_n_filters * self.res_bottleneck_factor),
+                                     out_channels=self.res_block_n_filters,
+                                     kernel_size=1,
+                                     stride=1,
+                                     padding=0)
 
         self.encoding_network = nn.ModuleList([])
 
         for _ in range(self.n_res_blocks):
-
             r = ResidualBlock(self.res_block_n_filters,
                               self.res_block_n_filters,
                               self.res_bottleneck_factor,
@@ -187,13 +181,13 @@ class Prot2Vec(pl.LightningModule):
         x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
         x = self.dilated1(x)
         x[mask.expand(-1,
-            int(self.res_block_n_filters*self.res_bottleneck_factor), -1)] = 0
+                      int(self.res_block_n_filters * self.res_bottleneck_factor), -1)] = 0
         x = F.relu(self.bn2(x))
         x[mask.expand(-1,
-            int(self.res_block_n_filters*self.res_bottleneck_factor), -1)] = 0
+                      int(self.res_block_n_filters * self.res_bottleneck_factor), -1)] = 0
         x = self.bottleneck1(x) + out
         for layer in self.encoding_network:
-            x = layer(x, mask) # takes care of masking in the function
+            x = layer(x, mask)  # takes care of masking in the function
         x = self.pool(x)
         x = self.embedding(x.squeeze())
 
@@ -242,61 +236,59 @@ class Prot2Vec(pl.LightningModule):
 
             return embeddings
 
-
-    def _get_dots(self, targets, targets_mask, 
-            in_context, in_context_mask,
-            out_of_context,
-            out_of_context_mask):
+    def _get_dots(self, targets, targets_mask,
+                  in_context, in_context_mask,
+                  out_of_context,
+                  out_of_context_mask):
 
         targets_embed = self.forward(targets, targets_mask)
 
         context_embed = self.forward(in_context, in_context_mask)
-        negatives_embed = self.forward(out_of_context, out_of_context_mask) 
+        negatives_embed = self.forward(out_of_context, out_of_context_mask)
 
         negatives_embed = torch.reshape(negatives_embed, (self.batch_size,
-            self.n_negative_samples, self.embedding_dim))
+                                                          self.n_negative_samples, self.embedding_dim))
 
-
-        pos_dots = (targets_embed*context_embed).sum(axis=1).squeeze() 
+        pos_dots = (targets_embed * context_embed).sum(axis=1).squeeze()
         neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(2)).squeeze()
         return pos_dots, neg_dots.ravel()
 
     def _compute_loss_and_preds(self, batch):
 
-        targets, targets_mask, contexts, contexts_mask, negatives,\
+        targets, targets_mask, contexts, contexts_mask, negatives, \
         negatives_mask, labels = batch
 
         pos_dots, neg_dots = self._get_dots(targets, targets_mask,
-                contexts, contexts_mask,
-                negatives, negatives_mask)
+                                            contexts, contexts_mask,
+                                            negatives, negatives_mask)
 
         logits = torch.cat((pos_dots, neg_dots), axis=0)
-        loss = self.loss_func(logits, labels.ravel()) 
+        loss = self.loss_func(logits, labels.ravel())
         preds = self.class_act(logits).ravel()
 
         return loss, preds, labels, logits, pos_dots, neg_dots
 
     def training_step(self, batch, batch_idx):
 
-        loss, preds, labels, logits, pos_dots, neg_dots\
-                = self._compute_loss_and_preds(batch)
+        loss, preds, labels, logits, pos_dots, neg_dots \
+            = self._compute_loss_and_preds(batch)
         self.log('loss', loss.item())
         self.log('accuracy', torch.sum(torch.round(preds.ravel()) ==
-            labels.ravel())/torch.numel(preds))
+                                       labels.ravel()) / torch.numel(preds))
 
         return loss
 
     def validation_step(self, batch, batch_idx):
 
-        loss, preds, labels, logits, pos_dots, neg_dots\
-                = self._compute_loss_and_preds(batch)
-        
+        loss, preds, labels, logits, pos_dots, neg_dots \
+            = self._compute_loss_and_preds(batch)
+
         return loss
 
     def test_step(self, batch, batch_idx):
 
-        loss, preds, labels, logits, pos_dots, neg_dots\
-                = self._compute_loss_and_preds(batch)
+        loss, preds, labels, logits, pos_dots, neg_dots \
+            = self._compute_loss_and_preds(batch)
 
         return loss
 
@@ -304,67 +296,64 @@ class Prot2Vec(pl.LightningModule):
 
     def _create_datasets(self):
 
-
         self.test_data = datasets.Word2VecStyleDataset(self.test_files,
-                                  self.max_sequence_length,
-                                  evaluating=False,
-                                  n_negative_samples=self.n_negative_samples
-                                  )
+                                                       self.max_sequence_length,
+                                                       evaluating=False,
+                                                       n_negative_samples=self.n_negative_samples
+                                                       )
 
         self.train_data = datasets.Word2VecStyleDataset(self.train_files,
-                                  self.max_sequence_length,
-                                  evaluating=False,
-                                  n_negative_samples=self.n_negative_samples
-                                  )
+                                                        self.max_sequence_length,
+                                                        evaluating=False,
+                                                        n_negative_samples=self.n_negative_samples
+                                                        )
 
         self.valid_data = datasets.Word2VecStyleDataset(self.valid_files,
-                                  self.max_sequence_length,
-                                  evaluating=False,
-                                  n_negative_samples=self.n_negative_samples
-                                  )
-
+                                                        self.max_sequence_length,
+                                                        evaluating=False,
+                                                        n_negative_samples=self.n_negative_samples
+                                                        )
 
     def train_dataloader(self):
 
-        return torch.utils.data.DataLoader(self.train_data, 
-                batch_size=self.batch_size,
-                num_workers=self.num_workers, 
-                drop_last=True,
-                collate_fn=pad_word2vec_batch)
+        return torch.utils.data.DataLoader(self.train_data,
+                                           batch_size=self.batch_size,
+                                           num_workers=self.num_workers,
+                                           drop_last=True,
+                                           collate_fn=pad_word2vec_batch)
 
     def test_dataloader(self):
 
         return torch.utils.data.DataLoader(self.test_data,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                drop_last=True,
-                collate_fn=pad_word2vec_batch)
+                                           batch_size=self.batch_size,
+                                           num_workers=self.num_workers,
+                                           drop_last=True,
+                                           collate_fn=pad_word2vec_batch)
 
     def val_dataloader(self):
 
         return torch.utils.data.DataLoader(self.valid_data,
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                drop_last=True,
-                collate_fn=pad_word2vec_batch)
+                                           batch_size=self.batch_size,
+                                           num_workers=self.num_workers,
+                                           drop_last=True,
+                                           collate_fn=pad_word2vec_batch)
 
     def configure_optimizers(self):
 
         optim = torch.optim.Adam(self.parameters(),
-                lr=self.initial_learning_rate)
+                                 lr=self.initial_learning_rate)
         return optim
 
     def configure_optimizers_decay(self):
 
         optim = torch.optim.Adam(self.parameters(),
-                lr=self.initial_learning_rate)
+                                 lr=self.initial_learning_rate)
         decay_steps = 4000
 
         def lr_schedule(step):
-
             x = self.initial_learning_rate * self.gamma ** int(step / decay_steps)
             return x
 
         mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
-        sched = {'scheduler':mysched, 'interval':'step'} 
+        sched = {'scheduler': mysched, 'interval': 'step'}
         return [optim], [sched]

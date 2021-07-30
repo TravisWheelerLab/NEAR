@@ -15,18 +15,18 @@
 """Tests for module colab_evaluation.py."""
 
 import gzip
-import os
-import time
 import math
+import time
 
+import numpy as np
+import pandas as pd
+import tensorflow.compat.v1 as tf
 from absl import flags
 from absl.testing import absltest
 from absl.testing import parameterized
-import numpy as np
-import pandas as pd
+
 import colab_evaluation
 import inference
-import tensorflow.compat.v1 as tf
 
 FLAGS = flags.FLAGS
 
@@ -136,7 +136,7 @@ class ColabEvaluationTest(parameterized.TestCase):
         expected_df = pd.DataFrame({
             'up_id': ['SEQ0', 'SEQ0', 'SEQ1', 'SEQ1', 'SEQ1', 'SEQ3'],
             'label':
-            ['ENTRY1', 'ENTRY2', 'ENTRY0', 'ENTRY1', 'ENTRY2', 'ENTRY6'],
+                ['ENTRY1', 'ENTRY2', 'ENTRY0', 'ENTRY1', 'ENTRY2', 'ENTRY6'],
             'value': [0.9, 0.5, 1.0, 1.0, 1.0, False],
             'gt': [True, False, False, True, True, True]
         })
@@ -183,7 +183,6 @@ class ColabEvaluationTest(parameterized.TestCase):
         actual = tp_fp_fn.loc[:, ["tp", "fp", "fn"]]
         pd.testing.assert_frame_equal(expected, actual)
 
-
     def test_apply_threshold_and_return_stats(self):
         pred = pd.DataFrame({
             'up_id': ['SEQ0', 'SEQ0', 'SEQ1', 'SEQ1', 'SEQ1'],
@@ -195,7 +194,8 @@ class ColabEvaluationTest(parameterized.TestCase):
             'label': ['ENTRY1', 'ENTRY1', 'ENTRY2', 'ENTRY6'],
             'gt': [True, True, True, True]
         })
-        actual = colab_evaluation.apply_threshold_and_return_stats(pred,gt,grouping = {"ENTRY0":'A',"ENTRY1":'A',"ENTRY2":'A',"ENTRY6":'A'})
+        actual = colab_evaluation.apply_threshold_and_return_stats(pred, gt, grouping={"ENTRY0": 'A', "ENTRY1": 'A',
+                                                                                       "ENTRY2": 'A', "ENTRY6": 'A'})
         expected = pd.DataFrame({
             'group': ['A'],
             'tp': [3.0],
@@ -209,13 +209,14 @@ class ColabEvaluationTest(parameterized.TestCase):
             'proportion_text': ['100.0%'],
             'threshold': [0.5]
         })
-        pd.testing.assert_frame_equal(actual,expected, check_dtype=False)
-
+        pd.testing.assert_frame_equal(actual, expected, check_dtype=False)
 
     def test_read_blast_table(self):
         actual = colab_evaluation.read_blast_table("testdata/blast.tsv")
-        expected = pd.DataFrame({'up_id': ['ABC'], 'target': ['DEF'], 'pc_identity': [50], 'alignment_length': [100], 'bit_score': [500]})
+        expected = pd.DataFrame(
+            {'up_id': ['ABC'], 'target': ['DEF'], 'pc_identity': [50], 'alignment_length': [100], 'bit_score': [500]})
         pd.testing.assert_frame_equal(actual, expected)
+
 
 if __name__ == '__main__':
     absltest.main()

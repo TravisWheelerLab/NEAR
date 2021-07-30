@@ -1,14 +1,14 @@
-import numpy as np
-import os
-import matplotlib.pyplot as plt
 import json
-
+import os
 from argparse import ArgumentParser
 from collections import defaultdict
 from glob import glob
 
-def summarize_dataset(json_files, savefig=None):
+import matplotlib.pyplot as plt
+import numpy as np
 
+
+def summarize_dataset(json_files, savefig=None):
     lengths = []
     sequence_to_count = defaultdict(int)
     labels_per_sequence = []
@@ -27,10 +27,10 @@ def summarize_dataset(json_files, savefig=None):
     s += ' percentile {:.3f}, number of seq. {:d}'
 
     s = s.format(np.mean(lengths),
-            np.median(lengths),
-            np.percentile(lengths, 25),
-            np.percentile(lengths, 75),
-            len(lengths))
+                 np.median(lengths),
+                 np.percentile(lengths, 25),
+                 np.percentile(lengths, 75),
+                 len(lengths))
 
     if savefig is not None:
         fig, ax = plt.subplots(ncols=2)
@@ -44,12 +44,12 @@ def summarize_dataset(json_files, savefig=None):
         ax[1].hist(labels_per_sequence, bins=100, histtype='step')
         ax[1].set_xlabel('num labels')
         ax[1].set_ylabel('number')
-        
+
         plt.savefig(savefig)
         plt.close()
 
-def parser():
 
+def parser():
     ap = ArgumentParser()
     ap.add_argument('--directory', required=True, type=str)
     ap.add_argument('--glob_string', required=True, type=str)
@@ -58,7 +58,6 @@ def parser():
 
 
 if __name__ == '__main__':
-
     args = parser()
 
     directory = args.directory
@@ -66,4 +65,3 @@ if __name__ == '__main__':
     save_path = args.save_fig
     json_files = glob(os.path.join(directory, glob_string))
     summarize_dataset(json_files, savefig=save_path)
-

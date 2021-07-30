@@ -1,7 +1,7 @@
-import os
 import json
-
+import os
 from glob import glob
+
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -12,7 +12,7 @@ test = glob('./small-dataset/json/*test*')
 for f in train:
 
     of = os.path.splitext(os.path.basename(f))[0]
-    of = os.path.join('./small-dataset/train_subset/', of+'.fa')
+    of = os.path.join('./small-dataset/train_subset/', of + '.fa')
     with open(f, 'r') as src:
         sequences_and_labels = json.load(src)
 
@@ -22,7 +22,7 @@ for f in train:
     for sequence, labels in sequences_and_labels.items():
         for label in labels:
             records.append(SeqRecord(Seq(sequence.upper()), label,
-                description=str(i)))
+                                     description=str(i)))
             i += 1
         if j > 9:
             break

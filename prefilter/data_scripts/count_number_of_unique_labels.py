@@ -16,5 +16,4 @@ for f in files:
         if isinstance(label_set, list):
             set_of_sets.add(frozenset(label_set))
 
-
 print(len(set_of_sets))

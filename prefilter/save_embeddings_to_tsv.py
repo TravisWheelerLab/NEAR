@@ -1,22 +1,22 @@
 import os
+from argparse import ArgumentParser
+
 import numpy as np
 import torch
 
-from argparse import ArgumentParser
 
 def parser():
-
     ap = ArgumentParser()
     ap.add_argument('--embeddings', required=True, type=str)
     ap.add_argument('--embedding_names', required=True, type=str)
     ap.add_argument('--np', action='store_true')
-    ap.add_argument('--output_dir' , required=True, type=str)
-    ap.add_argument('--prefix' , required=True, type=str)
+    ap.add_argument('--output_dir', required=True, type=str)
+    ap.add_argument('--prefix', required=True, type=str)
 
     return ap.parse_args()
 
-def save_tsv_np(embedding_npy, metadata_npy, output_dir, prefix):
 
+def save_tsv_np(embedding_npy, metadata_npy, output_dir, prefix):
     os.makedirs(output_dir, exist_ok=True)
 
     if metadata_npy != 'None':
@@ -43,7 +43,7 @@ def save_tsv_np(embedding_npy, metadata_npy, output_dir, prefix):
         if os.path.isfile(out_embedding):
             return
 
-        out_metadata = os.path.splitext(os.path.basename(embedding_npy))[0] + '-metadata'+ '.tsv'
+        out_metadata = os.path.splitext(os.path.basename(embedding_npy))[0] + '-metadata' + '.tsv'
         out_metadata = os.path.join(output_dir, out_metadata)
 
         embedding = np.load(embedding_npy)
@@ -74,7 +74,7 @@ def save_tsv_pt(embedding_pt, output_dir, prefix):
     if os.path.isfile(out_embedding):
         return
 
-    out_metadata = os.path.splitext(os.path.basename(embedding_pt))[0] + '-metadata'+ '.tsv'
+    out_metadata = os.path.splitext(os.path.basename(embedding_pt))[0] + '-metadata' + '.tsv'
     out_embedding = os.path.join(output_dir, out_embedding)
     out_metadata = os.path.join(output_dir, out_metadata)
 
@@ -86,7 +86,6 @@ def save_tsv_pt(embedding_pt, output_dir, prefix):
 
     with open(out_metadata, 'w') as dst:
         dst.write(label + '\n')
-
 
 
 if __name__ == '__main__':

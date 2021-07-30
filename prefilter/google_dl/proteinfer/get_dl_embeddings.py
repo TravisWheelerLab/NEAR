@@ -3,12 +3,13 @@
 # %cd proteinfer
 # !pip3 install -qr  requirements.txt
 
-import inference
-import json
 import os
+from glob import glob
+
 import numpy as np
 
-from glob import glob
+import inference
+
 
 def fasta_from_file(fasta_file):
     sequence_labels, sequence_strs = [], []
@@ -43,6 +44,7 @@ def fasta_from_file(fasta_file):
 
     return sequence_labels, sequence_strs
 
+
 # Get a savedmodel
 # !wget -qN https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/models/single_domain_per_sequence_zipped_models/seed_random_32.0/5356760.tar.gz
 # unzip
@@ -56,7 +58,6 @@ def fasta_from_file(fasta_file):
 # Load savedmodel
 
 def get_embeddings_from_sequences_and_labels(sequences, out_dir):
-
     for f in sequences:
         sequence_labels, sequence_strs = fasta_from_file(f)
         # print(sequence_labels, sequence_strs)
@@ -64,13 +65,13 @@ def get_embeddings_from_sequences_and_labels(sequences, out_dir):
         activations = inferrer.get_activations(sequence_strs)
         # Find what the most likely class is
         for sequence_label, sequence_embedding in zip(sequence_labels,
-                activations):
+                                                      activations):
             # print(sequence_label, sequence_embedding.shape)
-            of = os.path.join(out_dir, sequence_label+'npy')
+            of = os.path.join(out_dir, sequence_label + 'npy')
             np.save(of, sequence_embedding)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     root = '../../small-dataset/'
     test_sequences = glob(os.path.join(root, 'fasta/*test*'))
     train_sequences = glob(os.path.join(root, 'train_subset/*'))
@@ -91,4 +92,4 @@ if __name__ == '__main__':
     # get_embeddings_from_sequences_and_labels(train_sequences,
     #         './embeddings/train/')
     get_embeddings_from_sequences_and_labels(consensus_sequences,
-            './embeddings/consensus/')
+                                             './embeddings/consensus/')

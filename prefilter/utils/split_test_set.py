@@ -1,9 +1,9 @@
 import json
-import sys
 import os
-import numpy as np
-
+import sys
 from glob import glob
+
+import numpy as np
 
 if __name__ == '__main__':
 
@@ -22,9 +22,9 @@ if __name__ == '__main__':
 
         if len(sequences) > 1:
             valid = np.random.choice(sequences,
-                                     size=int(len(sequences)*0.5), 
+                                     size=int(len(sequences) * 0.5),
                                      replace=False)
-            
+
             valid_sequence_to_label = {}
             for v in valid:
                 valid_sequence_to_label[v] = sequence_to_label[v]

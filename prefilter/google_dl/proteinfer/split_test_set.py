@@ -1,24 +1,23 @@
 import json
-import sys
 import os
+from argparse import ArgumentParser
+from glob import glob
+
 import numpy as np
 
-from glob import glob
-from argparse import ArgumentParser
 
 def parser():
-
     ap = ArgumentParser()
     ap.add_argument('--directory', required=True,
-            help='directory containing test files')
+                    help='directory containing test files')
     ap.add_argument('--glob_str', required=False,
-            help='glob string to pick out test files',
-            default='*test.json')
+                    help='glob string to pick out test files',
+                    default='*test.json')
     args = ap.parse_args()
     return args
 
-def split_files(test_files, args):
 
+def split_files(test_files, args):
     '''
     Splits a json file containing sequences and their hmmer labels into two
     files, each containing half of the sequences as in the original file (50/50
@@ -40,9 +39,9 @@ def split_files(test_files, args):
 
         if len(sequences) > 1:
             valid = np.random.choice(sequences,
-                                     size=int(len(sequences)*0.5), 
+                                     size=int(len(sequences) * 0.5),
                                      replace=False)
-            
+
             valid_sequence_to_label = {}
             for v in valid:
                 valid_sequence_to_label[v] = sequence_to_label[v]
@@ -61,12 +60,10 @@ def split_files(test_files, args):
 
 
 def main(args):
-
     test_files = glob(os.path.join(args.directory, args.glob_str))
     split_files(test_files, args)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     args = parser()
     main(args)
-

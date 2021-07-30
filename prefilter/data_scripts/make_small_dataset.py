@@ -1,7 +1,6 @@
 import json
 import os
 import shutil
-import numpy as np
 
 from glob import glob
 from random import shuffle
@@ -12,10 +11,10 @@ train_files_original = sorted(glob('./1k/*train.json'))
 # 34765 total sequences in 1k/
 
 test_ = []
-tot =0
+tot = 0
 tot2 = 0
 shuffle(train_files_original)
-train_files = train_files_original[:int(len(train_files_original)*0.01)]
+train_files = train_files_original[:int(len(train_files_original) * 0.01)]
 
 for train in train_files:
     base = train.replace('-train.json', '')
@@ -26,12 +25,11 @@ for train in train_files:
             test_.append(test)
             break
 
-
 for test in test_:
     with open(test, 'r') as src:
         tot2 += len(json.load(src))
 
-print(tot2/tot, tot2, tot)
+print(tot2 / tot, tot2, tot)
 
 for train in train_files:
     of = os.path.basename(train)

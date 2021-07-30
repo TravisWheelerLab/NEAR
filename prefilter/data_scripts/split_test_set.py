@@ -1,23 +1,23 @@
 import json
-import sys
 import os
+from argparse import ArgumentParser
+from glob import glob
+
 from numpy.random import choice
 
-from glob import glob
-from argparse import ArgumentParser
 
 def parser():
-
     ap = ArgumentParser()
     ap.add_argument('--directory', required=True,
-            help='directory containing test files')
+                    help='directory containing test files')
     ap.add_argument('--glob_str', required=False,
-            help='glob string to pick out test files (include wildcard\
+                    help='glob string to pick out test files (include wildcard\
             characters)',
-            default='*test.json')
+                    default='*test.json')
     args = ap.parse_args()
 
     return args
+
 
 def split_files(test_files, command_line_args):
     '''
@@ -49,9 +49,9 @@ def split_files(test_files, command_line_args):
 
         if len(sequences) > 1:
             valid = choice(sequences,
-                           size=int(len(sequences)*0.5), 
+                           size=int(len(sequences) * 0.5),
                            replace=False)
-            
+
             valid_sequence_to_label = {}
             for v in valid:
                 valid_sequence_to_label[v] = sequence_to_label[v]
@@ -70,7 +70,6 @@ def split_files(test_files, command_line_args):
 
 
 def main(args):
-
     test_files = glob(os.path.join(args.directory, args.glob_str))
 
     if not len(test_files):
@@ -80,8 +79,8 @@ def main(args):
     else:
         split_files(test_files, args)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     print('i have imported all necessary packages')
     args = parser()
     print("hi")

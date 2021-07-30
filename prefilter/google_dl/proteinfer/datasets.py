@@ -1,27 +1,22 @@
-import os
 import json
-import torch
-import numpy as np
-
-import pdb
+import os
 import time
-import inference
-
 from glob import glob
-from random import shuffle
-from collections import defaultdict
 
-import utils as utils
+import torch
+
+import inference
 
 __all__ = ['Word2VecStyleDataset',
            'ProteinSequenceDataset',
            ]
 
+
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self, json_files,
-                       existing_name_to_label_mapping=None,
-                       evaluating=False):
+                 existing_name_to_label_mapping=None,
+                 evaluating=False):
 
         self.json_files = json_files
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
@@ -36,11 +31,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         self._build_dataset()
 
-
     def _encoding_func(self, x):
 
         return self.inferrer.get_activations([x.upper()])
-
 
     def _build_dataset(self):
 
@@ -66,12 +59,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             for sequence, labelset in sequence_to_labels.items():
 
-                for label in labelset: 
+                for label in labelset:
 
                     if label not in self.name_to_class_code:
 
                         if not self.evaluating:
-
                             self.name_to_class_code[label] = class_id
                             class_id += 1
 
@@ -81,7 +73,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             print('saving to existing name to label_mapping')
 
             with open(self.existing_name_to_label_mapping, 'w') as dst:
-                    json.dump(self.name_to_class_code, dst)
+                json.dump(self.name_to_class_code, dst)
         else:
 
             self.class_code_mapping = './pfam_names_to_class_id-{}.json'.format(time.time())
@@ -89,8 +81,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             with open(self.class_code_mapping, 'w') as dst:
                 json.dump(self.name_to_class_code, dst)
 
-        self.n_classes = class_id+1
-
+        self.n_classes = class_id + 1
 
     def __getitem__(self, key):
 
@@ -99,7 +90,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         else:
             print('this shouldn\'t happen')
             return None
-         
 
     def __len__(self):
 
@@ -121,13 +111,12 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
 
 if __name__ == '__main__':
-
     root = '../../small-dataset/json/'
     train_files = glob(os.path.join(root, "*train.json"))[:2]
     test_files = glob(os.path.join(root, "*test*"))[:2]
 
     train_dset = ProteinSequenceDataset(
-                train_files)
+        train_files)
 
     test_dset = ProteinSequenceDataset(test_files,
-            existing_name_to_label_mapping=train_dset.class_code_mapping)
+                                       existing_name_to_label_mapping=train_dset.class_code_mapping)

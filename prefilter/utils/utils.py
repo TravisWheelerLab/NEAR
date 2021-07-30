@@ -1,13 +1,9 @@
-import os
 import json
-import torch
-import numpy as np
-
-import pdb
-import time
-
-from glob import glob
+import os
 from random import shuffle, seed
+
+import numpy as np
+import torch
 
 seed(1)
 
@@ -16,18 +12,18 @@ __all__ = ['get_n_classes',
            'encode_protein_as_one_hot_vector',
            'pad_batch']
 
-PROT_ALPHABET = {'A' : 0, 'B' : 1, 'C' : 2, 'D' : 3, 'E' : 4, 'F' : 5, 'G' : 6, 'H' : 7, 'I' : 8,
-             'K' : 9, 'L' : 10, 'M' : 11, 'N' : 12, 'P' : 13, 'Q' : 14, 'R' : 15, 'S' : 16, 
-             'T' : 17, 'V' : 18, 'W' : 19, 'X' : 20, 'Y' : 21, 'Z' : 22}
+PROT_ALPHABET = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8,
+                 'K': 9, 'L': 10, 'M': 11, 'N': 12, 'P': 13, 'Q': 14, 'R': 15, 'S': 16,
+                 'T': 17, 'V': 18, 'W': 19, 'X': 20, 'Y': 21, 'Z': 22}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
-def _read_fasta(fasta, label, return_index=True):
 
+def _read_fasta(fasta, label, return_index=True):
     def _parse_line(line):
         idx = line.find('\n')
         family = line[:idx]
-        sequence = line[idx+1:].replace('\n', '')
+        sequence = line[idx + 1:].replace('\n', '')
         if return_index:
             return [label, sequence]
         else:
@@ -39,6 +35,7 @@ def _read_fasta(fasta, label, return_index=True):
         sequences = list(map(_parse_line, lines))
 
     return sequences
+
 
 def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # input: raw protein string of arbitrary length 
@@ -58,9 +55,10 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
         try:
             one_hot_encoding[PROT_ALPHABET[residue], i] = 1
         except KeyError:
-            one_hot_encoding[PROT_ALPHABET['X'], i] = 1 # X is "any amino acid"
+            one_hot_encoding[PROT_ALPHABET['X'], i] = 1  # X is "any amino acid"
 
     return one_hot_encoding
+
 
 def read_sequences_from_json(json_file, fout=None):
     '''
@@ -89,7 +87,7 @@ def read_sequences_from_json(json_file, fout=None):
 
     if os.path.isfile(fout):
         with open(fout, 'r') as f:
-            name_to_integer_label  = json.load(f)
+            name_to_integer_label = json.load(f)
         integer_label = max(name_to_integer_label.values())
 
     len_before = len(name_to_integer_label)
@@ -102,7 +100,7 @@ def read_sequences_from_json(json_file, fout=None):
 
     if len_before != len(name_to_integer_label):
         s = 'saving new labels, number of unique classes went from {} to {}'.format(len_before,
-                len(name_to_integer_label))
+                                                                                    len(name_to_integer_label))
         print(s)
         with open(fout, 'w') as f:
             # overwrite old file if it exists
@@ -112,8 +110,7 @@ def read_sequences_from_json(json_file, fout=None):
 
     for sequence, labels in sequence_to_label.items():
         sequence_to_integer_label.append([[name_to_integer_label[l]
-            for l in labels], sequence])
-
+                                           for l in labels], sequence])
 
     shuffle(sequence_to_integer_label)
     return sequence_to_integer_label
@@ -136,7 +133,7 @@ def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True
     name_to_label = {}
     cnt = 0
     sequences = []
-    
+
     if not isinstance(files, list):
         files = [files]
 
@@ -158,7 +155,6 @@ def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True
 
 
 def get_n_classes(name_to_label_mapping):
-
     with open(name_to_label_mapping, 'r') as f:
         dct = json.load(f)
     s = set()
@@ -168,8 +164,8 @@ def get_n_classes(name_to_label_mapping):
     n_classes = len(s)
     return n_classes
 
-def _pad_sequences(sequences):
 
+def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
@@ -178,15 +174,17 @@ def _pad_sequences(sequences):
         mask = np.ones((1, mxlen))
         mask[:, :s.shape[-1]] = 0
         masks.append(mask)
-    
+
     masks = np.stack(masks)
     return torch.tensor(padded_batch).float(), torch.tensor(masks).bool()
+
 
 def pad_batch(batch):
     targets = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     targets, targets_mask = _pad_sequences(targets)
     return targets, targets_mask, labels
+
 
 def pad_word2vec_batch_with_string(batch):
     targets = [b[0] for b in batch]
@@ -207,8 +205,8 @@ def pad_word2vec_batch_with_string(batch):
     negatives, negatives_mask = _pad_sequences(negatives)
 
     return (targets, targets_mask, contexts, contexts_mask, negatives,
-                negatives_mask, torch.stack(labels), positive_prots,
-                context_prots, negative_sequences)
+            negatives_mask, torch.stack(labels), positive_prots,
+            context_prots, negative_sequences)
 
 
 def pad_word2vec_batch(batch):
@@ -227,7 +225,7 @@ def pad_word2vec_batch(batch):
     negatives, negatives_mask = _pad_sequences(negatives)
 
     return (targets, targets_mask, contexts, contexts_mask, negatives,
-                negatives_mask, torch.stack(labels))
+            negatives_mask, torch.stack(labels))
 
 
 if __name__ == '__main__':
