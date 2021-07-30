@@ -6,7 +6,7 @@ import numpy as np
 from glob import glob
 from random import shuffle
 
-test_files = sorted(glob('./1k/*test-split.json'))
+test_files = sorted(glob('./1k/*0.2-test-split.json'))
 train_files_original = sorted(glob('./1k/*train.json'))
 # 1502866 total train sequences in 1k/
 # 34765 total sequences in 1k/

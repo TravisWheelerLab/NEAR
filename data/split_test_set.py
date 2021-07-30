@@ -1,7 +1,7 @@
 import json
 import sys
 import os
-import numpy as np
+from numpy.random import choice
 
 from glob import glob
 from argparse import ArgumentParser
@@ -12,13 +12,14 @@ def parser():
     ap.add_argument('--directory', required=True,
             help='directory containing test files')
     ap.add_argument('--glob_str', required=False,
-            help='glob string to pick out test files',
+            help='glob string to pick out test files (include wildcard\
+            characters)',
             default='*test.json')
     args = ap.parse_args()
+
     return args
 
-def split_files(test_files, args):
-
+def split_files(test_files, command_line_args):
     '''
     Splits a json file containing sequences and their hmmer labels into two
     files, each containing half of the sequences as in the original file (50/50
@@ -26,22 +27,30 @@ def split_files(test_files, args):
     <origina-file>test-split.json.
     '''
 
-    suffix = args.glob_str
+    suffix = command_line_args.glob_str
     suffix = suffix.replace('*', '')
+    import pdb
+    pdb.set_trace()
+
+    print(len(test_files))
 
     for f in test_files:
 
         valid_filename = f.replace(suffix, 'valid-split.json')
         test_filename = f.replace(suffix, 'test-split.json')
+
+        print(valid_filename, test_filename)
+        exit()
+
         with open(f, 'r') as src:
             sequence_to_label = json.load(src)
 
         sequences = list(sequence_to_label.keys())
 
         if len(sequences) > 1:
-            valid = np.random.choice(sequences,
-                                     size=int(len(sequences)*0.5), 
-                                     replace=False)
+            valid = choice(sequences,
+                           size=int(len(sequences)*0.5), 
+                           replace=False)
             
             valid_sequence_to_label = {}
             for v in valid:
@@ -63,10 +72,18 @@ def split_files(test_files, args):
 def main(args):
 
     test_files = glob(os.path.join(args.directory, args.glob_str))
-    split_files(test_files, args)
+
+    if not len(test_files):
+        print('no files found, provide a different directory or glob string')
+        exit(1)
+
+    else:
+        split_files(test_files, args)
 
 if __name__ == '__main__':
 
+    print('i have imported all necessary packages')
     args = parser()
+    print("hi")
+    print(args.glob_str)
     main(args)
-
