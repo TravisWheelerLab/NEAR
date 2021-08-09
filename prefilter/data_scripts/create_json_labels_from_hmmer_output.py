@@ -9,7 +9,7 @@ import pandas as pd
 
 def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
                                            evalue_threshold=None):
-    '''ingests a hmmer domtblout file'''
+    """ingests a hmmer domtblout file"""
 
     df = None
 
@@ -33,7 +33,7 @@ def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
 
     seq_name_to_family = defaultdict(list)
 
-    if single_best_score == True or evalue_threshold is not None:
+    if single_best_score or evalue_threshold is not None:
 
         cnt = 0
         for _, row in df.iterrows():
@@ -68,6 +68,7 @@ def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
         for _, row in df.iterrows():
             seq_name = row[0]
             if seq_name == '#':
+                # heuristic to get the table read in correctly.
                 row = row.index
                 seq_name = row[0]
             family = row[4]
@@ -129,7 +130,7 @@ def parser():
     ap = ArgumentParser()
     ap.add_argument('--domtblout',
                     type=str,
-                    help='domtblout of hmmer',
+                    help='domtblout produced by hmmer',
                     required=True)
 
     ap.add_argument('--sequences',
@@ -157,23 +158,26 @@ def parser():
                     default=1e-5,
                     help='overwrite json files?')
 
-    args = ap.parse_args()
+    parser_args = ap.parse_args()
 
-    return args
+    return parser_args
 
 
-if __name__ == '__main__':
-
-    args = parser()
-
+def main(args):
     if os.path.isfile(args.label_fname) and not args.overwrite:
         print('already created {}, not creating new json\
                 labels'.format(args.label_fname))
     else:
 
         sequences_and_labels = convert_hmmer_domtblout_to_json_labels(args.domtblout,
-                                                                      args.single_best_score, args.evalue_threshold)
+                                                                      args.single_best_score,
+                                                                      args.evalue_threshold)
 
         save_labels(sequences_and_labels,
                     args.sequences,
                     args.label_fname)
+
+
+if __name__ == '__main__':
+    args = parser()
+    main(args)
