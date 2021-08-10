@@ -14,3 +14,6 @@ models/*
 prefilter/logs/*
 prefilter/lightning_logs/*
 trained_models/*
+/prefilter/.nextflow.log.5
+*.nextflow*
+/prefilter/work/
