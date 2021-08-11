@@ -20,11 +20,11 @@ base=$(basename $FASTA_FILE)
 filename="${base%.*}"
 
 JSON=$OUT_DIR/$filename.json
-echo $JSON $DOMTBLOUT $FASTA_FILE
+echo $PWD
 
-python3 $PROJECT_WORK_DIR/create_json_labels_from_hmmer_output.py\
+create_json_labels_from_hmmer_output.py\
 	--domtblout $DOMTBLOUT\
 	--sequences $FASTA_FILE\
 	--label-fname $JSON\
 	--overwrite\
-	--evalue-threshold 100
+	--evalue-threshold $EVALUE_THRESHOLD
