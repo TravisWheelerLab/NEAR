@@ -60,9 +60,13 @@ process to_json_train {
 
     output:
         file "*.json" into json_train
-
     """
-    bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
+    if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]; then
+        bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
+    else
+        echo "run hmmsearch on your un-clustered sequences!"
+        exit 1
+    fi
     """
 }
 
