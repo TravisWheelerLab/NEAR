@@ -41,9 +41,11 @@ process carbs_split {
     """
     if [[ -f $params.afa_directory/${afa.baseName}.ddgm ]]; then
         carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
+    else
+        carbs cluster $params.afa_directory/${afa} # run clustering if ddgm can't be found
+        carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
     fi
     """
-    // TODO: add cluster creation.
 }
 
 process to_json_train {
