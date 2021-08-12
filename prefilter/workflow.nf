@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-TARGET_DIR = "1k"
+TARGET_DIR = "1m"
 
 params.pid = 0.34
 params.afa = "$HOME/data/prefilter/$TARGET_DIR/*.afa"
@@ -16,6 +16,7 @@ afas = Channel.fromPath(params.afa)
 
 process makedirs {
 
+    script:
     """
     mkdir -p ${params.out_path_fasta}
     mkdir -p ${params.out_path_json}
@@ -30,6 +31,7 @@ process carbs_split {
         path afa from afas
 
     output:
+       // TODO: is there a better way of doing the below?
        file '*train.fa*'  optional true into train_fasta
        file '*valid.fa*'  optional true into valid_fasta
        file '*test.fa*'  optional true into test_fasta
@@ -37,12 +39,15 @@ process carbs_split {
        path afa into valid_afa
        path afa into test_afa
 
+    script:
     """
-    if [[ -f $params.afa_directory/${afa.baseName}.ddgm ]]; then
+    if [[ -f $params.afa_directory/${afa.baseName}.ddgm ]]
+    then
         carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
     else
         n_seq=\$(grep ">" $params.afa_directory/${afa} | wc -l)
-        if [[ \$n_seq > 1 ]]; then
+        if [[ \$n_seq > 1 ]]
+        then
             carbs cluster $params.afa_directory/${afa} # run clustering if ddgm can't be found
             carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
         else
@@ -60,8 +65,10 @@ process to_json_train {
         file train from train_fasta
         path afa from train_afa
 
+    script:
     """
-    if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]; then
+    if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]
+    then
         bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
     else
         echo "run hmmsearch on your un-clustered sequences!"
@@ -81,6 +88,7 @@ process to_json_test {
         file test from test_fasta
         path afa from test_afa
 
+    script:
     """
     bash convert_domtblout_to_json.sh ${test} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
     """
@@ -94,6 +102,7 @@ process to_json_valid {
         file valid from valid_fasta
         path afa from valid_afa
 
+    script:
     """
     bash convert_domtblout_to_json.sh ${valid} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
     """
