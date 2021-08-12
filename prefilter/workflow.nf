@@ -11,7 +11,7 @@ params.afa_directory = "$HOME/data/prefilter/$TARGET_DIR/"
 params.evalue_threshold = 1e-5
 
 params.filter = 'NO_FILE'
-
+// frog de bog
 afas = Channel.fromPath(params.afa)
 
 process makedirs {
@@ -37,29 +37,29 @@ process carbs_split {
        path afa into valid_afa
        path afa into test_afa
 
-    // The below only runs once for each file in afas...
     """
     if [[ -f $params.afa_directory/${afa.baseName}.ddgm ]]; then
         carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
     else
-        carbs cluster $params.afa_directory/${afa} # run clustering if ddgm can't be found
-        carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
+        n_seq=\$(grep ">" $params.afa_directory/${afa} | wc -l)
+        if [[ \$n_seq > 1 ]]; then
+            carbs cluster $params.afa_directory/${afa} # run clustering if ddgm can't be found
+            carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
+        else
+        echo "only 1 sequence in ${afa}"
+        fi
     fi
     """
 }
 
 process to_json_train {
 
-    storeDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_json}"
 
-    // the line below iterates over split_fasta_files
     input:
         file train from train_fasta
-        // file test from test_fasta
         path afa from train_afa
 
-    output:
-        file "*.json" into json_train
     """
     if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]; then
         bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
@@ -68,19 +68,18 @@ process to_json_train {
         exit 1
     fi
     """
+    // TODO: figure out why nextflow can't see the json files on output if i add
+    // output:
+    //    *-train.json* into train_json
 }
 
 process to_json_test {
 
-    storeDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_json}"
 
-    // the line below iterates over split_fasta_files
     input:
         file test from test_fasta
         path afa from test_afa
-
-    output:
-        file "*.json" into json_test
 
     """
     bash convert_domtblout_to_json.sh ${test} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
@@ -89,15 +88,11 @@ process to_json_test {
 
 process to_json_valid {
 
-    storeDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_json}"
 
-    // the line below iterates over split_fasta_files
     input:
         file valid from valid_fasta
         path afa from valid_afa
-
-    output:
-        file "*.json" into json_valid
 
     """
     bash convert_domtblout_to_json.sh ${valid} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}

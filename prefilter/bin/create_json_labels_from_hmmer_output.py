@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import json
 import os
 from argparse import ArgumentParser
@@ -17,16 +17,20 @@ def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
     try:
         df = pd.read_csv(fname, skiprows=3, sep='\s+', engine='python')
 
-    except FileNotFoundError:
-        # annoying workaround for unknown file name
-        for replace_str in ['-0', '-train', '-test']:
-            fname_new = fname.replace(replace_str, '')
-            try:
-                df = pd.read_csv(fname_new, skiprows=3, sep='\s+',
-                                 engine='python')
-                break
-            except FileNotFoundError:
-                continue
+    except (FileNotFoundError, pd.errors.EmptyDataError) as e:
+        if isinstance(e, FileNotFoundError):
+            # annoying workaround for unknown file name
+            for replace_str in ['-0', '-train', '-test']:
+                fname_new = fname.replace(replace_str, '')
+                try:
+                    df = pd.read_csv(fname_new, skiprows=3, sep='\s+',
+                                     engine='python')
+                    break
+                except FileNotFoundError:
+                    continue
+        else:
+            print("file {} is empty".format(fname))
+            return None
 
     if df is None:
         print("couldn't find domtblout at", fname)
@@ -174,7 +178,7 @@ if __name__ == '__main__':
 
         sequences_and_labels = convert_hmmer_domtblout_to_json_labels(args.domtblout,
                                                                       args.single_best_score, args.evalue_threshold)
-
-        save_labels(sequences_and_labels,
-                    args.sequences,
-                    args.label_fname)
+        if sequences_and_labels is not None:
+            save_labels(sequences_and_labels,
+                        args.sequences,
+                        args.label_fname)
