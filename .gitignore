@@ -14,6 +14,7 @@ models/*
 prefilter/logs/*
 prefilter/lightning_logs/*
 trained_models/*
-*work/
 /prefilter/.nextflow.log
 *.nextflow*
+/prefilter/work/
+.idea/
