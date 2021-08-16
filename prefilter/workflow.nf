@@ -1,31 +1,19 @@
 #!/usr/bin/env nextflow
 
-TARGET_DIR = "1m"
-
-params.pid = 0.34
-params.afa = "$HOME/data/prefilter/$TARGET_DIR/*.afa"
-params.out_path_fasta = "$HOME/data/prefilter/fasta/${params.pid}"
-params.out_path_json = "$HOME/data/prefilter/json/${params.pid}"
-params.domtblout_directory = "$HOME/data/prefilter/$TARGET_DIR/"
-params.afa_directory = "$HOME/data/prefilter/$TARGET_DIR/"
-params.evalue_threshold = 1e-5
-
-params.filter = 'NO_FILE'
-// frog de bog
-afas = Channel.fromPath(params.afa)
+afas = Channel.fromPath(params.afas)
 
 process makedirs {
 
     script:
     """
-    mkdir -p ${params.out_path_fasta}
-    mkdir -p ${params.out_path_json}
+    mkdir -p ${params.out_path_fasta}/${params.pid}
+    mkdir -p ${params.out_path_json}/${params.pid}
     """
 }
 
 process carbs_split {
 
-    publishDir "${params.out_path_fasta}"
+    publishDir "${params.out_path_fasta}/${params.pid}"
 
     input:
         path afa from afas
@@ -39,9 +27,8 @@ process carbs_split {
        path afa into valid_afa
        path afa into test_afa
 
-    script:
     """
-    if [[ -f $params.afa_directory/${afa.baseName}.ddgm ]]
+    if [[ -f ${params.afa_directory}/${afa.baseName}.ddgm ]]
     then
         carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
     else
@@ -59,7 +46,7 @@ process carbs_split {
 
 process to_json_train {
 
-    publishDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_json}/${params.pid}"
 
     input:
         file train from train_fasta
@@ -69,7 +56,7 @@ process to_json_train {
     """
     if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]
     then
-        bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
+        bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
     else
         echo "run hmmsearch on your un-clustered sequences!"
         exit 1
@@ -82,7 +69,7 @@ process to_json_train {
 
 process to_json_test {
 
-    publishDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_json}/${params.pid}"
 
     input:
         file test from test_fasta
@@ -90,7 +77,7 @@ process to_json_test {
 
     script:
     """
-    bash convert_domtblout_to_json.sh ${test} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
+    bash convert_domtblout_to_json.sh ${test} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
     """
 }
 
@@ -104,6 +91,6 @@ process to_json_valid {
 
     script:
     """
-    bash convert_domtblout_to_json.sh ${valid} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json} ${params.evalue_threshold}
+    bash convert_domtblout_to_json.sh ${valid} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
     """
 }
