@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
-sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+sess = tf.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 import os
 import torch
 import pytorch_lightning as pl
@@ -111,7 +111,8 @@ if __name__ == '__main__':
     data_path = args.data_path
 
     train_files = glob(os.path.join(data_path, "*train*"))
-    test_files = glob(os.path.join(data_path, "*test-split.json"))
+    test_files = glob(os.path.join(data_path, "*test*"))
+    print(len(train_files), len(test_files))
 
     train = ProteinSequenceDataset(train_files)
 
@@ -122,15 +123,16 @@ if __name__ == '__main__':
     print('--------')
     print(train.n_classes, test.n_classes)
     print('--------')
-    # this is annoying. How can we expect the NN to learn anything when 
-    # the set of train and test classes is different?
+
     train.n_classes = test.n_classes
     n_classes = test.n_classes
 
     class_code_mapping = test.name_to_class_code
 
+
     test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
-                                       shuffle=False, drop_last=True)
+                                       shuffle=False, drop_last=False)
+
     train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
                                         shuffle=True, drop_last=True)
 
