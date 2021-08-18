@@ -150,15 +150,17 @@ def parser():
                     labels',
                     required=True)
 
-    ap.add_argument('--single-best-score',
-                    action='store_true',
-                    help='whether or not to save the single best score')
-
     ap.add_argument('--overwrite',
                     action='store_true',
                     help='overwrite json files?')
 
-    ap.add_argument('--evalue-threshold',
+    group = ap.add_mutually_exclusive_group(required=False)
+
+    group.add_argument('--single-best-score',
+                    action='store_true',
+                    help='whether or not to save the single best score')
+
+    group.add_argument('--evalue-threshold',
                     type=float,
                     default=1e-5,
                     help='overwrite json files?')
@@ -169,28 +171,24 @@ def parser():
 
 
 def main(args):
+
     if os.path.isfile(args.label_fname) and not args.overwrite:
         print('already created {}, not creating new json\
                 labels'.format(args.label_fname))
     else:
 
         sequences_and_labels = convert_hmmer_domtblout_to_json_labels(args.domtblout,
-<<<<<<< HEAD:prefilter/bin/create_json_labels_from_hmmer_output.py
-                                                                      args.single_best_score, args.evalue_threshold)
+                                                                      args.single_best_score,
+                                                                      args.evalue_threshold)
         if sequences_and_labels is not None:
             save_labels(sequences_and_labels,
                         args.sequences,
                         args.label_fname)
-=======
-                                                                      args.single_best_score,
-                                                                      args.evalue_threshold)
 
         save_labels(sequences_and_labels,
                     args.sequences,
                     args.label_fname)
 
-
 if __name__ == '__main__':
     args = parser()
     main(args)
->>>>>>> main:prefilter/data_scripts/create_json_labels_from_hmmer_output.py
