@@ -20,7 +20,6 @@ base=$(basename $FASTA_FILE)
 filename="${base%.*}"
 
 JSON=$OUT_DIR/$filename.json
-echo $PWD
 
 create_json_labels_from_hmmer_output.py\
 	--domtblout $DOMTBLOUT\

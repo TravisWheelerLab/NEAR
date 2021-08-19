@@ -23,13 +23,11 @@ process carbs_split {
        file '*train.fa*'  optional true into train_fasta
        file '*valid.fa*'  optional true into valid_fasta
        file '*test.fa*'  optional true into test_fasta
-       path afa into train_afa
-       path afa into valid_afa
-       path afa into test_afa
 
     """
     if [[ -f ${params.afa_directory}/${afa.baseName}.ddgm ]]
     then
+        echo $afa
         carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
     else
         n_seq=\$(grep ">" $params.afa_directory/${afa} | wc -l)
@@ -50,21 +48,21 @@ process to_json_train {
 
     input:
         file train from train_fasta
-        path afa from train_afa
+
+    output:
+        stdout result_train
 
     script:
     """
-    if [[ -f ${params.domtblout_directory}/${afa.baseName}.domtblout ]]
+    domtblout_file=\$(echo ${train.baseName} | sed "s/${params.pid}-train/domtblout/g")
+    domtblout_file=${params.domtblout_directory}/\$domtblout_file
+    if [[ -f \$domtblout_file ]]
     then
-        bash convert_domtblout_to_json.sh ${train} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+        bash convert_domtblout_to_json.sh ${train} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
     else
-        echo "run hmmsearch on your un-clustered sequences!"
-        exit 1
+        echo "couldn't find domtblout at \$domtblout_file $train"
     fi
     """
-    // TODO: figure out why nextflow can't see the json files on output if i add
-    // output:
-    //    *-train.json* into train_json
 }
 
 process to_json_test {
@@ -73,11 +71,20 @@ process to_json_test {
 
     input:
         file test from test_fasta
-        path afa from test_afa
+
+    output:
+        stdout result_test
 
     script:
     """
-    bash convert_domtblout_to_json.sh ${test} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+    domtblout_file=\$(echo ${test.baseName} | sed "s/${params.pid}-test/domtblout/g")
+    domtblout_file=${params.domtblout_directory}/\$domtblout_file
+    if [[ -f \$domtblout_file ]]
+    then
+        bash convert_domtblout_to_json.sh ${test} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+    else
+        echo "couldn't find domtblout at \$domtblout_file"
+    fi
     """
 }
 
@@ -87,10 +94,23 @@ process to_json_valid {
 
     input:
         file valid from valid_fasta
-        path afa from valid_afa
+
+    output:
+        stdout result_valid
 
     script:
+    // if a valid file exists, it's always in the format {}.$pid-valid.fa. All I need to do is replace that with .domtblout.
     """
-    bash convert_domtblout_to_json.sh ${valid} ${params.domtblout_directory}/${afa.baseName}.domtblout ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+    domtblout_file=\$(echo ${valid.baseName} | sed "s/${params.pid}-valid/domtblout/g")
+    domtblout_file=${params.domtblout_directory}/\$domtblout_file
+    if [[ -f \$domtblout_file ]]
+    then
+        bash convert_domtblout_to_json.sh ${valid} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+    else
+        echo "couldn't find domtblout at \$domtblout_file"
+    fi
     """
 }
+// result_test.view{ it.trim() }
+// result_train.view{ it.trim() }
+// result_valid.view{ it.trim() }

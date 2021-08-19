@@ -8,78 +8,27 @@ import numpy as np
 import pandas as pd
 
 
+# W9XJ26_9EURO/7-77
+
 def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
                                            evalue_threshold=None):
     """ingests a hmmer domtblout file"""
 
-    df = None
+    df = pd.read_csv(fname, skiprows=2, sep="\s+", engine="python")
+    names = df.iloc[:, 0]
+    families = df.iloc[:, 4]
+    e_values = df.iloc[:, 6]
+    not_bad = names != '#'
+    names = names[not_bad]
+    families = families[not_bad]
+    e_values = e_values[not_bad]
+    sequence_name_to_family = defaultdict(list)
 
-    try:
-        df = pd.read_csv(fname, skiprows=3, sep='\s+', engine='python')
+    for name, family, e_value in zip(names, families, e_values):
+        if float(e_value) < evalue_threshold:
+            sequence_name_to_family[name].append(family)
 
-    except (FileNotFoundError, pd.errors.EmptyDataError) as e:
-        if isinstance(e, FileNotFoundError):
-            # annoying workaround for unknown file name
-            for replace_str in ['-0', '-train', '-test']:
-                fname_new = fname.replace(replace_str, '')
-                try:
-                    df = pd.read_csv(fname_new, skiprows=3, sep='\s+',
-                                     engine='python')
-                    break
-                except FileNotFoundError:
-                    continue
-        else:
-            print("file {} is empty".format(fname))
-            return None
-
-    if df is None:
-        print("couldn't find domtblout at", fname)
-        exit(1)
-
-    seq_name_to_family = defaultdict(list)
-
-    if single_best_score or evalue_threshold is not None:
-
-        cnt = 0
-        for _, row in df.iterrows():
-            seq_name = row[0]
-            if seq_name == '#':
-                row = row.index
-                seq_name = row[0]
-            family = row[4]
-            try:
-                score = float(row[6])
-            except (ValueError, TypeError):
-                cnt += 1
-                continue
-            if evalue_threshold is None:
-                seq_name_to_family[seq_name].append(score)
-            elif score < evalue_threshold:
-                seq_name_to_family[seq_name].append(family)
-            else:
-                pass
-
-        if single_best_score:
-
-            for seq_name in seq_name_to_family:
-                maxidx = np.argmin([s[1] for s in seq_name_to_family[seq_name]])
-                best_family = [s[0] for s in seq_name_to_family[seq_name]][maxidx]
-                seq_name_to_family[seq_name] = [best_family]
-
-        # print('had to throw out {} rows'.format(cnt))
-
-    else:
-
-        for _, row in df.iterrows():
-            seq_name = row[0]
-            if seq_name == '#':
-                # heuristic to get the table read in correctly.
-                row = row.index
-                seq_name = row[0]
-            family = row[4]
-            seq_name_to_family[seq_name].append(family)
-
-    return seq_name_to_family
+    return sequence_name_to_family
 
 
 def create_name_to_seq_dict(fasta_file):
@@ -120,15 +69,19 @@ def save_labels(seq_name_to_labels,
 
             labels = list(set(seq_name_to_labels[seq_name]))
             if not len(labels):
-                print('didn\'t find any labels for {}'.format(seq_name))
-                continue
-            sequence_to_labels[sequence] = list(set(labels))
+                print('didn\'t find any labels for {}, {}'.format(seq_name,
+                                                                  os.path.basename(fasta_file_with_sequences)))
+            else:
+                sequence_to_labels[sequence] = list(set(labels))
 
         except KeyError as e:
-            print('keyerror', e, seq_name)
+            raise KeyError("this really shouldn't happen, fix it.")
 
-    with open(out_fname, 'w') as f:
-        json.dump(sequence_to_labels, f, indent=2)
+    if len(sequence_to_labels):
+        with open(out_fname, 'w') as f:
+            json.dump(sequence_to_labels, f, indent=2)
+    else:
+        print("couldn't find any labels over set evalue threshold for {}, not saving.".format(fasta_file_with_sequences))
 
 
 def parser():
@@ -154,13 +107,11 @@ def parser():
                     action='store_true',
                     help='overwrite json files?')
 
-    group = ap.add_mutually_exclusive_group(required=False)
-
-    group.add_argument('--single-best-score',
+    ap.add_argument('--single-best-score',
                     action='store_true',
                     help='whether or not to save the single best score')
 
-    group.add_argument('--evalue-threshold',
+    ap.add_argument('--evalue-threshold',
                     type=float,
                     default=1e-5,
                     help='overwrite json files?')
@@ -171,7 +122,6 @@ def parser():
 
 
 def main(args):
-
     if os.path.isfile(args.label_fname) and not args.overwrite:
         print('already created {}, not creating new json\
                 labels'.format(args.label_fname))
@@ -188,6 +138,7 @@ def main(args):
         save_labels(sequences_and_labels,
                     args.sequences,
                     args.label_fname)
+
 
 if __name__ == '__main__':
     args = parser()

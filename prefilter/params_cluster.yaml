@@ -1,0 +1,7 @@
+pid: 0.5
+afas:                "/home/tc229954/data/prefilter/small-dataset/related_families/afa/*afa"
+afa_directory:       "/home/tc229954/data/prefilter/small-dataset/related_families/afa/"
+out_path_fasta:      "/home/tc229954/data/prefilter/small-dataset/related_families/fasta/"
+out_path_json:      "/home/tc229954/data/prefilter/small-dataset/related_families/json/"
+domtblout_directory: "/home/tc229954/data/prefilter/pfam/"
+evalue_threshold: 1e-3
