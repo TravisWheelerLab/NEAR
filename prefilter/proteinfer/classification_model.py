@@ -5,6 +5,7 @@ sess = tf.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 import os
 import torch
 import pytorch_lightning as pl
+import torchmetrics
 
 from glob import glob
 from argparse import ArgumentParser
@@ -40,6 +41,8 @@ class Model(pl.LightningModule):
 
         self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(self.pos_weight))
         self.class_act = torch.nn.Sigmoid()
+        self.precision = torchmetrics.Precision()
+        self.recall = torchmetrics.Recall()
 
         # 1100 because that's the dimension of the Bileschi et al model's
         # embeddings.
@@ -60,22 +63,27 @@ class Model(pl.LightningModule):
         preds = torch.round(self.class_act(logits))
         loss = self.loss_func(logits, labels)
         acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
-
-        return loss, preds, acc
+        precision = self.precision(preds, labels)
+        recall = self.recall(preds, labels)
+        return loss, preds, acc, precision, recall
 
     def training_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
-        self.log('loss', loss, on_step=True)
-        self.log('acc', acc, on_step=True)
+        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
+        self.log('train_loss', loss, on_step=True)
+        self.log('train_acc', acc, on_step=True)
+        self.log('train_precision', precision, on_step=True)
+        self.log('train_recall', recall, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
+        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
         self.log('val_loss', loss, on_step=True)
+        self.log('val_precision', precision, on_step=True)
+        self.log('val_recall', recall, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
+        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
         return loss
 
     def configure_optimizers(self):
@@ -99,6 +107,7 @@ def parser():
     ap.add_argument("--model_name", type=str, required=True)
     ap.add_argument("--data_path", type=str, required=True)
     ap.add_argument("--pos_weight", type=float, required=True)
+    ap.add_argument("--num-workers", type=int, default=32)
     return ap.parse_args()
 
 
@@ -129,12 +138,13 @@ if __name__ == '__main__':
 
     class_code_mapping = test.name_to_class_code
 
-
     test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
-                                       shuffle=False, drop_last=False)
+                                       shuffle=False, drop_last=False,
+                                       num_workers=args.num_workers)
 
     train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
-                                        shuffle=True, drop_last=True)
+                                        shuffle=True, drop_last=True,
+                                        num_workers=args.num_workers)
 
     model = Model(n_classes,
                   args.layer_1_nodes,
