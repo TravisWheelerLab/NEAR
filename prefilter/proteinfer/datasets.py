@@ -11,6 +11,13 @@ __all__ = ['Word2VecStyleDataset',
            'ProteinSequenceDataset',
            ]
 
+inferrer = inference.Inferrer(
+    'trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760',
+    use_tqdm=False,
+    batch_size=1,
+    activation_type="pooled_representation"
+)
+
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
@@ -22,18 +29,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.evaluating = evaluating
 
-        self.inferrer = inference.Inferrer(
-            'trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760',
-            use_tqdm=False,
-            batch_size=1,
-            activation_type="pooled_representation"
-        )
-
         self._build_dataset()
 
     def _encoding_func(self, x):
 
-        return self.inferrer.get_activations([x.upper()])
+        return inferrer.get_activations([x.upper()])
 
     def _build_dataset(self):
 

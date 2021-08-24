@@ -41,8 +41,9 @@ class Model(pl.LightningModule):
 
         self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(self.pos_weight))
         self.class_act = torch.nn.Sigmoid()
-        self.precision = torchmetrics.Precision()
-        self.recall = torchmetrics.Recall()
+        self.precision_metric = torchmetrics.Precision()
+        self.recall_metric = torchmetrics.Recall()
+        self.auroc_metric = torchmetrics.AUROC()
 
         # 1100 because that's the dimension of the Bileschi et al model's
         # embeddings.
@@ -63,27 +64,30 @@ class Model(pl.LightningModule):
         preds = torch.round(self.class_act(logits))
         loss = self.loss_func(logits, labels)
         acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
-        precision = self.precision(preds, labels)
-        recall = self.recall(preds, labels)
-        return loss, preds, acc, precision, recall
+        precision = self.precision_metric(preds, labels.int())
+        recall = self.recall_metric(preds, labels.int())
+        auroc = self.auroc_metric(preds, labels.int())
+        return loss, preds, acc, precision, recall, auroc
 
     def training_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
+        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
         self.log('train_loss', loss, on_step=True)
         self.log('train_acc', acc, on_step=True)
         self.log('train_precision', precision, on_step=True)
         self.log('train_recall', recall, on_step=True)
+        self.log('train_auroc', auroc, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
+        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
         self.log('val_loss', loss, on_step=True)
         self.log('val_precision', precision, on_step=True)
         self.log('val_recall', recall, on_step=True)
+        self.log('val_auroc', auroc, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall = self._loss_and_preds(batch)
+        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
         return loss
 
     def configure_optimizers(self):
@@ -107,11 +111,9 @@ def parser():
     ap.add_argument("--model_name", type=str, required=True)
     ap.add_argument("--data_path", type=str, required=True)
     ap.add_argument("--pos_weight", type=float, required=True)
-    ap.add_argument("--num-workers", type=int, default=32)
+    ap.add_argument("--num-workers", type=int, default=16)
     return ap.parse_args()
 
-
-# need to put this in inferrer
 
 if __name__ == '__main__':
     args = parser()
