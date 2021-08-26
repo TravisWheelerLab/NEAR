@@ -43,7 +43,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             self.name_to_class_code = {}
             class_id = 0
 
-        else:
+        elif isinstance(self.existing_name_to_label_mapping, str):
             s = 'loading class mapping from file {}'.format(self.existing_name_to_label_mapping)
             print(s)
 
@@ -51,6 +51,16 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                 self.name_to_class_code = json.load(src)
 
             class_id = len(self.name_to_class_code)
+
+        elif isinstance(self.existing_name_to_label_mapping, dict):
+            self.name_to_class_code = self.existing_name_to_label_mapping
+            class_id = len(self.name_to_class_code)
+
+        else:
+            s = 'expected existing_name_to_label_mapping to be one of dict, string, or None, found {}'.format(type(self.existing_name_to_label_mapping))
+            raise ValueError(s)
+
+
 
         for j in self.json_files:
 

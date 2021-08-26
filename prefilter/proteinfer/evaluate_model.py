@@ -4,80 +4,80 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import numpy as np
 import yaml
-import sklearn.metrics as metrics
-import matplotlib.pyplot as plt
-
 from argparse import ArgumentParser
+from glob import glob
+from collections import defaultdict
 
-from datasets import ProteinSequenceDataset
+
 from classification_model import Model
+from datasets import ProteinSequenceDataset
 
 
 def parser():
     ap = ArgumentParser()
-    ap.add_argument("--logs_dir", required=True)
-    ap.add_argument("--gpus", type=int, required=True)
+    ap.add_argument("--test_data", required=True)
+    ap.add_argument("--model_dir", required=True)
     return ap.parse_args()
 
 
 def load_model(logs_dir):
     yaml_path = os.path.join(logs_dir, 'hparams.yaml')
-    model_path = os.path.join(logs_dir, 'model_50_files.pt')
+    models = glob(os.path.join(logs_dir, "*pt"))
+    models += glob(os.path.join(logs_dir, "checkpoints", "*ckpt"))
+    if len(models) > 1:
+        print('{} models found, using the first one'.format(len(models)))
 
+    model_path = models[0]
     with open(yaml_path, 'r') as src:
         hparams = yaml.safe_load(src)
 
     model = Model(**hparams)
-    success = model.load_state_dict(torch.load(model_path))
+    state_dict = torch.load(model_path)
+    model.load_state_dict(state_dict)
+    model.eval()
     return model, hparams
 
 
 if __name__ == '__main__':
 
     args = parser()
-
-    model, hparams = load_model(args.logs_dir)
-    label_file = hparams['class_code_mapping']
-    test_files = hparams['test_files']
-
-    dataset = torch.utils.data.DataLoader(ProteinSequenceDataset(test_files,
-                                                                 label_file,
-                                                                 evaluating=True), batch_size=32)
-    top_n = 1000
-
-    predictions = []
-    labels = []
-
-    from sys import stdout
-
+    test_files = glob(os.path.join(args.test_data, "*test.json"))
+    model_dir = args.model_dir
+    model, hparams = load_model(model_dir)
+    pfam_id_to_class_code = hparams['class_code_mapping']
+    class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
+    test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
+    batch_size = 32
+    test_dataset = torch.utils.data.DataLoader(test_psd,
+                                               batch_size=batch_size,
+                                               shuffle=False,
+                                               drop_last=False)
+    pfam_id_to_statistics = defaultdict(dict)
     with torch.no_grad():
-        i = 0
-        for features, lab in dataset:
-            lab = lab.detach().numpy().squeeze()
+        for sequences, labels in test_dataset:
+            preds = model.class_act(model(sequences)).squeeze().numpy()
+            labels = labels.numpy()
+            for threshold in range(10, 100, 10)[::-1]:
 
-            preds = torch.sigmoid(model(features)).numpy().squeeze()
-            stdout.write('{}\r'.format(i))
-            i += 1
-            # best_preds = np.argsort(preds)[-top_n:]
+                threshold = threshold / 100
+                thresholded_preds = preds.copy()
+                thresholded_preds[thresholded_preds >= threshold] = 1
+                thresholded_preds[thresholded_preds < threshold] = 0
 
-            predictions.append(preds.ravel())
-            labels.append(lab.ravel())
-
-            # true_label_idx = np.where(labels == 1)[0]
-            # num_true_labels = len(true_label_idx)
-            # intersection = np.intersect1d(true_label_idx, best_preds)
-            # print(len(intersection), num_true_labels, len(intersection)/num_true_labels)
-            # exit()
-
-    # metrics.roc_auc_score(np.concatenate(labels), np.concatenate(predictions))
-    fpr, tpr, threshold = metrics.roc_curve(np.concatenate(labels),
-                                            np.concatenate(predictions))
-    roc_auc = metrics.auc(fpr, tpr)
-    plt.plot(fpr, tpr, 'b', label='AUC = %0.2f' % roc_auc)
-    plt.legend(loc='lower right')
-    plt.plot([0, 1], [0, 1], 'r--')
-    plt.xlim([0, 1])
-    plt.ylim([0, 1])
-    plt.ylabel('True Positive Rate')
-    plt.xlabel('False Positive Rate')
-    plt.savefig('/home/tom/Dropbox/roc_auc_curve.png')
+                for idx in range(thresholded_preds.shape[0]):
+                    total_above_threshold = np.count_nonzero(thresholded_preds[idx])
+                    correct_label_idx = np.where(labels[idx] == 1)[0]
+                    predicted_label_idx = np.where(thresholded_preds[idx] == 1)[0]
+                    pfam_accession_ids = [class_code_to_pfam_id[x] for x in correct_label_idx]
+                    for class_code, accession_id in zip(correct_label_idx, pfam_accession_ids):
+                        if thresholded_preds[idx][class_code] == 1:
+                            if threshold in pfam_id_to_statistics[accession_id]:
+                                pfam_id_to_statistics[accession_id][threshold].append((total_above_threshold, True))
+                            else:
+                                pfam_id_to_statistics[accession_id][threshold] = []
+                        else:
+                            if threshold in pfam_id_to_statistics[accession_id]:
+                                pfam_id_to_statistics[accession_id][threshold].append((total_above_threshold, False))
+                            else:
+                                pfam_id_to_statistics[accession_id][threshold] = []
+            break

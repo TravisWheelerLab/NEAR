@@ -16,7 +16,7 @@ python classification_model.py\
     --model_name model-0.35.pt\
     --data_path $HOME/data/prefilter/small-dataset/related_families/json/$PID\
     --batch_size 32\
-    --epochs 30\
+    --epochs 300\
     --layer_1_nodes 1024\
     --layer_2_nodes 512\
     --normalize_output_embedding\
