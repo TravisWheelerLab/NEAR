@@ -23,7 +23,7 @@ def summarize_dataset(json_files, savefig=None):
         l = list(map(len, labels))
         labels_per_sequence += l
 
-    s = 'mean length: {:.3f}, median: {:.3f}, 25th percentile: {:.3f}, 75th'
+    s = 'mean length: {:.3f}, median: {:.3f}, 25th percentile: {:.3f}\n 75th'
     s += ' percentile {:.3f}, number of seq. {:d}'
 
     s = s.format(np.mean(lengths),
@@ -33,17 +33,15 @@ def summarize_dataset(json_files, savefig=None):
                  len(lengths))
 
     if savefig is not None:
-        fig, ax = plt.subplots(ncols=2)
+        fig, ax = plt.subplots(ncols=2, figsize=(13, 10))
 
         ax[0].set_title(s, fontsize=8)
         ax[0].hist(lengths, bins=100, histtype='step')
         ax[0].set_xlabel('sequence length')
-        ax[0].set_ylabel('number')
 
-        ax[1].set_title('number of labels per sequence')
+        ax[1].set_title('number of labels per sequence', fontsize=8)
         ax[1].hist(labels_per_sequence, bins=100, histtype='step')
         ax[1].set_xlabel('num labels')
-        ax[1].set_ylabel('number')
 
         plt.savefig(savefig)
         plt.close()
