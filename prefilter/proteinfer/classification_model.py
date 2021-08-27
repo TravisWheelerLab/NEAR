@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
-sess = tf.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
+gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.1)
+sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 import os
 import torch
 import pytorch_lightning as pl
@@ -24,7 +24,8 @@ class Model(pl.LightningModule):
                  class_code_mapping,
                  initial_learning_rate,
                  batch_size,
-                 pos_weight=1
+                 pos_weight=1,
+                 ranking=True
                  ):
         super(Model, self).__init__()
 
@@ -35,6 +36,7 @@ class Model(pl.LightningModule):
         self.fc2 = fc2
         self.train_files = train_files
         self.test_files = test_files
+        self.ranking = ranking
         self.class_code_mapping = class_code_mapping
         self.pos_weight = pos_weight
         self.save_hyperparameters()
@@ -54,8 +56,11 @@ class Model(pl.LightningModule):
     def forward(self, x):
         x = torch.nn.functional.relu(self.layer_1(x))
         x = torch.nn.functional.relu(self.layer_2(x))
-        x = self.classification(x)
-        return x
+        if self.ranking:
+            return x
+        else:
+            x = self.classification(x)
+            return x
 
     def _loss_and_preds(self, batch):
         x, y = batch

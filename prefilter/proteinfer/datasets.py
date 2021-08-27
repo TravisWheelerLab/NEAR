@@ -9,6 +9,7 @@ import inference
 
 __all__ = ['Word2VecStyleDataset',
            'ProteinSequenceDataset',
+           'SimpleSequenceEmbedder'
            ]
 
 inferrer = inference.Inferrer(
@@ -120,13 +121,64 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         return torch.tensor(x), y
 
 
+def fasta_from_file(fasta_file):
+    sequence_labels, sequence_strs = [], []
+    cur_seq_label = None
+    buf = []
+
+    def _flush_current_seq():
+        nonlocal cur_seq_label, buf
+        if cur_seq_label is None:
+            return
+        sequence_labels.append(cur_seq_label)
+        sequence_strs.append("".join(buf))
+        cur_seq_label = None
+        buf = []
+
+    with open(fasta_file, "r") as infile:
+        for line_idx, line in enumerate(infile):
+            if line.startswith(">"):  # label line
+                _flush_current_seq()
+                line = line[1:].strip()
+                if len(line) > 0:
+                    cur_seq_label = line
+                else:
+                    cur_seq_label = f"seqnum{line_idx:09d}"
+            else:  # sequence line
+                buf.append(line.strip())
+
+    _flush_current_seq()
+
+    # print(len(set(sequence_labels)), len(sequence_labels))
+    # assert len(set(sequence_labels)) == len(sequence_labels)
+
+    return sequence_labels, sequence_strs
+
+
+class SimpleSequenceEmbedder(torch.utils.data.Dataset):
+
+    def __init__(self, fasta_file):
+        """
+        takes a fasta file as input
+        """
+
+        self.fasta_file = fasta_file
+        self.sequences, self.labels = fasta_from_file(fasta_file)
+
+    def _encoding_func(self, x):
+        return inferrer.get_activations([x.upper()])
+
+    def __getitem__(self, idx):
+
+        return torch.tensor(self._encoding_func(self.sequences[idx]))
+
+    def __len__(self):
+        return len(self.sequences)
+
+
 if __name__ == '__main__':
-    root = '../../small-dataset/json/'
-    train_files = glob(os.path.join(root, "*train.json"))[:2]
-    test_files = glob(os.path.join(root, "*test*"))[:2]
 
-    train_dset = ProteinSequenceDataset(
-        train_files)
-
-    test_dset = ProteinSequenceDataset(test_files,
-                                       existing_name_to_label_mapping=train_dset.class_code_mapping)
+    sse = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
+    print(len(sse))
+    for s in sse:
+        print(s.shape)
