@@ -94,13 +94,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         self.n_classes = class_id + 1
 
-    # def __getitem__(self, key):
-    #     if key in self.name_to_class_code:
-    #         return self.name_to_class_code[key]
-    #     else:
-    #         print('this shouldn\'t happen')
-    #         return None
-
     def __len__(self):
 
         return len(self.sequences_and_labels)

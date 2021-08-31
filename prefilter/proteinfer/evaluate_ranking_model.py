@@ -1,4 +1,5 @@
 import os
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import numpy as np
@@ -47,9 +48,9 @@ def load_model(logs_dir, model_path):
     model.eval()
     return model, hparams
 
+
 def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
                                    batch_size=32):
-
     # get final classification layer's weights and init a new
     # layer with trained weights
 
@@ -58,12 +59,13 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
 
     with torch.no_grad():
 
-         # for sequence in decoy_dataset:
-         #    scores = model.class_act(model(sequence)).squeeze()
-         #    decoy_scores.append(scores.numpy())
+        for sequence in decoy_dataset:
+            scores = model.class_act(model(sequence)).squeeze()
+            decoy_scores.append(scores.numpy())
 
         family_id_to_score_and_label = defaultdict(list)
         for sequence, labels in test_dataset:
+            labels = labels.squeeze()
             embeddings = model(sequence).squeeze()
             scores = model.class_act(embeddings)
             # The easiest thing to do would be to store scores for each family for each sequence
@@ -83,9 +85,6 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
         threshold_to_false_positives = defaultdict(int)
         threshold_to_true_positives = defaultdict(int)
 
-        print(family_id_to_score_and_label.keys())
-        exit()
-
         for family_class_code, list_of_scores in family_id_to_score_and_label.items():
             list_of_scores = np.stack(list_of_scores, axis=0)
             if list_of_scores.ndim < 2:
@@ -99,10 +98,7 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
 
             real_sequences_but_not_from_same_family = np.stack(real_sequences_but_not_from_same_family)
 
-            print(decoys.shape, list_of_scores.shape, real_sequences_but_not_from_same_family.shape)
-
             for threshold in range(10, 100, 2):
-
                 threshold = threshold / 100
                 thresholded_true_scores = list_of_scores.copy()
                 thresholded_true_scores[thresholded_true_scores >= threshold] = 1
@@ -118,9 +114,11 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
 
                 num_true_positives_above_threshold = np.count_nonzero(thresholded_true_scores[:, family_class_code])
                 num_false_positives_above_threshold_decoys = np.count_nonzero(thresholded_decoys[:, family_class_code])
-                num_false_positives_above_threshold_real_sequences = np.count_nonzero(thresholded_real[:, family_class_code])
+                num_false_positives_above_threshold_real_sequences = np.count_nonzero(
+                    thresholded_real[:, family_class_code])
                 threshold_to_true_positives[threshold] += num_true_positives_above_threshold
-                threshold_to_false_positives[threshold] += (num_false_positives_above_threshold_decoys)#+ num_false_positives_above_threshold_real_sequences)
+                threshold_to_false_positives[threshold] += (
+                    num_false_positives_above_threshold_decoys)  # + num_false_positives_above_threshold_real_sequences)
 
     # sequence ideally: shuffled sequence will be thrown out
     # x-axis: cutoff sigmoid probability
@@ -131,8 +129,8 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
     # now I need to look at #number of families passed through at different sigmoid thresholds
     from pprint import pprint
     total_sequences = len(test_psd)
-    percent_tps_recovered = {k: v/total_labels for k, v in threshold_to_true_positives.items()}
-    mean_fps_per_sequence = {k: v/total_sequences for k, v in threshold_to_false_positives.items()}
+    percent_tps_recovered = {k: v / total_labels for k, v in threshold_to_true_positives.items()}
+    mean_fps_per_sequence = {k: v / total_sequences for k, v in threshold_to_false_positives.items()}
     pprint(percent_tps_recovered)
     pprint(mean_fps_per_sequence)
 
@@ -144,6 +142,7 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
     ax.set_title('0.5pid clusters, decoys included')
     plt.savefig(save_fig)
     plt.close()
+
 
 if __name__ == '__main__':
     args = parser()
@@ -165,5 +164,4 @@ if __name__ == '__main__':
                                                 batch_size=batch_size,
                                                 shuffle=False)
 
-
-    predict_all_sequences_and_rank(test_psd, decoys, args.save_fig)
+    predict_all_sequences_and_rank(test_dataset, decoy_dataset, args.save_fig)
