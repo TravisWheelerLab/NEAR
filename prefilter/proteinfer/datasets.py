@@ -13,7 +13,7 @@ __all__ = ['Word2VecStyleDataset',
            ]
 
 inferrer = inference.Inferrer(
-    'trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760',
+    '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760',
     use_tqdm=False,
     batch_size=1,
     activation_type="pooled_representation"
@@ -94,20 +94,19 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         self.n_classes = class_id + 1
 
-    def __getitem__(self, key):
-
-        if key in self.name_to_class_code:
-            return self.name_to_class_code[key]
-        else:
-            print('this shouldn\'t happen')
-            return None
+    # def __getitem__(self, key):
+    #     if key in self.name_to_class_code:
+    #         return self.name_to_class_code[key]
+    #     else:
+    #         print('this shouldn\'t happen')
+    #         return None
 
     def __len__(self):
 
         return len(self.sequences_and_labels)
 
     def _make_multi_hot(self, labels):
-        y = torch.zeros((self.n_classes))
+        y = torch.zeros(self.n_classes)
         class_ids = [self.name_to_class_code[l] for l in labels]
         for idx in class_ids:
             y[idx] = 1

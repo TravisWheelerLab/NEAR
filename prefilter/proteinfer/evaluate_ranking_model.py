@@ -1,5 +1,4 @@
 import os
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import numpy as np
@@ -59,9 +58,9 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
 
     with torch.no_grad():
 
-        for sequence in decoy_dataset:
-            scores = model.class_act(model(sequence)).squeeze()
-            decoy_scores.append(scores.numpy())
+         # for sequence in decoy_dataset:
+         #    scores = model.class_act(model(sequence)).squeeze()
+         #    decoy_scores.append(scores.numpy())
 
         family_id_to_score_and_label = defaultdict(list)
         for sequence, labels in test_dataset:
@@ -83,6 +82,9 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
 
         threshold_to_false_positives = defaultdict(int)
         threshold_to_true_positives = defaultdict(int)
+
+        print(family_id_to_score_and_label.keys())
+        exit()
 
         for family_class_code, list_of_scores in family_id_to_score_and_label.items():
             list_of_scores = np.stack(list_of_scores, axis=0)
@@ -154,6 +156,7 @@ if __name__ == '__main__':
 
     test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
     decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
+    batch_size = 32
     test_dataset = torch.utils.data.DataLoader(test_psd,
                                                batch_size=batch_size,
                                                shuffle=False)
@@ -162,6 +165,5 @@ if __name__ == '__main__':
                                                 batch_size=batch_size,
                                                 shuffle=False)
 
-    batch_size = 32
 
     predict_all_sequences_and_rank(test_psd, decoys, args.save_fig)
