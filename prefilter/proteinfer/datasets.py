@@ -141,9 +141,6 @@ def fasta_from_file(fasta_file):
 
     _flush_current_seq()
 
-    # print(len(set(sequence_labels)), len(sequence_labels))
-    # assert len(set(sequence_labels)) == len(sequence_labels)
-
     return sequence_labels, sequence_strs
 
 
@@ -155,9 +152,10 @@ class SimpleSequenceEmbedder(torch.utils.data.Dataset):
         """
 
         self.fasta_file = fasta_file
-        self.sequences, self.labels = fasta_from_file(fasta_file)
+        self.labels, self.sequences = fasta_from_file(fasta_file)
 
-    def _encoding_func(self, x):
+    @staticmethod
+    def _encoding_func(x):
         return inferrer.get_activations([x.upper()])
 
     def __getitem__(self, idx):
