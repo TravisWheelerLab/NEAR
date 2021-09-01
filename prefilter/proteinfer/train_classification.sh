@@ -12,9 +12,9 @@ PID=0.5
 source ~/anaconda/bin/activate
 conda activate tf15
 python classification_model.py\
-    --log_dir $HOME/multilabel_classification_logs/\
+    --log_dir "$HOME"/multilabel_classification_logs/\
     --model_name model-0.35.pt\
-    --data_path $HOME/data/prefilter/small-dataset/related_families/json/$PID\
+    --data_path "$HOME"/data/prefilter/small-dataset/related_families/json/$PID\
     --batch_size 32\
     --epochs 300\
     --layer_1_nodes 1024\
