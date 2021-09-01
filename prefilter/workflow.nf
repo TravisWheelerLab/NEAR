@@ -44,6 +44,7 @@ process carbs_split {
 
 process to_json_train {
 
+    errorStrategy 'ignore'
     publishDir = "${params.out_path_json}/${params.pid}"
 
     input:
@@ -67,6 +68,7 @@ process to_json_train {
 
 process to_json_test {
 
+    errorStrategy 'ignore'
     publishDir = "${params.out_path_json}/${params.pid}"
 
     input:
@@ -90,6 +92,7 @@ process to_json_test {
 
 process to_json_valid {
 
+    errorStrategy 'ignore'
     publishDir = "${params.out_path_json}"
 
     input:
