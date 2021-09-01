@@ -90,7 +90,7 @@ def main(args):
     clan_to_regular_name = _make_clan_to_regular_name(clan_to_family, id_to_name)
 
     # choose n_clans clans
-    clans = np.random.choice(list(clan_to_regular_name.keys()), size=args.n_clans, replace=False)
+    clans = np.random.choice(list(clan_to_regular_name.keys()), size=len(clan_to_regular_name) if args.n_clans > len(clan_to_regular_name) else args.n_clans, replace=False)
 
     pfam_families = [family for c in clans for family in clan_to_regular_name[c]]  # flatten list
     copy_files(pfam_families, args)
