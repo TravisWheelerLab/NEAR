@@ -49,7 +49,7 @@ def load_model(logs_dir, model_path):
     return model, hparams
 
 
-def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
+def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig,
                                    batch_size=32):
     # get final classification layer's weights and init a new
     # layer with trained weights
@@ -57,17 +57,22 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
     decoy_scores = []
     total_labels = 0
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+
     with torch.no_grad():
 
         for sequence in decoy_dataset:
-            scores = model.class_act(model(sequence)).squeeze()
+            sequence = sequence.to(device)
+            scores = model.class_act(model(sequence)).squeeze().to('cpu')
             decoy_scores.append(scores.numpy())
 
         family_id_to_score_and_label = defaultdict(list)
         for sequence, labels in test_dataset:
             labels = labels.squeeze()
+            sequence = sequence.to(device)
             embeddings = model(sequence).squeeze()
-            scores = model.class_act(embeddings)
+            scores = model.class_act(embeddings).to('cpu')
             # The easiest thing to do would be to store scores for each family for each sequence
             # Because each sequences gets rated by each family, just keeping
             # a dictionary of family_id: (score, label) would be easy and be
@@ -76,7 +81,6 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
                 for unique_label in np.where(labelset == 1)[0]:
                     total_labels += 1
                     family_id_to_score_and_label[unique_label].append(scoreset.numpy())
-
         # now I have all family ids->scores for each sequence in that family.
         # by concatenating all of the decoys into each score list, I can sort
         # the score list and see where the true labels end up in relation
@@ -118,21 +122,12 @@ def predict_all_sequences_and_rank(test_dataset, decoy_dataset, save_fig,
                     thresholded_real[:, family_class_code])
                 threshold_to_true_positives[threshold] += num_true_positives_above_threshold
                 threshold_to_false_positives[threshold] += (
-                    num_false_positives_above_threshold_decoys)  # + num_false_positives_above_threshold_real_sequences)
+                    num_false_positives_above_threshold_decoys + num_false_positives_above_threshold_real_sequences)
 
-    # sequence ideally: shuffled sequence will be thrown out
-    # x-axis: cutoff sigmoid probability
-    # y-axis: what percent of the things that I hope will get run thru hmmer actually do (percent recovery)
-    # y-axis, 2nd plot: what percent of random shit gets puts through
-    # set up collection of families
-
-    # now I need to look at #number of families passed through at different sigmoid thresholds
     from pprint import pprint
     total_sequences = len(test_psd)
     percent_tps_recovered = {k: v / total_labels for k, v in threshold_to_true_positives.items()}
     mean_fps_per_sequence = {k: v / total_sequences for k, v in threshold_to_false_positives.items()}
-    pprint(percent_tps_recovered)
-    pprint(mean_fps_per_sequence)
 
     fig, ax = plt.subplots(figsize=(13, 10))
     ax.semilogx(list(mean_fps_per_sequence.values()), list(percent_tps_recovered.values()), 'ro--', markersize=10)
@@ -164,4 +159,82 @@ if __name__ == '__main__':
                                                 batch_size=batch_size,
                                                 shuffle=False)
 
-    predict_all_sequences_and_rank(test_dataset, decoy_dataset, args.save_fig)
+    predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, args.save_fig)
+    exit()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # ideally shuffled sequence will be thrown out
+    # x-axis: cutoff sigmoid probability
+    # y-axis: what percent of the things that I hope will get run thru hmmer actually do (percent recovery)
+    # y-axis, 2nd plot: what percent of random shit gets puts through
+    # set up collection of families
+    #  need to look at number of families passed through at different sigmoid thresholds
+
+    sigmoid_threshold_to_tps_passed = defaultdict(list)
+    sigmoid_threshold_to_num_passed = defaultdict(list)
+    sigmoid_threshold_to_decoys_passed = defaultdict(list)
+    sigmoid_threshold_to_tps_missed = defaultdict(list)
+
+    thresholds = range(10, 100, 1)
+    thresholds = [t / 100 for t in thresholds]
+
+    model = model.to(device)
+
+    total_true_labels = 0
+    total_sequences = 0
+    total_decoys = 0
+
+    with torch.no_grad():
+
+        for sequence, labels in test_dataset:
+            total_sequences += sequence.shape[0]
+            labels = labels.squeeze().numpy()
+            total_true_labels += np.count_nonzero(labels)
+            sequence = sequence.to(device)
+            embeddings = model(sequence).squeeze().to('cpu')
+            scores = model.class_act(embeddings).numpy()
+            for threshold in thresholds:
+                thresholded_scores = scores.copy()
+                thresholded_scores[thresholded_scores >= threshold] = 1
+                thresholded_scores[thresholded_scores < threshold] = 0
+                true_positives = np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 1).astype(bool),
+                                                  axis=-1)
+                misses = np.count_nonzero((thresholded_scores == 0).astype(bool) & (labels == 1).astype(bool), axis=-1)
+                num_passed = np.count_nonzero(thresholded_scores, axis=-1)
+                sigmoid_threshold_to_num_passed[threshold].extend(num_passed)
+                sigmoid_threshold_to_tps_missed[threshold].extend(misses)
+                sigmoid_threshold_to_tps_passed[threshold].extend(true_positives)
+
+        for sequence in decoy_dataset:
+            sequence = sequence.to(device)
+            scores = model.class_act(model(sequence)).squeeze().to('cpu').numpy()
+            total_decoys += sequence.shape[0]
+
+            for threshold in thresholds:
+                thresholded_scores = scores.copy()
+                thresholded_scores[thresholded_scores >= threshold] = 1
+                thresholded_scores[thresholded_scores < threshold] = 0
+                num_decoys_passed = np.count_nonzero(thresholded_scores, axis=-1)
+                sigmoid_threshold_to_decoys_passed[threshold].extend(num_decoys_passed)
+
+        fig, ax = plt.subplots(figsize=(13, 10))
+
+        sigmoid_threshold_to_tps_passed = {k: sum(v) for k, v in sigmoid_threshold_to_tps_passed.items()}
+        sigmoid_threshold_to_decoys_passed = {k: sum(v) for k, v in sigmoid_threshold_to_decoys_passed.items()}
+        sigmoid_threshold_to_num_passed = {k: sum(v) for k, v in sigmoid_threshold_to_num_passed.items()}
+
+        ax.plot(thresholds, [s / total_true_labels for s in sigmoid_threshold_to_tps_passed.values()], 'ro-',
+                label='percent tps passed')
+        ax.plot(thresholds, [1 - (s / (total_sequences * 253)) for s in sigmoid_threshold_to_num_passed.values()],
+                'bo-', label='percent filtered')
+        ax1 = ax.twinx()
+        ax1.plot(thresholds, [s / total_decoys for s in sigmoid_threshold_to_decoys_passed.values()], 'ko-',
+                 label='decoy hits per sequence')
+
+        ax.set_title('accuracy metrics')
+        ax.set_ylabel('percent or hits')
+        ax1.set_ylabel('hits per sequence')
+        ax.set_xlabel('sigmoid threshold')
+        ax.legend()
+        ax1.legend(loc='lower right')
+        plt.savefig(args.save_fig)
+        plt.close()
