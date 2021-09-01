@@ -58,11 +58,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             class_id = len(self.name_to_class_code)
 
         else:
-            s = 'expected existing_name_to_label_mapping to be one of dict, string, or None, found {}'.format(type(self.existing_name_to_label_mapping))
+            s = 'expected existing_name_to_label_mapping to be one of dict, string, or None, found {}'.format(
+                type(self.existing_name_to_label_mapping))
             raise ValueError(s)
 
-
-
+        len_before = len(self.name_to_class_code)
         for j in self.json_files:
 
             with open(j, 'r') as src:
@@ -83,14 +83,16 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         if self.existing_name_to_label_mapping is not None and not self.evaluating:
             print('saving to existing name to label_mapping')
 
-            with open(self.existing_name_to_label_mapping, 'w') as dst:
-                json.dump(self.name_to_class_code, dst)
+            if len_before != len(self.name_to_class_code):
+                with open(self.existing_name_to_label_mapping, 'w') as dst:
+                    json.dump(self.name_to_class_code, dst)
         else:
 
-            self.class_code_mapping = './pfam_names_to_class_id-{}.json'.format(time.time())
+            if len_before != len(self.name_to_class_code):
+                self.class_code_mapping = './pfam_names_to_class_id-{}.json'.format(time.time())
 
-            with open(self.class_code_mapping, 'w') as dst:
-                json.dump(self.name_to_class_code, dst)
+                with open(self.class_code_mapping, 'w') as dst:
+                    json.dump(self.name_to_class_code, dst)
 
         self.n_classes = class_id + 1
 
@@ -159,7 +161,6 @@ class SimpleSequenceEmbedder(torch.utils.data.Dataset):
         return inferrer.get_activations([x.upper()])
 
     def __getitem__(self, idx):
-
         return torch.tensor(self._encoding_func(self.sequences[idx]))
 
     def __len__(self):
