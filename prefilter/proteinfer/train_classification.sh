@@ -11,11 +11,12 @@
 PID=0.5
 source ~/anaconda/bin/activate
 conda activate tf15
+
 python classification_model.py\
-    --log_dir "$HOME"/multilabel_classification_logs/\
-    --model_name model-0.35.pt\
-    --data_path "$HOME"/data/prefilter/small-dataset/related_families/json/$PID\
-    --batch_size 32\
+    --log_dir "$HOME"/small-dataset-logs/\
+    --model_name model.pt\
+    --data_path "$HOME"/data/prefilter/small-dataset/related_families/json/0.5/\
+    --batch_size 64\
     --epochs 300\
     --layer_1_nodes 1024\
     --layer_2_nodes 512\
@@ -25,4 +26,5 @@ python classification_model.py\
     --gpus 1\
     --check_val_every_n_epoch 2\
     --pos_weight 1\
-    --num_workers 0
+    --num_workers 0\
+    --resample_families

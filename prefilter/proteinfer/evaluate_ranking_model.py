@@ -37,7 +37,9 @@ def load_model(logs_dir, model_path):
     with open(yaml_path, 'r') as src:
         hparams = yaml.safe_load(src)
 
-    model = Model(**hparams, ranking=False)
+    # always going to be false
+    hparams['ranking'] = False
+    model = Model(**hparams)
     if os.path.splitext(model_path)[1] == '.ckpt':
         checkpoint = torch.load(model_path)
         state_dict = checkpoint['state_dict']
@@ -159,9 +161,10 @@ if __name__ == '__main__':
                                                 batch_size=batch_size,
                                                 shuffle=False)
 
-    predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, args.save_fig)
-    exit()
+    # predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, args.save_fig)
+    # exit()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # TODO: refactor this.
     # ideally shuffled sequence will be thrown out
     # x-axis: cutoff sigmoid probability
     # y-axis: what percent of the things that I hope will get run thru hmmer actually do (percent recovery)
@@ -231,7 +234,7 @@ if __name__ == '__main__':
                  label='decoy hits per sequence')
 
         ax.set_title('accuracy metrics')
-        ax.set_ylabel('percent or hits')
+        ax.set_ylabel('percent of hits')
         ax1.set_ylabel('hits per sequence')
         ax.set_xlabel('sigmoid threshold')
         ax.legend()

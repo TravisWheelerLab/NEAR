@@ -149,6 +149,7 @@ if __name__ == '__main__':
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor='val_loss',
+        filename='{epoch}-{val_loss:.5f}',
         save_top_k=5)
 
     trainer = pl.Trainer(
