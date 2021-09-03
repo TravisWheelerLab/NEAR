@@ -84,4 +84,6 @@ if __name__ == '__main__':
     glob_string = args.glob_string
     save_path = args.save_fig
     json_files = glob(os.path.join(directory, glob_string))
+    if not len(json_files):
+        raise ValueError('glob string {}j does not contain any json files'.format(os.path.join(directory, glob_string)))
     summarize_dataset(json_files, savefig=save_path)
