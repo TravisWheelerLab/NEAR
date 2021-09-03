@@ -1,6 +1,4 @@
 import os
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import numpy as np
 import yaml
@@ -8,6 +6,8 @@ import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 from glob import glob
 from collections import defaultdict
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from classification_model import Model
 from datasets import ProteinSequenceDataset, SimpleSequenceEmbedder

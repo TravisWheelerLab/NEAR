@@ -1,19 +1,22 @@
-import json
 import os
+import json
 import time
-from glob import glob
-
 import torch
+import numpy as np
+from collections import defaultdict
 
-import inference
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-__all__ = ['Word2VecStyleDataset',
-           'ProteinSequenceDataset',
-           'SimpleSequenceEmbedder'
-           ]
+import inference # from proteinfer
+
+
+__all__ = ['ProteinSequenceDataset',
+           'SimpleSequenceEmbedder']
+
+GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
 inferrer = inference.Inferrer(
-    '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760',
+    GSCC_SAVED_TF_MODEL_PATH,
     use_tqdm=False,
     batch_size=1,
     activation_type="pooled_representation"
@@ -24,16 +27,19 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self, json_files,
                  existing_name_to_label_mapping=None,
+                 sample_sequences_based_on_family_membership=False,
                  evaluating=False):
 
         self.json_files = json_files
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.evaluating = evaluating
-
+        self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
         self._build_dataset()
 
-    def _encoding_func(self, x):
+    @staticmethod
+    def _encoding_func(x):
 
+        # TODO: experiment with mutexes for this.
         return inferrer.get_activations([x.upper()])
 
     def _build_dataset(self):
@@ -59,10 +65,15 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         else:
             s = 'expected existing_name_to_label_mapping to be one of dict, string, or None, found {}'.format(
-                type(self.existing_name_to_label_mapping))
+                type(self.existing_name_to_labelmapping))
             raise ValueError(s)
 
         len_before = len(self.name_to_class_code)
+
+        self.family_to_indices = defaultdict(list)
+
+        index_counter = 0
+
         for j in self.json_files:
 
             with open(j, 'r') as src:
@@ -71,6 +82,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             for sequence, labelset in sequence_to_labels.items():
 
                 for label in labelset:
+                    # could also sort sequences and labels by label
+                    # and save start and offset per family, which would be much
+                    # better memory usage. For now I'll do this then
+                    # speed it up in a bit.
+                    self.family_to_indices[label].append(index_counter)
 
                     if label not in self.name_to_class_code:
 
@@ -78,27 +94,51 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                             self.name_to_class_code[label] = class_id
                             class_id += 1
 
+                index_counter += 1
                 self.sequences_and_labels.append([labelset, sequence])
+
+        if self.sample_sequences_based_on_family_membership:
+
+            total_seq = sum(map(len, self.family_to_indices.values()))
+            family_to_frequency = {k: len(v) / total_seq for k, v in self.family_to_indices.items()}
+            family_to_resampled_membership = {}
+
+            for family, indices in self.family_to_indices.items():
+                indices = np.asarray(indices)
+                keep_prob = np.sqrt(1e-5/family_to_frequency[family])
+                kept = np.count_nonzero(np.random.rand(len(indices)) <= keep_prob)
+
+                if kept == 0:
+                    family_to_resampled_membership[family] = 1
+                else:
+                    family_to_resampled_membership[family] = kept
+
+            self.length_of_dataset = sum(list(family_to_resampled_membership.values()))
+            self.families = np.asarray(list(family_to_resampled_membership.keys()))
+            self.sample_probs = np.asarray(list(family_to_resampled_membership.values()))
+            self.sample_probs = self.sample_probs / np.sum(self.sample_probs)
+
+        self.sequences_and_labels = np.asarray(self.sequences_and_labels)
 
         if self.existing_name_to_label_mapping is not None and not self.evaluating:
             print('saving to existing name to label_mapping')
-
             if len_before != len(self.name_to_class_code):
+                # TODO: fix error where existing name to label mapping could be a dictionary.
                 with open(self.existing_name_to_label_mapping, 'w') as dst:
                     json.dump(self.name_to_class_code, dst)
         else:
-
             if len_before != len(self.name_to_class_code):
                 self.class_code_mapping = './pfam_names_to_class_id-{}.json'.format(time.time())
-
                 with open(self.class_code_mapping, 'w') as dst:
                     json.dump(self.name_to_class_code, dst)
 
         self.n_classes = class_id + 1
 
     def __len__(self):
-
-        return len(self.sequences_and_labels)
+        if self.sample_sequences_based_on_family_membership:
+            return self.length_of_dataset
+        else:
+            return len(self.sequences_and_labels)
 
     def _make_multi_hot(self, labels):
         y = torch.zeros(self.n_classes)
@@ -109,7 +149,15 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
 
-        labels, features = self.sequences_and_labels[idx][0], self.sequences_and_labels[idx][1]
+        if self.sample_sequences_based_on_family_membership:
+            family = np.random.choice(self.families, p=self.sample_probs)
+            family_indices = self.family_to_indices[family]
+            idx = int(np.random.rand()*len(family_indices))
+            labels, features = self.sequences_and_labels[family_indices[idx]]
+
+        else:
+            labels, features = self.sequences_and_labels[idx][0], self.sequences_and_labels[idx][1]
+
         x = self._encoding_func(features)
         y = self._make_multi_hot(labels)
         return torch.tensor(x), y
@@ -168,8 +216,11 @@ class SimpleSequenceEmbedder(torch.utils.data.Dataset):
 
 
 if __name__ == '__main__':
-
-    sse = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
-    print(len(sse))
-    for s in sse:
-        print(s.shape)
+    from glob import glob
+    # json_files = glob('/home/tc229954/data/prefilter/medium-dataset/json/0.5/*train.json')
+    json_files = glob('/home/tc229954/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
+    dataset = ProteinSequenceDataset(json_files, sample_sequences_based_on_family_membership=True)
+    print(len(dataset))
+    exit()
+    for d in dataset:
+        continue

@@ -101,6 +101,7 @@ def parser():
     ap.add_argument("--model_name", type=str, required=True)
     ap.add_argument("--data_path", type=str, required=True)
     ap.add_argument("--pos_weight", type=float, required=True)
+    ap.add_argument("--resample_families", action='store_true')
     ap.add_argument("--num-workers", type=int, default=16)
     return ap.parse_args()
 
@@ -114,15 +115,12 @@ if __name__ == '__main__':
     train_files = glob(os.path.join(data_path, "*train*"))
     test_files = glob(os.path.join(data_path, "*test*"))
 
-    train = ProteinSequenceDataset(train_files)
+    train = ProteinSequenceDataset(train_files, sample_sequences_based_on_family_membership=args.resample_families)
 
     class_code_mapping_file = train.class_code_mapping
 
+    # don't resample on test.
     test = ProteinSequenceDataset(test_files, class_code_mapping_file)
-
-    print('--------')
-    print(train.n_classes, test.n_classes)
-    print('--------')
 
     train.n_classes = test.n_classes
     n_classes = test.n_classes
