@@ -5,7 +5,6 @@ sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_opti
 import os
 import torch
 import pytorch_lightning as pl
-import torchmetrics
 
 from glob import glob
 from argparse import ArgumentParser
@@ -43,10 +42,6 @@ class Model(pl.LightningModule):
 
         self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(self.pos_weight))
         self.class_act = torch.nn.Sigmoid()
-        self.precision_metric = torchmetrics.Precision()
-        self.recall_metric = torchmetrics.Recall()
-        self.auroc_metric = torchmetrics.AUROC()
-
         # 1100 because that's the dimension of the Bileschi et al model's
         # embeddings.
         self.layer_1 = torch.nn.Linear(1100, fc1)
@@ -69,30 +64,20 @@ class Model(pl.LightningModule):
         preds = torch.round(self.class_act(logits))
         loss = self.loss_func(logits, labels)
         acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
-        precision = self.precision_metric(preds, labels.int())
-        recall = self.recall_metric(preds, labels.int())
-        auroc = self.auroc_metric(preds, labels.int())
-        return loss, preds, acc, precision, recall, auroc
+        return loss, preds, acc
 
     def training_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
+        loss, preds, acc = self._loss_and_preds(batch)
         self.log('train_loss', loss, on_step=True)
-        self.log('train_acc', acc, on_step=True)
-        self.log('train_precision', precision, on_step=True)
-        self.log('train_recall', recall, on_step=True)
-        self.log('train_auroc', auroc, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
+        loss, preds, acc = self._loss_and_preds(batch)
         self.log('val_loss', loss, on_step=True)
-        self.log('val_precision', precision, on_step=True)
-        self.log('val_recall', recall, on_step=True)
-        self.log('val_auroc', auroc, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-        loss, preds, acc, precision, recall, auroc = self._loss_and_preds(batch)
+        loss, preds, acc = self._loss_and_preds(batch)
         return loss
 
     def configure_optimizers(self):
@@ -128,7 +113,6 @@ if __name__ == '__main__':
 
     train_files = glob(os.path.join(data_path, "*train*"))
     test_files = glob(os.path.join(data_path, "*test*"))
-    print(len(train_files), len(test_files))
 
     train = ProteinSequenceDataset(train_files)
 
@@ -161,7 +145,8 @@ if __name__ == '__main__':
                   class_code_mapping,
                   args.initial_learning_rate,
                   args.batch_size,
-                  args.pos_weight
+                  args.pos_weight,
+                  ranking=False
                   )
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
