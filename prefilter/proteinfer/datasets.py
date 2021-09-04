@@ -5,23 +5,24 @@ import torch
 import numpy as np
 from collections import defaultdict
 
-import inference # from proteinfer
-
+import inference  # from proteinfer
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 
 __all__ = ['ProteinSequenceDataset',
            'SimpleSequenceEmbedder']
 
 GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
-inferrer = inference.Inferrer(
-    GSCC_SAVED_TF_MODEL_PATH,
-    use_tqdm=False,
-    batch_size=1,
-    activation_type="pooled_representation"
-)
+if os.path.isfile(GSCC_SAVED_TF_MODEL_PATH):
+    inferrer = inference.Inferrer(
+        GSCC_SAVED_TF_MODEL_PATH,
+        use_tqdm=False,
+        batch_size=1,
+        activation_type="pooled_representation"
+    )
+else:
+    inferrer = lambda x: x
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
@@ -29,19 +30,24 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
     def __init__(self, json_files,
                  existing_name_to_label_mapping=None,
                  sample_sequences_based_on_family_membership=False,
+                 sample_sequences_based_on_num_labels=False,
                  evaluating=False):
 
         self.json_files = json_files
+
+        if not len(self.json_files):
+            raise ValueError("no json files passed in")
+
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
+        self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
         self._build_dataset()
 
     @staticmethod
     def _encoding_func(x):
 
-        # TODO: experiment with mutexes for this.
-        return inferrer.get_activations([x.upper()])
+        return x  # inferrer.get_activations([x.upper()])
 
     def _build_dataset(self):
 
@@ -106,7 +112,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             for family, indices in self.family_to_indices.items():
                 indices = np.asarray(indices)
-                keep_prob = np.sqrt(1e-5/family_to_frequency[family])
+                keep_prob = np.sqrt(1e-5 / family_to_frequency[family])
                 kept = np.count_nonzero(np.random.rand(len(indices)) <= keep_prob)
 
                 if kept == 0:
@@ -119,7 +125,15 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             self.sample_probs = np.asarray(list(family_to_resampled_membership.values()))
             self.sample_probs = self.sample_probs / np.sum(self.sample_probs)
 
-        self.sequences_and_labels = np.asarray(self.sequences_and_labels)
+        self.sequences_and_labels = np.asarray(self.sequences_and_labels, dtype='object')
+        if self.sample_sequences_based_on_num_labels:
+
+            self.family_to_sample_dist = {}
+            for family in self.families:
+                lengths_of_label_sets = list(map(lambda x: len(x[0]),
+                                                 self.sequences_and_labels[self.family_to_indices[family]]))
+                x = np.asarray(lengths_of_label_sets)**4
+                self.family_to_sample_dist[family] = x / np.sum(x)
 
         if self.existing_name_to_label_mapping is not None and not self.evaluating:
             print('saving to existing name to label_mapping')
@@ -153,15 +167,18 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         if self.sample_sequences_based_on_family_membership:
             family = np.random.choice(self.families, p=self.sample_probs)
             family_indices = self.family_to_indices[family]
-            idx = int(np.random.rand()*len(family_indices))
-            labels, features = self.sequences_and_labels[family_indices[idx]]
-
+            if self.sample_sequences_based_on_num_labels:
+                idx = np.random.choice(family_indices, p=self.family_to_sample_dist[family])
+                labels, features = self.sequences_and_labels[idx]
+            else:
+                idx = int(np.random.rand() * len(family_indices))
+                labels, features = self.sequences_and_labels[family_indices[idx]]
         else:
-            labels, features = self.sequences_and_labels[idx][0], self.sequences_and_labels[idx][1]
+            labels, features = self.sequences_and_labels[idx]
 
         x = self._encoding_func(features)
         y = self._make_multi_hot(labels)
-        return torch.tensor(x), y
+        return x, y
 
 
 def fasta_from_file(fasta_file):
@@ -218,10 +235,12 @@ class SimpleSequenceEmbedder(torch.utils.data.Dataset):
 
 if __name__ == '__main__':
     from glob import glob
-    json_files = glob('/home/tc229954/data/prefilter/medium-dataset/json/0.5/*train.json')
+
+    json_files = glob('/Users/mac/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
     # json_files = glob('/home/tc229954/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
-    dataset = ProteinSequenceDataset(json_files, sample_sequences_based_on_family_membership=True)
-    print(len(dataset))
-    exit()
-    for d in dataset:
-        continue
+    dataset = ProteinSequenceDataset(json_files,
+                                     sample_sequences_based_on_family_membership=True,
+                                     sample_sequences_based_on_num_labels=True)
+    i = 0
+    for i in range(len(dataset)):
+        print(len(np.where(dataset[i][1] == 1)[0]))
