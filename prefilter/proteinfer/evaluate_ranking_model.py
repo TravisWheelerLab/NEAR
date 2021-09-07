@@ -1,6 +1,4 @@
 import os
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import numpy as np
 import yaml
@@ -12,11 +10,13 @@ from collections import defaultdict
 from classification_model import Model
 from datasets import ProteinSequenceDataset, SimpleSequenceEmbedder
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 
 def parser():
     ap = ArgumentParser()
     ap.add_argument("--test_data", required=True)
-    ap.add_argument("--save_fig", required=True)
+    ap.add_argument("--save_prefix", required=True)
     ap.add_argument("--logs_dir", required=True)
     ap.add_argument("--model_path", default=None)
     return ap.parse_args()
@@ -124,9 +124,8 @@ def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig,
                     thresholded_real[:, family_class_code])
                 threshold_to_true_positives[threshold] += num_true_positives_above_threshold
                 threshold_to_false_positives[threshold] += (
-                    num_false_positives_above_threshold_decoys + num_false_positives_above_threshold_real_sequences)
+                        num_false_positives_above_threshold_decoys + num_false_positives_above_threshold_real_sequences)
 
-    from pprint import pprint
     total_sequences = len(test_psd)
     percent_tps_recovered = {k: v / total_labels for k, v in threshold_to_true_positives.items()}
     mean_fps_per_sequence = {k: v / total_sequences for k, v in threshold_to_false_positives.items()}
@@ -141,36 +140,8 @@ def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig,
     plt.close()
 
 
-if __name__ == '__main__':
-    args = parser()
-    test_files = glob(os.path.join(args.test_data, "*test.json"))
-
-    model, hparams = load_model(args.logs_dir, model_path=args.model_path)
-
-    pfam_id_to_class_code = hparams['class_code_mapping']
-    class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
-
-    test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
-    decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
-    batch_size = 32
-    test_dataset = torch.utils.data.DataLoader(test_psd,
-                                               batch_size=batch_size,
-                                               shuffle=False)
-
-    decoy_dataset = torch.utils.data.DataLoader(decoys,
-                                                batch_size=batch_size,
-                                                shuffle=False)
-
-    # predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, args.save_fig)
-    # exit()
+def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # TODO: refactor this.
-    # ideally shuffled sequence will be thrown out
-    # x-axis: cutoff sigmoid probability
-    # y-axis: what percent of the things that I hope will get run thru hmmer actually do (percent recovery)
-    # y-axis, 2nd plot: what percent of random shit gets puts through
-    # set up collection of families
-    #  need to look at number of families passed through at different sigmoid thresholds
 
     sigmoid_threshold_to_tps_passed = defaultdict(list)
     sigmoid_threshold_to_num_passed = defaultdict(list)
@@ -239,5 +210,31 @@ if __name__ == '__main__':
         ax.set_xlabel('sigmoid threshold')
         ax.legend()
         ax1.legend(loc='lower right')
-        plt.savefig(args.save_fig)
+        plt.savefig(save_fig)
         plt.close()
+
+
+if __name__ == '__main__':
+    args = parser()
+
+    trained_model, hparams = load_model(args.logs_dir, model_path=args.model_path)
+    test_files = hparams['test_files']
+
+    pfam_id_to_class_code = hparams['class_code_mapping']
+    class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
+
+    test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
+    decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
+    batch_size = 32
+    test = torch.utils.data.DataLoader(test_psd,
+                                       batch_size=batch_size,
+                                       shuffle=False)
+
+    decoys = torch.utils.data.DataLoader(decoys,
+                                         batch_size=batch_size,
+                                         shuffle=False)
+
+    ranking_figure_name = args.save_prefix + '_rankings.png'
+    evaluation_figure_name = args.save_prefix + '_evaluated.png'
+    predict_all_sequences_and_rank(trained_model, test, decoys, ranking_figure_name)
+    evaluate_model(trained_model, test, decoys, evaluation_figure_name)
