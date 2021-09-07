@@ -10,15 +10,13 @@ from collections import defaultdict
 from classification_model import Model
 from datasets import ProteinSequenceDataset, SimpleSequenceEmbedder
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 
 def parser():
     ap = ArgumentParser()
-    ap.add_argument("--test_data", required=True)
     ap.add_argument("--save_prefix", required=True)
     ap.add_argument("--logs_dir", required=True)
     ap.add_argument("--model_path", default=None)
+    ap.add_argument("--batch_size", type=int, default=32)
     return ap.parse_args()
 
 
@@ -51,8 +49,7 @@ def load_model(logs_dir, model_path):
     return model, hparams
 
 
-def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig,
-                                   batch_size=32):
+def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig):
     # get final classification layer's weights and init a new
     # layer with trained weights
 
@@ -148,7 +145,7 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
     sigmoid_threshold_to_decoys_passed = defaultdict(list)
     sigmoid_threshold_to_tps_missed = defaultdict(list)
 
-    thresholds = range(10, 100, 1)
+    thresholds = range(10, 100, 1)[::-1]
     thresholds = [t / 100 for t in thresholds]
 
     model = model.to(device)
@@ -159,35 +156,38 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
 
     with torch.no_grad():
 
-        for sequence, labels in test_dataset:
+        for i, (sequence, labels) in enumerate(test_dataset):
             total_sequences += sequence.shape[0]
             labels = labels.squeeze().numpy()
             total_true_labels += np.count_nonzero(labels)
             sequence = sequence.to(device)
             embeddings = model(sequence).squeeze().to('cpu')
             scores = model.class_act(embeddings).numpy()
+            thresholded_scores = scores
             for threshold in thresholds:
-                thresholded_scores = scores.copy()
+                # could refactor, right?
+                # i do an unnecessary copy each time. Could just iterate over thresholds
+                # from highest to lowest and keep updating thresholded scores
                 thresholded_scores[thresholded_scores >= threshold] = 1
-                thresholded_scores[thresholded_scores < threshold] = 0
+                # thresholded_scores[thresholded_scores < threshold] = 0 -> don't modify things below the threshold
                 true_positives = np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 1).astype(bool),
                                                   axis=-1)
-                misses = np.count_nonzero((thresholded_scores == 0).astype(bool) & (labels == 1).astype(bool), axis=-1)
-                num_passed = np.count_nonzero(thresholded_scores, axis=-1)
+                misses = np.count_nonzero((thresholded_scores != 1).astype(bool) & (labels == 1).astype(bool), axis=-1)
+                num_passed = np.count_nonzero(thresholded_scores == 1, axis=-1)
                 sigmoid_threshold_to_num_passed[threshold].extend(num_passed)
                 sigmoid_threshold_to_tps_missed[threshold].extend(misses)
                 sigmoid_threshold_to_tps_passed[threshold].extend(true_positives)
+
+        print('finished dataset')
 
         for sequence in decoy_dataset:
             sequence = sequence.to(device)
             scores = model.class_act(model(sequence)).squeeze().to('cpu').numpy()
             total_decoys += sequence.shape[0]
-
+            thresholded_scores = scores
             for threshold in thresholds:
-                thresholded_scores = scores.copy()
                 thresholded_scores[thresholded_scores >= threshold] = 1
-                thresholded_scores[thresholded_scores < threshold] = 0
-                num_decoys_passed = np.count_nonzero(thresholded_scores, axis=-1)
+                num_decoys_passed = np.count_nonzero(thresholded_scores == 1, axis=-1)
                 sigmoid_threshold_to_decoys_passed[threshold].extend(num_decoys_passed)
 
         fig, ax = plt.subplots(figsize=(13, 10))
@@ -225,16 +225,15 @@ if __name__ == '__main__':
 
     test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
     decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
-    batch_size = 32
     test = torch.utils.data.DataLoader(test_psd,
-                                       batch_size=batch_size,
+                                       batch_size=args.batch_size,
                                        shuffle=False)
 
     decoys = torch.utils.data.DataLoader(decoys,
-                                         batch_size=batch_size,
+                                         batch_size=args.batch_size,
                                          shuffle=False)
 
     ranking_figure_name = args.save_prefix + '_rankings.png'
     evaluation_figure_name = args.save_prefix + '_evaluated.png'
-    predict_all_sequences_and_rank(trained_model, test, decoys, ranking_figure_name)
+    # predict_all_sequences_and_rank(trained_model, test, decoys, ranking_figure_name)
     evaluate_model(trained_model, test, decoys, evaluation_figure_name)
