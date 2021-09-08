@@ -140,12 +140,12 @@ def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig)
 def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigmoid_threshold_to_tps_passed = defaultdict(list)
-    sigmoid_threshold_to_num_passed = defaultdict(list)
-    sigmoid_threshold_to_decoys_passed = defaultdict(list)
-    sigmoid_threshold_to_tps_missed = defaultdict(list)
+    sigmoid_threshold_to_tps_passed = defaultdict(int)
+    sigmoid_threshold_to_num_passed = defaultdict(int)
+    sigmoid_threshold_to_decoys_passed = defaultdict(int)
+    sigmoid_threshold_to_tps_missed = defaultdict(int)
 
-    thresholds = range(10, 100, 1)[::-1]
+    thresholds = range(10, 101, 5)[::-1]
     thresholds = [t / 100 for t in thresholds]
 
     model = model.to(device)
@@ -161,8 +161,8 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
             labels = labels.squeeze().numpy()
             total_true_labels += np.count_nonzero(labels)
             sequence = sequence.to(device)
-            embeddings = model(sequence).squeeze().to('cpu')
-            scores = model.class_act(embeddings).numpy()
+            embeddings = model(sequence).squeeze()
+            scores = model.class_act(embeddings).to('cpu').numpy()
             thresholded_scores = scores
             for threshold in thresholds:
                 # could refactor, right?
@@ -170,15 +170,15 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
                 # from highest to lowest and keep updating thresholded scores
                 thresholded_scores[thresholded_scores >= threshold] = 1
                 # thresholded_scores[thresholded_scores < threshold] = 0 -> don't modify things below the threshold
-                true_positives = np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 1).astype(bool),
-                                                  axis=-1)
-                misses = np.count_nonzero((thresholded_scores != 1).astype(bool) & (labels == 1).astype(bool), axis=-1)
-                num_passed = np.count_nonzero(thresholded_scores == 1, axis=-1)
-                sigmoid_threshold_to_num_passed[threshold].extend(num_passed)
-                sigmoid_threshold_to_tps_missed[threshold].extend(misses)
-                sigmoid_threshold_to_tps_passed[threshold].extend(true_positives)
+                true_positives = np.sum(np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 1).astype(bool)))
+                misses = np.sum(np.count_nonzero((thresholded_scores != 1).astype(bool) & (labels == 1).astype(bool)))
+                num_passed = np.sum(np.count_nonzero(thresholded_scores == 1))
+                sigmoid_threshold_to_num_passed[threshold] += num_passed
+                sigmoid_threshold_to_tps_missed[threshold] += misses
+                sigmoid_threshold_to_tps_passed[threshold] += true_positives
+            print(i, len(test_dataset))
 
-        print('finished dataset')
+        print('finished real sequences dataset, starting on decoye')
 
         for sequence in decoy_dataset:
             sequence = sequence.to(device)
@@ -187,14 +187,14 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
             thresholded_scores = scores
             for threshold in thresholds:
                 thresholded_scores[thresholded_scores >= threshold] = 1
-                num_decoys_passed = np.count_nonzero(thresholded_scores == 1, axis=-1)
-                sigmoid_threshold_to_decoys_passed[threshold].extend(num_decoys_passed)
+                num_decoys_passed = np.sum(np.count_nonzero(thresholded_scores == 1))
+                sigmoid_threshold_to_decoys_passed[threshold] += num_decoys_passed
 
         fig, ax = plt.subplots(figsize=(13, 10))
 
-        sigmoid_threshold_to_tps_passed = {k: sum(v) for k, v in sigmoid_threshold_to_tps_passed.items()}
-        sigmoid_threshold_to_decoys_passed = {k: sum(v) for k, v in sigmoid_threshold_to_decoys_passed.items()}
-        sigmoid_threshold_to_num_passed = {k: sum(v) for k, v in sigmoid_threshold_to_num_passed.items()}
+        # sigmoid_threshold_to_tps_passed = {k: sum(v) for k, v in sigmoid_threshold_to_tps_passed.items()}
+        # sigmoid_threshold_to_decoys_passed = {k: sum(v) for k, v in sigmoid_threshold_to_decoys_passed.items()}
+        # sigmoid_threshold_to_num_passed = {k: sum(v) for k, v in sigmoid_threshold_to_num_passed.items()}
 
         ax.plot(thresholds, [s / total_true_labels for s in sigmoid_threshold_to_tps_passed.values()], 'ro-',
                 label='percent tps passed')
@@ -223,7 +223,10 @@ if __name__ == '__main__':
     pfam_id_to_class_code = hparams['class_code_mapping']
     class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
 
-    test_psd = ProteinSequenceDataset(test_files, pfam_id_to_class_code, evaluating=True)
+    test_psd = ProteinSequenceDataset(test_files,
+                                      pfam_id_to_class_code,
+                                      evaluating=True)
+
     decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
     test = torch.utils.data.DataLoader(test_psd,
                                        batch_size=args.batch_size,
