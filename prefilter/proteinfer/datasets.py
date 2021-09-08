@@ -5,16 +5,15 @@ import torch
 import numpy as np
 from collections import defaultdict
 
-import inference  # from proteinfer
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import inference
 
 __all__ = ['ProteinSequenceDataset',
            'SimpleSequenceEmbedder']
 
 GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
-if os.path.isfile(GSCC_SAVED_TF_MODEL_PATH):
+if os.path.isdir(GSCC_SAVED_TF_MODEL_PATH):
     inferrer = inference.Inferrer(
         GSCC_SAVED_TF_MODEL_PATH,
         use_tqdm=False,
@@ -22,7 +21,7 @@ if os.path.isfile(GSCC_SAVED_TF_MODEL_PATH):
         activation_type="pooled_representation"
     )
 else:
-    inferrer = lambda x: x
+    raise ValueError("no saved model found at {}".format(GSCC_SAVED_TF_MODEL_PATH))
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
@@ -47,7 +46,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
     @staticmethod
     def _encoding_func(x):
 
-        return x  # inferrer.get_activations([x.upper()])
+        return inferrer.get_activations([x.upper()])
 
     def _build_dataset(self):
 
@@ -237,7 +236,6 @@ if __name__ == '__main__':
     from glob import glob
 
     json_files = glob('/Users/mac/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
-    # json_files = glob('/home/tc229954/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
     dataset = ProteinSequenceDataset(json_files,
                                      sample_sequences_based_on_family_membership=True,
                                      sample_sequences_based_on_num_labels=True)
