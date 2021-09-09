@@ -1,16 +1,20 @@
 import json
 import os
+import pdb
 from random import shuffle, seed
 
 import numpy as np
 import torch
 
+import inference
+
+from prefilter.proteinfer.datasets import GSCC_SAVED_TF_MODEL_PATH
+
 seed(1)
 
-__all__ = ['get_n_classes',
-           'pad_word2vec_batch',
-           'encode_protein_as_one_hot_vector',
-           'pad_batch']
+__all__ = ['encode_protein_as_one_hot_vector',
+           'pad_batch',
+           'tf_saved_model_collate_fn']
 
 PROT_ALPHABET = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8,
                  'K': 9, 'L': 10, 'M': 11, 'N': 12, 'P': 13, 'Q': 14, 'R': 15, 'S': 16,
@@ -20,6 +24,7 @@ LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
 
 def _read_fasta(fasta, label, return_index=True):
+
     def _parse_line(line):
         idx = line.find('\n')
         family = line[:idx]
@@ -61,10 +66,10 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
 
 
 def read_sequences_from_json(json_file, fout=None):
-    '''
+    """
     json_file contains a dictionary of raw AA sequences mapped to their
     associated classes, classified by hmmsearch with an MSA of your choice.
-   
+
     Saves an json file mapping the Pfam accession ID reported by hmmsearch (this
     isn't general, since we're only working with Pfam-trained HMMs available on
     pfam.xfam.org) for easy lookup later on in the classification pipeline. This
@@ -74,7 +79,7 @@ def read_sequences_from_json(json_file, fout=None):
     second element and the list of hmmsearch determined labels as its first
     (there can be more than one if hmmsearch returns multiple good matches for
     an AA sequence).
-    '''
+    """
 
     with open(json_file, 'r') as f:
         sequence_to_label = json.load(f)
@@ -117,8 +122,8 @@ def read_sequences_from_json(json_file, fout=None):
 
 
 def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True):
-    ''' 
-    returns list of all sequences in the fasta files. 
+    """
+    returns list of all sequences in the fasta files.
     list is a list of two-element lists with the first element the class
     label and the second the protein sequence.
 
@@ -129,7 +134,7 @@ def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True
     does not take care of train/dev/val splits. This is trivially
     implemented.
 
-    '''
+    """
     name_to_label = {}
     cnt = 0
     sequences = []
@@ -154,17 +159,6 @@ def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True
     return sequences
 
 
-def get_n_classes(name_to_label_mapping):
-    with open(name_to_label_mapping, 'r') as f:
-        dct = json.load(f)
-    s = set()
-    for accession_id in dct.values():
-        s.add(accession_id)
-
-    n_classes = len(s)
-    return n_classes
-
-
 def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
@@ -180,52 +174,26 @@ def _pad_sequences(sequences):
 
 
 def pad_batch(batch):
-    targets = [b[0] for b in batch]
+    features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
-    targets, targets_mask = _pad_sequences(targets)
-    return targets, targets_mask, labels
+    features, features_mask = _pad_sequences(features)
+    return features, features_mask, torch.stack(labels)
 
 
-def pad_word2vec_batch_with_string(batch):
-    targets = [b[0] for b in batch]
-    contexts = [b[1] for b in batch]
-    positive_prots = [b[4] for b in batch]
-    context_prots = [b[5] for b in batch]
-    targets, targets_mask = _pad_sequences(targets)
-    contexts, contexts_mask = _pad_sequences(contexts)
-    negatives = []
-    negative_sequences = []
-    labels = []
+def tf_saved_model_collate_fn(batch_size):
 
-    for b in batch:
-        negatives.extend(b[2])
-        negative_sequences.extend(b[6])
-        labels.extend(b[3])
+    inferrer = inference.Inferrer(
+        GSCC_SAVED_TF_MODEL_PATH,
+        use_tqdm=False,
+        batch_size=batch_size,
+        activation_type="pooled_representation"
+    )
 
-    negatives, negatives_mask = _pad_sequences(negatives)
+    def fn(batch):
+        embeddings = inferrer.get_activations([b[0] for b in batch])
+        return torch.stack([torch.tensor(embedding) for embedding in embeddings]), torch.stack([b[1] for b in batch])
 
-    return (targets, targets_mask, contexts, contexts_mask, negatives,
-            negatives_mask, torch.stack(labels), positive_prots,
-            context_prots, negative_sequences)
-
-
-def pad_word2vec_batch(batch):
-    targets = [b[0] for b in batch]
-    contexts = [b[1] for b in batch]
-    targets, targets_mask = _pad_sequences(targets)
-    contexts, contexts_mask = _pad_sequences(contexts)
-    negatives = []
-    negative_sequences = []
-    labels = []
-
-    for b in batch:
-        negatives.extend(b[2])
-        labels.extend(b[3])
-
-    negatives, negatives_mask = _pad_sequences(negatives)
-
-    return (targets, targets_mask, contexts, contexts_mask, negatives,
-            negatives_mask, torch.stack(labels))
+    return fn
 
 
 if __name__ == '__main__':
