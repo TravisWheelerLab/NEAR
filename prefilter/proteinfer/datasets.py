@@ -5,6 +5,8 @@ import torch
 import numpy as np
 from collections import defaultdict
 
+from prefilter.utils import utils
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import inference
 
@@ -13,16 +15,6 @@ __all__ = ['ProteinSequenceDataset',
 
 GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
-if os.path.isdir(GSCC_SAVED_TF_MODEL_PATH):
-    inferrer = inference.Inferrer(
-        GSCC_SAVED_TF_MODEL_PATH,
-        use_tqdm=False,
-        batch_size=1,
-        activation_type="pooled_representation"
-    )
-else:
-    raise ValueError("no saved model found at {}".format(GSCC_SAVED_TF_MODEL_PATH))
-
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
@@ -30,23 +22,27 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                  existing_name_to_label_mapping=None,
                  sample_sequences_based_on_family_membership=False,
                  sample_sequences_based_on_num_labels=False,
+                 use_pretrained_model_embeddings=False,
                  evaluating=False):
 
         self.json_files = json_files
 
         if not len(self.json_files):
-            raise ValueError("no json files passed in")
+            raise ValueError("No json files found")
 
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
         self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
+        self.use_pretrained_model_embeddings = use_pretrained_model_embeddings
+
         self._build_dataset()
 
-    @staticmethod
-    def _encoding_func(x):
-
-        return inferrer.get_activations([x.upper()])
+    def _encoding_func(self, x):
+        if self.use_pretrained_model_embeddings:
+            return x.upper()
+        else:
+            return utils.encode_protein_as_one_hot_vector(x.upper())
 
     def _build_dataset(self):
 
@@ -131,7 +127,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             for family in self.families:
                 lengths_of_label_sets = list(map(lambda x: len(x[0]),
                                                  self.sequences_and_labels[self.family_to_indices[family]]))
-                x = np.asarray(lengths_of_label_sets)**4
+                x = np.asarray(lengths_of_label_sets) ** 4
                 self.family_to_sample_dist[family] = x / np.sum(x)
 
         if self.existing_name_to_label_mapping is not None and not self.evaluating:
@@ -223,10 +219,10 @@ class SimpleSequenceEmbedder(torch.utils.data.Dataset):
 
     @staticmethod
     def _encoding_func(x):
-        return inferrer.get_activations([x.upper()])
+        return x
 
     def __getitem__(self, idx):
-        return torch.tensor(self._encoding_func(self.sequences[idx]))
+        return self.sequences[idx], torch.tensor([0])
 
     def __len__(self):
         return len(self.sequences)
