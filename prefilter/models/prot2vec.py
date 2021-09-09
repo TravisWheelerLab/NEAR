@@ -1,65 +1,68 @@
-import torch
+import pdb
+
 import pytorch_lightning as pl
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import utils.datasets as datasets
-from utils.utils import pad_word2vec_batch
 
 __all__ = ['Prot2Vec']
 
 
 class ResidualBlock(nn.Module):
-    expansion = 1
 
-    def __init__(self, in_channels, out_channels,
-                 bottleneck_factor, kernel_size, stride=1):
+    def __init__(self,
+                 filters,
+                 resnet_bottleneck_factor,
+                 kernel_size,
+                 layer_index,
+                 first_dilated_layer,
+                 dilation_rate,
+                 stride=1):
 
         super(ResidualBlock, self).__init__()
 
-        out_channels = int(out_channels * bottleneck_factor)
-        self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.filters = filters
 
-        self.conv1 = nn.Conv1d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-            padding=1)
+        shifted_layer_index = layer_index - first_dilated_layer + 1
+        dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
+        self.num_bottleneck_units = math.floor(
+            resnet_bottleneck_factor * self.filters
+        )
+        self.bn1 = torch.nn.BatchNorm1d(self.filters)
+        # need to pad 'same', so output has the same size as input
+        # project down to a smaller number of self.filters with a larger kernel size
+        self.conv1 = torch.nn.Conv1d(self.filters,
+                                     self.num_bottleneck_units,
+                                     kernel_size=kernel_size,
+                                     dilation=dilation_rate,
+                                     padding='same')
 
-        self.bn1 = nn.BatchNorm1d(out_channels)
-
-        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size,
-                               stride=stride, padding=1)
-
-        self.bn2 = nn.BatchNorm1d(out_channels)
-
-        self.up_bottleneck = nn.Conv1d(out_channels,
-                                       int(out_channels / bottleneck_factor),
-                                       kernel_size=1, stride=1, padding=0)
-
-    def _masked_forward(self, x, mask):
-
-        x[mask.expand(-1, self.in_channels, -1)] = 0
-
-        out = self.conv1(x)
-        out[mask.expand(-1, self.out_channels, -1)] = 0
-        out = F.relu(self.bn1(out))
-
-        out[mask.expand(-1, self.out_channels, -1)] = 0
-        out = self.conv2(out)
-
-        out[mask.expand(-1, self.out_channels, -1)] = 0
-        out = F.relu(self.bn2(out))
-
-        out[mask.expand(-1, self.out_channels, -1)] = 0
-        out = self.up_bottleneck(out)
-
-        return out + x
+        self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
+        # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
+        # linear transformation) No padding needed sin
+        self.conv2 = torch.nn.Conv1d(self.num_bottleneck_units, self.filters, kernel_size=1,
+                                     dilation=1)
 
     def _forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.up_bottleneck(out)
-        return out + x
+        features = self.bn1(x)
+        features = torch.nn.functional.relu(features)
+        features = self.conv1(features)
+        features = self.bn2(features)
+        features = torch.nn.functional.relu(features)
+        features = self.conv2(features)
+        return features + x
+
+    def _masked_forward(self, x, mask):
+        features = self.bn1(x)
+        features = torch.nn.functional.relu(features)
+        features = self.conv1(features)
+        features[mask.expand(-1, self.num_bottleneck_units, -1)] = 0
+        features = self.bn2(features)
+        features = torch.nn.functional.relu(features)
+        features = self.conv2(features)
+        features[mask.expand(-1, self.filters, -1)] = 0
+        return features + x
 
     def forward(self, x, mask=None):
         if mask is None:
@@ -71,56 +74,39 @@ class ResidualBlock(nn.Module):
 class Prot2Vec(pl.LightningModule):
     """ 
     Convolutional network for protein family prediction.
-
     """
 
     def __init__(self,
+                 learning_rate,
                  res_block_n_filters,
                  vocab_size,
-                 pooling_layer_type,
                  res_block_kernel_size,
                  n_res_blocks,
                  res_bottleneck_factor,
-                 embedding_dim,
-                 loss_func,
-                 test_files,
-                 train_files,
-                 valid_files,
-                 normalize_output_embedding,
-                 max_sequence_length,
-                 initial_learning_rate,
-                 batch_size,
-                 num_workers,
-                 gamma,
-                 n_negative_samples,
-                 evaluating=False):
+                 dilation_rate,
+                 n_classes,
+                 schedule_lr,
+                 step_lr_step_size,
+                 step_lr_decay_factor,
+                 normalize_output_embedding=True):
 
         super().__init__()
-
+        self.learning_rate = learning_rate
         self.res_block_n_filters = res_block_n_filters
         self.vocab_size = vocab_size
-        self.pooling_layer_type = pooling_layer_type
         self.res_block_kernel_size = res_block_kernel_size
         self.n_res_blocks = n_res_blocks
         self.res_bottleneck_factor = res_bottleneck_factor
-        self.embedding_dim = embedding_dim
-        self.loss_func = loss_func
-        self.test_files = test_files
-        self.train_files = train_files
-        self.valid_files = valid_files
+        self.dilation_rate = dilation_rate
+        self.n_classes = n_classes
+        self.schedule_lr = schedule_lr
+        self.step_lr_step_size = step_lr_step_size
+        self.step_lr_decay_factor = step_lr_decay_factor
         self.normalize_output_embedding = normalize_output_embedding
-        self.max_sequence_length = max_sequence_length
-        self.initial_learning_rate = initial_learning_rate
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.gamma = gamma
-        self.n_negative_samples = n_negative_samples
-        self.evaluating = evaluating
-
-        if not self.evaluating:
-            self._create_datasets()
 
         self._setup_layers()
+
+        self.loss_func = torch.nn.BCEWithLogitsLoss()
 
         self.save_hyperparameters()
 
@@ -129,44 +115,21 @@ class Prot2Vec(pl.LightningModule):
         self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
                                       out_channels=self.res_block_n_filters,
                                       kernel_size=self.res_block_kernel_size,
-                                      padding=1)
+                                      padding='same')
 
-        self.bn1 = nn.BatchNorm1d(self.res_block_n_filters)
+        self.embedding_trunk = torch.nn.ModuleList()
 
-        self.dilated1 = nn.Conv1d(in_channels=self.res_block_n_filters,
-                                  out_channels=int(self.res_block_n_filters * self.res_bottleneck_factor),
-                                  kernel_size=self.res_block_kernel_size,
-                                  padding=1, stride=1)
+        for layer_index in range(self.n_res_blocks):
+            self.embedding_trunk.append(ResidualBlock(self.res_block_n_filters,
+                                                      self.res_bottleneck_factor,
+                                                      self.res_block_kernel_size,
+                                                      layer_index,
+                                                      1,
+                                                      self.dilation_rate))
 
-        self.bn2 = nn.BatchNorm1d(int(self.res_block_n_filters * self.res_bottleneck_factor))
-        self.bottleneck1 = nn.Conv1d(in_channels=int(self.res_block_n_filters * self.res_bottleneck_factor),
-                                     out_channels=self.res_block_n_filters,
-                                     kernel_size=1,
-                                     stride=1,
-                                     padding=0)
-
-        self.encoding_network = nn.ModuleList([])
-
-        for _ in range(self.n_res_blocks):
-            r = ResidualBlock(self.res_block_n_filters,
-                              self.res_block_n_filters,
-                              self.res_bottleneck_factor,
-                              self.res_block_kernel_size)
-
-            self.encoding_network.append(r)
-
-        if self.pooling_layer_type == 'max':
-            self.pool = nn.AdaptiveMaxPool1d(output_size=1)
-
-        elif self.pooling_layer_type == 'avg':
-            self.pool = nn.AdaptiveAvgPool1d(output_size=1)
-
-        else:
-            print(self.pooling_layer_type)
-            raise ValueError('pool type must be one of <max,avg>')
-
-        self.embedding = nn.Linear(self.res_block_n_filters, self.embedding_dim)
-        self.class_act = nn.Sigmoid()
+        self.classification_layer = torch.nn.Linear(self.res_block_n_filters,
+                                                    self.n_classes)
+        self.class_act = torch.nn.Sigmoid()
 
     def _masked_forward(self, x, mask):
         """
@@ -174,186 +137,72 @@ class Prot2Vec(pl.LightningModule):
         the features in any location that corresponds to padding in the input
         sequence 
         """
-
-        out = self.initial_conv(x)
-        out[mask.expand(-1, self.res_block_n_filters, -1)] = 0
-        x = F.relu(self.bn1(out))
+        x = self.initial_conv(x)
+        # TODO: Code errors when dilation_rate is too high. The error is
+        # unintelligible; figure out what's going on.
+        for layer in self.embedding_trunk:
+            x = layer(x, mask)
+        # re-zero regions
         x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
-        x = self.dilated1(x)
-        x[mask.expand(-1,
-                      int(self.res_block_n_filters * self.res_bottleneck_factor), -1)] = 0
-        x = F.relu(self.bn2(x))
-        x[mask.expand(-1,
-                      int(self.res_block_n_filters * self.res_bottleneck_factor), -1)] = 0
-        x = self.bottleneck1(x) + out
-        for layer in self.encoding_network:
-            x = layer(x, mask)  # takes care of masking in the function
-        x = self.pool(x)
-        x = self.embedding(x.squeeze())
-
-        return x
+        # and do an aggregation operation
+        # TODO: replace denominator of mean with the correct
+        # sequence length. Also add two learnable params:
+        # a power on the denominator and numerator
+        return x.mean(axis=-1)
 
     def _forward(self, x):
-        out = self.initial_conv(x)
-
-        x = F.relu(self.bn1(out))
-        x = self.dilated1(x)
-        x = F.relu(self.bn2(x))
-        x = self.bottleneck1(x) + out
-
-        for layer in self.encoding_network:
+        x = self.initial_conv(x)
+        for layer in self.embedding_trunk:
             x = layer(x)
-
-        x = self.pool(x)
-        x = self.embedding(x.squeeze())
-        return x
+        return x.mean(axis=1)
 
     def forward(self, x, mask=None):
-        """ Forward a batch of sequences through network.
-
-        Parameters
-        ----------
-        x : Tensor, shape (batch_size, sequence_len)
-            Sequence or batch of sequences to classify. Assumes they are
-            translated using a vocabulary. (See gen_amino_acid_vocab in
-            dataset.py)
-
-        Returns
-        -------
-        out : Tensor, shape (batch_size, n_classes)
-            Confidence of sequence(s) being in one of the n_classes.
-        """
         if mask is None:
             embeddings = self._forward(x)
         else:
             embeddings = self._masked_forward(x, mask)
 
+        classified = self.classification_layer(embeddings)
+
         if self.normalize_output_embedding:
-
-            return torch.nn.functional.normalize(embeddings, dim=-1, p=2)
-
+            return torch.nn.functional.normalize(classified, dim=-1, p=2)
         else:
+            return classified
 
-            return embeddings
-
-    def _get_dots(self, targets, targets_mask,
-                  in_context, in_context_mask,
-                  out_of_context,
-                  out_of_context_mask):
-
-        targets_embed = self.forward(targets, targets_mask)
-
-        context_embed = self.forward(in_context, in_context_mask)
-        negatives_embed = self.forward(out_of_context, out_of_context_mask)
-
-        negatives_embed = torch.reshape(negatives_embed, (self.batch_size,
-                                                          self.n_negative_samples, self.embedding_dim))
-
-        pos_dots = (targets_embed * context_embed).sum(axis=1).squeeze()
-        neg_dots = torch.bmm(negatives_embed, targets_embed.unsqueeze(2)).squeeze()
-        return pos_dots, neg_dots.ravel()
-
-    def _compute_loss_and_preds(self, batch):
-
-        targets, targets_mask, contexts, contexts_mask, negatives, \
-        negatives_mask, labels = batch
-
-        pos_dots, neg_dots = self._get_dots(targets, targets_mask,
-                                            contexts, contexts_mask,
-                                            negatives, negatives_mask)
-
-        logits = torch.cat((pos_dots, neg_dots), axis=0)
-        loss = self.loss_func(logits, labels.ravel())
-        preds = self.class_act(logits).ravel()
-
-        return loss, preds, labels, logits, pos_dots, neg_dots
+    def _loss_and_preds(self, batch):
+        features, masks, labels = batch
+        logits = self.forward(features, masks)
+        preds = torch.round(self.class_act(logits))
+        loss = self.loss_func(logits.ravel(), labels.ravel())
+        acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
+        return loss, preds, acc
 
     def training_step(self, batch, batch_idx):
-
-        loss, preds, labels, logits, pos_dots, neg_dots \
-            = self._compute_loss_and_preds(batch)
-        self.log('loss', loss.item())
-        self.log('accuracy', torch.sum(torch.round(preds.ravel()) ==
-                                       labels.ravel()) / torch.numel(preds))
-
+        loss, preds, acc = self._loss_and_preds(batch)
+        self.log('train_loss', loss, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-
-        loss, preds, labels, logits, pos_dots, neg_dots \
-            = self._compute_loss_and_preds(batch)
-
+        loss, preds, acc = self._loss_and_preds(batch)
+        self.log('val_loss', loss, on_step=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-
-        loss, preds, labels, logits, pos_dots, neg_dots \
-            = self._compute_loss_and_preds(batch)
-
+        loss, preds, acc = self._loss_and_preds(batch)
         return loss
 
-    # values returned by this func are stored over an epoch
-
-    def _create_datasets(self):
-
-        self.test_data = datasets.Word2VecStyleDataset(self.test_files,
-                                                       self.max_sequence_length,
-                                                       evaluating=False,
-                                                       n_negative_samples=self.n_negative_samples
-                                                       )
-
-        self.train_data = datasets.Word2VecStyleDataset(self.train_files,
-                                                        self.max_sequence_length,
-                                                        evaluating=False,
-                                                        n_negative_samples=self.n_negative_samples
-                                                        )
-
-        self.valid_data = datasets.Word2VecStyleDataset(self.valid_files,
-                                                        self.max_sequence_length,
-                                                        evaluating=False,
-                                                        n_negative_samples=self.n_negative_samples
-                                                        )
-
-    def train_dataloader(self):
-
-        return torch.utils.data.DataLoader(self.train_data,
-                                           batch_size=self.batch_size,
-                                           num_workers=self.num_workers,
-                                           drop_last=True,
-                                           collate_fn=pad_word2vec_batch)
-
-    def test_dataloader(self):
-
-        return torch.utils.data.DataLoader(self.test_data,
-                                           batch_size=self.batch_size,
-                                           num_workers=self.num_workers,
-                                           drop_last=True,
-                                           collate_fn=pad_word2vec_batch)
-
-    def val_dataloader(self):
-
-        return torch.utils.data.DataLoader(self.valid_data,
-                                           batch_size=self.batch_size,
-                                           num_workers=self.num_workers,
-                                           drop_last=True,
-                                           collate_fn=pad_word2vec_batch)
-
     def configure_optimizers(self):
+        if self.schedule_lr:
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+            return {'optimizer': optimizer,
+                    'lr_scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_lr_step_size,
+                                                                    gamma=self.step_lr_decay_factor)}
+        else:
+            return {'optimizer': torch.optim.Adam(self.parameters(),
+                                                  lr=self.learning_rate)}
 
-        optim = torch.optim.Adam(self.parameters(),
-                                 lr=self.initial_learning_rate)
-        return optim
 
-    def configure_optimizers_decay(self):
+if __name__ == '__main__':
+    model = Prot2Vec(1100, 23, 7, 5, 0.5, 5)
 
-        optim = torch.optim.Adam(self.parameters(),
-                                 lr=self.initial_learning_rate)
-        decay_steps = 4000
-
-        def lr_schedule(step):
-            x = self.initial_learning_rate * self.gamma ** int(step / decay_steps)
-            return x
-
-        mysched = torch.optim.lr_scheduler.LambdaLR(optim, lr_schedule)
-        sched = {'scheduler': mysched, 'interval': 'step'}
-        return [optim], [sched]
+    fake_data = torch.randn(1, 23, 152)
