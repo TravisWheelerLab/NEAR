@@ -40,7 +40,6 @@ class Model(pl.LightningModule):
         self.class_act = torch.nn.Sigmoid()
         # 1100 because that's the dimension of the Bileschi et al model's
         # embeddings.
-
         if self.fc2 == 0:
             self.forward_pass = torch.nn.Sequential(
                 torch.nn.Linear(1100, self.n_classes),

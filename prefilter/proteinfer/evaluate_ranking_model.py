@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from classification_model import Model
 from datasets import ProteinSequenceDataset, SimpleSequenceEmbedder
+from prefilter.utils.utils import tf_saved_model_collate_fn
 
 
 def parser():
@@ -37,6 +38,11 @@ def load_model(logs_dir, model_path):
 
     # always going to be false
     hparams['ranking'] = False
+    # hparams['learning_rate'] = False
+    # hparams['schedule_lr'] = False
+    # hparams['step_lr_step_size'] = False
+    # hparams['step_lr_decay_factor'] = False
+    # del hparams['initial_learning_rate']
     model = Model(**hparams)
     if os.path.splitext(model_path)[1] == '.ckpt':
         checkpoint = torch.load(model_path)
@@ -144,6 +150,7 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
     sigmoid_threshold_to_num_passed = defaultdict(int)
     sigmoid_threshold_to_decoys_passed = defaultdict(int)
     sigmoid_threshold_to_tps_missed = defaultdict(int)
+    sigmoid_threshold_to_fps_passed = defaultdict(int)
 
     thresholds = range(10, 101, 5)[::-1]
     thresholds = [t / 100 for t in thresholds]
@@ -171,16 +178,17 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
                 thresholded_scores[thresholded_scores >= threshold] = 1
                 # thresholded_scores[thresholded_scores < threshold] = 0 -> don't modify things below the threshold
                 true_positives = np.sum(np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 1).astype(bool)))
+                false_positives = np.sum(np.count_nonzero((thresholded_scores == 1).astype(bool) & (labels == 0).astype(bool)))
                 misses = np.sum(np.count_nonzero((thresholded_scores != 1).astype(bool) & (labels == 1).astype(bool)))
                 num_passed = np.sum(np.count_nonzero(thresholded_scores == 1))
                 sigmoid_threshold_to_num_passed[threshold] += num_passed
                 sigmoid_threshold_to_tps_missed[threshold] += misses
                 sigmoid_threshold_to_tps_passed[threshold] += true_positives
+                sigmoid_threshold_to_fps_passed[threshold] += false_positives
             print(i, len(test_dataset))
 
-        print('finished real sequences dataset, starting on decoye')
-
-        for sequence in decoy_dataset:
+        print('finished real sequences dataset, starting on decoys')
+        for sequence, _ in decoy_dataset:
             sequence = sequence.to(device)
             scores = model.class_act(model(sequence)).squeeze().to('cpu').numpy()
             total_decoys += sequence.shape[0]
@@ -197,7 +205,9 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
         # sigmoid_threshold_to_num_passed = {k: sum(v) for k, v in sigmoid_threshold_to_num_passed.items()}
 
         ax.plot(thresholds, [s / total_true_labels for s in sigmoid_threshold_to_tps_passed.values()], 'ro-',
-                label='percent tps passed')
+                label='percent tps recovered')
+        ax.plot(thresholds, [s / total_sequences for s in sigmoid_threshold_to_fps_passed.values()], 'go-',
+                label='mean fps passed per sequence')
         ax.plot(thresholds, [1 - (s / (total_sequences * 253)) for s in sigmoid_threshold_to_num_passed.values()],
                 'bo-', label='percent filtered')
         ax1 = ax.twinx()
@@ -225,16 +235,20 @@ if __name__ == '__main__':
 
     test_psd = ProteinSequenceDataset(test_files,
                                       pfam_id_to_class_code,
-                                      evaluating=True)
+                                      evaluating=True,
+                                      use_pretrained_model_embeddings=True)
 
     decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
+    collate_fn = tf_saved_model_collate_fn(args.batch_size)
     test = torch.utils.data.DataLoader(test_psd,
                                        batch_size=args.batch_size,
-                                       shuffle=False)
+                                       shuffle=False,
+                                       collate_fn=collate_fn)
 
     decoys = torch.utils.data.DataLoader(decoys,
                                          batch_size=args.batch_size,
-                                         shuffle=False)
+                                         shuffle=False,
+                                         collate_fn=collate_fn)
 
     ranking_figure_name = args.save_prefix + '_rankings.png'
     evaluation_figure_name = args.save_prefix + '_evaluated.png'
