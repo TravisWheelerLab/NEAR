@@ -1,9 +1,6 @@
-import tensorflow as tf
-
-gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.1)
-sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 import os
 import torch
+torch.multiprocessing.set_sharing_strategy('file_system')
 import pytorch_lightning as pl
 
 from glob import glob
@@ -11,6 +8,9 @@ from argparse import ArgumentParser
 
 from datasets import ProteinSequenceDataset
 from classification_model import Model
+from prefilter.models import Prot2Vec
+from prefilter.utils import pad_batch
+from prefilter.utils.utils import tf_saved_model_collate_fn, PROT_ALPHABET
 
 
 def parser():
@@ -32,17 +32,28 @@ def parser():
     ap.add_argument("--resample_families", action='store_true')
     ap.add_argument("--resample_based_on_num_labels", action='store_true')
     ap.add_argument("--tune_initial_lr", action='store_true')
-    ap.add_argument("--num-workers", type=int, default=16)
     ap.add_argument("--schedule_lr", action='store_true')
     ap.add_argument("--step_lr_step_size", type=int, default=None)
     ap.add_argument("--step_lr_decay_factor", type=float, default=None)
+    ap.add_argument("--train_from_scratch", action='store_true')
+    ap.add_argument("--res_block_n_filters", type=int, default=None)
+    ap.add_argument("--vocab_size", type=int, default=None)
+    ap.add_argument("--res_block_kernel_size", type=int, default=None)
+    ap.add_argument("--n_res_blocks", type=int, default=None)
+    ap.add_argument("--res_bottleneck_factor", type=float, default=None)
+    ap.add_argument("--dilation_rate", type=float, default=None)
     arguments = ap.parse_args()
     if arguments.schedule_lr and (arguments.step_lr_step_size is None or arguments.step_lr_decay_factor is None):
         ap.error('--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor')
+    if arguments.train_from_scratch:
+        # TODO: add error checking to make sure at least one of the
+        # arguments is filled out for prot2vec
+        pass
+
     return arguments
 
 
-def train(args):
+def main(args):
     log_dir = args.log_dir
     data_path = args.data_path
 
@@ -51,40 +62,73 @@ def train(args):
 
     train = ProteinSequenceDataset(train_files,
                                    sample_sequences_based_on_family_membership=args.resample_families,
-                                   sample_sequences_based_on_num_labels=args.resample_based_on_num_labels)
+                                   sample_sequences_based_on_num_labels=args.resample_based_on_num_labels,
+                                   use_pretrained_model_embeddings=not args.train_from_scratch)
 
     class_code_mapping_file = train.class_code_mapping
 
     # don't resample on test.
-    test = ProteinSequenceDataset(test_files, class_code_mapping_file)
+    test = ProteinSequenceDataset(test_files, class_code_mapping_file,
+                                  use_pretrained_model_embeddings=not args.train_from_scratch)
 
     train.n_classes = test.n_classes
     n_classes = test.n_classes
 
     class_code_mapping = test.name_to_class_code
+    if args.train_from_scratch:
 
-    test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
-                                       shuffle=False, drop_last=False,
-                                       num_workers=args.num_workers)
+        test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
+                                           shuffle=False, drop_last=False,
+                                           num_workers=args.num_workers,
+                                           collate_fn=pad_batch)
 
-    train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
-                                        shuffle=True, drop_last=True,
-                                        num_workers=args.num_workers)
+        train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
+                                            shuffle=True, drop_last=True,
+                                            num_workers=args.num_workers,
+                                            collate_fn=pad_batch)
 
-    model = Model(n_classes,
-                  args.layer_1_nodes,
-                  args.layer_2_nodes,
-                  test_files,
-                  train_files,
-                  class_code_mapping,
-                  args.learning_rate,
-                  args.batch_size,
-                  args.pos_weight,
-                  args.schedule_lr,
-                  args.step_lr_step_size,
-                  args.step_lr_decay_factor,
-                  ranking=False
-                  )
+        model = Prot2Vec(args.learning_rate,
+                         args.res_block_n_filters,
+                         len(PROT_ALPHABET),
+                         args.res_block_kernel_size,
+                         args.n_res_blocks,
+                         args.res_bottleneck_factor,
+                         args.dilation_rate,
+                         n_classes,
+                         args.schedule_lr,
+                         args.step_lr_step_size,
+                         args.step_lr_decay_factor)
+
+    else:
+
+        import tensorflow as tf
+        gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.5)
+        sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
+
+        collate_fn = tf_saved_model_collate_fn(args.batch_size)
+
+        test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
+                                           shuffle=False, drop_last=False,
+                                           num_workers=0,
+                                           collate_fn=collate_fn)
+
+        train = torch.utils.data.DataLoader(train, batch_size=args.batch_size,
+                                            shuffle=True, drop_last=True,
+                                            num_workers=0,
+                                            collate_fn=collate_fn)
+        model = Model(n_classes,
+                      args.layer_1_nodes,
+                      args.layer_2_nodes,
+                      test_files,
+                      train_files,
+                      class_code_mapping,
+                      args.learning_rate,
+                      args.batch_size,
+                      args.pos_weight,
+                      args.schedule_lr,
+                      args.step_lr_step_size,
+                      args.step_lr_decay_factor,
+                      ranking=False)
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor='val_loss',
@@ -98,7 +142,7 @@ def train(args):
             check_val_every_n_epoch=args.check_val_every_n_epoch,
             callbacks=[save_best],
             default_root_dir=log_dir,
-            auto_lr_find=True
+            auto_lr_find=True,
         )
         trainer.tune(model, train, test)
     else:
@@ -116,4 +160,4 @@ def train(args):
 
 
 if __name__ == '__main__':
-    train(parser())
+    main(parser())
