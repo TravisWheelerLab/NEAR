@@ -135,12 +135,14 @@ def main(args):
         filename='{epoch}-{val_loss:.5f}',
         save_top_k=5)
 
+    log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval='step')
+
     if args.tune_initial_lr:
         trainer = pl.Trainer(
             gpus=args.gpus,
             max_epochs=args.epochs,
             check_val_every_n_epoch=args.check_val_every_n_epoch,
-            callbacks=[save_best],
+            callbacks=[save_best, log_lr],
             default_root_dir=log_dir,
             auto_lr_find=True,
         )
@@ -150,7 +152,7 @@ def main(args):
             gpus=args.gpus,
             max_epochs=args.epochs,
             check_val_every_n_epoch=args.check_val_every_n_epoch,
-            callbacks=[save_best],
+            callbacks=[save_best, log_lr],
             default_root_dir=log_dir,
         )
 
