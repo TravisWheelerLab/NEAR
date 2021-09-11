@@ -180,6 +180,13 @@ def pad_batch(batch):
     return features, features_mask, torch.stack(labels)
 
 
+def stack_batch(batch):
+    """ replicates default collate_fn for API consistency """
+    features = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    return torch.stack(features), torch.stack(labels)
+
+
 def tf_saved_model_collate_fn(batch_size):
 
     inferrer = inference.Inferrer(
