@@ -1,4 +1,6 @@
 import os
+import pdb
+
 import torch
 import numpy as np
 import yaml
@@ -7,9 +9,10 @@ from argparse import ArgumentParser
 from glob import glob
 from collections import defaultdict
 
-from classification_model import Model
-from datasets import ProteinSequenceDataset, SimpleSequenceEmbedder
-from prefilter.utils.utils import tf_saved_model_collate_fn
+from prefilter.models import Prot2Vec
+from prefilter.models.classification_model import Model
+from datasets import ProteinSequenceDataset, SimpleSequenceIterator
+from prefilter.utils.utils import tf_saved_model_collate_fn, pad_batch, stack_batch
 
 
 def parser():
@@ -37,20 +40,18 @@ def load_model(logs_dir, model_path):
         hparams = yaml.safe_load(src)
 
     # always going to be false
-    hparams['ranking'] = False
-    # hparams['learning_rate'] = False
-    # hparams['schedule_lr'] = False
-    # hparams['step_lr_step_size'] = False
-    # hparams['step_lr_decay_factor'] = False
-    # del hparams['initial_learning_rate']
-    model = Model(**hparams)
+    if 'res_block_n_filters' in hparams:
+        model = Prot2Vec(**hparams)
+    else:
+        hparams['ranking'] = False
+        model = Model(**hparams)
     if os.path.splitext(model_path)[1] == '.ckpt':
         checkpoint = torch.load(model_path)
         state_dict = checkpoint['state_dict']
     else:
         state_dict = torch.load(model_path)
 
-    model.load_state_dict(state_dict)
+    success = model.load_state_dict(state_dict)
     model.eval()
     return model, hparams
 
@@ -163,12 +164,18 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
 
     with torch.no_grad():
 
-        for i, (sequence, labels) in enumerate(test_dataset):
+        for i, batch in enumerate(test_dataset):
+            if len(batch) == 3:
+                sequence, sequence_masks, labels = batch
+            else:
+                sequence, labels = batch
+                sequence_masks = None
+
             total_sequences += sequence.shape[0]
             labels = labels.squeeze().numpy()
             total_true_labels += np.count_nonzero(labels)
             sequence = sequence.to(device)
-            embeddings = model(sequence).squeeze()
+            embeddings = model(sequence, sequence_masks).squeeze()
             scores = model.class_act(embeddings).to('cpu').numpy()
             thresholded_scores = scores
             for threshold in thresholds:
@@ -188,9 +195,11 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
             print(i, len(test_dataset))
 
         print('finished real sequences dataset, starting on decoys')
+        # no padding b/c decoys are always the same length for now
         for sequence, _ in decoy_dataset:
-            sequence = sequence.to(device)
-            scores = model.class_act(model(sequence)).squeeze().to('cpu').numpy()
+            sequence = sequence.to(device).float()
+            embeddings = model(sequence)
+            scores = model.class_act(embeddings).squeeze().to('cpu').numpy()
             total_decoys += sequence.shape[0]
             thresholded_scores = scores
             for threshold in thresholds:
@@ -199,10 +208,6 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
                 sigmoid_threshold_to_decoys_passed[threshold] += num_decoys_passed
 
         fig, ax = plt.subplots(figsize=(13, 10))
-
-        # sigmoid_threshold_to_tps_passed = {k: sum(v) for k, v in sigmoid_threshold_to_tps_passed.items()}
-        # sigmoid_threshold_to_decoys_passed = {k: sum(v) for k, v in sigmoid_threshold_to_decoys_passed.items()}
-        # sigmoid_threshold_to_num_passed = {k: sum(v) for k, v in sigmoid_threshold_to_num_passed.items()}
 
         ax.plot(thresholds, [s / total_true_labels for s in sigmoid_threshold_to_tps_passed.values()], 'ro-',
                 label='percent tps recovered')
@@ -228,29 +233,36 @@ if __name__ == '__main__':
     args = parser()
 
     trained_model, hparams = load_model(args.logs_dir, model_path=args.model_path)
+
     test_files = hparams['test_files']
 
     pfam_id_to_class_code = hparams['class_code_mapping']
     class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
 
+    prot2vec = 'fc1' not in hparams
+
+    # TODO: need better ways of distinguishing b/t the two models
     test_psd = ProteinSequenceDataset(test_files,
                                       pfam_id_to_class_code,
                                       evaluating=True,
-                                      use_pretrained_model_embeddings=True)
+                                      use_pretrained_model_embeddings=not prot2vec)
 
-    decoys = SimpleSequenceEmbedder('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
-    collate_fn = tf_saved_model_collate_fn(args.batch_size)
+    decoys = SimpleSequenceIterator('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa',
+                                    one_hot_encode=prot2vec)
+
+    test_collate_fn = pad_batch if prot2vec else tf_saved_model_collate_fn(args.batch_size)
     test = torch.utils.data.DataLoader(test_psd,
                                        batch_size=args.batch_size,
                                        shuffle=False,
-                                       collate_fn=collate_fn)
+                                       collate_fn=test_collate_fn)
+
+    decoy_collate_fn = stack_batch if prot2vec else tf_saved_model_collate_fn(args.batch_size)
 
     decoys = torch.utils.data.DataLoader(decoys,
                                          batch_size=args.batch_size,
                                          shuffle=False,
-                                         collate_fn=collate_fn)
+                                         collate_fn=decoy_collate_fn)
 
     ranking_figure_name = args.save_prefix + '_rankings.png'
     evaluation_figure_name = args.save_prefix + '_evaluated.png'
-    # predict_all_sequences_and_rank(trained_model, test, decoys, ranking_figure_name)
     evaluate_model(trained_model, test, decoys, evaluation_figure_name)
