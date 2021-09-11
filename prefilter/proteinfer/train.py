@@ -7,7 +7,7 @@ from glob import glob
 from argparse import ArgumentParser
 
 from datasets import ProteinSequenceDataset
-from classification_model import Model
+from prefilter.models.classification_model import Model
 from prefilter.models import Prot2Vec
 from prefilter.utils import pad_batch
 from prefilter.utils.utils import tf_saved_model_collate_fn, PROT_ALPHABET
@@ -97,7 +97,11 @@ def main(args):
                          n_classes,
                          args.schedule_lr,
                          args.step_lr_step_size,
-                         args.step_lr_decay_factor)
+                         args.step_lr_decay_factor,
+                         test_files,
+                         train_files,
+                         class_code_mapping,
+                         args.batch_size)
 
     else:
 
