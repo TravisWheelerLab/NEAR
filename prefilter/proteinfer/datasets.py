@@ -207,22 +207,25 @@ def fasta_from_file(fasta_file):
     return sequence_labels, sequence_strs
 
 
-class SimpleSequenceEmbedder(torch.utils.data.Dataset):
+class SimpleSequenceIterator(torch.utils.data.Dataset):
 
-    def __init__(self, fasta_file):
+    def __init__(self, fasta_file, one_hot_encode=False):
         """
         takes a fasta file as input
         """
 
         self.fasta_file = fasta_file
         self.labels, self.sequences = fasta_from_file(fasta_file)
+        self.one_hot_encode = one_hot_encode
 
-    @staticmethod
-    def _encoding_func(x):
-        return x
+    def _encoding_func(self, x):
+        if self.one_hot_encode:
+            return torch.tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
+        else:
+            return x
 
     def __getitem__(self, idx):
-        return self.sequences[idx], torch.tensor([0])
+        return self._encoding_func(self.sequences[idx]), torch.tensor([0])
 
     def __len__(self):
         return len(self.sequences)
