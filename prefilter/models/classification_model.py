@@ -52,7 +52,7 @@ class Model(pl.LightningModule):
                 torch.nn.ReLU(),
                 torch.nn.Linear(fc2, self.n_classes))
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         return self.forward_pass(x)
 
     def _loss_and_preds(self, batch):

@@ -88,6 +88,11 @@ class Prot2Vec(pl.LightningModule):
                  schedule_lr,
                  step_lr_step_size,
                  step_lr_decay_factor,
+                 test_files,
+                 train_files,
+                 class_code_mapping,
+                 batch_size,
+                 pos_weight,
                  normalize_output_embedding=True):
 
         super().__init__()
@@ -103,10 +108,15 @@ class Prot2Vec(pl.LightningModule):
         self.step_lr_step_size = step_lr_step_size
         self.step_lr_decay_factor = step_lr_decay_factor
         self.normalize_output_embedding = normalize_output_embedding
+        self.train_files = train_files
+        self.test_files = test_files
+        self.class_code_mapping = class_code_mapping
+        self.pos_weight = pos_weight
 
         self._setup_layers()
 
         self.loss_func = torch.nn.BCEWithLogitsLoss()
+        self.class_act = torch.nn.Sigmoid()
 
         self.save_hyperparameters()
 
@@ -129,7 +139,6 @@ class Prot2Vec(pl.LightningModule):
 
         self.classification_layer = torch.nn.Linear(self.res_block_n_filters,
                                                     self.n_classes)
-        self.class_act = torch.nn.Sigmoid()
 
     def _masked_forward(self, x, mask):
         """
@@ -154,7 +163,7 @@ class Prot2Vec(pl.LightningModule):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        return x.mean(axis=1)
+        return x.mean(axis=-1)
 
     def forward(self, x, mask=None):
         if mask is None:
@@ -163,7 +172,6 @@ class Prot2Vec(pl.LightningModule):
             embeddings = self._masked_forward(x, mask)
 
         classified = self.classification_layer(embeddings)
-
         if self.normalize_output_embedding:
             return torch.nn.functional.normalize(classified, dim=-1, p=2)
         else:
