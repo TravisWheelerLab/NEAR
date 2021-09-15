@@ -96,6 +96,7 @@ class Prot2Vec(pl.LightningModule):
                  normalize_output_embedding=True):
 
         super().__init__()
+        self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.res_block_n_filters = res_block_n_filters
         self.vocab_size = vocab_size
@@ -206,8 +207,7 @@ class Prot2Vec(pl.LightningModule):
                     'lr_scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_lr_step_size,
                                                                     gamma=self.step_lr_decay_factor)}
         else:
-            return {'optimizer': torch.optim.Adam(self.parameters(),
-                                                  lr=self.learning_rate)}
+            return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
 
 if __name__ == '__main__':

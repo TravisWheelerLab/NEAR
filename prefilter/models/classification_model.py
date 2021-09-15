@@ -16,7 +16,7 @@ class Model(pl.LightningModule):
                  schedule_lr,
                  step_lr_step_size,
                  step_lr_decay_factor,
-                 pos_weight=1,
+                 pos_weight,
                  ranking=True
                  ):
         super(Model, self).__init__()
