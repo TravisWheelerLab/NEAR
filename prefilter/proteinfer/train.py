@@ -7,8 +7,7 @@ from glob import glob
 from argparse import ArgumentParser
 
 from datasets import ProteinSequenceDataset
-from prefilter.models.classification_model import Model
-from prefilter.models import Prot2Vec
+from prefilter.models import Model, Prot2Vec
 from prefilter.utils import pad_batch
 from prefilter.utils.utils import tf_saved_model_collate_fn, PROT_ALPHABET
 
@@ -87,24 +86,24 @@ def main(args):
                                             num_workers=args.num_workers,
                                             collate_fn=pad_batch)
 
-        model = Prot2Vec(args.learning_rate,
-                         args.res_block_n_filters,
-                         len(PROT_ALPHABET),
-                         args.res_block_kernel_size,
-                         args.n_res_blocks,
-                         args.res_bottleneck_factor,
-                         args.dilation_rate,
-                         n_classes,
-                         args.schedule_lr,
-                         args.step_lr_step_size,
-                         args.step_lr_decay_factor,
-                         test_files,
-                         train_files,
-                         class_code_mapping,
-                         args.batch_size)
+        model = Prot2Vec(learning_rate=args.learning_rate,
+                         res_block_n_filters=args.res_block_n_filters,
+                         vocab_size=len(PROT_ALPHABET),
+                         res_block_kernel_size=args.res_block_kernel_size,
+                         n_res_blocks=args.n_res_blocks,
+                         res_bottleneck_factor=args.res_bottleneck_factor,
+                         dilation_rate=args.dilation_rate,
+                         n_classes=n_classes,
+                         schedule_lr=args.schedule_lr,
+                         step_lr_step_size=args.step_lr_step_size,
+                         step_lr_decay_factor=args.step_lr_decay_factor,
+                         test_files=test_files,
+                         train_files=train_files,
+                         class_code_mapping=class_code_mapping,
+                         batch_size=args.batch_size,
+                         pos_weight=args.pos_weight)
 
     else:
-
         import tensorflow as tf
         gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.5)
         sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
@@ -120,18 +119,18 @@ def main(args):
                                             shuffle=True, drop_last=True,
                                             num_workers=0,
                                             collate_fn=collate_fn)
-        model = Model(n_classes,
-                      args.layer_1_nodes,
-                      args.layer_2_nodes,
-                      test_files,
-                      train_files,
-                      class_code_mapping,
-                      args.learning_rate,
-                      args.batch_size,
-                      args.pos_weight,
-                      args.schedule_lr,
-                      args.step_lr_step_size,
-                      args.step_lr_decay_factor,
+        model = Model(n_classes=n_classes,
+                      learning_rate=args.learning_rate,
+                      fc1=args.layer_1_nodes,
+                      fc2=args.layer_2_nodes,
+                      test_files=test_files,
+                      train_files=train_files,
+                      class_code_mapping=class_code_mapping,
+                      batch_size=args.batch_size,
+                      schedule_lr=args.schedule_lr,
+                      step_lr_step_size=args.step_lr_step_size,
+                      step_lr_decay_factor=args.step_lr_decay_factor,
+                      pos_weight=args.pos_weight,
                       ranking=False)
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
