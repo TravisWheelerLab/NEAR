@@ -10,7 +10,7 @@ import pandas as pd
 
 # W9XJ26_9EURO/7-77
 
-def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
+def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=True,
                                            evalue_threshold=None):
     """ingests a hmmer domtblout file"""
 
@@ -24,9 +24,20 @@ def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
     e_values = e_values[not_bad]
     sequence_name_to_family = defaultdict(list)
 
-    for name, family, e_value in zip(names, families, e_values):
-        if float(e_value) < evalue_threshold:
-            sequence_name_to_family[name].append(family)
+    if single_best_score:
+        min_evalue = np.inf
+        min_family_name = None
+        min_sequence_name = None
+        for name, family, e_value in zip(names, families, e_values):
+            if float(e_value) < min_evalue:
+                min_family_name = family
+                min_evalue = e_value
+                min_sequence_name = name
+        sequence_name_to_family[min_sequence_name].append(min_family_name)
+    else:
+        for name, family, e_value in zip(names, families, e_values):
+            if float(e_value) < evalue_threshold:
+                sequence_name_to_family[name].append(family)
 
     return sequence_name_to_family
 
