@@ -10,7 +10,7 @@ import pandas as pd
 
 # W9XJ26_9EURO/7-77
 
-def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=True,
+def convert_hmmer_domtblout_to_json_labels(fname, single_best_score=False,
                                            evalue_threshold=None):
     """ingests a hmmer domtblout file"""
 
