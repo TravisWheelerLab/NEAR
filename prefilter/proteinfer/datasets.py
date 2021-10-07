@@ -70,8 +70,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                 type(self.existing_name_to_labelmapping))
             raise ValueError(s)
 
-        len_before = len(self.name_to_class_code)
-
         self.family_to_indices = defaultdict(list)
 
         index_counter = 0
@@ -84,10 +82,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             for sequence, labelset in sequence_to_labels.items():
 
                 for label in labelset:
-                    # could also sort sequences and labels by label
-                    # and save start and offset per family, which would be much
-                    # better memory usage. For now I'll do this then
-                    # speed it up in a bit.
+
                     self.family_to_indices[label].append(index_counter)
 
                     if label not in self.name_to_class_code:
@@ -129,18 +124,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                                                  self.sequences_and_labels[self.family_to_indices[family]]))
                 x = np.asarray(lengths_of_label_sets) ** 4
                 self.family_to_sample_dist[family] = x / np.sum(x)
-
-        if self.existing_name_to_label_mapping is not None and not self.evaluating:
-            print('saving to existing name to label_mapping')
-            if len_before != len(self.name_to_class_code):
-                # TODO: fix error where existing name to label mapping could be a dictionary.
-                with open(self.existing_name_to_label_mapping, 'w') as dst:
-                    json.dump(self.name_to_class_code, dst)
-        else:
-            if len_before != len(self.name_to_class_code):
-                self.class_code_mapping = './pfam_names_to_class_id-{}.json'.format(time.time())
-                with open(self.class_code_mapping, 'w') as dst:
-                    json.dump(self.name_to_class_code, dst)
 
         self.n_classes = class_id + 1
 
