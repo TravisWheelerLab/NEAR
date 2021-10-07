@@ -116,8 +116,8 @@ class Prot2Vec(pl.LightningModule):
 
         self._setup_layers()
 
-        self.loss_func = torch.nn.BCEWithLogitsLoss()
-        self.class_act = torch.nn.Sigmoid()
+        self.loss_func = torch.nn.CrossEntropyLoss()
+        self.class_act = torch.nn.Softmax()
 
         self.save_hyperparameters()
 
@@ -182,7 +182,7 @@ class Prot2Vec(pl.LightningModule):
         features, masks, labels = batch
         logits = self.forward(features, masks)
         preds = torch.round(self.class_act(logits))
-        loss = self.loss_func(logits.ravel(), labels.ravel())
+        loss = self.loss_func(logits, labels.argmax(dim=-1))
         acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
         return loss, preds, acc
 
