@@ -8,13 +8,15 @@ import torch
 
 import inference
 
-from prefilter.proteinfer.datasets import GSCC_SAVED_TF_MODEL_PATH
+from .datasets import GSCC_SAVED_TF_MODEL_PATH
 
 seed(1)
 
 __all__ = ['encode_protein_as_one_hot_vector',
            'pad_batch',
-           'tf_saved_model_collate_fn']
+           'tf_saved_model_collate_fn',
+           'PROT_ALPHABET',
+           'LEN_PROTEIN_ALPHABET']
 
 PROT_ALPHABET = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8,
                  'K': 9, 'L': 10, 'M': 11, 'N': 12, 'P': 13, 'Q': 14, 'R': 15, 'S': 16,

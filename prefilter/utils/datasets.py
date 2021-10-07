@@ -5,13 +5,13 @@ import torch
 import numpy as np
 from collections import defaultdict
 
-from prefilter.utils import utils
+import utils as utils
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import inference
 
 __all__ = ['ProteinSequenceDataset',
-           'SimpleSequenceEmbedder']
+           'SimpleSequenceIterator']
 
 GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
