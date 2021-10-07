@@ -36,6 +36,6 @@ python train.py\
     --res_block_kernel_size 7\
     --res_bottleneck_factor 0.5\
     --n_res_blocks 5\
-    --dilation_rate 2\
-    --tune_initial_lr
+    --dilation_rate 2
+    # --tune_initial_lr
     # --schedule_lr\
