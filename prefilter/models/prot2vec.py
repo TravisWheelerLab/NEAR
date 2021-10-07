@@ -117,7 +117,7 @@ class Prot2Vec(pl.LightningModule):
         self._setup_layers()
 
         self.loss_func = torch.nn.CrossEntropyLoss()
-        self.class_act = torch.nn.Softmax()
+        self.class_act = torch.nn.Softmax(dim=-1)
 
         self.save_hyperparameters()
 
@@ -172,18 +172,20 @@ class Prot2Vec(pl.LightningModule):
         else:
             embeddings = self._masked_forward(x, mask)
 
-        classified = self.classification_layer(embeddings)
         if self.normalize_output_embedding:
-            return torch.nn.functional.normalize(classified, dim=-1, p=2)
-        else:
-            return classified
+            embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
+
+        classified = self.classification_layer(embeddings)
+
+        return classified
 
     def _loss_and_preds(self, batch):
         features, masks, labels = batch
         logits = self.forward(features, masks)
-        preds = torch.round(self.class_act(logits))
-        loss = self.loss_func(logits, labels.argmax(dim=-1))
-        acc = (torch.sum(preds == labels) / torch.numel(preds)).item()
+        preds = self.class_act(logits).argmax(dim=-1)
+        labels = labels.argmax(dim=-1)
+        loss = self.loss_func(logits, labels)
+        acc = (torch.sum(preds == labels) / torch.numel(preds))
         return loss, preds, acc
 
     def training_step(self, batch, batch_idx):

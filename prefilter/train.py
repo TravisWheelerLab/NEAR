@@ -6,10 +6,9 @@ import pytorch_lightning as pl
 from glob import glob
 from argparse import ArgumentParser
 
-from datasets import ProteinSequenceDataset
-from prefilter.models import Model, Prot2Vec
-from prefilter.utils import pad_batch
-from prefilter.utils.utils import tf_saved_model_collate_fn, PROT_ALPHABET
+from models import Model, Prot2Vec
+from utils import pad_batch
+from utils import tf_saved_model_collate_fn, PROT_ALPHABET, pad_batch, ProteinSequenceDataset
 
 
 def parser():
@@ -56,6 +55,9 @@ def main(args):
     log_dir = args.log_dir
     data_path = args.data_path
 
+    if '$HOME' in data_path:
+        data_path = data_path.replace("$HOME", os.environ['HOME'])
+
     train_files = glob(os.path.join(data_path, "*train*"))
     test_files = glob(os.path.join(data_path, "*test*"))
 
@@ -64,10 +66,10 @@ def main(args):
                                    sample_sequences_based_on_num_labels=args.resample_based_on_num_labels,
                                    use_pretrained_model_embeddings=not args.train_from_scratch)
 
-    class_code_mapping_file = train.class_code_mapping
 
     # don't resample on test.
-    test = ProteinSequenceDataset(test_files, class_code_mapping_file,
+    test = ProteinSequenceDataset(test_files,
+                                  existing_name_to_label_mapping=train.name_to_class_code,
                                   use_pretrained_model_embeddings=not args.train_from_scratch)
 
     train.n_classes = test.n_classes
@@ -75,7 +77,6 @@ def main(args):
 
     class_code_mapping = test.name_to_class_code
     if args.train_from_scratch:
-
         test = torch.utils.data.DataLoader(test, batch_size=args.batch_size,
                                            shuffle=False, drop_last=False,
                                            num_workers=args.num_workers,
@@ -102,7 +103,6 @@ def main(args):
                          class_code_mapping=class_code_mapping,
                          batch_size=args.batch_size,
                          pos_weight=args.pos_weight)
-        print('hello')
 
     else:
         import tensorflow as tf
@@ -158,7 +158,6 @@ def main(args):
             check_val_every_n_epoch=args.check_val_every_n_epoch,
             callbacks=[save_best, log_lr],
             default_root_dir=log_dir,
-            overfit_batches=1,
         )
 
     trainer.fit(model, train, test)
