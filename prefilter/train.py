@@ -1,7 +1,8 @@
 import os
 import torch
-torch.multiprocessing.set_sharing_strategy('file_system')
+
 import pytorch_lightning as pl
+from pytorch_lightning.plugins import DDPPlugin
 
 from glob import glob
 from argparse import ArgumentParser
@@ -65,7 +66,6 @@ def main(args):
                                    sample_sequences_based_on_family_membership=args.resample_families,
                                    sample_sequences_based_on_num_labels=args.resample_based_on_num_labels,
                                    use_pretrained_model_embeddings=not args.train_from_scratch)
-
 
     # don't resample on test.
     test = ProteinSequenceDataset(test_files,
@@ -141,23 +141,26 @@ def main(args):
 
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval='step')
 
+    trainer_kwargs = {
+        'gpus': args.gpus,
+        'max_epochs': args.epochs,
+        'check_val_every_n_epoch': args.check_val_every_n_epoch,
+        'callbacks': [save_best, log_lr],
+        'accelerator': 'ddp',
+        'plugins': DDPPlugin(find_unused_parameters=False),
+        'precision': 16,
+        'default_root_dir': log_dir
+    }
+
     if args.tune_initial_lr:
+        trainer_kwargs['auto_lr_find'] = True
         trainer = pl.Trainer(
-            gpus=args.gpus,
-            max_epochs=args.epochs,
-            check_val_every_n_epoch=args.check_val_every_n_epoch,
-            callbacks=[save_best, log_lr],
-            default_root_dir=log_dir,
-            auto_lr_find=True,
+            **trainer_kwargs
         )
         trainer.tune(model, train, test)
     else:
         trainer = pl.Trainer(
-            gpus=args.gpus,
-            max_epochs=args.epochs,
-            check_val_every_n_epoch=args.check_val_every_n_epoch,
-            callbacks=[save_best, log_lr],
-            default_root_dir=log_dir,
+            **trainer_kwargs
         )
 
     trainer.fit(model, train, test)
