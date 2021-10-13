@@ -3,8 +3,8 @@ import pdb
 import pytorch_lightning as pl
 import math
 import torch
+import torchmetrics
 import torch.nn as nn
-import torch.nn.functional as F
 
 __all__ = ['Prot2Vec']
 
@@ -118,6 +118,7 @@ class Prot2Vec(pl.LightningModule):
 
         self.loss_func = torch.nn.CrossEntropyLoss()
         self.class_act = torch.nn.Softmax(dim=-1)
+        self.accuracy = torchmetrics.Accuracy()
 
         self.save_hyperparameters()
 
@@ -179,27 +180,41 @@ class Prot2Vec(pl.LightningModule):
 
         return classified
 
-    def _loss_and_preds(self, batch):
+    def _calc_loss(self, batch):
         features, masks, labels = batch
         logits = self.forward(features, masks)
         preds = self.class_act(logits).argmax(dim=-1)
         labels = labels.argmax(dim=-1)
         loss = self.loss_func(logits, labels)
-        acc = (torch.sum(preds == labels) / torch.numel(preds))
-        return loss, preds, acc
+        acc = self.accuracy(preds, labels)
+        return loss, acc
 
     def training_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
-        self.log('train_loss', loss, on_step=True)
+        loss, acc = self._calc_loss(batch)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
-        self.log('val_loss', loss, on_step=True)
-        return loss
+        loss, acc = self._calc_loss(batch)
+        return {'val_loss': loss, 'val_acc': acc}
+
+    def training_epoch_end(self, outputs):
+        train_loss = self.all_gather([x['train_loss'] for x in outputs])
+        train_acc = self.all_gather([x['train_acc'] for x in outputs])
+        loss = torch.mean(torch.cat(train_loss, 0))
+        acc = torch.mean(torch.cat(train_acc, 0))
+        self.log('train_loss', loss)
+        self.log('train_acc', acc)
+
+    def validation_epoch_end(self, outputs):
+        val_loss = self.all_gather([x['val_loss'] for x in outputs])
+        val_acc = self.all_gather([x['val_acc'] for x in outputs])
+        loss = torch.mean(torch.cat(val_loss, 0))
+        acc = torch.mean(torch.cat(val_acc, 0))
+        self.log('val_loss', loss)
+        self.log('val_acc', acc)
 
     def test_step(self, batch, batch_idx):
-        loss, preds, acc = self._loss_and_preds(batch)
+        loss, acc = self._calc_loss(batch)
         return loss
 
     def configure_optimizers(self):
@@ -210,9 +225,3 @@ class Prot2Vec(pl.LightningModule):
                                                                     gamma=self.step_lr_decay_factor)}
         else:
             return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-
-
-if __name__ == '__main__':
-    model = Prot2Vec(1100, 23, 7, 5, 0.5, 5)
-
-    fake_data = torch.randn(1, 23, 152)
