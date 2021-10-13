@@ -1,6 +1,7 @@
 import os
+from pytorch_lightning import seed_everything
+seed_everything(1)
 import torch
-
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 
