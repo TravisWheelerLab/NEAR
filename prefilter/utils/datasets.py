@@ -134,11 +134,11 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             return len(self.sequences_and_labels)
 
     def _make_multi_hot(self, labels):
-        y = torch.zeros(self.n_classes)
+        y = np.zeros(self.n_classes)
         class_ids = [self.name_to_class_code[l] for l in labels]
         for idx in class_ids:
             y[idx] = 1
-        return y
+        return torch.as_tensor(y)
 
     def __getitem__(self, idx):
 
@@ -156,7 +156,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         x = self._encoding_func(features)
         y = self._make_multi_hot(labels)
-        return x, y
+        return torch.as_tensor(x), y
 
 
 def fasta_from_file(fasta_file):
@@ -203,12 +203,12 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
 
     def _encoding_func(self, x):
         if self.one_hot_encode:
-            return torch.tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
+            return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
         else:
             return x
 
     def __getitem__(self, idx):
-        return self._encoding_func(self.sequences[idx]), torch.tensor([0])
+        return self._encoding_func(self.sequences[idx]), torch.as_tensor([0])
 
     def __len__(self):
         return len(self.sequences)
