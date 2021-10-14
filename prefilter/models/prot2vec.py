@@ -191,14 +191,14 @@ class Prot2Vec(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, acc = self._calc_loss(batch)
-        return loss
+        return {'loss': loss, 'train_acc': acc}
 
     def validation_step(self, batch, batch_idx):
         loss, acc = self._calc_loss(batch)
         return {'val_loss': loss, 'val_acc': acc}
 
     def training_epoch_end(self, outputs):
-        train_loss = self.all_gather([x['train_loss'] for x in outputs])
+        train_loss = self.all_gather([x['loss'] for x in outputs])
         train_acc = self.all_gather([x['train_acc'] for x in outputs])
         loss = torch.mean(torch.cat(train_loss, 0))
         acc = torch.mean(torch.cat(train_acc, 0))

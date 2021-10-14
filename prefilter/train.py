@@ -17,6 +17,7 @@ def parser():
     ap = ArgumentParser()
     ap.add_argument("--log_dir", required=True)
     ap.add_argument("--gpus", type=int, required=True)
+    ap.add_argument("--num_nodes", type=int, required=True)
     ap.add_argument("--epochs", type=int, required=True)
     ap.add_argument("--layer_1_nodes", type=int, required=True)
     ap.add_argument("--layer_2_nodes", type=int, required=True)
@@ -144,6 +145,7 @@ def main(args):
 
     trainer_kwargs = {
         'gpus': args.gpus,
+        'num_nodes': args.num_nodes,
         'max_epochs': args.epochs,
         'check_val_every_n_epoch': args.check_val_every_n_epoch,
         'callbacks': [save_best, log_lr],
