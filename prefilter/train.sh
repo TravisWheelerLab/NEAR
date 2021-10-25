@@ -1,23 +1,21 @@
 #!/bin/bash
 
 #SBATCH --partition=wheeler_lab_gpu
-#SBATCH --job-name=model_from_scratch
+#SBATCH --job-name=model_from_scratch_compute-1-9
 #SBATCH --output=model_from_scratch
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
-#SBATCH --nodes=2
+#SBATCH --nodes=1
+#SBATCH -w compute-1-9
 
 source ~/anaconda/bin/activate
 conda activate tf15
 
 export NCCL_DEBUG=INFO
-export PL_TORCH_DISTRIBUTED_BACKEND=gloo
-
-echo "starting job"
 
 time srun python train.py\
     --gpus 4\
-    --num_nodes 2\
+    --num_nodes 1\
     --num_workers 8\
     --log_dir "$HOME"/model-from-scratch/small-medium-dataset/single-best/\
     --model_name model.pt\

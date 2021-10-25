@@ -14,6 +14,7 @@ seed(1)
 
 __all__ = ['encode_protein_as_one_hot_vector',
            'pad_batch',
+           'stack_batch',
            'tf_saved_model_collate_fn',
            'PROT_ALPHABET',
            'LEN_PROTEIN_ALPHABET']
