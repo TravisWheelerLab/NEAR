@@ -6,6 +6,8 @@ import torch
 import torchmetrics
 import torch.nn as nn
 
+from prefilter.models.base_model import BaseModel
+
 __all__ = ['Prot2Vec']
 
 
@@ -71,55 +73,36 @@ class ResidualBlock(nn.Module):
             return self._masked_forward(x, mask)
 
 
-class Prot2Vec(pl.LightningModule):
+class Prot2Vec(BaseModel):
     """ 
     Convolutional network for protein family prediction.
     """
 
     def __init__(self,
-                 learning_rate,
                  res_block_n_filters,
                  vocab_size,
                  res_block_kernel_size,
                  n_res_blocks,
                  res_bottleneck_factor,
                  dilation_rate,
-                 n_classes,
-                 schedule_lr,
-                 step_lr_step_size,
-                 step_lr_decay_factor,
-                 test_files,
-                 train_files,
-                 class_code_mapping,
-                 batch_size,
-                 pos_weight,
-                 normalize_output_embedding=True):
+                 normalize_output_embedding=True,
+                 **kwargs):
 
-        super().__init__()
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
+        super(Prot2Vec, self).__init__(**kwargs)
+
         self.res_block_n_filters = res_block_n_filters
         self.vocab_size = vocab_size
         self.res_block_kernel_size = res_block_kernel_size
         self.n_res_blocks = n_res_blocks
         self.res_bottleneck_factor = res_bottleneck_factor
         self.dilation_rate = dilation_rate
-        self.n_classes = n_classes
-        self.schedule_lr = schedule_lr
-        self.step_lr_step_size = step_lr_step_size
-        self.step_lr_decay_factor = step_lr_decay_factor
         self.normalize_output_embedding = normalize_output_embedding
-        self.train_files = train_files
-        self.test_files = test_files
-        self.class_code_mapping = class_code_mapping
-        self.pos_weight = pos_weight
-
-        self._setup_layers()
-
         self.loss_func = torch.nn.CrossEntropyLoss()
         self.class_act = torch.nn.Softmax(dim=-1)
         self.accuracy = torchmetrics.Accuracy()
 
+        self._create_datasets()
+        self._setup_layers()
         self.save_hyperparameters()
 
     def _setup_layers(self):
@@ -180,7 +163,7 @@ class Prot2Vec(pl.LightningModule):
 
         return classified
 
-    def _calc_loss(self, batch):
+    def _shared_step(self, batch):
         features, masks, labels = batch
         logits = self.forward(features, masks)
         preds = self.class_act(logits).argmax(dim=-1)
@@ -188,40 +171,3 @@ class Prot2Vec(pl.LightningModule):
         loss = self.loss_func(logits, labels)
         acc = self.accuracy(preds, labels)
         return loss, acc
-
-    def training_step(self, batch, batch_idx):
-        loss, acc = self._calc_loss(batch)
-        return {'loss': loss, 'train_acc': acc}
-
-    def validation_step(self, batch, batch_idx):
-        loss, acc = self._calc_loss(batch)
-        return {'val_loss': loss, 'val_acc': acc}
-
-    def training_epoch_end(self, outputs):
-        train_loss = self.all_gather([x['loss'] for x in outputs])
-        train_acc = self.all_gather([x['train_acc'] for x in outputs])
-        loss = torch.mean(torch.cat(train_loss, 0))
-        acc = torch.mean(torch.cat(train_acc, 0))
-        self.log('train_loss', loss)
-        self.log('train_acc', acc)
-
-    def validation_epoch_end(self, outputs):
-        val_loss = self.all_gather([x['val_loss'] for x in outputs])
-        val_acc = self.all_gather([x['val_acc'] for x in outputs])
-        loss = torch.mean(torch.cat(val_loss, 0))
-        acc = torch.mean(torch.cat(val_acc, 0))
-        self.log('val_loss', loss)
-        self.log('val_acc', acc)
-
-    def test_step(self, batch, batch_idx):
-        loss, acc = self._calc_loss(batch)
-        return loss
-
-    def configure_optimizers(self):
-        if self.schedule_lr:
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-            return {'optimizer': optimizer,
-                    'lr_scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_lr_step_size,
-                                                                    gamma=self.step_lr_decay_factor)}
-        else:
-            return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

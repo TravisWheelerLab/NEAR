@@ -1,13 +1,31 @@
 import pytorch_lightning as pl
+import prefilter.utils as utils
+import torch
+
+__all__ = ['BaseModel']
 
 
 class BaseModel(pl.LightningModule):
-    def __init__(self, args):
+    def __init__(self, **kwargs):
 
-        for k, v in args.items():
+        super().__init__()
+
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
-        self._setup_layers()
+    def _create_datasets(self):
+        # This will be shared between every model that I train.
+        self.train_dataset = utils.ProteinSequenceDataset(self.train_files,
+                                                          sample_sequences_based_on_family_membership=self.resample_families,
+                                                          sample_sequences_based_on_num_labels=self.resample_based_on_num_labels,
+                                                          use_pretrained_model_embeddings=not self.train_from_scratch)
+
+        self.val_dataset = utils.ProteinSequenceDataset(self.val_files,
+                                                        existing_name_to_label_mapping=self.train_dataset.name_to_class_code,
+                                                        use_pretrained_model_embeddings=not self.train_from_scratch)
+
+        self.class_code_mapping = self.val_dataset.name_to_class_code
+        self.n_classes = self.val_dataset.n_classes
 
     def _setup_layers(self):
         raise NotImplementedError(
@@ -26,20 +44,7 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError()
 
     def _shared_step(self, batch):
-
-        if len(batch) == 3:
-            x, x_mask, y = batch
-            logits = self.forward(x, x_mask)
-        else:
-            x, y = batch
-            logits = self.forward(x)
-
-        loss = torch.nn.functional.nll_loss(logits, y, ignore_index=MASK_CHARACTER)
-        preds = logits.argmax(dim=1)
-        preds = preds[y != MASK_CHARACTER]
-        labels = y[y != MASK_CHARACTER]
-        acc = self.accuracy(preds, labels)
-        return loss, acc
+        raise NotImplementedError()
 
     def training_step(self, batch, batch_nb):
         loss, acc = self._shared_step(batch)
@@ -49,14 +54,18 @@ class BaseModel(pl.LightningModule):
         loss, acc = self._shared_step(batch)
         return {"val_loss": loss, "val_acc": acc}
 
+    def test_step(self, batch, batch_idx):
+        loss, acc = self._shared_step(batch)
+        return loss
+
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": torch.optim.lr_scheduler.StepLR(
-                optimizer, step_size=150, gamma=0.5
-            ),
-        }
+        if self.schedule_lr:
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+            return {'optimizer': optimizer,
+                    'lr_scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_lr_step_size,
+                                                                    gamma=self.step_lr_decay_factor)}
+        else:
+            return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])
@@ -68,7 +77,7 @@ class BaseModel(pl.LightningModule):
         self.log("learning_rate", self.learning_rate)
 
     def on_train_start(self):
-        self.log("hp_metric", self.learning_rate + self.n_fft)
+        self.log("hp_metric", self.learning_rate)
 
     def validation_epoch_end(self, outputs):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
@@ -79,41 +88,23 @@ class BaseModel(pl.LightningModule):
         self.log("val_acc", val_acc)
 
     def train_dataloader(self):
-        train_dataset = SpectrogramDatasetMultiLabel(
-            self.train_files,
-            apply_log=self.log,
-            vertical_trim=self.vertical_trim,
-            bootstrap_sample=self.bootstrap,
-            mask_beginning_and_end=self.mask_beginning_and_end,
-            begin_mask=self.begin_mask,
-            end_mask=self.end_mask,
-        )
 
         train_loader = torch.utils.data.DataLoader(
-            train_dataset,
+            self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            collate_fn=None if self.batch_size == 1 else pad_batch,
+            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
         )
         return train_loader
 
     def val_dataloader(self):
-        val_dataset = SpectrogramDatasetMultiLabel(
-            self.val_files,
-            apply_log=self.log,
-            vertical_trim=self.vertical_trim,
-            bootstrap_sample=False,
-            mask_beginning_and_end=False,
-            begin_mask=None,
-            end_mask=None,
-        )
 
         val_loader = torch.utils.data.DataLoader(
-            val_dataset,
+            self.val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=None if self.batch_size == 1 else pad_batch,
+            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
         )
         return val_loader
