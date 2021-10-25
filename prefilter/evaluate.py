@@ -9,18 +9,10 @@ from argparse import ArgumentParser
 from glob import glob
 from collections import defaultdict
 
-from models import Prot2Vec
-from utils import ProteinSequenceDataset, SimpleSequenceIterator
-from utils import tf_saved_model_collate_fn, pad_batch, stack_batch
-
-
-def parser():
-    ap = ArgumentParser()
-    ap.add_argument("--save_prefix", required=True)
-    ap.add_argument("--logs_dir", required=True)
-    ap.add_argument("--model_path", default=None)
-    ap.add_argument("--batch_size", type=int, default=32)
-    return ap.parse_args()
+from .models import Prot2Vec
+# TODO: fix this in all files
+from .utils import ProteinSequenceDataset, SimpleSequenceIterator
+from .utils import pad_batch, stack_batch
 
 
 def load_model(logs_dir, model_path):
@@ -225,9 +217,7 @@ def evaluate_model(model, test_dataset, decoy_dataset, save_fig):
         plt.close()
 
 
-if __name__ == '__main__':
-    args = parser()
-
+def main(args):
     trained_model, hparams = load_model(args.logs_dir, model_path=args.model_path)
 
     test_files = hparams['test_files']
@@ -243,7 +233,7 @@ if __name__ == '__main__':
                                       evaluating=True,
                                       use_pretrained_model_embeddings=not prot2vec)
 
-    decoys = SimpleSequenceIterator('/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa',
+    decoys = SimpleSequenceIterator(args.decoy_path,
                                     one_hot_encode=prot2vec)
 
     test_collate_fn = pad_batch if prot2vec else tf_saved_model_collate_fn(args.batch_size)
@@ -259,6 +249,5 @@ if __name__ == '__main__':
                                          shuffle=False,
                                          collate_fn=decoy_collate_fn)
 
-    ranking_figure_name = args.save_prefix + '_rankings.png'
     evaluation_figure_name = args.save_prefix + '_evaluated.png'
     evaluate_model(trained_model, test, decoys, evaluation_figure_name)

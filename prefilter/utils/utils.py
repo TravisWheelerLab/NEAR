@@ -6,16 +6,13 @@ from random import shuffle, seed
 import numpy as np
 import torch
 
-import inference
-
-from .datasets import GSCC_SAVED_TF_MODEL_PATH
+from prefilter.utils.datasets import GSCC_SAVED_TF_MODEL_PATH
 
 seed(1)
 
 __all__ = ['encode_protein_as_one_hot_vector',
            'pad_batch',
            'stack_batch',
-           'tf_saved_model_collate_fn',
            'PROT_ALPHABET',
            'LEN_PROTEIN_ALPHABET']
 
@@ -188,22 +185,6 @@ def stack_batch(batch):
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     return torch.stack(features), torch.stack(labels)
-
-
-def tf_saved_model_collate_fn(batch_size):
-
-    inferrer = inference.Inferrer(
-        GSCC_SAVED_TF_MODEL_PATH,
-        use_tqdm=False,
-        batch_size=batch_size,
-        activation_type="pooled_representation"
-    )
-
-    def fn(batch):
-        embeddings = inferrer.get_activations([b[0] for b in batch])
-        return torch.stack([torch.tensor(embedding) for embedding in embeddings]), torch.stack([b[1] for b in batch])
-
-    return fn
 
 
 if __name__ == '__main__':

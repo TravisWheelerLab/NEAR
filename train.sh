@@ -13,8 +13,8 @@ conda activate tf15
 
 export NCCL_DEBUG=INFO
 
-time srun python train.py\
-    --gpus 4\
+time python -m prefilter train\
+    --gpus 1\
     --num_nodes 1\
     --num_workers 8\
     --log_dir "$HOME"/model-from-scratch/small-medium-dataset/single-best/\

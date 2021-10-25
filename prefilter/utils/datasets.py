@@ -5,10 +5,9 @@ import torch
 import numpy as np
 from collections import defaultdict
 
-import utils as utils
+import prefilter.utils as utils
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import inference
 
 __all__ = ['ProteinSequenceDataset',
            'SimpleSequenceIterator']
@@ -39,10 +38,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self._build_dataset()
 
     def _encoding_func(self, x):
-        if self.use_pretrained_model_embeddings:
-            return x.upper()
-        else:
-            return utils.encode_protein_as_one_hot_vector(x.upper())
+        return utils.encode_protein_as_one_hot_vector(x.upper())
 
     def _build_dataset(self):
 
