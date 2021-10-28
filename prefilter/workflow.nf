@@ -7,7 +7,6 @@ process makedirs {
     script:
     """
     mkdir -p ${params.out_path_fasta}/${params.pid}
-    mkdir -p ${params.out_path_json}/${params.pid}
     """
 }
 
@@ -42,10 +41,10 @@ process carbs_split {
     """
 }
 
-process to_json_train {
+process to_fasta_train {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_json}/${params.pid}"
+    publishDir = "${params.out_path_fasta}/${params.pid}"
 
     input:
         file train from train_fasta
@@ -55,21 +54,22 @@ process to_json_train {
 
     script:
     """
+    echo \$PATH
     domtblout_file=\$(echo ${train.baseName} | sed "s/${params.pid}-train/domtblout/g")
     domtblout_file=${params.domtblout_directory}/\$domtblout_file
     if [[ -f \$domtblout_file ]]
     then
-        bash convert_domtblout_to_json.sh ${train} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+        grep ">" $train | sed 's/>//g' | sed 's/ .*//g' | grep -f - \$domtblout_file | awk '{print \$1,\$4,\$5,\$7}' | label_fasta.py --fasta_file $train -
     else
         echo "couldn't find domtblout at \$domtblout_file $train"
     fi
     """
 }
 
-process to_json_test {
+process to_fasta_test {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_json}/${params.pid}"
+    publishDir = "${params.out_path_fasta}/${params.pid}"
 
     input:
         file test from test_fasta
@@ -83,17 +83,17 @@ process to_json_test {
     domtblout_file=${params.domtblout_directory}/\$domtblout_file
     if [[ -f \$domtblout_file ]]
     then
-        bash convert_domtblout_to_json.sh ${test} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+        grep ">" $test | sed 's/>//g' | sed 's/ .*//g' | grep -f - \$domtblout_file | awk '{print \$1,\$4,\$5,\$7}' | label_fasta.py --fasta_file $test -
     else
-        echo "couldn't find domtblout at \$domtblout_file"
+        echo "couldn't find domtblout at \$domtblout_file $test"
     fi
     """
 }
 
-process to_json_valid {
+process to_fasta_valid {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_json}"
+    publishDir = "${params.out_path_fasta}"
 
     input:
         file valid from valid_fasta
@@ -102,18 +102,14 @@ process to_json_valid {
         stdout result_valid
 
     script:
-    // if a valid file exists, it's always in the format {}.$pid-valid.fa. All I need to do is replace that with .domtblout.
     """
     domtblout_file=\$(echo ${valid.baseName} | sed "s/${params.pid}-valid/domtblout/g")
     domtblout_file=${params.domtblout_directory}/\$domtblout_file
     if [[ -f \$domtblout_file ]]
     then
-        bash convert_domtblout_to_json.sh ${valid} \$domtblout_file ${params.out_path_json}/${params.pid} ${params.evalue_threshold}
+        grep ">" $valid | sed 's/>//g' | sed 's/ .*//g' | grep -f - \$domtblout_file | awk '{print \$1,\$4,\$5,\$7}' | label_fasta.py --fasta_file $valid -
     else
-        echo "couldn't find domtblout at \$domtblout_file"
+        echo "couldn't find domtblout at \$domtblout_file $valid"
     fi
     """
 }
-// result_test.view{ it.trim() }
-// result_train.view{ it.trim() }
-// result_valid.view{ it.trim() }
