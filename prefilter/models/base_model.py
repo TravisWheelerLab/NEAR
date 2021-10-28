@@ -72,8 +72,8 @@ class BaseModel(pl.LightningModule):
         train_acc = self.all_gather([x["train_acc"] for x in outputs])
         loss = torch.mean(torch.stack(train_loss))
         acc = torch.mean(torch.stack(train_acc))
-        self.log("train_loss", loss)
-        self.log("train_acc", acc)
+        self.log("train/loss", loss)
+        self.log("train/acc", acc)
         self.log("learning_rate", self.learning_rate)
 
     def on_train_start(self):
@@ -84,8 +84,8 @@ class BaseModel(pl.LightningModule):
         val_acc = self.all_gather([x["val_acc"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
         val_acc = torch.mean(torch.stack(val_acc))
-        self.log("val_loss", val_loss)
-        self.log("val_acc", val_acc)
+        self.log("val/loss", val_loss)
+        self.log("val/acc", val_acc)
 
     def train_dataloader(self):
 

@@ -4,11 +4,12 @@ seed_everything(1)
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
+from pytorch_lightning.loggers import WandbLogger
 
 from glob import glob
 from argparse import ArgumentParser
 
-from .models import Model, Prot2Vec
+from .models import Prot2Vec
 from .utils import pad_batch
 from .utils import PROT_ALPHABET, pad_batch, ProteinSequenceDataset
 
@@ -53,8 +54,8 @@ def main(args):
                      **data_and_optimizer_kwargs)
 
     save_best = pl.callbacks.model_checkpoint.ModelCheckpoint(
-        monitor='val_loss',
-        filename='{epoch}-{val_loss:.5f}-{val_acc:.5f}',
+        monitor='val/loss',
+        filename='{epoch}-{val/loss:.5f}-{val/acc:.5f}',
         save_top_k=1)
 
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval='step')
@@ -69,7 +70,10 @@ def main(args):
         'plugins': DDPPlugin(find_unused_parameters=False),
         'precision': 16 if args.gpus else 32,
         'default_root_dir': log_dir,
-        'terminate_on_nan': True
+        'terminate_on_nan': True,
+        'logger': WandbLogger(save_dir=log_dir, log_model='all',
+                              project=args.project_name,
+                              )
     }
 
     if args.tune_initial_lr:
@@ -85,4 +89,7 @@ def main(args):
 
     trainer.fit(model)
 
-    torch.save(model.state_dict(), os.path.join(trainer.log_dir, args.model_name))
+    torch.save(model.state_dict(), os.path.join(trainer.logger.experiment.dir,
+               args.model_name))
+
+    trainer.validate()

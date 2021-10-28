@@ -10,24 +10,26 @@ import prefilter.utils as utils
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 __all__ = ['ProteinSequenceDataset',
-           'SimpleSequenceIterator']
+           'SimpleSequenceIterator',
+           'fasta_from_file',
+           'data_run']
 
 GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_files,
+    def __init__(self, fasta_files,
                  existing_name_to_label_mapping=None,
                  sample_sequences_based_on_family_membership=False,
                  sample_sequences_based_on_num_labels=False,
                  use_pretrained_model_embeddings=False,
                  evaluating=False):
 
-        self.json_files = json_files
+        self.fasta_files = fasta_files
 
-        if not len(self.json_files):
-            raise ValueError("No json files found")
+        if not len(self.fasta_files):
+            raise ValueError("No fasta files found")
 
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.evaluating = evaluating
@@ -70,10 +72,17 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         index_counter = 0
 
-        for j in self.json_files:
+        for f in self.fasta_files:
 
-            with open(j, 'r') as src:
-                sequence_to_labels = json.load(src)
+            with open(f, 'r') as src:
+                sequence_labels, sequences = fasta_from_file(f)
+
+            sequence_to_labels = defaultdict(list)
+
+            for sequence, labelstring in zip(sequences, sequence_labels):
+                labels = labelstring[labelstring.find("|")+1:].split(" ")
+                labels = list(filter(len, labels))
+                sequence_to_labels[sequence] = labels
 
             for sequence, labelset in sequence_to_labels.items():
 
@@ -210,13 +219,18 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         return len(self.sequences)
 
 
-if __name__ == '__main__':
+def data_run():
     from glob import glob
 
-    json_files = glob('/Users/mac/data/prefilter/small-dataset/related_families/json/0.5/*train.json')
-    dataset = ProteinSequenceDataset(json_files,
+    fasta_files = glob('/home/tc229954/tmp/*train*')
+
+    dataset = ProteinSequenceDataset(fasta_files,
                                      sample_sequences_based_on_family_membership=True,
                                      sample_sequences_based_on_num_labels=True)
     i = 0
     for i in range(len(dataset)):
         print(len(np.where(dataset[i][1] == 1)[0]))
+
+
+if __name__ == '__main__':
+    data_run()
