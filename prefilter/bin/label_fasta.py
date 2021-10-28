@@ -54,7 +54,7 @@ def main(args):
     name_to_label = _name_to_label(args.domtblout_labels)
     with open(args.fasta_file, 'w') as dst:
         for sequence_name, labels in name_to_label.items():
-            labels = sorted(labels, key=lambda x: x[1])
+            labels = sorted(labels, key=lambda x: float(x[1]))
             labels = list(filter(lambda x: float(x[1]) <= args.evalue_threshold, labels))
             # sort so the first label will be the one with the highest e-value
             try:
