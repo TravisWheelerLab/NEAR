@@ -1,6 +1,9 @@
 import pytorch_lightning as pl
 import prefilter.utils as utils
 import torch
+import wandb
+from wandb import Table
+from collections import defaultdict
 
 __all__ = ['BaseModel']
 
@@ -13,16 +16,33 @@ class BaseModel(pl.LightningModule):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
+        self.sigmoid_threshold_to_tps_passed = defaultdict(int)
+        self.sigmoid_threshold_to_num_passed = defaultdict(int)
+        self.sigmoid_threshold_to_decoys_passed = defaultdict(int)
+        self.sigmoid_threshold_to_tps_missed = defaultdict(int)
+        self.sigmoid_threshold_to_fps_passed = defaultdict(int)
+        self.thresholds = range(10, 101, 5)[::-1]
+        self.thresholds = [t / 100 for t in self.thresholds]
+        self.total_sequences = 0
+        self.total_true_labels = 0
+
     def _create_datasets(self):
         # This will be shared between every model that I train.
         self.train_dataset = utils.ProteinSequenceDataset(self.train_files,
+                                                          single_label=self.single_label,
                                                           sample_sequences_based_on_family_membership=self.resample_families,
                                                           sample_sequences_based_on_num_labels=self.resample_based_on_num_labels,
                                                           use_pretrained_model_embeddings=not self.train_from_scratch)
 
         self.val_dataset = utils.ProteinSequenceDataset(self.val_files,
+                                                        single_label=self.single_label,
                                                         existing_name_to_label_mapping=self.train_dataset.name_to_class_code,
                                                         use_pretrained_model_embeddings=not self.train_from_scratch)
+
+        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(self.val_files,
+                                                                  single_label=self.single_label,
+                                                                  existing_name_to_label_mapping=self.val_dataset.name_to_class_code,
+                                                                  use_pretrained_model_embeddings=not self.train_from_scratch)
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
         self.n_classes = self.val_dataset.n_classes
@@ -54,10 +74,6 @@ class BaseModel(pl.LightningModule):
         loss, acc = self._shared_step(batch)
         return {"val_loss": loss, "val_acc": acc}
 
-    def test_step(self, batch, batch_idx):
-        loss, acc = self._shared_step(batch)
-        return loss
-
     def configure_optimizers(self):
         if self.schedule_lr:
             optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -88,7 +104,6 @@ class BaseModel(pl.LightningModule):
         self.log("val/acc", val_acc)
 
     def train_dataloader(self):
-
         train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
@@ -99,7 +114,6 @@ class BaseModel(pl.LightningModule):
         return train_loader
 
     def val_dataloader(self):
-
         val_loader = torch.utils.data.DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
@@ -108,3 +122,53 @@ class BaseModel(pl.LightningModule):
             collate_fn=None if self.batch_size == 1 else utils.pad_batch,
         )
         return val_loader
+
+    def test_dataloader(self):
+        val_and_decoy_loader = torch.utils.data.DataLoader(
+            self.val_and_decoy_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
+        )
+        return val_and_decoy_loader
+
+    def on_test_epoch_end(self):
+        percent_tps_recovered = [[x, y / self.total_true_labels] for x, y in zip(self.thresholds,
+                                                                                 self.sigmoid_threshold_to_tps_passed.values())]
+        table = Table(data=percent_tps_recovered, columns=["threshold", "tps_recovered"])
+        self.logger.experiment.log({
+            "percent_tps_recovered": wandb.plot.line(table,
+                                                     "threshold",
+                                                     "tps_recovered",
+                                                     stroke=None,
+                                                     title="tps recovered")
+        })
+        mean_fps_per_sequence = [[x, y / self.total_sequences] for x, y in zip(self.thresholds,
+                                                                               self.sigmoid_threshold_to_fps_passed.values())]
+        table = Table(data=mean_fps_per_sequence, columns=["threshold", "fps_per_sequence"])
+        self.logger.experiment.log({
+            "fps_per_sequence": wandb.plot.line(table,
+                                                "threshold",
+                                                "fps_per_sequence",
+                                                stroke=None,
+                                                title="fps per sequence")
+        })
+
+    def test_step(self, batch, batch_nb):
+        features, masks, labels = batch
+        self.total_sequences += features.shape[0]
+        self.total_true_labels += torch.count_nonzero(labels)
+        logits = self.forward(features, masks)
+        scores = self.class_act(logits)
+        for threshold in self.thresholds:
+            scores[scores >= threshold] = 1
+            # TODO: do I need to include decoys?
+            true_positives = torch.sum(torch.count_nonzero((scores == 1).bool() & (labels == 1).bool()))
+            false_positives = torch.sum(torch.count_nonzero((scores == 1).bool() & (labels == 0).bool()))
+            misses = torch.sum(torch.count_nonzero((scores != 1).bool() & (labels == 1).bool()))
+            num_passed = torch.sum(torch.count_nonzero(scores == 1))
+            self.sigmoid_threshold_to_num_passed[threshold] += num_passed
+            self.sigmoid_threshold_to_tps_missed[threshold] += misses
+            self.sigmoid_threshold_to_tps_passed[threshold] += true_positives
+            self.sigmoid_threshold_to_fps_passed[threshold] += false_positives

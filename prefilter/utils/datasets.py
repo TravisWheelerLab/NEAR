@@ -20,6 +20,7 @@ GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_ra
 class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self, fasta_files,
+                 single_label=False,
                  existing_name_to_label_mapping=None,
                  sample_sequences_based_on_family_membership=False,
                  sample_sequences_based_on_num_labels=False,
@@ -32,6 +33,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             raise ValueError("No fasta files found")
 
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
+        self.single_label = single_label
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
         self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
@@ -82,6 +84,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             for sequence, labelstring in zip(sequences, sequence_labels):
                 labels = labelstring[labelstring.find("|")+1:].split(" ")
                 labels = list(filter(len, labels))
+                if len(labels) > 1 and self.single_label:
+                    labels = [labels[0]]
                 sequence_to_labels[sequence] = labels
 
             for sequence, labelset in sequence_to_labels.items():

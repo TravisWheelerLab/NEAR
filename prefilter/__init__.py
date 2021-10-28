@@ -21,6 +21,7 @@ def main():
     train_parser.add_argument("--check_val_every_n_epoch", type=int, required=True)
     train_parser.add_argument("--model_name", type=str, required=True)
     train_parser.add_argument("--data_path", type=str, required=True)
+    train_parser.add_argument("--decoy_path", type=str, required=True)
     train_parser.add_argument("--pos_weight", type=float, required=True)
     train_parser.add_argument("--resample_families", action='store_true')
     train_parser.add_argument("--resample_based_on_num_labels", action='store_true')
@@ -30,11 +31,13 @@ def main():
     train_parser.add_argument("--step_lr_decay_factor", type=float, default=None)
     train_parser.add_argument("--train_from_scratch", action='store_true')
     train_parser.add_argument("--res_block_n_filters", type=int, default=None)
+    train_parser.add_argument("--single_label", action='store_true')
     train_parser.add_argument("--vocab_size", type=int, default=None)
     train_parser.add_argument("--res_block_kernel_size", type=int, default=None)
     train_parser.add_argument("--n_res_blocks", type=int, default=None)
     train_parser.add_argument("--res_bottleneck_factor", type=float, default=None)
     train_parser.add_argument("--dilation_rate", type=float, default=None)
+    train_parser.add_argument("--project_name", type=str, default='prefilter')
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help='evaluate a model')
@@ -45,6 +48,8 @@ def main():
     eval_parser.add_argument("--decoy_path", type=str,
                              default='/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa')
 
+    data_parser = subparsers.add_parser("data", help='data runner')
+
     args = ap.parse_args()
     if args.subcmd == 'train':
         from .train import main
@@ -52,6 +57,9 @@ def main():
     elif args.subcmd == 'eval':
         from .evaluate import main
         main(args)
+    elif args.subcmd == 'data':
+        from .utils import data_run
+        data_run()
     else:
         ap.print_help()
         exit(1)
