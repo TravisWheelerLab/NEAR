@@ -1,6 +1,7 @@
 import os
 from pytorch_lightning import seed_everything
-seed_everything(1)
+from time import time
+seed_everything(int(time()) // 1000)
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
@@ -10,8 +11,7 @@ from glob import glob
 from argparse import ArgumentParser
 
 from .models import Prot2Vec
-from .utils import pad_batch
-from .utils import PROT_ALPHABET, pad_batch, ProteinSequenceDataset
+from .utils import PROT_ALPHABET
 
 
 def main(args):
@@ -29,12 +29,14 @@ def main(args):
         data_path = data_path.replace("$HOME", os.environ['HOME'])
 
     train_files = glob(os.path.join(data_path, "*train*"))
-    val_files = glob(os.path.join(data_path, "*test*"))
+    val_files = glob(os.path.join(data_path, "*valid*"))
+    decoy_files = glob(os.path.join(args.decoy_path, "*.fa"))
 
     data_and_optimizer_kwargs = {
         'learning_rate': args.learning_rate,
         'train_files': train_files,
         'val_files': val_files,
+        'decoy_files': decoy_files,
         'schedule_lr': args.schedule_lr,
         'step_lr_step_size': args.step_lr_step_size,
         'step_lr_decay_factor': args.step_lr_decay_factor,
@@ -42,7 +44,8 @@ def main(args):
         'resample_based_on_num_labels': args.resample_based_on_num_labels,
         'train_from_scratch': args.train_from_scratch,
         'batch_size': args.batch_size,
-        'num_workers': args.num_workers
+        'num_workers': args.num_workers,
+        'single_label': args.single_label
     }
 
     model = Prot2Vec(res_block_n_filters=args.res_block_n_filters,
@@ -88,8 +91,8 @@ def main(args):
         )
 
     trainer.fit(model)
+    # I use test as a handy override for doing things with the best model after training.
+    trainer.test(model)
 
     torch.save(model.state_dict(), os.path.join(trainer.logger.experiment.dir,
                args.model_name))
-
-    trainer.validate()

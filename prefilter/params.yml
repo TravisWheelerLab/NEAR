@@ -1,7 +1,10 @@
-pid: 0.5
-afas: "/Users/mac/data/prefilter/related_families/afa/*afa"
-afa_directory: "/Users/mac/data/prefilter/related_families/afa/"
-out_path_fasta: "/Users/mac/data/prefilter/related_families/fasta/"
-out_path_json: "/Users/mac/data/prefilter/related_families/json/"
-domtblout_directory: "/Users/mac/data/prefilter/pfam/"
+pid: 0.35
+afa: "/home/tc229954/data/prefilter/alignments_and_ddgm/all/*.afa"
+afa_directory: "/home/tc229954/data/prefilter/alignments_and_ddgm/all"
+out_path_fasta: "/home/tc229954/data/prefilter/clustered/"
+domtblout_directory: "/home/tc229954/data/prefilter/pfam/"
+fasta_path: "/home/tc229954/data/prefilter/alignments_and_ddgm/all/*train*"
 evalue_threshold: 1e-5
+augment_threshold: 100
+n_emissions: 1000
+

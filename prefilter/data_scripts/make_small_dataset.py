@@ -10,11 +10,13 @@ from argparse import ArgumentParser
 
 def parser():
     ap = ArgumentParser()
-    ap.add_argument('--clan-to-family-mapping', required=True)
-    ap.add_argument('--accession-id-to-name', required=True)
-    ap.add_argument('--afa-path', required=True)
+    ap.add_argument('--afa-path', required=True,
+                    help='where are the alignments stored?')
     ap.add_argument('--out-path', required=True)
-    ap.add_argument('--n-clans', type=int, default=100)
+    ap.add_argument('--clan-to-family-mapping', type=str, default='../resources/clan_id_to_pfam.txt')
+    ap.add_argument('--accession-id-to-name', type=str, default='../resources/clan_name_to_pfam.txt')
+    ap.add_argument('--n-sequences-per-family', type=int, required=True)
+    ap.add_argument('--fraction-of-families-in-clans', type=float, default=0.5)
 
     return ap.parse_args()
 
@@ -78,7 +80,12 @@ def copy_files(pfam_families, args):
             shutil.copyfile(ddgm_pth, out_ddgm)
 
         else:
-            print('either .ddgm or .afa does not exist for {} in {}'.format(family, args.afa_path))
+            if not os.path.isfile(afa_pth):
+                print('.afa does not exist for {} in {}'.format(family, args.afa_path))
+            elif not os.path.isfile(ddgm_pth):
+                print('.ddgm does not exist for {} in {}'.format(family, args.afa_path))
+            else:
+                pass
 
     return
 
@@ -90,14 +97,14 @@ def main(args):
     clan_to_regular_name = _make_clan_to_regular_name(clan_to_family, id_to_name)
 
     # choose n_clans clans
-    clans = np.random.choice(list(clan_to_regular_name.keys()), size=len(clan_to_regular_name) if args.n_clans > len(clan_to_regular_name) else args.n_clans, replace=False)
+    clans = np.random.choice(list(clan_to_regular_name.keys()), size=len(clan_to_regular_name) if args.n_clans > len(
+        clan_to_regular_name) else args.n_clans, replace=False)
 
     pfam_families = [family for c in clans for family in clan_to_regular_name[c]]  # flatten list
     copy_files(pfam_families, args)
 
 
 if __name__ == '__main__':
-
     parser_args = parser()
 
     main(parser_args)

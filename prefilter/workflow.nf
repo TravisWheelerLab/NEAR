@@ -1,42 +1,32 @@
 #!/usr/bin/env nextflow
 
-afas = Channel.fromPath(params.afas)
-
-process makedirs {
-
-    script:
-    """
-    mkdir -p ${params.out_path_fasta}/${params.pid}
-    """
-}
+afas = Channel.fromPath(params.afa)
 
 process carbs_split {
-
-    publishDir "${params.out_path_fasta}/${params.pid}"
 
     input:
         path afa from afas
 
     output:
-       // TODO: is there a better way of doing the below?
-       file '*train.fa*'  optional true into train_fasta
-       file '*valid.fa*'  optional true into valid_fasta
-       file '*test.fa*'  optional true into test_fasta
+       // TODO: is there a better way of handling the below?
+       path '*train.fa*'  optional true into train_fasta
+       path '*valid.fa*'  optional true into valid_fasta
+       path '*test.fa*'  optional true into test_fasta
 
     """
-    if [[ -f ${params.afa_directory}/${afa.baseName}.ddgm ]]
+    n_seq=\$(grep ">" ${afa} | wc -l)
+    if [[ \$n_seq > 1 ]]
     then
-        echo $afa
-        carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
-    else
-        n_seq=\$(grep ">" $params.afa_directory/${afa} | wc -l)
-        if [[ \$n_seq > 1 ]]
+        if [[ -f ${params.afa_directory}/${afa.baseName}.ddgm ]]
         then
-            carbs cluster $params.afa_directory/${afa} # run clustering if ddgm can't be found
             carbs split -T argument --split_test --output_path . ${params.afa_directory}/${afa} ${params.pid}
         else
-        echo "only 1 sequence in ${afa}"
+            carbs cluster ${afa} # run clustering if ddgm can't be found
+            carbs split -T argument --split_test --output_path . ${afa} ${params.pid}
         fi
+    else
+        echo "only 1 sequence in ${afa}"
+        cp ${afa} ${afa.baseName}.${params.pid}-train.fa
     fi
     """
 }
@@ -44,17 +34,16 @@ process carbs_split {
 process to_fasta_train {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_fasta}/${params.pid}"
+    publishDir "${params.out_path_fasta}/${params.pid}"
 
     input:
-        file train from train_fasta
+        path train from train_fasta
 
     output:
-        stdout result_train
+        path "*train*" into out
 
     script:
     """
-    echo \$PATH
     domtblout_file=\$(echo ${train.baseName} | sed "s/${params.pid}-train/domtblout/g")
     domtblout_file=${params.domtblout_directory}/\$domtblout_file
     if [[ -f \$domtblout_file ]]
@@ -69,10 +58,10 @@ process to_fasta_train {
 process to_fasta_test {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_fasta}/${params.pid}"
+    publishDir "${params.out_path_fasta}/${params.pid}"
 
     input:
-        file test from test_fasta
+        path test from test_fasta
 
     output:
         stdout result_test
@@ -93,10 +82,10 @@ process to_fasta_test {
 process to_fasta_valid {
 
     errorStrategy 'ignore'
-    publishDir = "${params.out_path_fasta}"
+    publishDir "${params.out_path_fasta}"
 
     input:
-        file valid from valid_fasta
+        path valid from valid_fasta
 
     output:
         stdout result_valid
