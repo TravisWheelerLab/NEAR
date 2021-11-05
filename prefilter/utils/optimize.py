@@ -2,51 +2,18 @@ import numpy as np
 from argparse import ArgumentParser
 
 def _parse_tunable_args(tuning_list):
-    float_values = ('b', 'begin', 'e', 'end', 's', 'step')
-    true_false_values = ('log', 'random')
-    if len(tuning_list) == 1:
-        # we've been given a single value for this param, tunable = False
-        return float(tuning_list[0])
 
-    var_to_arg = {'log': False,
-                  'random': False} # initialize with default
+    subparser = ArgumentParser()
+    subparser.add_argument('b', 'begin')
+    subparser.add_argument('e', 'end')
+    subparser.add_argument('l', 'log', action='store_true')
+    mutex = subparser.add_mutually_exclusive_group()
+    mutex.add_argument('s', 'step')
+    mutex.add_argument('r', 'random', action='store_true')
 
-    for arg in tuning_list:
-        if arg in true_false_values:
-            var_to_arg[arg] = True
-
-    for present_arg in var_to_arg:
-        try:
-            # try to remove true/false values from list since they were
-            # overwritten in the above for loop.
-            tuning_list.remove(present_arg)
-        except ValueError:
-            # if they aren't present in the tuning list, we'll fall back to
-            # defaults.
-            continue
-
-    parsed = 0
-    for float_value in float_values:
-        try:
-            idx = tuning_list.index(float_value)
-            var_to_arg[tuning_list[idx]] = tuning_list[idx+1]
-            parsed += 2
-        except ValueError:
-            continue
-
-    if parsed != len(tuning_list):
-        for present_arg, value in var_to_arg.items():
-            tuning_list.remove(present_arg)
-            tuning_list.remove(value)
-        raise ValueError(f'unrecognized arguments: {tuning_list}')
-
-    if var_to_arg['random'] and ('step', 's') in var_to_arg:
-        raise ValueError('cannot specify both random and a step value')
-
-    if len(var_to_arg) < 5 and not (('s', 'step') not in var_to_arg and var_to_arg['random']):
-        raise ValueError('must specify begin, end, and step or just enter 1 value')
-
-    return var_to_arg
+    command_specific_args = subparser.parse_known_args(tuning_list)
+    print(command_specific_args)
+    return command_specific_args
 
 
 def add_tunable_arg(argument_parser, name, type_default):
@@ -114,10 +81,8 @@ if __name__ == '__main__':
     add_tunable_arg(ap, 'n_fft', int)
     add_tunable_arg(ap, 'lr', float)
     args = ap.parse_args()
-    ap2 = ArgumentParser()
-    ap2.parse_known_args(args=['--frog', 'dog'])
-    # argument_dict = vars(args)
-    # argument_dict = {k: _parse_tunable_args(v) for k, v in argument_dict.items()}
+    argument_dict = vars(args)
+    argument_dict = {k: _parse_tunable_args(v) for k, v in argument_dict.items()}
     # print(argument_dict)
 
 
