@@ -20,30 +20,185 @@ def _parse_version(s):
     bs = os.path.splitext(os.path.basename(s))[0]
     return int(bs[bs.rfind('v') + 1:])
 
+class SlurmExperiment:
 
-class Experiment:
+    def __init__(self,
+                 experiment_dir,
+                 max_iter,
+                 experiment_id,
+                 **hparams):
 
-    def __init__(self, **kwargs):
-        self.params = {}
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-            # TODO: change this
-            self.params[k] = v
-        self.args = []
+        self.experiment_dir = experiment_dir
+        self.hparams = hparams
+        self.experiment_id = experiment_id
+        self.max_iter = max_iter
+        self.hparams['max_iter'] = max_iter
+        self.resubmit_cmd = None
+        self.slurm_jobid = None
+        os.makedirs(self.experiment_dir, exist_ok=True)
 
     def __str__(self):
-        for k, v in self.params.items():
-            self.args.append(f"--{k} {v}")
-        return ' '.join(self.args)
+        # TODO: this seems hacky for resubmitting
+        args = []
+        for k, v in self.hparams.items():
+            args.append(f"--{k} {v}")
+        args.append(f"--experiment_dir {self.experiment_dir}")
+        if self.resubmit_cmd is not None:
+            args.append(f"--{self.resubmit_cmd}")
+        return ' '.join(args)
 
     def __repr__(self):
         return str(self)
 
     def __setitem__(self, key, value):
-        self.params[key] = value
+        setattr(self, key, value)
 
     def __getitem__(self, key):
-        return self.params[key]
+        getattr(self, key)
+
+    def submit(self, hparams):
+        script_path = self._create_slurm_script(hparams)
+        self.slurm_jobid = subprocess.check_output(
+            f"sbatch --parsable {script_path}", shell=True
+        )
+        self.slurm_jobid = int(self.slurm_jobid)
+        return self.slurm_jobid
+
+    @property
+    def completed(self):
+        job_status = subprocess.check_output(
+            f"sacct --format State -u {os.environ['USER']} -j {self.slurm_jobid}".split()
+        )
+        job_status = job_status.decode('utf-8')
+        # TODO: will this always work?
+        return "COMPLETED" in job_status
+
+    def _create_slurm_script(self, hparams):
+        sub_commands = []
+
+        header = [
+            "#!/bin/bash\n",
+        ]
+        sub_commands.extend(header)
+
+        # make sure the entire logs are kept for resubmitting experiments
+        command = [
+            "#SBATCH --open-mode=append"
+        ]
+        sub_commands.extend(command)
+
+        self.job_name_with_version = f'{hparams.project_name}v{self.experiment_id}'
+        command = [
+            f"#SBATCH --job-name={self.job_name_with_version}\n"
+        ]
+        sub_commands.extend(command)
+
+        # set an outfile.
+        slurm_out_path = os.path.join(self.experiment_dir, 'slurm_out.out')
+        command = [
+            f"#SBATCH --output={slurm_out_path}\n"
+        ]
+        sub_commands.extend(command)
+
+        # add any slurm directives that the user specifies. No defaults are given.
+        for cmd in hparams.slurm_directives:
+            command = [
+                f"#SBATCH {cmd}\n",
+            ]
+            sub_commands.extend(command)
+
+        # add any commands necessary for running the training script.
+        for cmd in hparams.environment_commands:
+            command = [
+                f"{cmd}\n",
+            ]
+            sub_commands.extend(command)
+
+        # add commands to the experiment object that describe
+        # a) the supervisor directory
+        # b) the process PID
+        self['exp_id'] = "$SLURM_JOB_ID"
+
+        run_cmd = f"{hparams.run_command} {self}"
+
+        slurm_script = '\n'.join(sub_commands)
+        slurm_script += '\n' + run_cmd + '\n'
+
+        slurm_file = os.path.join(self.experiment_dir, 'slurm_script.sh')
+
+        with open(slurm_file, 'w') as dst:
+            dst.write(slurm_script)
+
+        return slurm_file
+
+
+class BashExperiment:
+
+    def __init__(self,
+                 experiment_dir,
+                 max_iter,
+                 **hparams):
+
+        self.experiment_dir = experiment_dir
+        self.hparams = hparams
+        self.max_iter = max_iter
+        self.hparams['max_iter'] = max_iter
+        self.resubmit_cmd = None
+
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        self.process = None
+
+    def __str__(self):
+        # TODO: this seems hacky?
+        args = []
+        for k, v in self.hparams.items():
+            args.append(f"--{k} {v}")
+        args.append(f"--experiment_dir {self.experiment_dir}")
+        if self.resubmit_cmd is not None:
+            args.append(f"--{self.resubmit_cmd}")
+        return ' '.join(args)
+
+    def __repr__(self):
+        return str(self)
+
+    def __setitem__(self, key, value):
+        setattr(self, key, value)
+
+    def __getitem__(self, key):
+        getattr(self, key)
+
+    def submit(self, hparams):
+        script_path = self._create_bash_script(hparams)
+        stdout_path = os.path.join(self.experiment_dir, 'log_file.stdout')
+        self.process = subprocess.Popen(
+            f"bash {script_path} >> {stdout_path} 2>&1", shell=True
+        )
+        return self.process.pid
+
+    def _create_bash_script(self, hparams):
+
+        sub_commands = []
+        header = [
+            "#!/bin/bash\n",
+        ]
+        sub_commands.extend(header)
+        # set an outfile.
+        for cmd in hparams.environment_commands:
+            command = [
+                f"{cmd}\n",
+            ]
+            sub_commands.extend(command)
+
+        run_cmd = f"{hparams.run_command} {self}"
+
+        bash_script = '\n'.join(sub_commands)
+        bash_script += '\n' + run_cmd + '\n'
+
+        bash_file = os.path.join(self.experiment_dir, 'submit_script.sh')
+        with open(bash_file, 'w') as dst:
+            dst.write(bash_script)
+
+        return bash_file
 
 
 class HyperRange:
@@ -164,11 +319,14 @@ class HPConf:
 
 class ExperimentGenerator:
 
-    def __init__(self, hparams):
+    def __init__(self, hparams: HPConf,
+                 experiment_type: str) -> None:
 
         self.statics = []
         self.stochastics = []
         self.uniform = []
+        self.hparams = hparams
+        self.experiment_type = experiment_type
 
         for hparam, setting in hparams.hparams.items():
             hrange = HyperRange(hparam, **setting)
@@ -202,7 +360,9 @@ class ExperimentGenerator:
 
                 self.experiments.append(param_dict)
 
-    def get_new_experiment(self):
+    def submit_new_experiment(self, experiment_dir, max_iter,
+                              experiment_id=None):
+
         if len(self.experiments) != 0:
             # grab a random set of uniform hparams if they are available
             base_params = self.experiments[int(np.random.rand() * len(self.experiments))]
@@ -210,20 +370,25 @@ class ExperimentGenerator:
             # if the user didn't specify any uniform hparams, just grab the statics
             base_params = self.base_parameter_set
 
-        # now add in the randomly generated hparams
+        # now add in the randomly generated hparam
         for stochastic in self.stochastics:
             base_params[stochastic.name] = stochastic.sample()
 
-        return Experiment(**base_params)
+        if self.experiment_type == 'slurm':
+            exp = SlurmExperiment(experiment_dir, max_iter, experiment_id, **base_params)
+        elif self.experiment_type == 'bash':
+            exp = BashExperiment(experiment_dir, max_iter, **base_params)
+        else:
+            raise ValueError(f"experiment type should be one of [bash,slurm], got {self.experiment_type}")
 
-    def __next__(self):
-        return self.get_new_set_of_hparams()
+        exp.submit(self.hparams)
+
+        return exp
 
     def __iter__(self):
         return self
 
     def generate_cartesian_prod_of_uniform_hparams(self):
-        # generate all combinations of hyperparameters
         if len(self.uniform):
             prod = list(itertools.product(*self.uniform))
             shuffle(prod)
@@ -248,245 +413,152 @@ def load_and_parse_logfile(file, num_iter):
 
 class CPUSupervisor:
 
-    def __init__(self, config_file):
-        self.hparams = HPConf(config_file)
-        self.experiments = ExperimentGenerator(self.hparams)
-        self.poll_interval = 1
+    def __init__(self, experiment_generator,
+                 project_directory,
+                 poll_interval=0.1):
+
+        self.poll_interval = poll_interval
         self.file_to_process = {}
+        self.project_directory = project_directory
+        self.experiment_generator = experiment_generator
+        self.running_experiments = []
+        self.experiment_id = 0
 
-        t = str(int(time.time()))
+    def submit_new_experiment(self, experiment_directory, max_iter):
 
-        self.supervisor_dir = os.path.join(self.hparams.logs_dir, "run_" + t, 'supervisor')
-        self.script_dir = os.path.join(self.hparams.logs_dir, "run_" + t, 'scripts')
-        self.stdout_dir = os.path.join(self.hparams.logs_dir, "run_" + t, 'stdout')
+        experiment_dir = os.path.join(self.project_directory, experiment_directory,
+                                      f"exp_{self.experiment_id}")
 
-        os.makedirs(self.supervisor_dir, exist_ok=True)
-        os.makedirs(self.script_dir, exist_ok=True)
-        os.makedirs(self.stdout_dir, exist_ok=True)
+        exp = self.experiment_generator.submit_new_experiment(experiment_dir,
+                                                              max_iter=max_iter)
+        self.experiment_id += 1
+        self.running_experiments.append(exp)
 
-    def submit_experiment(self, exp, exp_num):
-        script_path = self._create_bash_script(self.hparams, exp, exp_num)
-        stdout_path = os.path.join(self.stdout_dir, exp['exp_id'] + '.stdout')
-        result = subprocess.Popen(
-            f"bash {script_path} >> {stdout_path} 2>&1", shell=True
-        )
-        self.file_to_process[os.path.splitext(os.path.basename(script_path))[0]] = result
-        return result.pid
-
-    def _create_bash_script(self, hparams, exp, exp_num):
-        sub_commands = []
-
-        header = [
-            "#!/bin/bash\n",
-        ]
-        sub_commands.extend(header)
-        # set an outfile.
-        for cmd in hparams.environment_commands:
-            command = [
-                f"{cmd}\n",
-            ]
-            sub_commands.extend(command)
-
-        job_with_version = f"{hparams.project_name}v{exp_num}"
-
-        exp['supervisor_dir'] = self.supervisor_dir
-        exp['exp_id'] = job_with_version
-
-        run_cmd = f"{hparams.run_command} {exp}"
-
-        bash_script = '\n'.join(sub_commands)
-        bash_script += '\n' + run_cmd + '\n'
-        bash_file = self.write_bash_script_to_file(bash_script, job_with_version)
-
-        return bash_file
-
-    def get_new_experiment(self):
-        return self.experiments.get_new_experiment()
-
-    def write_bash_script_to_file(self, script, job_with_version):
-        fout = os.path.join(self.script_dir, f'{job_with_version}.sh')
-        with open(fout, 'w') as dst:
-            dst.write(script)
-        return fout
-
-    def supervise(self, num_iters, n_lowest_to_terminate):
-
-        trials = self.get_valid_experiments(self.supervisor_dir)
-        losses = list(map(lambda x: x is None, [load_and_parse_logfile(t, num_iters) for t in trials]))
-
-        # there's got to be a better way to handle this
-        if len(losses) != 0 and np.any(losses):
-            trials = []
-
-        while len(trials) < len(self.file_to_process):
-
-            trials = self.get_valid_experiments(self.supervisor_dir)
-            # if the trial is valid (i.e. it's one that hasn't been canceled)
-            # we need to check if it's still running. If it's terminated on its own,
-            # we need to remove it from self.file_to_process since it doesn't
-
-            losses = list(map(lambda x: x is None, [load_and_parse_logfile(t, num_iters) for t in trials]))
-            bad = [i for i, x in enumerate(losses) if x]
-            bad_trials = [trials[i] for i in bad]
-
-            for trial in bad_trials:
-                bs = os.path.splitext(os.path.basename(trial))[0]
-                pid = self.file_to_process[bs].pid
-                proc = psutil.Process(pid)
-                if proc.status() == 'zombie':
-                    del self.file_to_process[bs]
-
-            if np.any(losses):
-                trials = []
-
+    def watch_experiments(self, n_best_to_keep):
+        while True:
+            finished = 0
+            for experiment in self.running_experiments:
+                poll = experiment.process.poll()
+                if poll is not None:
+                    finished += 1
             time.sleep(self.poll_interval)
+            if finished == len(self.running_experiments):
+                print("Hyperband loop finished. Culling poorly-performing experiments.")
+                break
 
-        candidates_for_termination = []
-        for trial in trials:
-            loss = load_and_parse_logfile(trial, num_iters)
-            trial_to_loss = {'trial_file': trial, 'loss': loss}
-            candidates_for_termination.append(trial_to_loss)
+        losses = []
+        for experiment in self.running_experiments:
+            log_path = os.path.join(experiment.experiment_dir, 'checkpoint.txt')
+            with open(log_path, 'r') as src:
+                step, loss = src.read().split(":")
+            losses.append(float(loss))
 
-        candidates_for_termination = sorted(candidates_for_termination, key=lambda x: x['loss'])
+        indices = np.argsort(losses)  # smallest metric first
+        self.running_experiments = [self.running_experiments[i] for i in indices[0:n_best_to_keep]]
 
-        for exp in candidates_for_termination[-n_lowest_to_terminate:]:
-            basename = os.path.splitext(os.path.basename(exp['trial_file']))[0]
-            if basename in self.file_to_process:
-                pid = self.file_to_process[basename].pid
-                os.kill(pid, signal.SIGTERM)
-                os.remove(exp['trial_file'])
-                del self.file_to_process[basename]
-                print(f"terminated experiment {basename} (pid {pid}) with loss {exp['loss']}")
-            else:
-                print(f"couldnt find {exp['version']} // did you kill it?")
+    def resubmit_experiments(self, max_iter):
+        for experiment in self.running_experiments:
+            experiment.max_iter = max_iter
+            experiment.resubmit_cmd = 'load_from_ckpt'
+            # TODO.. fix this.
+            experiment.submit(self.experiment_generator.hparams)
 
-    def get_valid_experiments(self, supervisor_dir):
-        trials = glob(os.path.join(supervisor_dir, "*"))
-        valid_trials = []
-        for trial in trials:
-            if os.path.splitext(os.path.basename(trial))[0] in self.file_to_process:
-                valid_trials.append(trial)
-        return valid_trials
+def _many_or_one(x):
+    return "iteration" if x == 1 else "iterations"
 
 
 def hyperband(supervisor):
-
     max_iter = 100  # maximum iterations / epochs per configuration
     eta = 3  # defines downsampling rate (default=3)
     logeta = lambda x: np.log(x) / np.log(eta)
     s_max = int(logeta(max_iter))  # number of unique executions of Successive Halving (minus one)
     B = (s_max + 1) * max_iter  # total number of iterations (without reuse) per execution of Succesive Halving (n,r)
-    for s in reversed(range(s_max + 1)):
-        n = int(np.ceil(int(B / max_iter / (s + 1)) * eta ** s))  # initial number of configurations
-        r = max_iter * eta ** (-s)  # initial number of iterations to run configurations for
-        print(f"iteration {s_max - s} of HyperBand outside loop, submitting {n} experiments")
-        j = 0
-        while j < n:
-            exp = supervisor.get_new_experiment()
-            supervisor.submit_experiment(exp, exp_num=j)
-            j += 1
 
+    for s in reversed(range(s_max + 1)):
+        n = int(np.ceil(B / max_iter / (s + 1)) * eta ** s)  # initial number of configurations
+        r = int(max_iter * eta ** (-s))  # initial number of iterations to run configurations for
+        print(f"iteration {s_max - s} of HyperBand outside loop, submitting {n} experiments,"
+              f" each running for {r} " + _many_or_one(r))
+
+        loop_directory = f"{s}_{n}_{r}"
+        # the supervisor has a project directory and each outer loop
+        # of hyperband has a subdirectory. Each experiment in each outer
+        # loop has its own directory
+        first = True
         for i in range(s + 1):
-            n_i = n * eta ** (-i)
-            r_i = r * eta ** i
-            print(f"iteration {i} of HyperBand inside loop, throwing out {int(n_i / eta)}, running for {int(r_i)} steps")
-            supervisor.supervise(num_iters=int(r_i),
-                                 n_lowest_to_terminate=int(n_i / eta))
+            n_i = int(n * eta ** (-i))  # submit N experiments
+            r_i = int(r * eta ** i)  # and run for R iterations.
+            if first:
+                for _ in range(n_i):
+                    supervisor.submit_new_experiment(experiment_directory=loop_directory,
+                                                     max_iter=r_i)
+                first = False
+            else:
+                supervisor.resubmit_experiments(max_iter=r_i)
+            # this is a blocking method. It'll monitor whether or not the experiments are done.
+            # When they are done, it'll resubmit the best-performing ones.
+            supervisor.watch_experiments(n_best_to_keep=int(n_i / eta))
+            print(f"Hyperband inner loop {i} finished. Keeping {int(n_i / eta)} experiments.")
 
 
 class SlurmSupervisor:
 
-    def __init__(self, config_file):
-        self.hparams = HPConf(config_file)
-        self.experiments = _generate_experiments(self.hparams.hparams, self.hparams.n_trials)
+    def __init__(self, experiment_generator,
+                 project_directory,
+                 poll_interval=0.1):
 
-    def submit_experiment(self, exp, exp_num):
-        script_path = self._create_slurm_script(self.hparams, exp, exp_num)
-        result = subprocess.Popen(
-            f"sbatch {script_path}".split(), shell=True
-        )
-        return result
+        self.poll_interval = poll_interval
+        self.file_to_process = {}
+        self.project_directory = project_directory
+        self.experiment_generator = experiment_generator
+        self.running_experiments = []
+        self.experiment_id = 0
 
-    def get_max_experiment_version(self):
-        script_files = glob(os.path.join(self.hparams.out_dir, "scripts", '*sh'))
-        versions = []
-        for s in script_files:
-            bs = os.path.splitext(os.path.basename(s))[0]
-            try:
-                version_num = int(bs[bs.rfind('v') + 1:])
-                versions.append(version_num)
-            except ValueError:
-                print(f"found file that did not conform to naming spec: {s}")
-                continue
-        return max(versions) + 1 if len(versions) != 0 else 0
+    def submit_new_experiment(self, experiment_directory, max_iter):
 
-    def _create_slurm_script(self, hparams, exp, exp_num):
-        sub_commands = []
+        experiment_dir = os.path.join(self.project_directory, experiment_directory,
+                                      f"exp_{self.experiment_id}")
 
-        header = [
-            "#!/bin/bash\n",
-        ]
-        sub_commands.extend(header)
-        job_with_version = f"{hparams.project_name}v{exp_num}"
-        command = [
-            f"#SBATCH --job-name={job_with_version}\n",
-        ]
-        sub_commands.extend(command)
+        exp = self.experiment_generator.submit_new_experiment(experiment_dir,
+                                                              max_iter=max_iter,
+                                                              experiment_id=self.experiment_id)
+        self.experiment_id += 1
+        self.running_experiments.append(exp)
 
-        # set an outfile.
-        slurm_out_path = os.path.join(hparams.out_dir, 'out', f"{job_with_version}_slurm_output.out")
-        command = [
-            f"#SBATCH --output={slurm_out_path}\n"
-        ]
-        sub_commands.extend(command)
+    def watch_experiments(self, n_best_to_keep):
 
-        # add any slurm directives that the user specifies. No defaults are given.
-        for cmd in hparams.slurm_directives:
-            command = [
-                f"#SBATCH {cmd}\n",
-            ]
-            sub_commands.extend(command)
+        while True:
+            finished = 0
+            for experiment in self.running_experiments:
+                if experiment.completed:
+                    finished += 1
+            time.sleep(self.poll_interval)
+            if finished == len(self.running_experiments):
+                break
 
-        # add any commands necessary for running the training script.
-        for cmd in hparams.environment_commands:
-            command = [
-                f"{cmd}\n",
-            ]
-            sub_commands.extend(command)
+        losses = []
+        for experiment in self.running_experiments:
+            log_path = os.path.join(experiment.experiment_dir, 'checkpoint.txt')
+            with open(log_path, 'r') as src:
+                _, loss = src.read().split(":")
+            losses.append(float(loss))
 
-        # add commands to the experiment object that describe
-        # a) the supervisor directory
-        exp['supervisor_dir'] = hparams.supervisor_dir
-        # b) the process PID
-        exp['exp_id'] = "$SLURM_JOB_ID"
+        indices = np.argsort(losses)  # smallest metric first
+        self.running_experiments = [self.running_experiments[i] for i in indices[0:n_best_to_keep]]
 
-        run_cmd = f"{hparams.run_command} {exp}"
-
-        slurm_script = '\n'.join(sub_commands)
-        slurm_script += '\n' + run_cmd + '\n'
-        slurm_file = self.write_slurm_script_to_file(slurm_script, job_with_version)
-
-        return slurm_file
-
-    def write_slurm_script_to_file(self, script, job_with_version):
-
-        os.makedirs(os.path.join(self.hparams.out_dir, 'scripts'), exist_ok=True)
-        fout = os.path.join(self.hparams.out_dir, 'scripts', f'{job_with_version}.sh')
-        with open(fout, 'w') as dst:
-            dst.write(script)
-        return fout
-
-    def run(self):
-        i = self.get_max_experiment_version()
-        for experiment in self.experiments:
-            self.submit_experiment(experiment, i)
-            i += 1
+    def resubmit_experiments(self, max_iter):
+        for experiment in self.running_experiments:
+            experiment.max_iter = max_iter
+            experiment.resubmit_cmd = 'load_from_ckpt'
+            # TODO.. fix this.
+            experiment.submit(self.experiment_generator.hparams)
 
 
 if __name__ == "__main__":
     # where should parameter list generation go?
     # probably in the slurm supervisor constructor
     f = 'hparams.yaml'
-
-    x = CPUSupervisor(f)
+    hp = HPConf(f)
+    exp_gen = ExperimentGenerator(hp, experiment_type='slurm')
+    x = SlurmSupervisor(exp_gen, 'slurm', poll_interval=10)
     hyperband(x)
