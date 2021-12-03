@@ -10,46 +10,68 @@ from prefilter.utils.datasets import GSCC_SAVED_TF_MODEL_PATH
 
 seed(1)
 
-__all__ = ['encode_protein_as_one_hot_vector',
-           'pad_batch',
-           'stack_batch',
-           'PROT_ALPHABET',
-           'LEN_PROTEIN_ALPHABET',
-           ]
+__all__ = [
+    "encode_protein_as_one_hot_vector",
+    "pad_batch",
+    "stack_batch",
+    "PROT_ALPHABET",
+    "LEN_PROTEIN_ALPHABET",
+]
 
-PROT_ALPHABET = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8,
-                 'K': 9, 'L': 10, 'M': 11, 'N': 12, 'P': 13, 'Q': 14, 'R': 15, 'S': 16,
-                 'T': 17, 'V': 18, 'W': 19, 'X': 20, 'Y': 21, 'Z': 22}
+PROT_ALPHABET = {
+    "A": 0,
+    "B": 1,
+    "C": 2,
+    "D": 3,
+    "E": 4,
+    "F": 5,
+    "G": 6,
+    "H": 7,
+    "I": 8,
+    "K": 9,
+    "L": 10,
+    "M": 11,
+    "N": 12,
+    "P": 13,
+    "Q": 14,
+    "R": 15,
+    "S": 16,
+    "T": 17,
+    "V": 18,
+    "W": 19,
+    "X": 20,
+    "Y": 21,
+    "Z": 22,
+}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
 
 def _read_fasta(fasta, label, return_index=True):
-
     def _parse_line(line):
-        idx = line.find('\n')
+        idx = line.find("\n")
         family = line[:idx]
-        sequence = line[idx + 1:].replace('\n', '')
+        sequence = line[idx + 1 :].replace("\n", "")
         if return_index:
             return [label, sequence]
         else:
             return sequence
 
-    with open(fasta, 'r') as f:
+    with open(fasta, "r") as f:
         names_and_sequences = f.read()
-        lines = names_and_sequences.split('>')
+        lines = names_and_sequences.split(">")
         sequences = list(map(_parse_line, lines))
 
     return sequences
 
 
 def encode_protein_as_one_hot_vector(protein, maxlen=None):
-    # input: raw protein string of arbitrary length 
+    # input: raw protein string of arbitrary length
     # output: np.array() of size (1, maxlen, length_protein_alphabet)
-    # Each row in the array is a separate character, encoded as 
+    # Each row in the array is a separate character, encoded as
     # a one-hot vector
 
-    protein = protein.upper().replace('\n', '')
+    protein = protein.upper().replace("\n", "")
 
     if maxlen is not None:
         one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, maxlen))
@@ -61,7 +83,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
         try:
             one_hot_encoding[PROT_ALPHABET[residue], i] = 1
         except KeyError:
-            one_hot_encoding[PROT_ALPHABET['X'], i] = 1  # X is "any amino acid"
+            one_hot_encoding[PROT_ALPHABET["X"], i] = 1  # X is "any amino acid"
 
     return one_hot_encoding
 
@@ -82,17 +104,17 @@ def read_sequences_from_json(json_file, fout=None):
     an AA sequence).
     """
 
-    with open(json_file, 'r') as f:
+    with open(json_file, "r") as f:
         sequence_to_label = json.load(f)
 
     name_to_integer_label = {}
     integer_label = 0
 
     if fout is None:
-        fout = os.path.join(os.path.dirname(json_file), 'name-to-label.json')
+        fout = os.path.join(os.path.dirname(json_file), "name-to-label.json")
 
     if os.path.isfile(fout):
-        with open(fout, 'r') as f:
+        with open(fout, "r") as f:
             name_to_integer_label = json.load(f)
         integer_label = max(name_to_integer_label.values())
 
@@ -105,18 +127,20 @@ def read_sequences_from_json(json_file, fout=None):
                 integer_label += 1
 
     if len_before != len(name_to_integer_label):
-        s = 'saving new labels, number of unique classes went from {} to {}'.format(len_before,
-                                                                                    len(name_to_integer_label))
+        s = "saving new labels, number of unique classes went from {} to {}".format(
+            len_before, len(name_to_integer_label)
+        )
         print(s)
-        with open(fout, 'w') as f:
+        with open(fout, "w") as f:
             # overwrite old file if it exists
             json.dump(name_to_integer_label, f)
 
     sequence_to_integer_label = []
 
     for sequence, labels in sequence_to_label.items():
-        sequence_to_integer_label.append([[name_to_integer_label[l]
-                                           for l in labels], sequence])
+        sequence_to_integer_label.append(
+            [[name_to_integer_label[l] for l in labels], sequence]
+        )
 
     shuffle(sequence_to_integer_label)
     return sequence_to_integer_label
@@ -153,7 +177,7 @@ def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True
             sequences.extend(filter(lambda x: len(x), seq))
 
     if save_name_to_label:
-        with open('name_to_class_code.json', 'w') as f:
+        with open("name_to_class_code.json", "w") as f:
             json.dump(name_to_label, f)
 
     shuffle(sequences)
@@ -165,9 +189,9 @@ def _pad_sequences(sequences):
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
     for i, s in enumerate(sequences):
-        padded_batch[i, :, :s.shape[-1]] = s
+        padded_batch[i, :, : s.shape[-1]] = s
         mask = np.ones((1, mxlen))
-        mask[:, :s.shape[-1]] = 0
+        mask[:, : s.shape[-1]] = 0
         masks.append(mask)
 
     masks = np.stack(masks)
@@ -182,11 +206,11 @@ def pad_batch(batch):
 
 
 def stack_batch(batch):
-    """ replicates default collate_fn for API consistency """
+    """replicates default collate_fn for API consistency"""
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     return torch.stack(features), torch.stack(labels)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pass

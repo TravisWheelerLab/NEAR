@@ -5,7 +5,7 @@ import wandb
 from wandb import Table
 from collections import defaultdict
 
-__all__ = ['BaseModel']
+__all__ = ["BaseModel"]
 
 
 class BaseModel(pl.LightningModule):
@@ -28,21 +28,28 @@ class BaseModel(pl.LightningModule):
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        self.train_dataset = utils.ProteinSequenceDataset(self.train_files,
-                                                          single_label=self.single_label,
-                                                          sample_sequences_based_on_family_membership=self.resample_families,
-                                                          sample_sequences_based_on_num_labels=self.resample_based_on_num_labels,
-                                                          use_pretrained_model_embeddings=not self.train_from_scratch)
+        self.train_dataset = utils.ProteinSequenceDataset(
+            self.train_files,
+            single_label=self.single_label,
+            sample_sequences_based_on_family_membership=self.resample_families,
+            sample_sequences_based_on_num_labels=self.resample_based_on_num_labels,
+            resample_based_on_uniform_dist=self.resample_based_on_uniform_dist,
+            use_pretrained_model_embeddings=not self.train_from_scratch,
+        )
 
-        self.val_dataset = utils.ProteinSequenceDataset(self.val_files,
-                                                        single_label=self.single_label,
-                                                        existing_name_to_label_mapping=self.train_dataset.name_to_class_code,
-                                                        use_pretrained_model_embeddings=not self.train_from_scratch)
+        self.val_dataset = utils.ProteinSequenceDataset(
+            self.val_files,
+            single_label=self.single_label,
+            existing_name_to_label_mapping=self.train_dataset.name_to_class_code,
+            use_pretrained_model_embeddings=not self.train_from_scratch,
+        )
 
-        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(self.val_files,
-                                                                  single_label=self.single_label,
-                                                                  existing_name_to_label_mapping=self.val_dataset.name_to_class_code,
-                                                                  use_pretrained_model_embeddings=not self.train_from_scratch)
+        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(
+            self.val_files,
+            single_label=self.single_label,
+            existing_name_to_label_mapping=self.val_dataset.name_to_class_code,
+            use_pretrained_model_embeddings=not self.train_from_scratch,
+        )
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
         self.n_classes = self.val_dataset.n_classes
@@ -77,9 +84,14 @@ class BaseModel(pl.LightningModule):
     def configure_optimizers(self):
         if self.schedule_lr:
             optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-            return {'optimizer': optimizer,
-                    'lr_scheduler': torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.step_lr_step_size,
-                                                                    gamma=self.step_lr_decay_factor)}
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": torch.optim.lr_scheduler.StepLR(
+                    optimizer,
+                    step_size=self.step_lr_step_size,
+                    gamma=self.step_lr_decay_factor,
+                ),
+            }
         else:
             return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
@@ -134,26 +146,46 @@ class BaseModel(pl.LightningModule):
         return val_and_decoy_loader
 
     def on_test_epoch_end(self):
-        percent_tps_recovered = [[x, y / self.total_true_labels] for x, y in zip(self.thresholds,
-                                                                                 self.sigmoid_threshold_to_tps_passed.values())]
-        table = Table(data=percent_tps_recovered, columns=["threshold", "tps_recovered"])
-        self.logger.experiment.log({
-            "percent_tps_recovered": wandb.plot.line(table,
-                                                     "threshold",
-                                                     "tps_recovered",
-                                                     stroke=None,
-                                                     title="tps recovered")
-        })
-        mean_fps_per_sequence = [[x, y / self.total_sequences] for x, y in zip(self.thresholds,
-                                                                               self.sigmoid_threshold_to_fps_passed.values())]
-        table = Table(data=mean_fps_per_sequence, columns=["threshold", "fps_per_sequence"])
-        self.logger.experiment.log({
-            "fps_per_sequence": wandb.plot.line(table,
-                                                "threshold",
-                                                "fps_per_sequence",
-                                                stroke=None,
-                                                title="fps per sequence")
-        })
+        percent_tps_recovered = [
+            [x, y / self.total_true_labels]
+            for x, y in zip(
+                self.thresholds, self.sigmoid_threshold_to_tps_passed.values()
+            )
+        ]
+        table = Table(
+            data=percent_tps_recovered, columns=["threshold", "tps_recovered"]
+        )
+        self.logger.experiment.log(
+            {
+                "percent_tps_recovered": wandb.plot.line(
+                    table,
+                    "threshold",
+                    "tps_recovered",
+                    stroke=None,
+                    title="tps recovered",
+                )
+            }
+        )
+        mean_fps_per_sequence = [
+            [x, y / self.total_sequences]
+            for x, y in zip(
+                self.thresholds, self.sigmoid_threshold_to_fps_passed.values()
+            )
+        ]
+        table = Table(
+            data=mean_fps_per_sequence, columns=["threshold", "fps_per_sequence"]
+        )
+        self.logger.experiment.log(
+            {
+                "fps_per_sequence": wandb.plot.line(
+                    table,
+                    "threshold",
+                    "fps_per_sequence",
+                    stroke=None,
+                    title="fps per sequence",
+                )
+            }
+        )
 
     def test_step(self, batch, batch_nb):
         features, masks, labels = batch
@@ -164,9 +196,15 @@ class BaseModel(pl.LightningModule):
         for threshold in self.thresholds:
             scores[scores >= threshold] = 1
             # TODO: do I need to include decoys?
-            true_positives = torch.sum(torch.count_nonzero((scores == 1).bool() & (labels == 1).bool()))
-            false_positives = torch.sum(torch.count_nonzero((scores == 1).bool() & (labels == 0).bool()))
-            misses = torch.sum(torch.count_nonzero((scores != 1).bool() & (labels == 1).bool()))
+            true_positives = torch.sum(
+                torch.count_nonzero((scores == 1).bool() & (labels == 1).bool())
+            )
+            false_positives = torch.sum(
+                torch.count_nonzero((scores == 1).bool() & (labels == 0).bool())
+            )
+            misses = torch.sum(
+                torch.count_nonzero((scores != 1).bool() & (labels == 1).bool())
+            )
             num_passed = torch.sum(torch.count_nonzero(scores == 1))
             self.sigmoid_threshold_to_num_passed[threshold] += num_passed
             self.sigmoid_threshold_to_tps_missed[threshold] += misses

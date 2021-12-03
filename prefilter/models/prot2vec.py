@@ -8,19 +8,20 @@ import torch.nn as nn
 
 from prefilter.models.base_model import BaseModel
 
-__all__ = ['Prot2Vec']
+__all__ = ["Prot2Vec"]
 
 
 class ResidualBlock(nn.Module):
-
-    def __init__(self,
-                 filters,
-                 resnet_bottleneck_factor,
-                 kernel_size,
-                 layer_index,
-                 first_dilated_layer,
-                 dilation_rate,
-                 stride=1):
+    def __init__(
+        self,
+        filters,
+        resnet_bottleneck_factor,
+        kernel_size,
+        layer_index,
+        first_dilated_layer,
+        dilation_rate,
+        stride=1,
+    ):
 
         super(ResidualBlock, self).__init__()
 
@@ -28,23 +29,24 @@ class ResidualBlock(nn.Module):
 
         shifted_layer_index = layer_index - first_dilated_layer + 1
         dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
-        self.num_bottleneck_units = math.floor(
-            resnet_bottleneck_factor * self.filters
-        )
+        self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
         self.bn1 = torch.nn.BatchNorm1d(self.filters)
         # need to pad 'same', so output has the same size as input
         # project down to a smaller number of self.filters with a larger kernel size
-        self.conv1 = torch.nn.Conv1d(self.filters,
-                                     self.num_bottleneck_units,
-                                     kernel_size=kernel_size,
-                                     dilation=dilation_rate,
-                                     padding='same')
+        self.conv1 = torch.nn.Conv1d(
+            self.filters,
+            self.num_bottleneck_units,
+            kernel_size=kernel_size,
+            dilation=dilation_rate,
+            padding="same",
+        )
 
         self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
         # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
         # linear transformation) No padding needed sin
-        self.conv2 = torch.nn.Conv1d(self.num_bottleneck_units, self.filters, kernel_size=1,
-                                     dilation=1)
+        self.conv2 = torch.nn.Conv1d(
+            self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
+        )
 
     def _forward(self, x):
         features = self.bn1(x)
@@ -74,19 +76,21 @@ class ResidualBlock(nn.Module):
 
 
 class Prot2Vec(BaseModel):
-    """ 
+    """
     Convolutional network for protein family prediction.
     """
 
-    def __init__(self,
-                 res_block_n_filters,
-                 vocab_size,
-                 res_block_kernel_size,
-                 n_res_blocks,
-                 res_bottleneck_factor,
-                 dilation_rate,
-                 normalize_output_embedding=True,
-                 **kwargs):
+    def __init__(
+        self,
+        res_block_n_filters,
+        vocab_size,
+        res_block_kernel_size,
+        n_res_blocks,
+        res_bottleneck_factor,
+        dilation_rate,
+        normalize_output_embedding=True,
+        **kwargs
+    ):
 
         super(Prot2Vec, self).__init__(**kwargs)
 
@@ -107,29 +111,36 @@ class Prot2Vec(BaseModel):
 
     def _setup_layers(self):
 
-        self.initial_conv = nn.Conv1d(in_channels=self.vocab_size,
-                                      out_channels=self.res_block_n_filters,
-                                      kernel_size=self.res_block_kernel_size,
-                                      padding='same')
+        self.initial_conv = nn.Conv1d(
+            in_channels=self.vocab_size,
+            out_channels=self.res_block_n_filters,
+            kernel_size=self.res_block_kernel_size,
+            padding="same",
+        )
 
         self.embedding_trunk = torch.nn.ModuleList()
 
         for layer_index in range(self.n_res_blocks):
-            self.embedding_trunk.append(ResidualBlock(self.res_block_n_filters,
-                                                      self.res_bottleneck_factor,
-                                                      self.res_block_kernel_size,
-                                                      layer_index,
-                                                      1,
-                                                      self.dilation_rate))
+            self.embedding_trunk.append(
+                ResidualBlock(
+                    self.res_block_n_filters,
+                    self.res_bottleneck_factor,
+                    self.res_block_kernel_size,
+                    layer_index,
+                    1,
+                    self.dilation_rate,
+                )
+            )
 
-        self.classification_layer = torch.nn.Linear(self.res_block_n_filters,
-                                                    self.n_classes)
+        self.classification_layer = torch.nn.Linear(
+            self.res_block_n_filters, self.n_classes
+        )
 
     def _masked_forward(self, x, mask):
         """
         Before each convolution or batch normalization operation, we zero-out
         the features in any location that corresponds to padding in the input
-        sequence 
+        sequence
         """
         x = self.initial_conv(x)
         # TODO: Code errors when dilation_rate is too high. The error is
