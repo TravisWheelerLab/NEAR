@@ -1,35 +1,32 @@
 import os
+import pdb
 import json
 import time
 import torch
 import numpy as np
+import logging
 from collections import defaultdict
 
 import prefilter.utils as utils
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = [
-    "ProteinSequenceDataset",
-    "SimpleSequenceIterator",
-    "fasta_from_file",
-    "data_run",
-]
+log = logging.getLogger(__name__)
 
 GSCC_SAVED_TF_MODEL_PATH = "/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760"
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
     def __init__(
-        self,
-        fasta_files,
-        single_label=False,
-        existing_name_to_label_mapping=None,
-        sample_sequences_based_on_family_membership=False,
-        resample_based_on_uniform_dist=False,
-        sample_sequences_based_on_num_labels=False,
-        use_pretrained_model_embeddings=False,
-        evaluating=False,
+            self,
+            fasta_files,
+            single_label=False,
+            existing_name_to_label_mapping=None,
+            sample_sequences_based_on_family_membership=False,
+            resample_based_on_uniform_dist=False,
+            sample_sequences_based_on_num_labels=False,
+            use_pretrained_model_embeddings=False,
+            evaluating=False,
     ):
 
         self.fasta_files = fasta_files
@@ -90,9 +87,20 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             sequence_to_labels = defaultdict(list)
 
-            for sequence, labelstring in zip(sequences, sequence_labels):
-                labels = labelstring[labelstring.find("|") + 1 :].split(" ")
+            for i, (sequence, labelstring) in enumerate(zip(sequences, sequence_labels)):
+                delim = labelstring.find("|")
+
+                if delim == -1:
+                    log.info(f"No delimiter found for {f}")
+                    continue
+
+                labels = labelstring[delim + 1:].split(" ")
                 labels = list(filter(len, labels))
+
+                if not len(labels):
+                    log.info(f"No labels found for sequence num {i} in {f}, {labelstring}")
+                    continue
+
                 if len(labels) > 1 and self.single_label:
                     labels = [labels[0]]
                 sequence_to_labels[sequence] = labels
@@ -116,7 +124,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             total_seq = sum(map(len, self.family_to_indices.values()))
             if self.resample_based_on_uniform_dist:
-                family_to_frequency = {k: 1 / len(v) for k, v in self.family_to_indices.items()}
+                total_families = len(self.family_to_indices)
+                family_to_frequency = {k: 1 / total_families for k, v in self.family_to_indices.items()}
             else:
                 family_to_frequency = {
                     k: len(v) / total_seq for k, v in self.family_to_indices.items()
@@ -125,14 +134,18 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             family_to_resampled_membership = {}
 
             for family, indices in self.family_to_indices.items():
-                indices = np.asarray(indices)
-                keep_prob = np.sqrt(1e-5 / family_to_frequency[family])
-                kept = np.count_nonzero(np.random.rand(len(indices)) <= keep_prob)
-
-                if kept == 0:
+                if self.resample_based_on_uniform_dist:
+                    # artificially make everything have the same number of members
                     family_to_resampled_membership[family] = 1
                 else:
-                    family_to_resampled_membership[family] = kept
+                    indices = np.asarray(indices)
+                    keep_prob = np.sqrt(1e-5 / family_to_frequency[family])
+                    kept = np.count_nonzero(np.random.rand(len(indices)) <= keep_prob)
+
+                    if kept == 0:
+                        family_to_resampled_membership[family] = 1
+                    else:
+                        family_to_resampled_membership[family] = kept
 
             self.length_of_dataset = sum(list(family_to_resampled_membership.values()))
             self.families = np.asarray(list(family_to_resampled_membership.keys()))
@@ -250,18 +263,21 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
 def data_run():
     from glob import glob
 
-    fasta_files = glob("/home/tc229954/data/prefilter/training_data/0.2/10000/*train*")
+    for pid in [0.2, 0.35, 0.5]:
+        for n in [100, 500, 2000, 10000]:
+            fasta_files = glob("/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(pid, n))
 
-    dataset = ProteinSequenceDataset(
-        fasta_files,
-        sample_sequences_based_on_family_membership=True,
-        resample_based_on_uniform_dist=False,
-        sample_sequences_based_on_num_labels=False,
-    )
-    print(len(dataset))
-    #i = 0
-    #for i in range(len(dataset)):
-    #    print(len(np.where(dataset[i][1] == 1)[0]))
+            resample_uniform = True
+
+            dataset = ProteinSequenceDataset(
+                fasta_files,
+                single_label=True,
+                sample_sequences_based_on_family_membership=True,
+                resample_based_on_uniform_dist=resample_uniform,
+                sample_sequences_based_on_num_labels=False
+            )
+
+            print(f"{'uniform' if resample_uniform else 'frequency based'}", len(dataset), pid, n)
 
 
 if __name__ == "__main__":
