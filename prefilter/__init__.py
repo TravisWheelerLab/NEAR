@@ -2,6 +2,7 @@
 Prefilter passes good candidates to hmmer.
 """
 from argparse import ArgumentParser
+
 __version__ = "0.0.1"
 
 
@@ -70,6 +71,7 @@ def main():
         main(args)
     elif args.subcmd == "data":
         from .utils import data_run
+
         data_run()
     else:
         ap.print_help()

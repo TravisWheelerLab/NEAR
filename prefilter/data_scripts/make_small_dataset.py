@@ -26,9 +26,7 @@ def parser():
     clan_parser.add_argument("--fraction-of-families-in-clans", type=float, default=0.5)
 
     random_parser = ap.add_parser("random")
-    random_parser.add_argument(
-        "fa_path", help="where are the fast files stored?"
-    )
+    random_parser.add_argument("fa_path", help="where are the fast files stored?")
     random_parser.add_argument("out_path")
     random_parser.add_argument("n_families", type=int)
     return p.parse_args()
@@ -136,17 +134,19 @@ def get_file_tuples(fpath):
     """
     bs = os.path.basename(fpath)
     dirname = os.path.dirname(fpath)
-    if 'test' in bs:
-        replace_str = 'test'
-    elif 'train' in bs:
-        replace_str = 'train'
-    elif 'valid' in bs:
-        replace_str = 'valid'
+    if "test" in bs:
+        replace_str = "test"
+    elif "train" in bs:
+        replace_str = "train"
+    elif "valid" in bs:
+        replace_str = "valid"
     else:
-        raise ValueError(f"expected one of (test, train, valid) in the .fa file, got {fpath}")
+        raise ValueError(
+            f"expected one of (test, train, valid) in the .fa file, got {fpath}"
+        )
 
     train_path = os.path.join(dirname, bs.replace(replace_str, "train"))
-    test_path =  os.path.join(dirname, bs.replace(replace_str, "test"))
+    test_path = os.path.join(dirname, bs.replace(replace_str, "test"))
     valid_path = os.path.join(dirname, bs.replace(replace_str, "valid"))
     existing_files = []
 
@@ -205,9 +205,9 @@ def grab_random_sets(directory, out_path, n):
 if __name__ == "__main__":
 
     parser_args = parser()
-    if parser_args.command == 'random':
-        base_out_path = '/home/tc229954/data/prefilter/training_data/{}/{}/'
-        base_data_path = '/home/tc229954/data/prefilter/clustered/{}/'
+    if parser_args.command == "random":
+        base_out_path = "/home/tc229954/data/prefilter/training_data/{}/{}/"
+        base_data_path = "/home/tc229954/data/prefilter/clustered/{}/"
         pids = [0.2, 0.5, 0.35]
         n_seqs = [10000, 100, 2000, 500]
         for pid in pids:
@@ -219,4 +219,4 @@ if __name__ == "__main__":
     elif parser_args.command == "clan":
         main(parser_args)
     else:
-        print('whaat?')
+        print("whaat?")

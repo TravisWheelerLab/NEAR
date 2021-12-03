@@ -69,7 +69,7 @@ def main(args):
         n_res_blocks=args.n_res_blocks,
         res_bottleneck_factor=args.res_bottleneck_factor,
         dilation_rate=args.dilation_rate,
-        **data_and_optimizer_kwargs
+        **data_and_optimizer_kwargs,
     )
 
     if args.shoptimize:
@@ -90,7 +90,10 @@ def main(args):
             checkpoint = torch.load(checkpoint_file)
             last_epoch = checkpoint["epoch"]
             model = model.load_from_checkpoint(
-                checkpoint_file, map_location=torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+                checkpoint_file,
+                map_location=torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu"),
             )
 
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
@@ -98,14 +101,22 @@ def main(args):
     trainer_kwargs = {
         "gpus": args.gpus,
         "num_nodes": args.num_nodes,
-        "max_epochs": last_epoch + (max_iter * min_unit) if args.shoptimize else args.epochs,
-        "check_val_every_n_epoch": 1 if args.shoptimize else args.check_val_every_n_epoch,
+        "max_epochs": last_epoch + (max_iter * min_unit)
+        if args.shoptimize
+        else args.epochs,
+        "check_val_every_n_epoch": 1
+        if args.shoptimize
+        else args.check_val_every_n_epoch,
         "callbacks": [checkpoint_callback, log_lr],
         "accelerator": "ddp" if args.gpus else None,
         "plugins": DDPPlugin(find_unused_parameters=False),
         "precision": 16 if args.gpus else 32,
         "terminate_on_nan": True,
-        "logger": TensorBoardLogger(experiment_dir, name="", version="") if args.shoptimize else WandbLogger(save_dir=args.log_dir, log_model="all", project=args.project_name)
+        "logger": TensorBoardLogger(experiment_dir, name="", version="")
+        if args.shoptimize
+        else WandbLogger(
+            save_dir=args.log_dir, log_model="all", project=args.project_name
+        ),
     }
 
     if args.tune_initial_lr:
@@ -123,4 +134,7 @@ def main(args):
             dst.write(f"test_acc:{results['test_acc']}")
 
     if not args.shoptimize:
-        torch.save(model.state_dict(), os.path.join(trainer.logger.experiment.dir, args.model_name))
+        torch.save(
+            model.state_dict(),
+            os.path.join(trainer.logger.experiment.dir, args.model_name),
+        )

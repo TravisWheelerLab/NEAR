@@ -18,15 +18,15 @@ GSCC_SAVED_TF_MODEL_PATH = "/home/tc229954/data/prefilter/proteinfer/trn-_cnn_ra
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
     def __init__(
-            self,
-            fasta_files,
-            single_label=False,
-            existing_name_to_label_mapping=None,
-            sample_sequences_based_on_family_membership=False,
-            resample_based_on_uniform_dist=False,
-            sample_sequences_based_on_num_labels=False,
-            use_pretrained_model_embeddings=False,
-            evaluating=False,
+        self,
+        fasta_files,
+        single_label=False,
+        existing_name_to_label_mapping=None,
+        sample_sequences_based_on_family_membership=False,
+        resample_based_on_uniform_dist=False,
+        sample_sequences_based_on_num_labels=False,
+        use_pretrained_model_embeddings=False,
+        evaluating=False,
     ):
 
         self.fasta_files = fasta_files
@@ -37,7 +37,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
         self.single_label = single_label
         self.evaluating = evaluating
-        self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
+        self.sample_sequences_based_on_family_membership = (
+            sample_sequences_based_on_family_membership
+        )
         self.resample_based_on_uniform_dist = resample_based_on_uniform_dist
         self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
         self.use_pretrained_model_embeddings = use_pretrained_model_embeddings
@@ -87,18 +89,22 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             sequence_to_labels = defaultdict(list)
 
-            for i, (sequence, labelstring) in enumerate(zip(sequences, sequence_labels)):
+            for i, (sequence, labelstring) in enumerate(
+                zip(sequences, sequence_labels)
+            ):
                 delim = labelstring.find("|")
 
                 if delim == -1:
                     log.info(f"No delimiter found for {f}")
                     continue
 
-                labels = labelstring[delim + 1:].split(" ")
+                labels = labelstring[delim + 1 :].split(" ")
                 labels = list(filter(len, labels))
 
                 if not len(labels):
-                    log.info(f"No labels found for sequence num {i} in {f}, {labelstring}")
+                    log.info(
+                        f"No labels found for sequence num {i} in {f}, {labelstring}"
+                    )
                     continue
 
                 if len(labels) > 1 and self.single_label:
@@ -125,7 +131,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             total_seq = sum(map(len, self.family_to_indices.values()))
             if self.resample_based_on_uniform_dist:
                 total_families = len(self.family_to_indices)
-                family_to_frequency = {k: 1 / total_families for k, v in self.family_to_indices.items()}
+                family_to_frequency = {
+                    k: 1 / total_families for k, v in self.family_to_indices.items()
+                }
             else:
                 family_to_frequency = {
                     k: len(v) / total_seq for k, v in self.family_to_indices.items()
@@ -265,7 +273,11 @@ def data_run():
 
     for pid in [0.2, 0.35, 0.5]:
         for n in [100, 500, 2000, 10000]:
-            fasta_files = glob("/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(pid, n))
+            fasta_files = glob(
+                "/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(
+                    pid, n
+                )
+            )
 
             resample_uniform = True
 
@@ -274,10 +286,15 @@ def data_run():
                 single_label=True,
                 sample_sequences_based_on_family_membership=True,
                 resample_based_on_uniform_dist=resample_uniform,
-                sample_sequences_based_on_num_labels=False
+                sample_sequences_based_on_num_labels=False,
             )
 
-            print(f"{'uniform' if resample_uniform else 'frequency based'}", len(dataset), pid, n)
+            print(
+                f"{'uniform' if resample_uniform else 'frequency based'}",
+                len(dataset),
+                pid,
+                n,
+            )
 
 
 if __name__ == "__main__":
