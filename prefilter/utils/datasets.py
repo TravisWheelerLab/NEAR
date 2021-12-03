@@ -7,25 +7,30 @@ from collections import defaultdict
 
 import prefilter.utils as utils
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = ['ProteinSequenceDataset',
-           'SimpleSequenceIterator',
-           'fasta_from_file',
-           'data_run']
+__all__ = [
+    "ProteinSequenceDataset",
+    "SimpleSequenceIterator",
+    "fasta_from_file",
+    "data_run",
+]
 
-GSCC_SAVED_TF_MODEL_PATH = '/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760'
+GSCC_SAVED_TF_MODEL_PATH = "/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760"
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
-
-    def __init__(self, fasta_files,
-                 single_label=False,
-                 existing_name_to_label_mapping=None,
-                 sample_sequences_based_on_family_membership=False,
-                 sample_sequences_based_on_num_labels=False,
-                 use_pretrained_model_embeddings=False,
-                 evaluating=False):
+    def __init__(
+        self,
+        fasta_files,
+        single_label=False,
+        existing_name_to_label_mapping=None,
+        sample_sequences_based_on_family_membership=False,
+        resample_based_on_uniform_dist=False,
+        sample_sequences_based_on_num_labels=False,
+        use_pretrained_model_embeddings=False,
+        evaluating=False,
+    ):
 
         self.fasta_files = fasta_files
 
@@ -36,6 +41,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         self.single_label = single_label
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = sample_sequences_based_on_family_membership
+        self.resample_based_on_uniform_dist = resample_based_on_uniform_dist
         self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
         self.use_pretrained_model_embeddings = use_pretrained_model_embeddings
 
@@ -53,10 +59,12 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             class_id = 0
 
         elif isinstance(self.existing_name_to_label_mapping, str):
-            s = 'loading class mapping from file {}'.format(self.existing_name_to_label_mapping)
+            s = "loading class mapping from file {}".format(
+                self.existing_name_to_label_mapping
+            )
             print(s)
 
-            with open(self.existing_name_to_label_mapping, 'r') as src:
+            with open(self.existing_name_to_label_mapping, "r") as src:
                 self.name_to_class_code = json.load(src)
 
             class_id = len(self.name_to_class_code)
@@ -66,8 +74,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             class_id = len(self.name_to_class_code)
 
         else:
-            s = 'expected existing_name_to_label_mapping to be one of dict, string, or None, found {}'.format(
-                type(self.existing_name_to_labelmapping))
+            s = "expected existing_name_to_label_mapping to be one of dict, string, or None, found {}".format(
+                type(self.existing_name_to_labelmapping)
+            )
             raise ValueError(s)
 
         self.family_to_indices = defaultdict(list)
@@ -76,13 +85,13 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         for f in self.fasta_files:
 
-            with open(f, 'r') as src:
+            with open(f, "r") as src:
                 sequence_labels, sequences = fasta_from_file(f)
 
             sequence_to_labels = defaultdict(list)
 
             for sequence, labelstring in zip(sequences, sequence_labels):
-                labels = labelstring[labelstring.find("|")+1:].split(" ")
+                labels = labelstring[labelstring.find("|") + 1 :].split(" ")
                 labels = list(filter(len, labels))
                 if len(labels) > 1 and self.single_label:
                     labels = [labels[0]]
@@ -106,7 +115,13 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         if self.sample_sequences_based_on_family_membership:
 
             total_seq = sum(map(len, self.family_to_indices.values()))
-            family_to_frequency = {k: len(v) / total_seq for k, v in self.family_to_indices.items()}
+            if self.resample_based_on_uniform_dist:
+                family_to_frequency = {k: 1 / len(v) for k, v in self.family_to_indices.items()}
+            else:
+                family_to_frequency = {
+                    k: len(v) / total_seq for k, v in self.family_to_indices.items()
+                }
+
             family_to_resampled_membership = {}
 
             for family, indices in self.family_to_indices.items():
@@ -121,16 +136,24 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
             self.length_of_dataset = sum(list(family_to_resampled_membership.values()))
             self.families = np.asarray(list(family_to_resampled_membership.keys()))
-            self.sample_probs = np.asarray(list(family_to_resampled_membership.values()))
+            self.sample_probs = np.asarray(
+                list(family_to_resampled_membership.values())
+            )
             self.sample_probs = self.sample_probs / np.sum(self.sample_probs)
 
-        self.sequences_and_labels = np.asarray(self.sequences_and_labels, dtype='object')
+        self.sequences_and_labels = np.asarray(
+            self.sequences_and_labels, dtype="object"
+        )
         if self.sample_sequences_based_on_num_labels:
 
             self.family_to_sample_dist = {}
             for family in self.families:
-                lengths_of_label_sets = list(map(lambda x: len(x[0]),
-                                                 self.sequences_and_labels[self.family_to_indices[family]]))
+                lengths_of_label_sets = list(
+                    map(
+                        lambda x: len(x[0]),
+                        self.sequences_and_labels[self.family_to_indices[family]],
+                    )
+                )
                 x = np.asarray(lengths_of_label_sets) ** 4
                 self.family_to_sample_dist[family] = x / np.sum(x)
 
@@ -155,7 +178,9 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             family = np.random.choice(self.families, p=self.sample_probs)
             family_indices = self.family_to_indices[family]
             if self.sample_sequences_based_on_num_labels:
-                idx = np.random.choice(family_indices, p=self.family_to_sample_dist[family])
+                idx = np.random.choice(
+                    family_indices, p=self.family_to_sample_dist[family]
+                )
                 labels, features = self.sequences_and_labels[idx]
             else:
                 idx = int(np.random.rand() * len(family_indices))
@@ -200,7 +225,6 @@ def fasta_from_file(fasta_file):
 
 
 class SimpleSequenceIterator(torch.utils.data.Dataset):
-
     def __init__(self, fasta_file, one_hot_encode=False):
         """
         takes a fasta file as input
@@ -226,15 +250,19 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
 def data_run():
     from glob import glob
 
-    fasta_files = glob('/home/tc229954/tmp/*train*')
+    fasta_files = glob("/home/tc229954/data/prefilter/training_data/0.2/10000/*train*")
 
-    dataset = ProteinSequenceDataset(fasta_files,
-                                     sample_sequences_based_on_family_membership=True,
-                                     sample_sequences_based_on_num_labels=True)
-    i = 0
-    for i in range(len(dataset)):
-        print(len(np.where(dataset[i][1] == 1)[0]))
+    dataset = ProteinSequenceDataset(
+        fasta_files,
+        sample_sequences_based_on_family_membership=True,
+        resample_based_on_uniform_dist=False,
+        sample_sequences_based_on_num_labels=False,
+    )
+    print(len(dataset))
+    #i = 0
+    #for i in range(len(dataset)):
+    #    print(len(np.where(dataset[i][1] == 1)[0]))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     data_run()
