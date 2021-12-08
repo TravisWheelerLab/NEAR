@@ -29,12 +29,16 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         evaluating=False,
     ):
 
-        self.fasta_files = fasta_files
-
-        if not len(self.fasta_files):
+        if not len(fasta_files):
             raise ValueError("No fasta files found")
 
+        self.fasta_files = fasta_files
+
+        if not isinstance(self.fasta_files, list):
+            self.fasta_files = [self.fasta_files]
+
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
+        self.subsample_members = 100
         self.single_label = single_label
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = (
@@ -204,7 +208,12 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                 )
                 labels, features = self.sequences_and_labels[idx]
             else:
-                idx = int(np.random.rand() * len(family_indices))
+                subsample = (
+                    len(family_indices)
+                    if len(family_indices) < self.subsample_members
+                    else self.subsample_members
+                )
+                idx = int(np.random.rand() * subsample)
                 labels, features = self.sequences_and_labels[family_indices[idx]]
         else:
             labels, features = self.sequences_and_labels[idx]
@@ -271,30 +280,31 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
 def data_run():
     from glob import glob
 
-    for pid in [0.2, 0.35, 0.5]:
-        for n in [100, 500, 2000, 10000]:
-            fasta_files = glob(
-                "/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(
-                    pid, n
-                )
-            )
+    pid = 0.35
+    n = 100
 
-            resample_uniform = True
+    fasta_files = glob(
+        "/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(pid, n)
+    )
 
-            dataset = ProteinSequenceDataset(
-                fasta_files,
-                single_label=True,
-                sample_sequences_based_on_family_membership=True,
-                resample_based_on_uniform_dist=resample_uniform,
-                sample_sequences_based_on_num_labels=False,
-            )
+    resample_uniform = True
 
-            print(
-                f"{'uniform' if resample_uniform else 'frequency based'}",
-                len(dataset),
-                pid,
-                n,
-            )
+    dataset = ProteinSequenceDataset(
+        fasta_files,
+        single_label=True,
+        sample_sequences_based_on_family_membership=True,
+        resample_based_on_uniform_dist=resample_uniform,
+        sample_sequences_based_on_num_labels=False,
+    )
+    for features, labels in dataset:
+        print(np.argmax(features.numpy(), axis=0))
+
+    print(
+        f"{'uniform' if resample_uniform else 'frequency based'}",
+        len(dataset),
+        pid,
+        n,
+    )
 
 
 if __name__ == "__main__":

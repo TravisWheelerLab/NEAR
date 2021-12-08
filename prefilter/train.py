@@ -7,6 +7,7 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 from pytorch_lightning.loggers import WandbLogger
+from shopty import ShoptyConfig
 
 from glob import glob
 from argparse import ArgumentParser
@@ -34,7 +35,17 @@ def main(args):
         checkpoint_dir = shopty_config.checkpoint_directory
         checkpoint_file = shopty_config.checkpoint_file
         max_iter = shopty_config.max_iter
-        min_unit = 1
+        min_unit = 50
+        print(
+            "frog",
+            result_file,
+            experiment_dir,
+            checkpoint_dir,
+            checkpoint_file,
+            max_iter,
+        )
+    else:
+        max_iter = args.epochs
 
     data_path = args.data_path
 
@@ -73,7 +84,7 @@ def main(args):
     )
 
     if args.shoptimize:
-        checkpoint_callback = ModelCheckpoint(
+        checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             dirpath=checkpoint_dir, save_last=True, save_top_k=0, verbose=True
         )
     else:
@@ -104,15 +115,13 @@ def main(args):
         "max_epochs": last_epoch + (max_iter * min_unit)
         if args.shoptimize
         else args.epochs,
-        "check_val_every_n_epoch": 1
-        if args.shoptimize
-        else args.check_val_every_n_epoch,
+        "check_val_every_n_epoch": args.check_val_every_n_epoch,
         "callbacks": [checkpoint_callback, log_lr],
         "accelerator": "ddp" if args.gpus else None,
         "plugins": DDPPlugin(find_unused_parameters=False),
         "precision": 16 if args.gpus else 32,
         "terminate_on_nan": True,
-        "logger": TensorBoardLogger(experiment_dir, name="", version="")
+        "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
         if args.shoptimize
         else WandbLogger(
             save_dir=args.log_dir, log_model="all", project=args.project_name
@@ -126,12 +135,19 @@ def main(args):
     else:
         trainer = pl.Trainer(**trainer_kwargs)
 
-    trainer.fit(model)
+    ckpt_path = None
+    if args.shoptimize:
+        checkpoint_file = checkpoint_file if os.path.isfile(checkpoint_file) else None
+
+    trainer.fit(model, ckpt_path=ckpt_path)
     # I use test as a handy override for doing things with the best model after training.
     if args.shoptimize:
-        results = trainer.test(model)[0]
+        results = trainer.validate(model)[0]
         with open(result_file, "w") as dst:
-            dst.write(f"test_acc:{results['test_acc']}")
+            dst.write(f"test_acc:{results['val/loss']}")
+    else:
+        # this requires a wandb logger.
+        results = trainer.validate(model)[0]
 
     if not args.shoptimize:
         torch.save(
