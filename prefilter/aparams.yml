@@ -1,6 +1,0 @@
-data_path: "/home/tc229954/tmp/*train*"
-ali_path: "/home/tc229954/data/prefilter/alignments_and_ddgm/all/"
-pid: 0.5
-n_emissions: 2
-out_dir: "/home/tc229954/tmp/test/"
-
