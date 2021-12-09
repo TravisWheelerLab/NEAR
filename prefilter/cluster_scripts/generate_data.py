@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 
 SLURM_DIRECTIVES = "#!/bin/bash\n#SBATCH --job-name={}\n#SBATCH --output={}.out\n#SBATCH --partition=wheeler_lab_small_cpu,wheeler_lab_large_cpu\n"
 
+
 def create_parser():
     ap = ArgumentParser(prog="generate data for one family.")
     ap.add_argument("aligned_fasta", help=".afa file to split with `carbs split`.")
@@ -59,7 +60,9 @@ def create_slurm_script(
     os.makedirs(slurm_out_directory, exist_ok=True)
     os.makedirs(fasta_output_directory, exist_ok=True)
 
-    cmd_list = [SLURM_DIRECTIVES.format(job_name, os.path.join(slurm_out_directory, job_name))]
+    cmd_list = [
+        SLURM_DIRECTIVES.format(job_name, os.path.join(slurm_out_directory, job_name))
+    ]
 
     slurm_outfile = os.path.join(
         slurm_out_directory, os.path.splitext(os.path.basename(afa))[0] + ".sh"
@@ -82,7 +85,7 @@ def create_slurm_script(
     domtblout = os.path.splitext(afa)[0] + ".domtblout"
 
     if not os.path.isfile(domtblout):
-        raise ValueError(f"couldn\'t find domtblout at {domtblout}, exiting.")
+        raise ValueError(f"couldn't find domtblout at {domtblout}, exiting.")
 
     domtblout_cmd = "grep \">\" {} | sed 's/>//g' | sed 's/ .*//g' | grep -f - {} | awk '{{print $1,$4,$5,$7}}' | label_fasta.py --output_directory {} --fasta_file {} -"
     # now, check that the train, test, or valid file was created.

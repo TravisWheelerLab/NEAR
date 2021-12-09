@@ -9,11 +9,9 @@ from argparse import ArgumentParser
 from glob import glob
 from collections import defaultdict
 
-from .models import Prot2Vec
+from prefilter.models import Prot2Vec
 
-# TODO: fix this in all files
-from .utils import ProteinSequenceDataset, SimpleSequenceIterator
-from .utils import pad_batch, stack_batch
+from prefilter.utils import ProteinSequenceDataset, SimpleSequenceIterator, pad_batch, stack_batch
 
 
 def load_model(logs_dir, model_path):

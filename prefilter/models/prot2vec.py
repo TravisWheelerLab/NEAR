@@ -139,12 +139,11 @@ class Prot2Vec(BaseModel):
     def _masked_forward(self, x, mask):
         """
         Before each convolution or batch normalization operation, we zero-out
-        the features in any location that corresponds to padding in the input
+        the features in any location is padded in the input
         sequence
         """
         x = self.initial_conv(x)
-        # TODO: Code errors when dilation_rate is too high. The error is
-        # unintelligible; figure out what's going on.
+
         for layer in self.embedding_trunk:
             x = layer(x, mask)
         # re-zero regions

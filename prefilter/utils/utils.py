@@ -102,64 +102,6 @@ def fasta_from_file(fasta_file):
     return sequence_labels, sequence_strs
 
 
-def read_sequences_from_json(json_file, fout=None):
-    """
-    json_file contains a dictionary of raw AA sequences mapped to their
-    associated classes, classified by hmmsearch with an MSA of your choice.
-
-    Saves an json file mapping the Pfam accession ID reported by hmmsearch (this
-    isn't general, since we're only working with Pfam-trained HMMs available on
-    pfam.xfam.org) for easy lookup later on in the classification pipeline. This
-    json file is called 'name-to-label.json'.
-
-    Returns a list of lists. Each list contains the raw AA sequence as its
-    second element and the list of hmmsearch determined labels as its first
-    (there can be more than one if hmmsearch returns multiple good matches for
-    an AA sequence).
-    """
-
-    with open(json_file, "r") as f:
-        sequence_to_label = json.load(f)
-
-    name_to_integer_label = {}
-    integer_label = 0
-
-    if fout is None:
-        fout = os.path.join(os.path.dirname(json_file), "name-to-label.json")
-
-    if os.path.isfile(fout):
-        with open(fout, "r") as f:
-            name_to_integer_label = json.load(f)
-        integer_label = max(name_to_integer_label.values())
-
-    len_before = len(name_to_integer_label)
-
-    for seq in sequence_to_label.keys():
-        for label in sequence_to_label[seq]:
-            if label not in name_to_integer_label:
-                name_to_integer_label[label] = integer_label
-                integer_label += 1
-
-    if len_before != len(name_to_integer_label):
-        s = "saving new labels, number of unique classes went from {} to {}".format(
-            len_before, len(name_to_integer_label)
-        )
-        print(s)
-        with open(fout, "w") as f:
-            # overwrite old file if it exists
-            json.dump(name_to_integer_label, f)
-
-    sequence_to_integer_label = []
-
-    for sequence, labels in sequence_to_label.items():
-        sequence_to_integer_label.append(
-            [[name_to_integer_label[l] for l in labels], sequence]
-        )
-
-    shuffle(sequence_to_integer_label)
-    return sequence_to_integer_label
-
-
 def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))

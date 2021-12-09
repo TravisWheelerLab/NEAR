@@ -35,7 +35,7 @@ def main(args):
         checkpoint_dir = shopty_config.checkpoint_directory
         checkpoint_file = shopty_config.checkpoint_file
         max_iter = shopty_config.max_iter
-        min_unit = 50
+        min_unit = 100
         print(
             "frog",
             result_file,
@@ -137,7 +137,7 @@ def main(args):
 
     ckpt_path = None
     if args.shoptimize:
-        checkpoint_file = checkpoint_file if os.path.isfile(checkpoint_file) else None
+        ckpt_path = checkpoint_file if os.path.isfile(checkpoint_file) else None
 
     trainer.fit(model, ckpt_path=ckpt_path)
     # I use test as a handy override for doing things with the best model after training.
@@ -146,10 +146,7 @@ def main(args):
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
     else:
-        # this requires a wandb logger.
-        results = trainer.validate(model)[0]
-
-    if not args.shoptimize:
+        # testing for my models requires a wandb logger.
         torch.save(
             model.state_dict(),
             os.path.join(trainer.logger.experiment.dir, args.model_name),
