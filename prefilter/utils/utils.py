@@ -48,24 +48,6 @@ PROT_ALPHABET = {
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
 
-def _read_fasta(fasta, label, return_index=True):
-    def _parse_line(line):
-        idx = line.find("\n")
-        family = line[:idx]
-        sequence = line[idx + 1 :].replace("\n", "")
-        if return_index:
-            return [label, sequence]
-        else:
-            return sequence
-
-    with open(fasta, "r") as f:
-        names_and_sequences = f.read()
-        lines = names_and_sequences.split(">")
-        sequences = list(map(_parse_line, lines))
-
-    return sequences
-
-
 def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # input: raw protein string of arbitrary length
     # output: np.array() of size (1, maxlen, length_protein_alphabet)
@@ -178,44 +160,6 @@ def read_sequences_from_json(json_file, fout=None):
     return sequence_to_integer_label
 
 
-def read_sequences_from_fasta(files, save_name_to_label=False, return_index=True):
-    """
-    returns list of all sequences in the fasta files.
-    list is a list of two-element lists with the first element the class
-    label and the second the protein sequence.
-
-    Assumes that each fasta file has the class name of the proteins as its
-    filename. TODO: implement logic that parses the fasta header to get a class
-    name.
-
-    does not take care of train/dev/val splits. This is trivially
-    implemented.
-
-    """
-    name_to_label = {}
-    cnt = 0
-    sequences = []
-
-    if not isinstance(files, list):
-        files = [files]
-
-    for f in files:
-        seq = _read_fasta(f, cnt, return_index=return_index)
-        name_to_label[os.path.basename(f)] = cnt
-        cnt += 1
-        if return_index:
-            sequences.extend(filter(lambda x: len(x[1]), seq))
-        else:
-            sequences.extend(filter(lambda x: len(x), seq))
-
-    if save_name_to_label:
-        with open("name_to_class_code.json", "w") as f:
-            json.dump(name_to_label, f)
-
-    shuffle(sequences)
-    return sequences
-
-
 def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
@@ -242,7 +186,3 @@ def stack_batch(batch):
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     return torch.stack(features), torch.stack(labels)
-
-
-if __name__ == "__main__":
-    pass
