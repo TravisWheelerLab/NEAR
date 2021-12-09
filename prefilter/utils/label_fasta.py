@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from collections import defaultdict
+import os
 
 from argparse import ArgumentParser, FileType
 
@@ -52,7 +53,9 @@ def main(args):
     names = [n.split(" ")[0] for n in names]
     name_to_seq = {n: s for n, s in zip(names, seq)}
     name_to_label = _name_to_label(args.domtblout_labels)
-    with open(args.fasta_file, "w") as dst:
+    outfile = os.path.join(args.output_directory, os.path.basename(args.fasta_file))
+
+    with open(outfile, "w") as dst:
         for sequence_name, labels in name_to_label.items():
             labels = sorted(labels, key=lambda x: float(x[1]))
             labels = list(
@@ -78,6 +81,7 @@ def parser():
     parser.add_argument(
         "domtblout_labels", nargs="?", type=FileType("r"), default=sys.stdin, help=""
     )
+    parser.add_argument("--output_directory", type=str)
     parser.add_argument("--evalue_threshold", type=float, default=1e-5)
     args = parser.parse_args()
     return args
