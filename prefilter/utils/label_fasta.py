@@ -4,37 +4,7 @@ from collections import defaultdict
 import os
 
 from argparse import ArgumentParser, FileType
-
-
-def fasta_from_file(fasta_file):
-    sequence_labels, sequence_strs = [], []
-    cur_seq_label = None
-    buf = []
-
-    def _flush_current_seq():
-        nonlocal cur_seq_label, buf
-        if cur_seq_label is None:
-            return
-        sequence_labels.append(cur_seq_label)
-        sequence_strs.append("".join(buf))
-        cur_seq_label = None
-        buf = []
-
-    with open(fasta_file, "r") as infile:
-        for line_idx, line in enumerate(infile):
-            if line.startswith(">"):  # label line
-                _flush_current_seq()
-                line = line[1:].strip()
-                if len(line) > 0:
-                    cur_seq_label = line
-                else:
-                    cur_seq_label = f"seqnum{line_idx:09d}"
-            else:  # sequence line
-                buf.append(line.strip())
-
-    _flush_current_seq()
-
-    return sequence_labels, sequence_strs
+from prefilter.utils import fasta_from_file
 
 
 def _name_to_label(domtblout):

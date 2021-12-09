@@ -38,7 +38,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             self.fasta_files = [self.fasta_files]
 
         self.existing_name_to_label_mapping = existing_name_to_label_mapping
-        self.subsample_members = 100
+        self.subsample_members = 1000
         self.single_label = single_label
         self.evaluating = evaluating
         self.sample_sequences_based_on_family_membership = (
@@ -88,8 +88,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         for f in self.fasta_files:
 
-            with open(f, "r") as src:
-                sequence_labels, sequences = fasta_from_file(f)
+            sequence_labels, sequences = utils.fasta_from_file(f)
 
             sequence_to_labels = defaultdict(list)
 
@@ -223,37 +222,6 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
         return torch.as_tensor(x), y
 
 
-def fasta_from_file(fasta_file):
-    sequence_labels, sequence_strs = [], []
-    cur_seq_label = None
-    buf = []
-
-    def _flush_current_seq():
-        nonlocal cur_seq_label, buf
-        if cur_seq_label is None:
-            return
-        sequence_labels.append(cur_seq_label)
-        sequence_strs.append("".join(buf))
-        cur_seq_label = None
-        buf = []
-
-    with open(fasta_file, "r") as infile:
-        for line_idx, line in enumerate(infile):
-            if line.startswith(">"):  # label line
-                _flush_current_seq()
-                line = line[1:].strip()
-                if len(line) > 0:
-                    cur_seq_label = line
-                else:
-                    cur_seq_label = f"seqnum{line_idx:09d}"
-            else:  # sequence line
-                buf.append(line.strip())
-
-    _flush_current_seq()
-
-    return sequence_labels, sequence_strs
-
-
 class SimpleSequenceIterator(torch.utils.data.Dataset):
     def __init__(self, fasta_file, one_hot_encode=False):
         """
@@ -261,7 +229,7 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         """
 
         self.fasta_file = fasta_file
-        self.labels, self.sequences = fasta_from_file(fasta_file)
+        self.labels, self.sequences = utils.fasta_from_file(fasta_file)
         self.one_hot_encode = one_hot_encode
 
     def _encoding_func(self, x):
