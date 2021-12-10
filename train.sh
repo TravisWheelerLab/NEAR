@@ -18,7 +18,7 @@ time python -m prefilter train\
     --model_name model.pt\
     --data_path "$HOME"/data/prefilter/training_data/0.35/100/ \
     --decoy_path "$HOME"/tmp/ \
-    --batch_size 64\
+    --batch_size 32\
     --epochs 1000\
     --single_label \
     --train_from_scratch\
@@ -34,4 +34,5 @@ time python -m prefilter train\
     --n_res_blocks 5\
     --dilation_rate 2\
     --resample_families \
-    --resample_based_on_uniform_dist \
+    --resample_based_on_uniform_dist
+
