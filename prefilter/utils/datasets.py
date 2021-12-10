@@ -150,6 +150,8 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
                         family_to_resampled_membership[family] = kept
 
             self.length_of_dataset = sum(list(family_to_resampled_membership.values()))
+            if self.resample_based_on_uniform_dist:
+                self.length_of_dataset = 10*self.length_of_dataset
             self.families = np.asarray(list(family_to_resampled_membership.keys()))
             self.sample_probs = np.asarray(
                 list(family_to_resampled_membership.values())
