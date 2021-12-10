@@ -35,15 +35,7 @@ def main(args):
         checkpoint_dir = shopty_config.checkpoint_directory
         checkpoint_file = shopty_config.checkpoint_file
         max_iter = shopty_config.max_iter
-        min_unit = 100
-        print(
-            "frog",
-            result_file,
-            experiment_dir,
-            checkpoint_dir,
-            checkpoint_file,
-            max_iter,
-        )
+        min_unit = 10
     else:
         max_iter = args.epochs
 
@@ -122,10 +114,7 @@ def main(args):
         "precision": 16 if args.gpus else 32,
         "terminate_on_nan": True,
         "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
-        if args.shoptimize
-        else WandbLogger(
-            save_dir=args.log_dir, log_model="all", project=args.project_name
-        ),
+        if args.shoptimize else pl.loggers.TensorBoardLogger(args.log_dir)
     }
 
     if args.tune_initial_lr:
