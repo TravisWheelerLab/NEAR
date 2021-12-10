@@ -180,4 +180,4 @@ class Prot2Vec(BaseModel):
         labels = labels.argmax(dim=-1)
         loss = self.loss_func(logits, labels)
         acc = self.accuracy(preds, labels)
-        return loss, acc
+        return loss, acc, logits, labels

@@ -1,6 +1,17 @@
+import pdb
+
 import pytorch_lightning as pl
+import io
+import pandas as pd
+import torchmetrics
+import torch
+import numpy as np
+import torchvision
 import prefilter.utils as utils
 import torch
+import seaborn as sn
+import matplotlib.pyplot as plt
+from PIL import Image
 import wandb
 from wandb import Table
 from collections import defaultdict
@@ -25,6 +36,8 @@ class BaseModel(pl.LightningModule):
         self.thresholds = [t / 100 for t in self.thresholds]
         self.total_sequences = 0
         self.total_true_labels = 0
+        self.val_confusion = None
+        self.train_confusion = None
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
@@ -53,6 +66,8 @@ class BaseModel(pl.LightningModule):
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
         self.n_classes = self.val_dataset.n_classes
+        self.val_confusion = torchmetrics.ConfusionMatrix(num_classes=self.n_classes)
+        self.train_confusion = torchmetrics.ConfusionMatrix(num_classes=self.n_classes)
 
     def _setup_layers(self):
         raise NotImplementedError(
@@ -74,11 +89,13 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError()
 
     def training_step(self, batch, batch_nb):
-        loss, acc = self._shared_step(batch)
+        loss, acc, logits, labels = self._shared_step(batch)
+        self.train_confusion.update(logits, labels)
         return {"loss": loss, "train_acc": acc}
 
     def validation_step(self, batch, batch_nb):
-        loss, acc = self._shared_step(batch)
+        loss, acc, logits, labels = self._shared_step(batch)
+        self.val_confusion.update(logits, labels)
         return {"val_loss": loss, "val_acc": acc}
 
     def configure_optimizers(self):
@@ -103,9 +120,23 @@ class BaseModel(pl.LightningModule):
         self.log("train/loss", loss)
         self.log("train/acc", acc)
         self.log("learning_rate", self.learning_rate)
+        self.log_cmat(self.train_confusion, "train/cmat")
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
+
+    def log_cmat(self, cmat, tag):
+        conf_mat = cmat.compute().detach().cpu().numpy().astype(np.int)
+        df_cm = pd.DataFrame(
+            conf_mat,
+            index=np.arange(self.n_classes),
+            columns=np.arange(self.n_classes))
+
+        fig = plt.figure(figsize=(12, 10), dpi=300)
+        sn.heatmap(df_cm, annot=True, annot_kws={"size": 1}, fmt='d')
+        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
+        plt.close(fig)
+        cmat.reset()
 
     def validation_epoch_end(self, outputs):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
@@ -114,6 +145,7 @@ class BaseModel(pl.LightningModule):
         val_acc = torch.mean(torch.stack(val_acc))
         self.log("val/loss", val_loss)
         self.log("val/acc", val_acc)
+        self.log_cmat(self.val_confusion, "val/cmat")
 
     def train_dataloader(self):
         train_loader = torch.utils.data.DataLoader(
