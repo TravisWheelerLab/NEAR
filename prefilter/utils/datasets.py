@@ -1,213 +1,272 @@
-import json
 import os
+import pdb
+import json
 import time
-from collections import defaultdict
-from glob import glob
-from random import shuffle
-
-import numpy as np
 import torch
+import numpy as np
+import logging
+from collections import defaultdict
 
-import utils as utils
+import prefilter.utils as utils
 
-__all__ = ['Word2VecStyleDataset',
-           'ProteinSequenceDataset',
-           ]
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+log = logging.getLogger(__name__)
 
-class Word2VecStyleDataset(torch.utils.data.Dataset):
-
-    def __init__(self,
-                 json_files,
-                 max_sequence_length,
-                 n_negative_samples,
-                 evaluating=False,
-                 return_protein_strings=False
-                 ):
-
-        self.max_sequence_length = max_sequence_length
-        self.n_negative_samples = n_negative_samples
-        self.evaluating = evaluating
-        self.return_protein_strings = return_protein_strings
-        self._build_dataset(json_files)
-
-        if self.evaluating:
-            self.sample_func = self._iterate
-        else:
-            self.sample_func = self._sample_w2v_batch
-
-    def _encoding_func(self, x):
-        return utils.encode_protein_as_one_hot_vector(x, self.max_sequence_length)
-
-    def _sample_w2v_batch(self, idx):
-
-        set_of_positive_labels = []
-
-        while len(set_of_positive_labels) == 0:
-            target_sequence = self.sequences[int(np.random.rand() * len(self.sequences))]
-            # grab a random sequence
-            set_of_positive_labels = self.sequences_and_labels[target_sequence]  # ... and all of the
-        # i need to figure out why some sequences have 0 labels associated with
-        # them...
-
-        # labels that come along with it (pfam ids)
-
-        target_family = set_of_positive_labels[int(np.random.rand() * len(set_of_positive_labels))]
-        # choose targets with probability proportional
-        # to the number of sequences in that family
-
-        y = self.labels_and_sequences[target_family]
-        context_sequence = y[int(np.random.rand() * len(y))]
-
-        # k, now sample self.n_negative_samples
-        negative_examples = []
-        i = 0
-        while len(negative_examples) < self.n_negative_samples:
-            negative_idx = np.array([int(np.random.rand() * len(self.pfam_names)) for _ in
-                                     range(self.n_negative_samples)])
-
-            for idx in negative_idx:
-                x = self.pfam_names[idx]
-                if len(x) > 1:
-                    negative_family = x[int(np.random.rand() * len(x))]
-                elif len(x) == 1:
-                    negative_family = x[0]
-                else:
-                    # this shouldn't happen. But it only happens a few
-                    # times.
-                    continue
-
-                if negative_family not in set_of_positive_labels:
-                    negative_examples.append(negative_family)
-
-        if len(negative_examples) > self.n_negative_samples:
-            negative_examples = negative_examples[:self.n_negative_samples]
-
-        negatives = []
-        for negative in negative_examples:
-            x = self.labels_and_sequences[negative][int(np.random.rand() * len(self.labels_and_sequences[negative]))]
-            negatives.append(x)
-
-        target = torch.tensor(self._encoding_func(target_sequence))
-        context = torch.tensor(self._encoding_func(context_sequence))
-        negative_encodings = [torch.tensor(self._encoding_func(x)) for x in negatives]
-        labels = [1]
-        labels.extend([0] * self.n_negative_samples)
-        labels = torch.tensor([labels])
-        if self.return_protein_strings:
-            return (target.float(), context.float(), negative_encodings,
-                    labels.float(), target_sequence, context_sequence,
-                    negatives)
-        else:
-            return (target.float(), context.float(), negative_encodings,
-                    labels.float())
-
-    def _iterate(self, idx):
-        seq, labels = self.sequences[idx], self.pfam_names[idx]
-        return torch.tensor(self._encoding_func(seq)), labels
-
-    def _build_dataset(self, json_files):
-
-        if not isinstance(json_files, list):
-            json_files = [json_files]
-        self.sequences_and_labels = {}
-        for f in json_files:
-            with open(f, 'r') as src:
-                dct = json.load(src)
-                self.sequences_and_labels.update(dct)
-
-        self.labels_and_sequences = defaultdict(list)
-        for prot_seq, accession_ids in self.sequences_and_labels.items():
-            for i in accession_ids:
-                self.labels_and_sequences[i].append(prot_seq)
-
-        self.sequences = list(self.sequences_and_labels.keys())
-        self.pfam_names = list(self.sequences_and_labels.values())
-
-    def __len__(self):
-        return len(self.sequences_and_labels)
-
-    def __getitem__(self, idx):
-        x = self.sample_func(idx)
-        return x
+GSCC_SAVED_TF_MODEL_PATH = "/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760"
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        fasta_files,
+        single_label=False,
+        existing_name_to_label_mapping=None,
+        sample_sequences_based_on_family_membership=False,
+        resample_based_on_uniform_dist=False,
+        sample_sequences_based_on_num_labels=False,
+        use_pretrained_model_embeddings=False,
+        evaluating=False,
+    ):
 
-    def __init__(self,
-                 json_files,
-                 max_sequence_length,
-                 encode_as_image,
-                 multilabel,
-                 name_to_label_mapping,
-                 n_classes=None
-                 ):
+        if not len(fasta_files):
+            raise ValueError("No fasta files found")
 
-        self.max_sequence_length = max_sequence_length
-        self.multilabel = multilabel
-        self.encode_as_image = encode_as_image
-        self.name_to_label_mapping = name_to_label_mapping
+        self.fasta_files = fasta_files
 
-        if n_classes is None:
-            self.n_classes = utils.get_n_classes(self.name_to_label_mapping)
-        else:
-            self.n_classes = n_classes
+        if not isinstance(self.fasta_files, list):
+            self.fasta_files = [self.fasta_files]
 
-        self._build_dataset(json_files)
+        self.existing_name_to_label_mapping = existing_name_to_label_mapping
+        self.subsample_members = 1000
+        self.single_label = single_label
+        self.evaluating = evaluating
+        self.sample_sequences_based_on_family_membership = (
+            sample_sequences_based_on_family_membership
+        )
+        self.resample_based_on_uniform_dist = resample_based_on_uniform_dist
+        self.sample_sequences_based_on_num_labels = sample_sequences_based_on_num_labels
+        self.use_pretrained_model_embeddings = use_pretrained_model_embeddings
+
+        self._build_dataset()
 
     def _encoding_func(self, x):
-        # TODO: implement more logic here to use variable encodings.
+        return utils.encode_protein_as_one_hot_vector(x.upper())
 
-        labels, seq = x
+    def _build_dataset(self):
 
-        oh = encode_protein_as_one_hot_vector(seq, self.max_sequence_length)
-        if not self.encode_as_image:
-            oh = np.argmax(oh, axis=-1)
+        self.sequences_and_labels = []
 
-        if self.multilabel:
-            label = np.zeros((self.n_classes,))
-            label[np.asarray(labels)] = 1
-            labels = label
+        if self.existing_name_to_label_mapping is None:
+            self.name_to_class_code = {}
+            class_id = 0
 
-        return [oh, label]
+        elif isinstance(self.existing_name_to_label_mapping, str):
+            s = "loading class mapping from file {}".format(
+                self.existing_name_to_label_mapping
+            )
+            print(s)
 
-    def _build_dataset(self, json_files):
-        if not isinstance(json_files, list):
-            json_files = [json_files]
+            with open(self.existing_name_to_label_mapping, "r") as src:
+                self.name_to_class_code = json.load(src)
 
-        if len(json_files) == 1:
-            self.sequences_and_labels = read_sequences_from_json(json_files[0], self.name_to_label_mapping)
+            class_id = len(self.name_to_class_code)
+
+        elif isinstance(self.existing_name_to_label_mapping, dict):
+            self.name_to_class_code = self.existing_name_to_label_mapping
+            class_id = len(self.name_to_class_code)
+
         else:
-            self.sequences_and_labels = []
-            for j in json_files:
-                self.sequences_and_labels.extend(read_sequences_from_json(j,
-                                                                          self.name_to_label_mapping))
+            s = "expected existing_name_to_label_mapping to be one of dict, string, or None, found {}".format(
+                type(self.existing_name_to_labelmapping)
+            )
+            raise ValueError(s)
 
-        shuffle(self.sequences_and_labels)
+        self.family_to_indices = defaultdict(list)
+
+        index_counter = 0
+
+        for f in self.fasta_files:
+
+            sequence_labels, sequences = utils.fasta_from_file(f)
+
+            sequence_to_labels = defaultdict(list)
+
+            for i, (sequence, labelstring) in enumerate(
+                zip(sequences, sequence_labels)
+            ):
+
+                labels = utils.parse_labels(labelstring)
+
+                if labels is None:
+                    continue
+
+                if len(labels) > 1 and self.single_label:
+                    labels = [labels[0]]
+                sequence_to_labels[sequence] = labels
+
+            for sequence, labelset in sequence_to_labels.items():
+
+                for label in labelset:
+
+                    self.family_to_indices[label].append(index_counter)
+
+                    if label not in self.name_to_class_code:
+
+                        if not self.evaluating:
+                            self.name_to_class_code[label] = class_id
+                            class_id += 1
+
+                index_counter += 1
+                self.sequences_and_labels.append([labelset, sequence])
+
+        if self.sample_sequences_based_on_family_membership:
+
+            total_seq = sum(map(len, self.family_to_indices.values()))
+            if self.resample_based_on_uniform_dist:
+                total_families = len(self.family_to_indices)
+                family_to_frequency = {
+                    k: 1 / total_families for k, v in self.family_to_indices.items()
+                }
+            else:
+                family_to_frequency = {
+                    k: len(v) / total_seq for k, v in self.family_to_indices.items()
+                }
+
+            family_to_resampled_membership = {}
+
+            for family, indices in self.family_to_indices.items():
+                if self.resample_based_on_uniform_dist:
+                    # artificially make everything have the same number of members
+                    family_to_resampled_membership[family] = 1
+                else:
+                    indices = np.asarray(indices)
+                    keep_prob = np.sqrt(1e-5 / family_to_frequency[family])
+                    kept = np.count_nonzero(np.random.rand(len(indices)) <= keep_prob)
+
+                    if kept == 0:
+                        family_to_resampled_membership[family] = 1
+                    else:
+                        family_to_resampled_membership[family] = kept
+
+            self.length_of_dataset = sum(list(family_to_resampled_membership.values()))
+            if self.resample_based_on_uniform_dist:
+                self.length_of_dataset = 10*self.length_of_dataset
+            self.families = np.asarray(list(family_to_resampled_membership.keys()))
+            self.sample_probs = np.asarray(
+                list(family_to_resampled_membership.values())
+            )
+            self.sample_probs = self.sample_probs / np.sum(self.sample_probs)
+
+        self.sequences_and_labels = np.asarray(
+            self.sequences_and_labels, dtype="object"
+        )
+        if self.sample_sequences_based_on_num_labels:
+
+            self.family_to_sample_dist = {}
+            for family in self.families:
+                lengths_of_label_sets = list(
+                    map(
+                        lambda x: len(x[0]),
+                        self.sequences_and_labels[self.family_to_indices[family]],
+                    )
+                )
+                x = np.asarray(lengths_of_label_sets) ** 4
+                self.family_to_sample_dist[family] = x / np.sum(x)
+
+        self.n_classes = class_id + 1
 
     def __len__(self):
+        if self.sample_sequences_based_on_family_membership:
+            return self.length_of_dataset
+        else:
+            return len(self.sequences_and_labels)
 
-        return len(self.sequences_and_labels)
+    def _make_multi_hot(self, labels):
+        y = np.zeros(self.n_classes)
+        class_ids = [self.name_to_class_code[l] for l in labels]
+        for idx in class_ids:
+            y[idx] = 1
+        return torch.as_tensor(y)
 
     def __getitem__(self, idx):
-        x, y = self._encoding_func(self.sequences_and_labels[idx])
-        return torch.tensor(x.squeeze()).transpose(-1, -2).float(), torch.tensor(y)
+
+        if self.sample_sequences_based_on_family_membership:
+            family = np.random.choice(self.families, p=self.sample_probs)
+            family_indices = self.family_to_indices[family]
+            if self.sample_sequences_based_on_num_labels:
+                idx = np.random.choice(
+                    family_indices, p=self.family_to_sample_dist[family]
+                )
+                labels, features = self.sequences_and_labels[idx]
+            else:
+                subsample = (
+                    len(family_indices)
+                    if len(family_indices) < self.subsample_members
+                    else self.subsample_members
+                )
+                idx = int(np.random.rand() * subsample)
+                labels, features = self.sequences_and_labels[family_indices[idx]]
+        else:
+            labels, features = self.sequences_and_labels[idx]
+
+        x = self._encoding_func(features)
+        y = self._make_multi_hot(labels)
+        return torch.as_tensor(x), y
 
 
-if __name__ == '__main__':
+class SimpleSequenceIterator(torch.utils.data.Dataset):
+    def __init__(self, fasta_file, one_hot_encode=False):
+        """
+        takes a fasta file as input
+        """
 
-    root = '../../data/small-dataset/'
-    root = glob(os.path.join(root, "*train.json"))
-    dset = Word2VecStyleDataset(root, None, 5, return_protein_strings=True)
+        self.fasta_file = fasta_file
+        self.labels, self.sequences = utils.fasta_from_file(fasta_file)
+        self.one_hot_encode = one_hot_encode
 
-    dset = torch.utils.data.DataLoader(dset, batch_size=32,
-                                       collate_fn=utils.pad_word2vec_batch_with_string)
-    i = 0
+    def _encoding_func(self, x):
+        if self.one_hot_encode:
+            return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
+        else:
+            return x
 
-    s = time.time()
-    cnt = 0
-    for x in dset:
-        cnt += 1
-        print(x[0].shape)
-        pass
-    print(time.time() - s, (time.time() - s) / cnt)
+    def __getitem__(self, idx):
+        return self._encoding_func(self.sequences[idx]), torch.as_tensor([0])
+
+    def __len__(self):
+        return len(self.sequences)
+
+
+def data_run():
+    from glob import glob
+
+    pid = 0.35
+    n = 100
+
+    fasta_files = glob(
+        "/home/tc229954/data/prefilter/training_data/{}/{}/*train*".format(pid, n)
+    )
+
+    resample_uniform = True
+
+    dataset = ProteinSequenceDataset(
+        fasta_files,
+        single_label=True,
+        sample_sequences_based_on_family_membership=True,
+        resample_based_on_uniform_dist=resample_uniform,
+        sample_sequences_based_on_num_labels=False,
+    )
+    for features, labels in dataset:
+        print(np.argmax(features.numpy(), axis=0))
+
+    print(
+        f"{'uniform' if resample_uniform else 'frequency based'}",
+        len(dataset),
+        pid,
+        n,
+    )
+
+
+if __name__ == "__main__":
+    data_run()
