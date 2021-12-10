@@ -95,19 +95,10 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
             for i, (sequence, labelstring) in enumerate(
                 zip(sequences, sequence_labels)
             ):
-                delim = labelstring.find("|")
 
-                if delim == -1:
-                    log.info(f"No delimiter found for {f}")
-                    continue
+                labels = utils.parse_labels(labelstring)
 
-                labels = labelstring[delim + 1 :].split(" ")
-                labels = list(filter(len, labels))
-
-                if not len(labels):
-                    log.info(
-                        f"No labels found for sequence num {i} in {f}, {labelstring}"
-                    )
+                if labels is None:
                     continue
 
                 if len(labels) > 1 and self.single_label:

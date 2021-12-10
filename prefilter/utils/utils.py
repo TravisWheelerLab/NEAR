@@ -1,6 +1,7 @@
 import json
 import os
 import pdb
+import logging
 from random import shuffle, seed
 
 import numpy as np
@@ -8,10 +9,13 @@ import torch
 
 from prefilter.utils.datasets import GSCC_SAVED_TF_MODEL_PATH
 
+log = logging.getLogger(__name__)
+
 seed(1)
 
 __all__ = [
     "encode_protein_as_one_hot_vector",
+    "parse_labels",
     "pad_batch",
     "stack_batch",
     "PROT_ALPHABET",
@@ -69,6 +73,32 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
             one_hot_encoding[PROT_ALPHABET["X"], i] = 1  # X is "any amino acid"
 
     return one_hot_encoding
+
+def parse_labels(labelstring):
+    """
+    Parses the Pfam accession IDs from a > line in a fasta file.
+    Assumes that the fasta files have been generated with prefilter.utils.label_fasta.
+    Each > line of the fasta file should look like this:
+    >arbitrary name of sequence | PFAMID1 PFAMID2 PFAMID3 ... PFAMIDN
+    <sequence>
+    Each sequence can have one or many pfam accession IDs as labels.
+    :param labelstring: line to parse labels from
+    :type labelstring: str
+    :return: List of Pfam accession IDs
+    :rtype: Union[List[str], None]
+    """
+    delim = labelstring.find("|")
+
+    if delim == -1:
+        return None
+
+    labels = labelstring[delim + 1 :].split(" ")
+    labels = list(filter(len, labels))
+
+    if not len(labels):
+        return None
+
+    return labels
 
 
 def fasta_from_file(fasta_file):
