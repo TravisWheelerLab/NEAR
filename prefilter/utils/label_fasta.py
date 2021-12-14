@@ -41,8 +41,9 @@ def main(args):
                 )
                 continue
             labels = [l[0] for l in labels]
-            dst.write(">" + sequence_name + " | " + " ".join(labels) + "\n" + seq)
-            dst.write("\n")
+            if len(labels):
+                dst.write(">" + sequence_name + " | " + " ".join(labels) + "\n" + seq)
+                dst.write("\n")
 
 
 def parser():
