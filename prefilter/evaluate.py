@@ -1,9 +1,10 @@
+# pylint: disable=no-member
 import os
-import pdb
 
 import torch
 import numpy as np
 import yaml
+import torchmetrics
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 from glob import glob
@@ -13,8 +14,16 @@ from prefilter.models import Prot2Vec
 
 from prefilter.utils import ProteinSequenceDataset, SimpleSequenceIterator, pad_batch, stack_batch
 
+def precision_and_recall(cmat):
+    res = cmat.compute().detach().cpu().numpy()
+    rec = res / np.sum(res, axis=0, keepdims=True)
+    prec = res / np.sum(res, axis=1, keepdims=True)
+    r = np.diag(rec)
+    p = np.diag(prec)
+    return np.nanmean((2*r*p)/(r+p)), r, p
 
-def load_model(logs_dir, model_path):
+
+def load_model(logs_dir, model_path=None):
     yaml_path = os.path.join(logs_dir, "hparams.yaml")
 
     if model_path is None:
@@ -128,7 +137,7 @@ def predict_all_sequences_and_rank(model, test_dataset, decoy_dataset, save_fig)
                     + num_false_positives_above_threshold_real_sequences
                 )
 
-    total_sequences = len(test_psd)
+    total_sequences = len(test_dataset)
     percent_tps_recovered = {
         k: v / total_labels for k, v in threshold_to_true_positives.items()
     }
@@ -295,16 +304,12 @@ def main(args):
 
     decoys = SimpleSequenceIterator(args.decoy_path, one_hot_encode=prot2vec)
 
-    test_collate_fn = (
-        pad_batch if prot2vec else tf_saved_model_collate_fn(args.batch_size)
-    )
+    test_collate_fn = pad_batch
     test = torch.utils.data.DataLoader(
         test_psd, batch_size=args.batch_size, shuffle=False, collate_fn=test_collate_fn
     )
 
-    decoy_collate_fn = (
-        stack_batch if prot2vec else tf_saved_model_collate_fn(args.batch_size)
-    )
+    decoy_collate_fn = stack_batch
 
     decoys = torch.utils.data.DataLoader(
         decoys, batch_size=args.batch_size, shuffle=False, collate_fn=decoy_collate_fn
@@ -312,3 +317,54 @@ def main(args):
 
     evaluation_figure_name = args.save_prefix + "_evaluated.png"
     evaluate_model(trained_model, test, decoys, evaluation_figure_name)
+
+
+if __name__ == '__main__':
+
+    log_dir = '/home/tc229954/share/prefilter/500_families_lr_ablate/4_81_1/exp_64/'
+
+    trained_model, hparams = load_model(log_dir)
+    val_files = hparams["train_files"]
+
+    with open(os.path.join(log_dir, "new_hparams.yaml")) as src:
+        cc = yaml.safe_load(src)
+
+    pfam_id_to_class_code = cc["name_to_class_code"]
+    n_classes = cc["n_classes"]
+
+    class_code_to_pfam_id = {v: k for k, v in pfam_id_to_class_code.items()}
+
+    psd = ProteinSequenceDataset(
+        fasta_files=val_files,
+        existing_name_to_label_mapping=pfam_id_to_class_code,
+        evaluating=True,
+        single_label=True,
+        use_pretrained_model_embeddings=False
+    )
+
+    device = 'cuda'
+    model = trained_model.to(device)
+    dataset = torch.utils.data.DataLoader(psd,
+                                          batch_size=64,
+                                          collate_fn=pad_batch)
+
+    cmat = torchmetrics.ConfusionMatrix(num_classes=n_classes).to(device)
+
+    correct = 0
+    total = len(psd)
+
+    sequence_to_correct = {}
+
+    with torch.no_grad():
+
+        for features, masks, labels in dataset:
+            features = features.to(device).float()
+            labels = labels.to(device).argmax(dim=-1)
+            preds = model.forward(features, masks).argmax(dim=-1)
+            correct += torch.sum(labels == preds).item()
+            cmat.update(preds, labels)
+
+    print(correct/total)
+    f1, r, p = precision_and_recall(cmat)
+
+    print(f1, np.nanmean(r), np.nanmean(p))

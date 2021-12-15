@@ -107,6 +107,10 @@ class Prot2Vec(BaseModel):
 
         self._create_datasets()
         self._setup_layers()
+
+        self.save_hyperparameters()
+        self.hparams["name_to_class_code"] = self.class_code_mapping
+        self.hparams["n_classes"] = self.n_classes
         self.save_hyperparameters()
 
     def _setup_layers(self):

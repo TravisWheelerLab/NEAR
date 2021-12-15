@@ -1,8 +1,10 @@
+# pylint: disable=no-member
 import os
 from pytorch_lightning import seed_everything
 from time import time
 
-seed_everything(int(time()) // 1000)
+seed = 1639426
+seed_everything(seed)
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
@@ -18,7 +20,7 @@ from prefilter.utils import PROT_ALPHABET
 
 def main(args):
     if args.schedule_lr and (
-        args.step_lr_step_size is None or args.step_lr_decay_factor is None
+            args.step_lr_step_size is None or args.step_lr_decay_factor is None
     ):
         raise ValueError(
             "--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor"
@@ -79,6 +81,11 @@ def main(args):
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             dirpath=checkpoint_dir, save_last=True, save_top_k=0, verbose=True
         )
+        best_loss_ckpt = pl.callbacks.model_checkpoint.ModelCheckpoint(
+            monitor="val/loss",
+            filename="{epoch}-{val/loss:.5f}-{val/acc:.5f}",
+            save_top_k=1,
+        )
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             monitor="val/loss",
@@ -108,7 +115,7 @@ def main(args):
         if args.shoptimize
         else args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
-        "callbacks": [checkpoint_callback, log_lr],
+        "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt],
         "accelerator": "ddp" if args.gpus else None,
         "plugins": DDPPlugin(find_unused_parameters=False),
         "precision": 16 if args.gpus else 32,
@@ -135,7 +142,6 @@ def main(args):
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
     else:
-        # testing for my models requires a wandb logger.
         torch.save(
             model.state_dict(),
             os.path.join(trainer.logger.experiment.dir, args.model_name),

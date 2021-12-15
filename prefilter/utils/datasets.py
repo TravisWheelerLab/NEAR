@@ -1,3 +1,4 @@
+# pylint: disable=no-member
 import os
 import pdb
 import json
@@ -78,7 +79,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
         else:
             s = "expected existing_name_to_label_mapping to be one of dict, string, or None, found {}".format(
-                type(self.existing_name_to_labelmapping)
+                type(self.existing_name_to_label_mapping)
             )
             raise ValueError(s)
 
@@ -103,6 +104,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
                 if len(labels) > 1 and self.single_label:
                     labels = [labels[0]]
+
                 sequence_to_labels[sequence] = labels
 
             for sequence, labelset in sequence_to_labels.items():
