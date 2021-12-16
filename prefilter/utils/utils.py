@@ -75,6 +75,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
 
     return one_hot_encoding
 
+
 def parse_labels(labelstring):
     """
     Parses the Pfam accession IDs from a > line in a fasta file.

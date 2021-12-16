@@ -1,63 +1,187 @@
 #!/usr/bin/env python3
+import pdb
+import shutil
+import subprocess
 import sys
+import pandas as pd
+import logging
 from collections import defaultdict
 import os
 
+log = logging.getLogger(__name__)
+
 from argparse import ArgumentParser, FileType
-from prefilter.utils import fasta_from_file
+import prefilter.utils as utils
+
+TBLOUT_COL_NAMES = [
+    "target_name",
+    "query_name",
+    "accession_id",
+    "e_value",
+    "description",
+]
+TBLOUT_COLS = [0, 2, 3, 4, 18]
 
 
-def _name_to_label(domtblout):
-    name_to_label = defaultdict(list)
-    for row in domtblout:
-        row = row.rstrip("\n").split(" ")
-        name_to_label[row[0]].append([row[2], row[3]])
-    return name_to_label
-
-
-def main(args):
-    # names are the names as labeled in pfam.
-    # we're going to overwrite these with new "names" that are actually
-    # labels - the pfam accession ID.
-    names, seq = fasta_from_file(args.fasta_file)
-    names = [n.split(" ")[0] for n in names]
-    name_to_seq = {n: s for n, s in zip(names, seq)}
-    name_to_label = _name_to_label(args.domtblout_labels)
-    outfile = os.path.join(args.output_directory, os.path.basename(args.fasta_file))
-
-    with open(outfile, "w") as dst:
-        for sequence_name, labels in name_to_label.items():
-            labels = sorted(labels, key=lambda x: float(x[1]))
-            labels = list(
-                filter(lambda x: float(x[1]) <= args.evalue_threshold, labels)
-            )
-            # sort so the first label will be the one with the highest e-value
-            try:
-                seq = name_to_seq[sequence_name]
-            except KeyError:
-                print(
-                    "a key error means that the domtblout didn't contain anything for the sequence named {}"
-                    "in {}".format(sequence_name, args.fasta_file)
-                )
-                continue
-            labels = [l[0] for l in labels]
-            if len(labels):
-                dst.write(">" + sequence_name + " | " + " ".join(labels) + "\n" + seq)
-                dst.write("\n")
-
-
-def parser():
-    parser = ArgumentParser()
-    parser.add_argument("--fasta_file", type=str)
-    parser.add_argument(
-        "domtblout_labels", nargs="?", type=FileType("r"), default=sys.stdin, help=""
+def parse_tblout(tbl):
+    df = pd.read_csv(
+        tbl,
+        skiprows=3,
+        header=None,
+        delim_whitespace=True,
+        usecols=TBLOUT_COLS,
+        names=TBLOUT_COL_NAMES,
     )
-    parser.add_argument("--output_directory", type=str)
+    df["target_name"] = df["target_name"] + " " + df["description"]
+    return df
+
+
+def create_parser():
+    parser = ArgumentParser()
+    parser.add_argument("-a", "--aligned_fasta_file", type=str)
+    parser.add_argument(
+        "-p",
+        "--pid",
+        type=float,
+        help="percent identity to split the aligned fasta file",
+    )
+    parser.add_argument(
+        "-t",
+        "--tblout",
+        default=None,
+        help="tblout containing the results of hmmsearch HMMDB aligned_fasta_file."
+        " default: basename(aligned_fasta_file) + .tblout",
+    )
+    parser.add_argument(
+        "-hdb",
+        "--hmmdb",
+        default=None,
+        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
+    )
+    parser.add_argument(
+        "-c",
+        "--carbs_output_directory",
+        type=str,
+        help="where to save the clustered .fa files.",
+    )
+    parser.add_argument(
+        "-f",
+        "--fasta_output_directory",
+        type=str,
+        help="where to save the labeled fasta files",
+    )
     parser.add_argument("--evalue_threshold", type=float, default=1e-5)
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
+
+
+def labels_from_file(fasta_in, fasta_out, tblout_df):
+    labels, sequences = utils.fasta_from_file(fasta_in)
+
+    with open(fasta_out, "w") as dst:
+        for label, sequence in zip(labels, sequences):
+
+            assigned_labels = tblout_df.loc[tblout_df["target_name"] == label]
+
+            if len(assigned_labels) == 0:
+                # why are some sequences not classified? They're in Pfam-seed,
+                # which means they're manually curated to be part of a family.
+                log.info(f"sequence named {label} not found in {fasta_in} tblout.")
+                continue
+            # each sequence should have at least one label, but we
+            # only need to grab one since one sequence can be associated with
+            # multiple pfam accession IDs
+            fasta_header = f">{assigned_labels['target_name'].iloc[0]} | "
+            labelset = []
+
+            for seq_label, e_value in zip(
+                assigned_labels["accession_id"], assigned_labels["e_value"]
+            ):
+
+                if float(e_value) <= args.evalue_threshold:
+                    labelset.append(seq_label)
+
+            if len(labelset):
+                fasta_header += " ".join(labelset) + "\n" + sequence + "\n"
+                dst.write(fasta_header)
 
 
 if __name__ == "__main__":
-    args = parser()
-    main(args)
+    # Inputs:
+    # 1) .afa file.
+    # 2) hmm database
+    # 3) percent id
+    args = create_parser()
+
+    # if we can't find the .afa, exit
+    if not os.path.isfile(args.aligned_fasta_file):
+        raise ValueError(f"couldn't find .afa at {args.aligned_fasta_file}")
+
+    esl_output = subprocess.check_output(
+        f"esl-alistat {args.aligned_fasta_file}".split()
+    ).decode("utf-8")
+    esl_output = esl_output.split("\n")[2].split(":")[-1]
+
+    if int(esl_output) < 10:
+        log.info(f"less than 10 sequences found for {args.aligned_fasta_file}, exiting")
+        exit()
+
+    tblout_path = os.path.splitext(args.aligned_fasta_file)[0] + ".tblout"
+    # make sure that the tblout passed in exists, otherwise error out
+    if args.tblout is not None:
+        if not os.path.isfile(args.tblout):
+            raise ValueError(f"couldn't find .tblout at {args.tblout}")
+        else:
+            tblout_path = args.tblout
+    # else, look for a tblout in the same directory as the .afa (with .tblout as the extension).
+    # if it doesn't exist, make it.
+    elif not os.path.isfile(tblout_path):
+        subprocess.call(
+            f"hmmsearch -o /dev/null --tblout {tblout_path} {args.hmmdb} {args.aligned_fasta_file}".split()
+        )
+
+    # cluster the .afa if we can't find the .ddgm
+    ddgm_path = os.path.splitext(args.aligned_fasta_file)[0] + ".ddgm"
+    if not os.path.isfile(ddgm_path):
+        subprocess.call(f"carbs cluster {args.aligned_fasta_file}".split())
+
+    carbs_output_template = (
+        os.path.join(
+            args.carbs_output_directory,
+            os.path.splitext(os.path.basename(args.aligned_fasta_file))[0],
+        )
+        + ".{}-{}.fa"
+    )
+    fasta_output_template = (
+        os.path.join(
+            args.fasta_output_directory,
+            os.path.splitext(os.path.basename(args.aligned_fasta_file))[0],
+        )
+        + ".{}-{}.fa"
+    )
+
+    os.makedirs(args.fasta_output_directory, exist_ok=True)
+    os.makedirs(args.carbs_output_directory, exist_ok=True)
+
+    # now, split the .afa at the given pid:
+    if not os.path.isfile(carbs_output_template.format(args.pid, "train")):
+        cmd = f"carbs split -T argument --split_test --output_path {args.carbs_output_directory} {args.aligned_fasta_file} {args.pid}"
+        subprocess.call(cmd.split())
+
+    # now, use the .tblout labels to create new fasta files with labels.
+    tblout = parse_tblout(tblout_path)
+
+    train_fasta_in = carbs_output_template.format(args.pid, "train")
+
+    if os.path.isfile(train_fasta_in):
+        train_fasta_out = fasta_output_template.format(args.pid, "train")
+        labels_from_file(train_fasta_in, train_fasta_out, tblout)
+
+    test_fasta_in = carbs_output_template.format(args.pid, "test")
+    if os.path.isfile(test_fasta_in):
+        test_fasta_out = fasta_output_template.format(args.pid, "test")
+        labels_from_file(test_fasta_in, test_fasta_out, tblout)
+
+    valid_fasta_in = carbs_output_template.format(args.pid, "valid")
+    if os.path.isfile(valid_fasta_in):
+        valid_fasta_out = fasta_output_template.format(args.pid, "valid")
+        labels_from_file(valid_fasta_in, valid_fasta_out, tblout)
