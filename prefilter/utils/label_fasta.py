@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 import pdb
-import shutil
 import subprocess
-import sys
 import pandas as pd
 import logging
-from collections import defaultdict
 import os
 
 log = logging.getLogger(__name__)
 
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 import prefilter.utils as utils
+
+# TODO: replace hardcoded stuff with variables in __init__.py in prefilter
 
 TBLOUT_COL_NAMES = [
     "target_name",
@@ -74,31 +73,49 @@ def create_parser():
     return parser.parse_args()
 
 
-def labels_from_file(fasta_in, fasta_out, tblout_df):
+def labels_from_file(
+    fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5, relabel=False
+):
+
     labels, sequences = utils.fasta_from_file(fasta_in)
 
     with open(fasta_out, "w") as dst:
         for label, sequence in zip(labels, sequences):
+            if " |" in label:
+                target_label = label[: label.find(" |")]
+            else:
+                target_label = label
 
-            assigned_labels = tblout_df.loc[tblout_df["target_name"] == label]
+            assigned_labels = tblout_df.loc[tblout_df["target_name"] == target_label]
 
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
                 # which means they're manually curated to be part of a family.
-                log.info(f"sequence named {label} not found in {fasta_in} tblout.")
+                log.info(
+                    f"sequence named {target_label} not found in {fasta_in} tblout."
+                )
                 continue
             # each sequence should have at least one label, but we
             # only need to grab one since one sequence can be associated with
             # multiple pfam accession IDs
-            fasta_header = f">{assigned_labels['target_name'].iloc[0]} | "
+            if relabel:
+                # if we're relabelng, forget about adding a delimiter
+                fasta_header = f">{label} "
+            else:
+                # otherwise, add it in.
+                fasta_header = f">{label} | "
+
             labelset = []
 
             for seq_label, e_value in zip(
                 assigned_labels["accession_id"], assigned_labels["e_value"]
             ):
 
-                if float(e_value) <= args.evalue_threshold:
-                    labelset.append(seq_label)
+                if float(e_value) <= evalue_threshold:
+                    if relabel:
+                        labelset.append("RL" + seq_label)
+                    else:
+                        labelset.append(seq_label)
 
             if len(labelset):
                 fasta_header += " ".join(labelset) + "\n" + sequence + "\n"
