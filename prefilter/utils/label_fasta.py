@@ -76,7 +76,7 @@ def parse_tblout(tbl):
     return df
 
 
-def create_parser():
+def parse_args():
     parser = ArgumentParser()
     parser.add_argument("-a", "--aligned_fasta_file", type=str)
     parser.add_argument(
@@ -121,6 +121,9 @@ def create_parser():
 def labels_from_file(
     fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5, relabel=False
 ):
+    if os.path.isfile(fasta_out):
+        pfunc(f"Already created labels for {fasta_out}.")
+        return
 
     labels, sequences = utils.fasta_from_file(fasta_in)
 
@@ -136,14 +139,18 @@ def labels_from_file(
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
                 # which means they're manually curated to be part of a family.
-                pfunc(f"sequence named {target_label} not found in {tblout_path}")
+                pfunc(
+                    f"sequence named {target_label} not found in classification on {fasta_in}"
+                )
                 target_label = target_label.split()[0]
                 # Sometimes the names don't have a description, and aren't found.
                 assigned_labels = tblout_df.loc[
                     tblout_df["target_name"] == target_label
                 ]
                 if len(assigned_labels) == 0:
-                    pfunc(f"sequence named {target_label} not found in {tblout_path}")
+                    pfunc(
+                        f"sequence named {target_label} not found in classification on {fasta_in}"
+                    )
                 continue
             # each sequence should have at least one label, but we
             # only need to grab one since one sequence can be associated with
@@ -176,12 +183,37 @@ def labels_from_file(
                 dst.write(fasta_header)
 
 
-if __name__ == "__main__":
-    # Inputs:
-    # 1) .afa file.
-    # 2) hmm database
-    # 3) percent id
-    args = create_parser()
+def main(args):
+    """
+    Creates labels for the prefilter task.
+    I will try to describe the complicated process of generating labels.
+
+    1) Ingest an aligned fasta file (.afa) and use carbs (https://github.com/TravisWheelerLab/carbs) to split it into train,
+    test, and validation sets. If there are < 3 sequences in the .afa, exit. If the .afa can't be split at the given
+    percent identity, dump all of the sequences in it into the training set.
+    2) Use the provided hmm database to classify each of the sequences in the .afa file. A sequence is considered
+    "classified" if the alignment between it and a hmm produces an e-value of < 1e-5. The threshold is tunable via
+    the --evalue command line argument. Each sequence can have multiple labels. Labels are provided in the form
+    of a Pfam accession ID.  All of the sequences in the .afa are assumed to be present in the hmm database. The hmm
+    database is used to assign "gold-standard" labels - i.e. the "true" family membership of each sequence in the
+    .afa.
+    3) Extract the sub-alignment of the training sequences from the alignment database and use the sub-alignment to
+    build a new "train" hmm.
+    4) Use the train hmm to reclassify the train, test, and validation splits, and save the sequences to a new file,
+    called "{fasta_file}-relabeled.fa." The -relabeled files describe how well hmmer does when classifying the test/valid
+    sequences when all it's seen is the training set. The "relabels" will be used to benchmark the neural network
+    model that's aimed at prefilter hmmer hits. In effect, the "relabels" tell us how well our network actually matches
+    hmmer - if hmmer can't classify a sequence given the training set, and we pass it that hard-to-classify sequence
+    with our nn, we won't actually classify it correctly with hmmer. That's why we have two sets of labels - to quantify
+    how well do we do at determining the "true" family membership, and how well we do compared to hmmer.
+
+    Note: I use "classify" as shorthand for "align each hmm to each sequence in the fasta database with hmmsearch".
+
+    :param args:
+    :type args:
+    :return:
+    :rtype:
+    """
 
     # if we can't find the .afa, exit
     if not os.path.isfile(args.aligned_fasta_file):
@@ -257,6 +289,13 @@ if __name__ == "__main__":
 
     # grab the sequences from the alignment that are in train
     train_seq, _ = utils.fasta_from_file(train_fasta_out)
+    if not len(train_seq):
+        pfunc(
+            f"No training sequences in {train_fasta_out}."
+            f" Check {train_fasta_in} and {tblout_path}."
+        )
+        return
+
     random_f = random_filename()
     with open(random_f, "w") as dst:
         for seq in train_seq:
@@ -283,12 +322,20 @@ if __name__ == "__main__":
         or os.stat(stockholm_out_path).st_size == 0
     ):
         family_name = os.path.splitext(os.path.basename(args.aligned_fasta_file))[0]
-        subprocess.call(
-            f"esl-afetch -o {stockholm_out_path} {args.alidb} {family_name}".split()
+        assert (
+            subprocess.call(
+                f"esl-afetch -o {stockholm_out_path} {args.alidb} {family_name}".split()
+            )
+            == 0
         )
 
-    subprocess.call(
-        f"esl-alimanip -o {ali_out_path} --seq-k {random_f} {stockholm_out_path}".split()
+    print(random_f, stockholm_out_path, ali_out_path)
+
+    assert (
+        subprocess.call(
+            f"esl-alimanip -o {ali_out_path} --seq-k {random_f} {stockholm_out_path}".split()
+        )
+        == 0
     )
 
     os.remove(random_f)
@@ -312,3 +359,7 @@ if __name__ == "__main__":
     n_train = int(n_train.split("\n")[2].split(":")[-1])
     if n_train == 0:
         raise ValueError(f"{train_fasta_out} empty")
+
+
+if __name__ == "__main__":
+    main(parse_args())
