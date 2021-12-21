@@ -16,7 +16,7 @@ time python -m prefilter train\
     --num_workers 8\
     --log_dir test \
     --model_name model.pt\
-    --data_path "$HOME"/data/prefilter/training_data/0.35/100/ \
+    --data_path "$HOME"/data/prefilter/training_data/0.35/500/ \
     --decoy_path "$HOME"/tmp/ \
     --batch_size 32\
     --epochs 1000\

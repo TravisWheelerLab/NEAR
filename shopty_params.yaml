@@ -1,6 +1,6 @@
 project_name: 'pre'
 run_command: "time python -m prefilter train"
-project_dir: "500_families_lr_ablate"
+project_dir: "50PIDTune"
 monitor: "min"
 poll_interval: 20
 
@@ -34,7 +34,7 @@ statics:
     type: 'int'
   log_dir: "$HOME/prefilter-logs/test"
   model_name: "model.pt"
-  data_path: "$HOME/data/prefilter/training_data/0.35/500/"
+  data_path: "$HOME/data/prefilter/training_data/0.5/500/"
   decoy_path: "$HOME/tmp/"
   batch_size:
     val: 32
@@ -53,7 +53,7 @@ statics:
     val: 1e-3
     type: 'float'
   check_val_every_n_epoch:
-    val: 10
+    val: 2
     type: 'int'
   res_block_n_filters:
     val: 1100
