@@ -32,37 +32,6 @@ TBLOUT_COL_NAMES = [
 TBLOUT_COLS = [0, 2, 3, 4, 18]
 
 
-def reclassify(fasta_file, hmm_file):
-
-    if not os.path.isfile(fasta_file):
-        log.info(f"{fasta_file} does not exist")
-        return
-
-    if not os.path.isfile(hmm_file):
-        pfunc(f"{hmm_file} does not exist")
-        return
-
-    # reclassify the fasta file with the hmm:
-    # wait. Do I want to reclassify the fasta file with all of the hmms from the training set?
-    # probably... for now since we're doing single label classification this will do.
-
-    tblout_path_random = random_filename()
-
-    relabeled_path = os.path.splitext(fasta_file)[0] + "-relabeled.fa"
-    subprocess.call(
-        f"hmmsearch -o /dev/null --tblout {tblout_path_random} {hmm_file} {fasta_file}".split()
-    )
-    if os.path.isfile(tblout_path_random):
-        tblout_df = parse_tblout(tblout_path_random)
-        labels_from_file(fasta_file, relabeled_path, tblout_df, relabel=True)
-    else:
-        pfunc(
-            f"couldn't find tblout {tblout_path_random}; did hmmsearch work correctly?"
-        )
-
-    os.remove(tblout_path_random)
-
-
 def parse_tblout(tbl):
     df = pd.read_csv(
         tbl,
@@ -78,44 +47,72 @@ def parse_tblout(tbl):
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("-a", "--aligned_fasta_file", type=str)
-    parser.add_argument(
+    subparsers = parser.add_subparsers(title="action", dest="command")
+
+    split_parser = subparsers.add_parser(name="split", add_help=False)
+    split_parser.add_argument("-a", "--aligned_fasta_file", type=str)
+    split_parser.add_argument(
+        "-db",
+        "--hmmdb",
+        default=None,
+        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
+        required=True,
+    )
+    split_parser.add_argument(
         "-p",
         "--pid",
         type=float,
         help="percent identity to split the aligned fasta file",
         required=True,
     )
-    parser.add_argument(
-        "-hdb",
-        "--hmmdb",
-        default=None,
-        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
-        required=True,
-    )
-    parser.add_argument(
+    split_parser.add_argument(
         "-adb",
         "--alidb",
         default=None,
         help="database of alignments (ex; Pfam-A.seed)",
         required=True,
     )
-    parser.add_argument(
+    split_parser.add_argument(
         "-c",
         "--clustered_output_directory",
         type=str,
         help="where to save the clustered .fa files.",
         required=True,
     )
-    parser.add_argument(
-        "-f",
+    split_parser.add_argument(
+        "-o",
         "--fasta_output_directory",
         type=str,
         help="where to save the labeled fasta files",
         required=True,
     )
-    parser.add_argument("--evalue_threshold", type=float, default=1e-5)
-    return parser.parse_args()
+
+    split_parser.add_argument("--evalue_threshold", type=float, default=1e-5)
+
+    label_parser = subparsers.add_parser("label")
+    label_parser.add_argument(
+        "-hdb",
+        "--hmmdb",
+        default=None,
+        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
+        required=True,
+    )
+
+    label_parser.add_argument(
+        "-f", "--fasta_file", help="fasta file to label", required=True
+    )
+    label_parser.add_argument(
+        "-o",
+        "--fasta_output_directory",
+        help="where to save the labeled fasta files",
+        required=True,
+    )
+    train_hdb_parser = subparsers.add_parser("hdb")
+    train_hdb_parser.add_argument(
+        "fasta_file", help="fasta file containing train sequences"
+    )
+    train_hdb_parser.add_argument("alidb", help="alignment database")
+    return parser
 
 
 def labels_from_file(
@@ -183,10 +180,89 @@ def labels_from_file(
                 dst.write(fasta_header)
 
 
-def main(args):
+def cluster_and_split_sequences(
+    aligned_fasta_file, clustered_output_directory, pid, overwrite=False
+):
+
+    output_template = (
+        os.path.join(
+            clustered_output_directory,
+            os.path.splitext(os.path.basename(aligned_fasta_file))[0],
+        )
+        + ".{}-{}.fa"
+    )
+
+    os.makedirs(clustered_output_directory, exist_ok=True)
+
+    ddgm_path = os.path.splitext(aligned_fasta_file)[0] + ".ddgm"
+    # cluster the .afa if we can't find the .ddgm
+    if not os.path.isfile(ddgm_path) or os.stat(ddgm_path).st_size == 0:
+        subprocess.call(f"carbs cluster {aligned_fasta_file}".split())
+
+    if not os.path.isfile(output_template.format(pid, "train")):
+        cmd = f"carbs split -T argument --split_test --output_path {clustered_output_directory} {aligned_fasta_file} {pid}"
+        subprocess.call(cmd.split())
+    else:
+        pfunc(f"already created {output_template.format(pid, 'train')}")
+
+
+def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb):
+
+    tblout_path = os.path.splitext(fasta_file)[0] + ".tblout"
+
+    if not os.path.isfile(tblout_path) or os.stat(tblout_path).st_size == 0:
+        subprocess.call(
+            f"hmmsearch -o /dev/null --tblout {tblout_path} {hmmdb} {fasta_file}".split()
+        )
+
+    tblout = parse_tblout(tblout_path)
+
+    labels_from_file(fasta_file, fasta_outfile, tblout)
+
+
+def extract_ali_and_create_hmm(fasta_file, alidb):
+
+    if "train" not in os.path.basename(fasta_file):
+        raise ValueError(f'{fasta_file} does not have "train" in it.')
+
+    stockholm_out = os.path.splitext(fasta_file)[0] + ".sto"
+
+    if not os.path.isfile(stockholm_out):
+        # extract the alignment from the alidb that has the same
+        # name as the fasta file
+        family_name = os.path.splitext(os.path.basename(fasta_file))[0]
+        train_alignment_temp_file = random_filename()
+        cmd = f"esl-afetch -o {train_alignment_temp_file} {alidb} {family_name}"
+        assert subprocess.call(cmd.split()) == 0
+
+        train_name_file = random_filename()
+        train_names, _ = utils.fasta_from_file()
+
+        with open(train_name_file, "w") as dst:
+            for name in train_names:
+                dst.write(f"{name}\n")
+
+        cmd = f"esl-alimanip -o {stockholm_out} --seq-k {train_name_file} {alidb}"
+        # check for successful exit code
+        assert subprocess.call(cmd.split()) == 0
+        os.remove(train_name_file)
+
+    else:
+        pfunc(f"{stockholm_out} already exists.")
+
+    hmm_out_path = os.path.splitext(fasta_file)[0] + ".hmm"
+
+    if not os.path.isfile(hmm_out_path):
+        # create the hmm
+        cmd = f"hmmbuild -o /dev/null {hmm_out_path} {alidb}"
+        assert subprocess.call(cmd.split()) == 0
+    else:
+        pfunc(f"{hmm_out_path} already exists.")
+
+
+def split_and_label_sequences(args):
     """
     Creates labels for the prefilter task.
-    I will try to describe the complicated process of generating labels.
 
     1) Ingest an aligned fasta file (.afa) and use carbs (https://github.com/TravisWheelerLab/carbs) to split it into train,
     test, and validation sets. If there are < 3 sequences in the .afa, exit. If the .afa can't be split at the given
@@ -219,26 +295,22 @@ def main(args):
     if not os.path.isfile(args.aligned_fasta_file):
         raise ValueError(f"couldn't find .afa at {args.aligned_fasta_file}")
 
+    # use esl-alistat to get the number of sequences in the fasta file
     esl_output = subprocess.check_output(
         f"esl-alistat {args.aligned_fasta_file}".split()
     ).decode("utf-8")
     esl_output = esl_output.split("\n")[2].split(":")[-1]
 
+    # exit if there are less than 3 sequences
     if int(esl_output) < 3:
         pfunc(f"less than 3 sequences found for {args.aligned_fasta_file}, exiting")
         exit()
 
-    tblout_path = os.path.splitext(args.aligned_fasta_file)[0] + ".tblout"
-    if not os.path.isfile(tblout_path) or os.stat(tblout_path).st_size == 0:
-        subprocess.call(
-            f"hmmsearch -o /dev/null --tblout {tblout_path} {args.hmmdb} {args.aligned_fasta_file}".split()
-        )
+    # determine if there's a tblout (signaling that we've already classified these sequences with hmmsearch)
 
-    # cluster the .afa if we can't find the .ddgm
-    ddgm_path = os.path.splitext(args.aligned_fasta_file)[0] + ".ddgm"
+    os.makedirs(args.fasta_output_directory, exist_ok=True)
 
-    if not os.path.isfile(ddgm_path) or os.stat(ddgm_path).st_size == 0:
-        subprocess.call(f"carbs cluster {args.aligned_fasta_file}".split())
+    # split the .afa at the given pid:
 
     clustered_output_template = (
         os.path.join(
@@ -247,6 +319,7 @@ def main(args):
         )
         + ".{}-{}.fa"
     )
+
     fasta_output_template = (
         os.path.join(
             args.fasta_output_directory,
@@ -255,40 +328,29 @@ def main(args):
         + ".{}-{}.fa"
     )
 
-    os.makedirs(args.fasta_output_directory, exist_ok=True)
-    os.makedirs(args.clustered_output_directory, exist_ok=True)
-
-    # split the .afa at the given pid:
-    cmd = f"carbs split -T argument --split_test --output_path {args.clustered_output_directory} {args.aligned_fasta_file} {args.pid}"
-    subprocess.call(cmd.split())
-
-    # use the .tblout labels to create new fasta files with labels.
-
-    # these are called "true" labels, as the hmmdb contains all of the Pfam-A seed alignments.
-    tblout = parse_tblout(tblout_path)
+    cluster_and_split_sequences(
+        args.aligned_fasta_file, args.clustered_output_directory, args.pid
+    )
 
     train_fasta_in = clustered_output_template.format(args.pid, "train")
+    train_fasta_out = fasta_output_template.format(args.pid, "train")
 
-    if os.path.isfile(train_fasta_in):
-        train_fasta_out = fasta_output_template.format(args.pid, "train")
-        labels_from_file(train_fasta_in, train_fasta_out, tblout)
-    else:
-        raise ValueError(f"train file from {train_fasta_in} was not created by carbs.")
+    label_with_hmmdb(train_fasta_in, train_fasta_out, args.hmmdb)
 
     test_fasta_in = clustered_output_template.format(args.pid, "test")
-    test_fasta_out = None
+    valid_fasta_in = clustered_output_template.format(args.pid, "valid")
+
     if os.path.isfile(test_fasta_in):
         test_fasta_out = fasta_output_template.format(args.pid, "test")
-        labels_from_file(test_fasta_in, test_fasta_out, tblout)
+        label_with_hmmdb(test_fasta_in, test_fasta_out, args.hmmdb)
 
-    valid_fasta_in = clustered_output_template.format(args.pid, "valid")
-    valid_fasta_out = None
     if os.path.isfile(valid_fasta_in):
         valid_fasta_out = fasta_output_template.format(args.pid, "valid")
-        labels_from_file(valid_fasta_in, valid_fasta_out, tblout)
+        label_with_hmmdb(valid_fasta_in, valid_fasta_out, args.hmmdb)
 
     # grab the sequences from the alignment that are in train
     train_seq, _ = utils.fasta_from_file(train_fasta_out)
+
     if not len(train_seq):
         pfunc(
             f"No training sequences in {train_fasta_out}."
@@ -296,70 +358,21 @@ def main(args):
         )
         return
 
-    random_f = random_filename()
-    with open(random_f, "w") as dst:
-        for seq in train_seq:
-            delim = seq.find(" |")
-            if delim != -1:
-                seq_name = seq[:delim].split()[0]
-                dst.write(f"{seq_name}\n")
-            else:
-                raise ValueError(
-                    f"has {train_fasta_out} been relabeled with " f"label_fasta.py?"
-                )
-
-    # grab the training alignment
-    ali_out_path = random_filename()
-
-    # then grab the families' alignment (after first reformatting to stockholm)
-    # this won't propagate the name of the alignment. So rely on the alidb to
-    # grab the training alignment. This assumes that the aligned fasta file's
-    # name describes the family from which the sequences come from...
-
-    stockholm_out_path = os.path.splitext(args.aligned_fasta_file)[0] + ".sto"
-    if (
-        not os.path.isfile(stockholm_out_path)
-        or os.stat(stockholm_out_path).st_size == 0
-    ):
-        family_name = os.path.splitext(os.path.basename(args.aligned_fasta_file))[0]
-        assert (
-            subprocess.call(
-                f"esl-afetch -o {stockholm_out_path} {args.alidb} {family_name}".split()
-            )
-            == 0
-        )
-
-    print(random_f, stockholm_out_path, ali_out_path)
-
-    assert (
-        subprocess.call(
-            f"esl-alimanip -o {ali_out_path} --seq-k {random_f} {stockholm_out_path}".split()
-        )
-        == 0
-    )
-
-    os.remove(random_f)
-
-    hmm_out_path = random_filename()
-    # use the train alignment to build a new hmm
-    subprocess.call(f"hmmbuild -o /dev/null {hmm_out_path} {ali_out_path}".split())
-    # classify our train, test, and valid sequences with the training hmm
-    reclassify(train_fasta_out, hmm_out_path)
-
-    if test_fasta_out is not None:
-        reclassify(test_fasta_out, hmm_out_path)
-    if valid_fasta_out is not None:
-        reclassify(valid_fasta_out, hmm_out_path)
-
-    os.remove(hmm_out_path)
-
-    n_train = subprocess.check_output(f"esl-seqstat {train_fasta_out}".split()).decode(
-        "utf-8"
-    )
-    n_train = int(n_train.split("\n")[2].split(":")[-1])
-    if n_train == 0:
-        raise ValueError(f"{train_fasta_out} empty")
-
 
 if __name__ == "__main__":
-    main(parse_args())
+    program_parser = parse_args()
+    program_args = program_parser.parse_args()
+    if program_args.command == "split":
+        split_and_label_sequences(program_args)
+    elif program_args.command == "label":
+        fasta_out = os.path.join(
+            program_args.fasta_output_directory,
+            os.path.basename(program_args.fasta_file),
+        )
+
+        label_with_hmmdb(program_args.fasta_file, program_args.hmmdb, fasta_out)
+    elif program_args.command == "hdb":
+        extract_ali_and_create_hmm(args.aligned_fasta_file, args.alidb)
+    else:
+        pfunc(program_args)
+        program_parser.print_help()
