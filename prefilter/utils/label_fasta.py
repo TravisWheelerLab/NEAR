@@ -112,6 +112,7 @@ def parse_args():
         "fasta_file", help="fasta file containing train sequences"
     )
     train_hdb_parser.add_argument("alidb", help="alignment database")
+    train_hdb_parser.add_argument("-o", "--overwrite", action="store_true")
     return parser
 
 
@@ -220,39 +221,41 @@ def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb):
     labels_from_file(fasta_file, fasta_outfile, tblout)
 
 
-def extract_ali_and_create_hmm(fasta_file, alidb):
+def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):
 
     if "train" not in os.path.basename(fasta_file):
         raise ValueError(f'{fasta_file} does not have "train" in it.')
 
     stockholm_out = os.path.splitext(fasta_file)[0] + ".sto"
 
-    if not os.path.isfile(stockholm_out):
+    if not os.path.isfile(stockholm_out) or overwrite:
         # extract the alignment from the alidb that has the same
         # name as the fasta file
-        family_name = os.path.splitext(os.path.basename(fasta_file))[0]
+        family_name = os.path.basename(fasta_file)
+        family_name = family_name[: family_name.find(".")]
         train_alignment_temp_file = random_filename()
         cmd = f"esl-afetch -o {train_alignment_temp_file} {alidb} {family_name}"
         assert subprocess.call(cmd.split()) == 0
 
         train_name_file = random_filename()
-        train_names, _ = utils.fasta_from_file()
+        train_names, _ = utils.fasta_from_file(fasta_file)
 
         with open(train_name_file, "w") as dst:
             for name in train_names:
-                dst.write(f"{name}\n")
+                dst.write(f"{name.split()[0]}\n")
 
-        cmd = f"esl-alimanip -o {stockholm_out} --seq-k {train_name_file} {alidb}"
-        # check for successful exit code
-        assert subprocess.call(cmd.split()) == 0
+        pfunc(len(train_names))
+        if len(train_names):
+            cmd = f"esl-alimanip -o {stockholm_out} --seq-k {train_name_file} {train_alignment_temp_file}"
+            # check for successful exit code
+            assert subprocess.call(cmd.split()) == 0
         os.remove(train_name_file)
-
     else:
         pfunc(f"{stockholm_out} already exists.")
 
     hmm_out_path = os.path.splitext(fasta_file)[0] + ".hmm"
 
-    if not os.path.isfile(hmm_out_path):
+    if not os.path.isfile(hmm_out_path) or overwrite:
         # create the hmm
         cmd = f"hmmbuild -o /dev/null {hmm_out_path} {alidb}"
         assert subprocess.call(cmd.split()) == 0
@@ -372,7 +375,9 @@ if __name__ == "__main__":
 
         label_with_hmmdb(program_args.fasta_file, program_args.hmmdb, fasta_out)
     elif program_args.command == "hdb":
-        extract_ali_and_create_hmm(args.aligned_fasta_file, args.alidb)
+        extract_ali_and_create_hmm(
+            program_args.fasta_file, program_args.alidb, program_args.overwrite
+        )
     else:
         pfunc(program_args)
         program_parser.print_help()
