@@ -20,7 +20,7 @@ from prefilter.utils import PROT_ALPHABET
 
 def main(args):
     if args.schedule_lr and (
-            args.step_lr_step_size is None or args.step_lr_decay_factor is None
+        args.step_lr_step_size is None or args.step_lr_decay_factor is None
     ):
         raise ValueError(
             "--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor"
@@ -121,7 +121,8 @@ def main(args):
         "precision": 16 if args.gpus else 32,
         "terminate_on_nan": True,
         "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
-        if args.shoptimize else pl.loggers.TensorBoardLogger(args.log_dir)
+        if args.shoptimize
+        else pl.loggers.TensorBoardLogger(args.log_dir),
     }
 
     if args.tune_initial_lr:

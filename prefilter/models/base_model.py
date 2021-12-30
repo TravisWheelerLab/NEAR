@@ -129,12 +129,11 @@ class BaseModel(pl.LightningModule):
     def log_cmat(self, cmat, tag):
         conf_mat = cmat.compute().detach().cpu().numpy().astype(np.int)
         df_cm = pd.DataFrame(
-            conf_mat,
-            index=np.arange(self.n_classes),
-            columns=np.arange(self.n_classes))
+            conf_mat, index=np.arange(self.n_classes), columns=np.arange(self.n_classes)
+        )
 
         fig = plt.figure(figsize=(12, 10), dpi=300)
-        sn.heatmap(df_cm, annot=True, annot_kws={"size": 1}, fmt='d')
+        sn.heatmap(df_cm, annot=True, annot_kws={"size": 1}, fmt="d")
         self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
         plt.close(fig)
         cmat.reset()
