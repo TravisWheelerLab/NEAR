@@ -67,10 +67,6 @@ def main():
         from prefilter.evaluate import main
 
         main(args)
-    elif args.subcmd == "data":
-        from .utils import data_run
-
-        data_run()
     else:
         ap.print_help()
         exit(1)

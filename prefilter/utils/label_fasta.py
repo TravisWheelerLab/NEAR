@@ -14,8 +14,16 @@ import prefilter.utils as utils
 # TODO: replace hardcoded stuff with variables in __init__.py in prefilter
 
 
-def random_filename():
-    return f"/tmp/{str(time.time())}"
+def random_filename(directory="/tmp/"):
+    """
+    Generate a random filename for temporary use.
+
+    :param directory: Which directory to place the file in
+    :type directory: str
+    :return: random filename in directory
+    :rtype: str
+    """
+    return os.path.join(directory, str(time.time()))
 
 
 def pfunc(str):
@@ -33,6 +41,16 @@ TBLOUT_COLS = [0, 2, 3, 4, 18]
 
 
 def parse_tblout(tbl):
+    """
+    Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
+    :param tbl: .tblout filename.
+    :type tbl: str
+    :return: dataframe containing the rows of the .tblout.
+    :rtype: pd.DataFrame
+    """
+    if os.path.splitext(tbl)[1] != ".tblout":
+        raise ValueError(f"must pass a .tblout file, found {tbl}")
+
     df = pd.read_csv(
         tbl,
         skiprows=3,
@@ -90,16 +108,12 @@ def parse_args():
     split_parser.add_argument("--evalue_threshold", type=float, default=1e-5)
 
     label_parser = subparsers.add_parser("label")
-    label_parser.add_argument(
-        "-hdb",
-        "--hmmdb",
-        default=None,
-        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
-        required=True,
-    )
 
+    label_parser.add_argument("fasta_file", help="fasta file to label")
     label_parser.add_argument(
-        "-f", "--fasta_file", help="fasta file to label", required=True
+        "hmmdb",
+        default=None,
+        help="hmm database to search the aligned fasta file against",
     )
     label_parser.add_argument(
         "-o",
@@ -107,6 +121,7 @@ def parse_args():
         help="where to save the labeled fasta files",
         required=True,
     )
+
     train_hdb_parser = subparsers.add_parser("hdb")
     train_hdb_parser.add_argument(
         "fasta_file", help="fasta file containing train sequences"
@@ -116,9 +131,7 @@ def parse_args():
     return parser
 
 
-def labels_from_file(
-    fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5, relabel=False
-):
+def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
     if os.path.isfile(fasta_out):
         pfunc(f"Already created labels for {fasta_out}.")
         return
@@ -137,6 +150,7 @@ def labels_from_file(
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
                 # which means they're manually curated to be part of a family.
+                # or the hmmdb can't find them.
                 pfunc(
                     f"sequence named {target_label} not found in classification on {fasta_in}"
                 )
@@ -153,12 +167,7 @@ def labels_from_file(
             # each sequence should have at least one label, but we
             # only need to grab one since one sequence can be associated with
             # multiple pfam accession IDs
-            if relabel:
-                # if we're relabeling, don't add a delimiter
-                fasta_header = f">{label} "
-            else:
-                # otherwise, add it in.
-                fasta_header = f">{label} | "
+            fasta_header = f">{label} | "
 
             labelset = []
 
@@ -171,10 +180,7 @@ def labels_from_file(
                     )
 
                 if float(e_value) <= evalue_threshold:
-                    if relabel:
-                        labelset.append("RL" + seq_label)
-                    else:
-                        labelset.append(seq_label)
+                    labelset.append(seq_label)
 
             if len(labelset):
                 fasta_header += " ".join(labelset) + "\n" + sequence + "\n"
@@ -257,37 +263,17 @@ def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):
 
     if not os.path.isfile(hmm_out_path) or overwrite:
         # create the hmm
-        cmd = f"hmmbuild -o /dev/null {hmm_out_path} {alidb}"
+        cmd = f"hmmbuild -o /dev/null -n 1 {hmm_out_path} {train_alignment_temp_file}"
         assert subprocess.call(cmd.split()) == 0
     else:
         pfunc(f"{hmm_out_path} already exists.")
+
+    os.remove(train_alignment_temp_file)
 
 
 def split_and_label_sequences(args):
     """
     Creates labels for the prefilter task.
-
-    1) Ingest an aligned fasta file (.afa) and use carbs (https://github.com/TravisWheelerLab/carbs) to split it into train,
-    test, and validation sets. If there are < 3 sequences in the .afa, exit. If the .afa can't be split at the given
-    percent identity, dump all of the sequences in it into the training set.
-    2) Use the provided hmm database to classify each of the sequences in the .afa file. A sequence is considered
-    "classified" if the alignment between it and a hmm produces an e-value of < 1e-5. The threshold is tunable via
-    the --evalue command line argument. Each sequence can have multiple labels. Labels are provided in the form
-    of a Pfam accession ID.  All of the sequences in the .afa are assumed to be present in the hmm database. The hmm
-    database is used to assign "gold-standard" labels - i.e. the "true" family membership of each sequence in the
-    .afa.
-    3) Extract the sub-alignment of the training sequences from the alignment database and use the sub-alignment to
-    build a new "train" hmm.
-    4) Use the train hmm to reclassify the train, test, and validation splits, and save the sequences to a new file,
-    called "{fasta_file}-relabeled.fa." The -relabeled files describe how well hmmer does when classifying the test/valid
-    sequences when all it's seen is the training set. The "relabels" will be used to benchmark the neural network
-    model that's aimed at prefilter hmmer hits. In effect, the "relabels" tell us how well our network actually matches
-    hmmer - if hmmer can't classify a sequence given the training set, and we pass it that hard-to-classify sequence
-    with our nn, we won't actually classify it correctly with hmmer. That's why we have two sets of labels - to quantify
-    how well do we do at determining the "true" family membership, and how well we do compared to hmmer.
-
-    Note: I use "classify" as shorthand for "align each hmm to each sequence in the fasta database with hmmsearch".
-
     :param args:
     :type args:
     :return:
@@ -368,12 +354,12 @@ if __name__ == "__main__":
     if program_args.command == "split":
         split_and_label_sequences(program_args)
     elif program_args.command == "label":
-        fasta_out = os.path.join(
+        fasta_outf = os.path.join(
             program_args.fasta_output_directory,
             os.path.basename(program_args.fasta_file),
         )
-
-        label_with_hmmdb(program_args.fasta_file, program_args.hmmdb, fasta_out)
+        os.makedirs(program_args.fasta_output_directory, exist_ok=True)
+        label_with_hmmdb(program_args.fasta_file, fasta_outf, program_args.hmmdb)
     elif program_args.command == "hdb":
         extract_ali_and_create_hmm(
             program_args.fasta_file, program_args.alidb, program_args.overwrite
