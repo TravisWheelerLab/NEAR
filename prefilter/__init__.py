@@ -5,6 +5,34 @@ from argparse import ArgumentParser
 
 __version__ = "0.0.1"
 
+array_job_template = """#!/usr/bin/env bash
+
+#SBATCH --partition=wheeler_lab_small_cpu,wheeler_lab_large_cpu
+#SBATCH --output=array_out.out
+#SBATCH --error=ERR
+#SBATCH --nodes=1
+#SBATCH --array=[1-ARRAY_JOBS]%200
+DEPENDENCY
+#SBATCH --cpus-per-task=1
+#SBATCH --exclude=compute-1-11
+
+f=$(sed -n "$SLURM_ARRAY_TASK_ID"p ARRAY_INPUT_FILE)
+echo $f
+RUN_CMD
+"""
+single_job_template = """#!/usr/bin/env bash
+
+#SBATCH --partition=wheeler_lab_small_cpu,wheeler_lab_large_cpu
+#SBATCH --output=single_job_out.out
+#SBATCH --nodes=1
+DEPENDENCY
+#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=1
+#SBATCH --exclude=compute-1-11
+
+RUN_CMD
+"""
+
 
 def main():
     ap = ArgumentParser()
@@ -55,8 +83,6 @@ def main():
         type=str,
         default="/home/tc229954/data/prefilter/small-dataset/random_sequences/random_sequences.fa",
     )
-
-    data_parser = subparsers.add_parser("data", help="data runner")
 
     args = ap.parse_args()
     if args.subcmd == "train":
