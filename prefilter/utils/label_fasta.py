@@ -5,13 +5,13 @@ import pandas as pd
 import logging
 import os
 import time
+from glob import glob
 
 log = logging.getLogger(__name__)
 
 from argparse import ArgumentParser
+from prefilter import array_job_template, single_job_template
 import prefilter.utils as utils
-
-# TODO: replace hardcoded stuff with variables in __init__.py in prefilter
 
 
 def random_filename(directory="/tmp/"):
@@ -24,6 +24,23 @@ def random_filename(directory="/tmp/"):
     :rtype: str
     """
     return os.path.join(directory, str(time.time()))
+
+
+def job_completed(slurm_jobid):
+    """
+    Returns whether or not a slurm job has completed.
+    :param slurm_jobid: id of job you want to check.
+    :type slurm_jobid: int.
+    :return: whether or not the job has completed.
+    :rtype: bool.
+    """
+    slurm_jobid = int(slurm_jobid)
+    job_status = subprocess.check_output(
+        f"sacct --format State -u {os.environ['USER']} -j {slurm_jobid}".split()
+    )
+    job_status = job_status.decode("utf-8")
+    # TODO: Figure out if this is going to always work for slurm jobs.
+    return "COMPLETED" in job_status
 
 
 def pfunc(str):
@@ -67,27 +84,25 @@ def parse_args():
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(title="action", dest="command")
 
+    pipeline_parser = subparsers.add_parser(name="generate")
+
+    pipeline_parser.add_argument("-a", "--afa_directory")
+    pipeline_parser.add_argument("-c", "--clustered_output_directory")
+    pipeline_parser.add_argument("-t", "--training_data_output_directory")
+    pipeline_parser.add_argument("-p", "--pid")
+    pipeline_parser.add_argument(
+        "-adb", "--alidb", help="database of alignments in stockholm format"
+    )
+    pipeline_parser.add_argument("-db", "--hmmdb", default=None)
+    pipeline_parser.add_argument("-e", "--evalue_threshold", type=float, default=1e-5)
+
     split_parser = subparsers.add_parser(name="split", add_help=False)
     split_parser.add_argument("-a", "--aligned_fasta_file", type=str)
-    split_parser.add_argument(
-        "-db",
-        "--hmmdb",
-        default=None,
-        help="hmm database to search the aligned fasta file against (if the --tblout file doesn't exist",
-        required=True,
-    )
     split_parser.add_argument(
         "-p",
         "--pid",
         type=float,
         help="percent identity to split the aligned fasta file",
-        required=True,
-    )
-    split_parser.add_argument(
-        "-adb",
-        "--alidb",
-        default=None,
-        help="database of alignments (ex; Pfam-A.seed)",
         required=True,
     )
     split_parser.add_argument(
@@ -97,15 +112,6 @@ def parse_args():
         help="where to save the clustered .fa files.",
         required=True,
     )
-    split_parser.add_argument(
-        "-o",
-        "--fasta_output_directory",
-        type=str,
-        help="where to save the labeled fasta files",
-        required=True,
-    )
-
-    split_parser.add_argument("--evalue_threshold", type=float, default=1e-5)
 
     label_parser = subparsers.add_parser("label")
 
@@ -187,9 +193,7 @@ def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
                 dst.write(fasta_header)
 
 
-def cluster_and_split_sequences(
-    aligned_fasta_file, clustered_output_directory, pid, overwrite=False
-):
+def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, pid):
 
     output_template = (
         os.path.join(
@@ -265,94 +269,216 @@ def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):
         # create the hmm
         cmd = f"hmmbuild -o /dev/null -n 1 {hmm_out_path} {train_alignment_temp_file}"
         assert subprocess.call(cmd.split()) == 0
+        os.remove(train_alignment_temp_file)
     else:
         pfunc(f"{hmm_out_path} already exists.")
 
-    os.remove(train_alignment_temp_file)
 
+class Generator:
+    def __init__(
+        self,
+        aligned_fasta_directory,
+        clustered_output_directory,
+        training_data_output_directory,
+        pid,
+        alidb,
+        evalue_threshold,
+        hmmdb=None,
+        poll_interval=1,
+    ):
 
-def split_and_label_sequences(args):
-    """
-    Creates labels for the prefilter task.
-    :param args:
-    :type args:
-    :return:
-    :rtype:
-    """
+        self.aligned_fasta_directory = aligned_fasta_directory
+        self.clustered_output_directory = clustered_output_directory
+        self.training_data_output_directory = training_data_output_directory
+        self.pid = pid
+        self.alidb = alidb
+        self.hmmdb = hmmdb
+        self.evalue_threshold = evalue_threshold
+        self.poll_interval = poll_interval
+        self.jobid_to_wait_for = None
 
-    # if we can't find the .afa, exit
-    if not os.path.isfile(args.aligned_fasta_file):
-        raise ValueError(f"couldn't find .afa at {args.aligned_fasta_file}")
+        self.files_to_delete = []
 
-    # use esl-alistat to get the number of sequences in the fasta file
-    esl_output = subprocess.check_output(
-        f"esl-alistat {args.aligned_fasta_file}".split()
-    ).decode("utf-8")
-    esl_output = esl_output.split("\n")[2].split(":")[-1]
-
-    # exit if there are less than 3 sequences
-    if int(esl_output) < 3:
-        pfunc(f"less than 3 sequences found for {args.aligned_fasta_file}, exiting")
-        exit()
-
-    # determine if there's a tblout (signaling that we've already classified these sequences with hmmsearch)
-
-    os.makedirs(args.fasta_output_directory, exist_ok=True)
-
-    # split the .afa at the given pid:
-
-    clustered_output_template = (
-        os.path.join(
-            args.clustered_output_directory,
-            os.path.splitext(os.path.basename(args.aligned_fasta_file))[0],
+        # split and cluster these afas using a slurm array job # requiring a slurm template.
+        job_id_to_wait_for = self.split_afa_array_job()
+        job_id_to_wait_for = self.extract_training_alignments_and_build_hmms(
+            job_id_to_wait_for
         )
-        + ".{}-{}.fa"
-    )
+        job_id_to_wait_for = self.concatenate_hmms(job_id_to_wait_for)
+        job_id_to_wait_for = self.label_with_hmm(job_id_to_wait_for)
+        self.delete(job_id_to_wait_for)
 
-    fasta_output_template = (
-        os.path.join(
-            args.fasta_output_directory,
-            os.path.splitext(os.path.basename(args.aligned_fasta_file))[0],
+    def _dump_data(self, filename, data):
+        if isinstance(data, list):
+            with open(filename, "w") as dst:
+                dst.write("\n".join(data))
+        elif isinstance(data, str):
+            with open(filename, "w") as dst:
+                dst.write(data)
+        else:
+            raise ValueError("only accepts strings and lists")
+
+    def split_afa_array_job(self):
+        random_f = self._random_file(".")
+        # use ls to dump all the .afas for splitting into a name file
+        afa_files = glob(os.path.join(self.aligned_fasta_directory, "*.afa"))
+        self._dump_data(random_f, afa_files)
+
+        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(afa_files)))
+        slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_f)
+        run_cmd = (
+            f"/home/tc229954/anaconda/envs/prefilter/bin/python "
+            f"/home/tc229954/share/prefilter/prefilter/utils/label_fasta.py split "
+            f"-a $f -p {self.pid} -c {self.clustered_output_directory}"
         )
-        + ".{}-{}.fa"
-    )
+        slurm_script = slurm_script.replace("RUN_CMD", run_cmd)
+        slurm_script = slurm_script.replace("DEPENDENCY", "")
+        slurm_script = slurm_script.replace("ERR", "split_afa.err")
 
-    cluster_and_split_sequences(
-        args.aligned_fasta_file, args.clustered_output_directory, args.pid
-    )
+        # write slurm script to file
+        slurm_file = self._random_file(".")
 
-    train_fasta_in = clustered_output_template.format(args.pid, "train")
-    train_fasta_out = fasta_output_template.format(args.pid, "train")
+        self._dump_data(slurm_file, slurm_script)
 
-    label_with_hmmdb(train_fasta_in, train_fasta_out, args.hmmdb)
+        pfunc("Submitting clustering array job script.")
+        return self._submit(slurm_file)
 
-    test_fasta_in = clustered_output_template.format(args.pid, "test")
-    valid_fasta_in = clustered_output_template.format(args.pid, "valid")
+    def extract_training_alignments_and_build_hmms(self, jobid_to_wait_for):
 
-    if os.path.isfile(test_fasta_in):
-        test_fasta_out = fasta_output_template.format(args.pid, "test")
-        label_with_hmmdb(test_fasta_in, test_fasta_out, args.hmmdb)
+        train_names = glob(os.path.join(self.clustered_output_directory, "*train.fa"))
+        random_train_fasta_file = self._random_file(".")
 
-    if os.path.isfile(valid_fasta_in):
-        valid_fasta_out = fasta_output_template.format(args.pid, "valid")
-        label_with_hmmdb(valid_fasta_in, valid_fasta_out, args.hmmdb)
+        self._dump_data(random_train_fasta_file, train_names)
 
-    # grab the sequences from the alignment that are in train
-    train_seq, _ = utils.fasta_from_file(train_fasta_out)
+        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(train_names)))
+        slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_train_fasta_file)
 
-    if not len(train_seq):
+        # slurm script to build the hmms
+        run_cmd = (
+            f"/home/tc229954/anaconda/envs/prefilter/bin/python "
+            f"/home/tc229954/share/prefilter/prefilter/utils/label_fasta.py hdb "
+            f"$f {self.alidb}"
+        )
+
+        slurm_script = slurm_script.replace("RUN_CMD", run_cmd)
+        slurm_script = slurm_script.replace("ERR", "build_hmm.err")
+
+        if jobid_to_wait_for is not None:
+            slurm_script = slurm_script.replace(
+                "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}"
+            )
+        else:
+            slurm_script = slurm_script.replace("DEPENDENCY", "")
+        slurm_file = self._random_file(".")
+        self._dump_data(slurm_file, slurm_script)
+
+        pfunc("Submitting hmm building array job script.")
+        return self._submit(slurm_file)
+
+    def concatenate_hmms(self, jobid_to_wait_for):
+        jobid = None
+        if self.hmmdb is None:
+            output_hmm_file = f"{self.clustered_output_directory}/Pfam-{self.pid}.hmm"
+            if os.path.isfile(output_hmm_file):
+                pfunc(
+                    f"Found concatenation of hmms at {output_hmm_file}. Continuing on to next step without recreating."
+                )
+            else:
+                run_cmd = f"for f in {self.clustered_output_directory}/*.hmm; do cat $f >> {output_hmm_file}; done"
+                bash_script = single_job_template.replace("RUN_CMD", run_cmd)
+                if jobid_to_wait_for is not None:
+                    bash_script = bash_script.replace(
+                        "DEPENDENCY",
+                        f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+                    )
+                else:
+                    bash_script = bash_script.replace("DEPENDENCY", "")
+                bash_random_file = self._random_file(".")
+                self._dump_data(bash_random_file, bash_script)
+                jobid = self._submit(bash_random_file)
+
+            self.hmmdb = output_hmm_file
+        else:
+            pfunc(
+                f"Using {self.hmmdb} for labeling instead of concatenating traing hmms."
+            )
+        return jobid
+
+    def label_with_hmm(self, jobid_to_wait_for):
+        # use the hmmdb that was created by concatenate_hmms or passed
+        # .afa files to label:
+        fa_files = glob(os.path.join(self.clustered_output_directory, "*.fa"))
+
+        random_f = self._random_file(".")
+        self._dump_data(random_f, fa_files)
+
+        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(fa_files)))
+        slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_f)
+        run_cmd = (
+            f"/home/tc229954/anaconda/envs/prefilter/bin/python "
+            f"/home/tc229954/share/prefilter/prefilter/utils/label_fasta.py label "
+            f"$f {self.hmmdb} -o {self.training_data_output_directory}"
+        )
+        slurm_script = slurm_script.replace("RUN_CMD", run_cmd)
+        slurm_script = slurm_script.replace("ERR", "label.err")
+
+        if jobid_to_wait_for is not None:
+            slurm_script = slurm_script.replace(
+                "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}"
+            )
+        else:
+            slurm_script = slurm_script.replace("DEPENDENCY", "")
+
+        # write slurm script to file
+        slurm_file = self._random_file(".")
+
+        self._dump_data(slurm_file, slurm_script)
+
         pfunc(
-            f"No training sequences in {train_fasta_out}."
-            f" Check {train_fasta_in} and {tblout_path}."
+            f"Submitting labeling array job script. Labeling each .fa in {self.clustered_output_directory} with {self.hmmdb}"
         )
-        return
+        self.jobid_to_wait_for = self._submit(slurm_file)
+
+    def _submit(self, slurm_script):
+        slurm_jobid = subprocess.check_output(
+            f"sbatch --wait --parsable {slurm_script}",
+            shell=True,
+        )
+        return int(slurm_jobid)
+
+    def _random_file(self, directory="/tmp/"):
+        f = random_filename(directory)
+        self.files_to_delete.append(f)
+        return f
+
+    def delete(self, jobid_to_wait_for):
+        random_f = self._random_file(".")
+        self._dump_data(random_f, self.files_to_delete)
+        run_cmd = f"cat {random_f} | while read line; do rm $line; done"
+        bash_script = single_job_template.replace("RUN_CMD", run_cmd)
+
+        if jobid_to_wait_for is not None:
+            bash_script = bash_script.replace(
+                "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}"
+            )
+        else:
+            bash_script = bash_script.replace("DEPENDENCY", "")
+
+        bash_random_f = self._random_file(".")
+        self._dump_data(bash_random_f, bash_script)
+        self._submit(bash_random_f)
+        os.remove(bash_random_f)
 
 
 if __name__ == "__main__":
     program_parser = parse_args()
     program_args = program_parser.parse_args()
     if program_args.command == "split":
-        split_and_label_sequences(program_args)
+        cluster_and_split_sequences(
+            program_args.aligned_fasta_file,
+            program_args.clustered_output_directory,
+            program_args.pid,
+        )
     elif program_args.command == "label":
         fasta_outf = os.path.join(
             program_args.fasta_output_directory,
@@ -363,6 +489,16 @@ if __name__ == "__main__":
     elif program_args.command == "hdb":
         extract_ali_and_create_hmm(
             program_args.fasta_file, program_args.alidb, program_args.overwrite
+        )
+    elif program_args.command == "generate":
+        Generator(
+            aligned_fasta_directory=program_args.afa_directory,
+            clustered_output_directory=program_args.clustered_output_directory,
+            training_data_output_directory=program_args.training_data_output_directory,
+            pid=program_args.pid,
+            alidb=program_args.alidb,
+            evalue_threshold=program_args.evalue_threshold,
+            hmmdb=program_args.hmmdb,
         )
     else:
         pfunc(program_args)
