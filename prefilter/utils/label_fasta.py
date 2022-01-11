@@ -14,6 +14,16 @@ from prefilter import array_job_template, single_job_template
 import prefilter.utils as utils
 
 
+def emit_sequences(hmm_file, output_directory, n):
+    # save to the same name as the hmm file but with a .fa
+    # suffix and in the output directory argument
+    output_path = os.path.join(
+        output_directory, os.path.splitext(os.path.basename(hmm_file))[0] + ".fa"
+    )
+    cmd = f"hmmemit -o {output_path} -N {n} {hmm_file}"
+    subprocess.call(cmd.split())
+
+
 def random_filename(directory="/tmp/"):
     """
     Generate a random filename for temporary use.
@@ -76,11 +86,20 @@ def parse_tblout(tbl):
         usecols=TBLOUT_COLS,
         names=TBLOUT_COL_NAMES,
     )
-    df["target_name"] = df["target_name"] + " " + df["description"]
+    # - is empty label
+    df["target_name"].loc[df["description"] != "-"] = (
+        df["target_name"] + " " + df["description"]
+    )
+
     return df
 
 
-def parse_args():
+def create_parser():
+    """
+    Creates the argument parser.
+    :return: Argument parser
+    :rtype: argparse.ArgumentParser
+    """
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(title="action", dest="command")
 
@@ -134,10 +153,32 @@ def parse_args():
     )
     train_hdb_parser.add_argument("alidb", help="alignment database")
     train_hdb_parser.add_argument("-o", "--overwrite", action="store_true")
+
+    emission_parser = subparsers.add_parser("emit")
+    emission_parser.add_argument("hmm_file", help="hmm file to emit sequences from")
+    emission_parser.add_argument(
+        "output_directory", help="where to save the emitted sequences"
+    )
+    emission_parser.add_argument("n", type=int, help="number of sequences to emit")
     return parser
 
 
 def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
+    """
+    Grabs sequences in fasta_in and their corresponding labels in the
+    .tblout dataframe (tblout_df), updates the sequence headers with the labels in
+     tblout_df, then saves to fasta_out. evalue_threshold controls the precision of the labels.
+    :param fasta_in: File containing sequences to label.
+    :type fasta_in: str
+    :param fasta_out: File to save updated sequences in.
+    :type fasta_out: str
+    :param tblout_df: dataframe containing .tblout.
+    :type tblout_df: pd.DataFrame
+    :param evalue_threshold: Threshold to keep sequences at.
+    :type evalue_threshold: float
+    :return: None.
+    :rtype: None.
+    """
     if os.path.isfile(fasta_out):
         pfunc(f"Already created labels for {fasta_out}.")
         return
@@ -194,7 +235,18 @@ def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
 
 
 def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, pid):
-
+    """
+    Use carbs (https://github.com/TravisWheelerLab/carbs) to split the sequences in the aligned fasta file at
+    percent identity pid.
+    :param aligned_fasta_file:
+    :type aligned_fasta_file:
+    :param clustered_output_directory:
+    :type clustered_output_directory:
+    :param pid:
+    :type pid:
+    :return:
+    :rtype:
+    """
     output_template = (
         os.path.join(
             clustered_output_directory,
@@ -471,7 +523,7 @@ class Generator:
 
 
 if __name__ == "__main__":
-    program_parser = parse_args()
+    program_parser = create_parser()
     program_args = program_parser.parse_args()
     if program_args.command == "split":
         cluster_and_split_sequences(
@@ -499,6 +551,12 @@ if __name__ == "__main__":
             alidb=program_args.alidb,
             evalue_threshold=program_args.evalue_threshold,
             hmmdb=program_args.hmmdb,
+        )
+    elif program_args.command == "emit":
+        if not os.path.isdir(program_args.output_directory):
+            os.makedirs(program_args.output_directory)
+        emit_sequences(
+            program_args.hmm_file, program_args.output_directory, n=program_args.n
         )
     else:
         pfunc(program_args)
