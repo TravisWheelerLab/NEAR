@@ -7,14 +7,11 @@ import pandas as pd
 import torchmetrics
 import torch
 import numpy as np
-import torchvision
 import prefilter.utils as utils
 import torch
 import seaborn as sn
 import matplotlib.pyplot as plt
 from PIL import Image
-import wandb
-from wandb import Table
 from collections import defaultdict
 
 __all__ = ["BaseModel"]
@@ -39,6 +36,8 @@ class BaseModel(pl.LightningModule):
         self.total_true_labels = 0
         self.val_confusion = None
         self.train_confusion = None
+        self.train_f1 = torchmetrics.F1()
+        self.val_f1 = torchmetrics.F1()
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
@@ -67,8 +66,13 @@ class BaseModel(pl.LightningModule):
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
         self.n_classes = self.val_dataset.n_classes
-        self.val_confusion = torchmetrics.ConfusionMatrix(num_classes=self.n_classes)
-        self.train_confusion = torchmetrics.ConfusionMatrix(num_classes=self.n_classes)
+        if self.log_confusion_matrix:
+            self.val_confusion = torchmetrics.ConfusionMatrix(
+                num_classes=self.n_classes
+            )
+            self.train_confusion = torchmetrics.ConfusionMatrix(
+                num_classes=self.n_classes
+            )
 
     def _setup_layers(self):
         raise NotImplementedError(
@@ -91,12 +95,16 @@ class BaseModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         loss, acc, logits, labels = self._shared_step(batch)
-        self.train_confusion.update(logits, labels)
+        if self.log_confusion_matrix:
+            self.train_confusion.update(logits, labels)
+        self.train_f1.update(logits, labels)
         return {"loss": loss, "train_acc": acc}
 
     def validation_step(self, batch, batch_nb):
         loss, acc, logits, labels = self._shared_step(batch)
-        self.val_confusion.update(logits, labels)
+        if self.log_confusion_matrix:
+            self.val_confusion.update(logits, labels)
+        self.val_f1.update(logits, labels)
         return {"val_loss": loss, "val_acc": acc}
 
     def configure_optimizers(self):
@@ -121,7 +129,9 @@ class BaseModel(pl.LightningModule):
         self.log("train/loss", loss)
         self.log("train/acc", acc)
         self.log("learning_rate", self.learning_rate)
-        self.log_cmat(self.train_confusion, "train/cmat")
+        if self.log_confusion_matrix:
+            self.log_cmat(self.train_confusion, "train/cmat")
+        self.log("train/f1", self.train_f1.compute())
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
@@ -145,7 +155,9 @@ class BaseModel(pl.LightningModule):
         val_acc = torch.mean(torch.stack(val_acc))
         self.log("val/loss", val_loss)
         self.log("val/acc", val_acc)
-        self.log_cmat(self.val_confusion, "val/cmat")
+        if self.log_confusion_matrix:
+            self.log_cmat(self.val_confusion, "val/cmat")
+        self.log("val/f1", self.val_f1.compute())
 
     def train_dataloader(self):
         train_loader = torch.utils.data.DataLoader(
@@ -181,43 +193,34 @@ class BaseModel(pl.LightningModule):
         percent_tps_recovered = [
             [x, y / self.total_true_labels]
             for x, y in zip(
-                self.thresholds, self.sigmoid_threshold_to_tps_passed.values()
+                self.thresholds,
+                [s.item() for s in self.sigmoid_threshold_to_tps_passed.values()],
             )
         ]
-        table = Table(
+        table = pd.DataFrame(
             data=percent_tps_recovered, columns=["threshold", "tps_recovered"]
         )
-        self.logger.experiment.log(
-            {
-                "percent_tps_recovered": wandb.plot.line(
-                    table,
-                    "threshold",
-                    "tps_recovered",
-                    stroke=None,
-                    title="tps recovered",
-                )
-            }
-        )
+        fig = plt.figure(figsize=(12, 10))
+        plt.plot(table["threshold"], table["tps_recovered"])
+        tag = "val/tps_recovered"
+        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
+        plt.close(fig)
+
         mean_fps_per_sequence = [
             [x, y / self.total_sequences]
             for x, y in zip(
-                self.thresholds, self.sigmoid_threshold_to_fps_passed.values()
+                self.thresholds,
+                [s.item() for s in self.sigmoid_threshold_to_tps_passed.values()],
             )
         ]
-        table = Table(
+        table = pd.DataFrame(
             data=mean_fps_per_sequence, columns=["threshold", "fps_per_sequence"]
         )
-        self.logger.experiment.log(
-            {
-                "fps_per_sequence": wandb.plot.line(
-                    table,
-                    "threshold",
-                    "fps_per_sequence",
-                    stroke=None,
-                    title="fps per sequence",
-                )
-            }
-        )
+        fig = plt.figure(figsize=(12, 10))
+        plt.plot(table["threshold"], table["fps_per_sequence"])
+        tag = "val/fps_per_sequence"
+        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
+        plt.close(fig)
 
     def test_step(self, batch, batch_nb):
         features, masks, labels = batch

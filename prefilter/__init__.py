@@ -71,6 +71,7 @@ def main():
     train_parser.add_argument("--dilation_rate", type=float, default=None)
     train_parser.add_argument("--project_name", type=str, default="prefilter")
     train_parser.add_argument("--shoptimize", action="store_true")
+    train_parser.add_argument("--log_confusion_matrix", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

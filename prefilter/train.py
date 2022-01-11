@@ -65,6 +65,7 @@ def main(args):
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
         "single_label": args.single_label,
+        "log_confusion_matrix": args.log_confusion_matrix,
     }
 
     model = Prot2Vec(
@@ -115,7 +116,9 @@ def main(args):
         if args.shoptimize
         else args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
-        "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt],
+        "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt]
+        if args.shoptimize
+        else [checkpoint_callback, log_lr],
         "accelerator": "ddp" if args.gpus else None,
         "plugins": DDPPlugin(find_unused_parameters=False),
         "precision": 16 if args.gpus else 32,
@@ -137,13 +140,11 @@ def main(args):
         ckpt_path = checkpoint_file if os.path.isfile(checkpoint_file) else None
 
     trainer.fit(model, ckpt_path=ckpt_path)
-    # I use test as a handy override for doing things with the best model after training.
+
     if args.shoptimize:
+
         results = trainer.validate(model)[0]
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
-    else:
-        torch.save(
-            model.state_dict(),
-            os.path.join(trainer.logger.experiment.dir, args.model_name),
-        )
+
+    trainer.test(model)
