@@ -210,7 +210,7 @@ class BaseModel(pl.LightningModule):
             [x, y / self.total_sequences]
             for x, y in zip(
                 self.thresholds,
-                [s.item() for s in self.sigmoid_threshold_to_tps_passed.values()],
+                [s.item() for s in self.sigmoid_threshold_to_fps_passed.values()],
             )
         ]
         table = pd.DataFrame(
