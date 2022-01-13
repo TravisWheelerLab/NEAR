@@ -4,6 +4,7 @@ import os
 import pdb
 import logging
 from random import shuffle, seed
+from typing import Union, List, Tuple
 
 import numpy as np
 import torch
@@ -76,7 +77,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     return one_hot_encoding
 
 
-def parse_labels(labelstring):
+def parse_labels(labelstring: str) -> Union[List[str], None]:
     """
     Parses the Pfam accession IDs from a > line in a fasta file.
     Assumes that the fasta files have been generated with prefilter.utils.label_fasta.
@@ -84,6 +85,7 @@ def parse_labels(labelstring):
     >arbitrary name of sequence | PFAMID1 PFAMID2 PFAMID3 ... PFAMIDN
     <sequence>
     Each sequence can have one or many pfam accession IDs as labels.
+    If the fasta header doesn't have a | or it has a | followed by nothing list,
     :param labelstring: line to parse labels from
     :type labelstring: str
     :return: List of Pfam accession IDs
@@ -103,7 +105,14 @@ def parse_labels(labelstring):
     return labels
 
 
-def fasta_from_file(fasta_file):
+def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
+    """
+    Returns labels and sequences.
+    param fasta_file: fasta file to load sequences + labels from.
+    :type fasta_file: str
+    :return: Labels, sequences, or none.
+    :rtype: Union[None, List[List[str], List[str]]]
+    """
     sequence_labels, sequence_strs = [], []
     cur_seq_label = None
     buf = []

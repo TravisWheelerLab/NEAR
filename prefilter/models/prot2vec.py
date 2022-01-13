@@ -101,9 +101,8 @@ class Prot2Vec(BaseModel):
         self.res_bottleneck_factor = res_bottleneck_factor
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
-        self.loss_func = torch.nn.CrossEntropyLoss()
-        self.class_act = torch.nn.Softmax(dim=-1)
-        self.accuracy = torchmetrics.Accuracy()
+        self.loss_func = torch.nn.BCEWithLogitsLoss()
+        self.class_act = torch.nn.Sigmoid()
 
         self._create_datasets()
         self._setup_layers()
@@ -139,6 +138,7 @@ class Prot2Vec(BaseModel):
         self.classification_layer = torch.nn.Linear(
             self.res_block_n_filters, self.n_classes
         )
+        print(self.classification_layer)
 
     def _masked_forward(self, x, mask):
         """
@@ -179,9 +179,9 @@ class Prot2Vec(BaseModel):
 
     def _shared_step(self, batch):
         features, masks, labels = batch
+        labels = labels.int()
         logits = self.forward(features, masks)
-        preds = self.class_act(logits).argmax(dim=-1)
-        labels = labels.argmax(dim=-1)
-        loss = self.loss_func(logits, labels)
+        preds = torch.round(self.class_act(logits))
+        loss = self.loss_func(logits, labels.float())
         acc = self.accuracy(preds, labels)
         return loss, acc, logits, labels

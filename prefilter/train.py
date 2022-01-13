@@ -25,10 +25,6 @@ def main(args):
         raise ValueError(
             "--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor"
         )
-    if args.train_from_scratch:
-        # TODO: add error checking to make sure at least one of the
-        # arguments is filled out for prot2vec
-        pass
 
     if args.shoptimize:
         shopty_config = ShoptyConfig()
@@ -37,7 +33,7 @@ def main(args):
         checkpoint_dir = shopty_config.checkpoint_directory
         checkpoint_file = shopty_config.checkpoint_file
         max_iter = shopty_config.max_iter
-        min_unit = 10
+        min_unit = 1
     else:
         max_iter = args.epochs
 
@@ -58,14 +54,10 @@ def main(args):
         "schedule_lr": args.schedule_lr,
         "step_lr_step_size": args.step_lr_step_size,
         "step_lr_decay_factor": args.step_lr_decay_factor,
-        "resample_families": args.resample_families,
-        "resample_based_on_num_labels": args.resample_based_on_num_labels,
-        "resample_based_on_uniform_dist": args.resample_based_on_uniform_dist,
-        "train_from_scratch": args.train_from_scratch,
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
-        "single_label": args.single_label,
         "log_confusion_matrix": args.log_confusion_matrix,
+        "n_seq_per_fam": args.n_seq_per_fam
     }
 
     model = Prot2Vec(

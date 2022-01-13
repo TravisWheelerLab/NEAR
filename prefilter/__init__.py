@@ -1,9 +1,12 @@
 """
 Prefilter passes good candidates to hmmer.
 """
+import os
 from argparse import ArgumentParser
 
 __version__ = "0.0.1"
+
+id_to_class_code = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/accession_id_to_class_code.json")
 
 array_job_template = """#!/usr/bin/env bash
 
@@ -53,17 +56,12 @@ def main():
     train_parser.add_argument("--model_name", type=str, required=True)
     train_parser.add_argument("--data_path", type=str, required=True)
     train_parser.add_argument("--decoy_path", type=str, required=True)
-    train_parser.add_argument("--resample_families", action="store_true")
-    train_parser.add_argument("--resample_based_on_num_labels", action="store_true")
-    train_parser.add_argument("--resample_based_on_uniform_dist", action="store_true")
     train_parser.add_argument("--tune_initial_lr", action="store_true")
     train_parser.add_argument("--schedule_lr", action="store_true")
     train_parser.add_argument("--step_lr_step_size", type=int, default=None)
     train_parser.add_argument("--step_lr_decay_factor", type=float, default=None)
     train_parser.add_argument("--min_unit", type=int, default=1)
-    train_parser.add_argument("--train_from_scratch", action="store_true")
     train_parser.add_argument("--res_block_n_filters", type=int, default=None)
-    train_parser.add_argument("--single_label", action="store_true")
     train_parser.add_argument("--vocab_size", type=int, default=None)
     train_parser.add_argument("--res_block_kernel_size", type=int, default=None)
     train_parser.add_argument("--n_res_blocks", type=int, default=None)
@@ -72,6 +70,7 @@ def main():
     train_parser.add_argument("--project_name", type=str, default="prefilter")
     train_parser.add_argument("--shoptimize", action="store_true")
     train_parser.add_argument("--log_confusion_matrix", action="store_true")
+    train_parser.add_argument("--n_seq_per_fam", type=int, required=True)
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

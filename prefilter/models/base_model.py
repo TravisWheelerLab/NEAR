@@ -36,37 +36,24 @@ class BaseModel(pl.LightningModule):
         self.total_true_labels = 0
         self.val_confusion = None
         self.train_confusion = None
-        self.train_f1 = torchmetrics.F1()
-        self.val_f1 = torchmetrics.F1()
+        self.train_f1 = torchmetrics.F1(ignore_index=0)
+        self.val_f1 = torchmetrics.F1(ignore_index=0)
+        self.accuracy = torchmetrics.Accuracy(ignore_index=0)
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        self.train_dataset = utils.ProteinSequenceDataset(
-            self.train_files,
-            single_label=self.single_label,
-            sample_sequences_based_on_family_membership=self.resample_families,
-            sample_sequences_based_on_num_labels=self.resample_based_on_num_labels,
-            resample_based_on_uniform_dist=self.resample_based_on_uniform_dist,
-            use_pretrained_model_embeddings=not self.train_from_scratch,
-        )
+        self.train_dataset = utils.ProteinSequenceDataset(self.train_files,
+                                                          self.n_seq_per_fam)
 
-        self.val_dataset = utils.ProteinSequenceDataset(
-            self.val_files,
-            single_label=self.single_label,
-            existing_name_to_label_mapping=self.train_dataset.name_to_class_code,
-            use_pretrained_model_embeddings=not self.train_from_scratch,
-        )
+        self.val_dataset = utils.ProteinSequenceDataset(self.val_files)
 
-        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(
-            self.val_files,
-            single_label=self.single_label,
-            existing_name_to_label_mapping=self.val_dataset.name_to_class_code,
-            use_pretrained_model_embeddings=not self.train_from_scratch,
-        )
+        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(self.val_files)
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
-        self.n_classes = self.val_dataset.n_classes
+        self.n_classes = len(self.class_code_mapping)
+
         if self.log_confusion_matrix:
+
             self.val_confusion = torchmetrics.ConfusionMatrix(
                 num_classes=self.n_classes
             )
