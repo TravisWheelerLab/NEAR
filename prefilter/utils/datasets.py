@@ -19,16 +19,25 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 log = logging.getLogger(__name__)
 
-GSCC_SAVED_TF_MODEL_PATH = "/home/tc229954/data/prefilter/proteinfer/trn-_cnn_random__random_sp_gpu-cnn_for_random_pfam-5356760"
-
 
 class LabelMapping:
 
     """
-    Container class to explicitly set the types of data in the dictionary.
+    Container class that handles sampling from a set of labeled sequences.
+    Pfam families have disparate number of sequences. This class samples from each family uniformly, in effect
+    balancing the number of sequences per family.
+
+    It accomplishes this by creating a data structure that maps pfam accession ID to sequence:
+    mapping = {PF1111: [[seq1, labelset1], [seq2, labelset2]....[seqN, labelsetN], PF1112: [[seq1, labelset1], [seq2, labelset2]....[seqN, labelsetN],..}
+    At "sample" time, it iterates over the pfam accession IDs and grabs the ith [sequence, labelset].
+    A separate data structure is used to keep track of the index for each family.
     """
 
     def __init__(self, n_seq_per_fam: Optional[int] = None) -> None:
+        """
+        :param n_seq_per_fam: number of sequences to sample per family
+        :type n_seq_per_fam: int
+        """
         self.label_to_sequence = defaultdict(list)
         self.label_to_count = defaultdict(int)
         self.label_to_index = defaultdict(int)
@@ -51,7 +60,16 @@ class LabelMapping:
     def __getitem__(self, key):
         return self.label_to_sequence[key]
 
-    def sample(self, idx):
+    def sample(self, idx: int) -> Tuple[List[str], str]:
+        """
+        Return a labelset, sequence pair. If n_seq_per_fam is specified, only grab from the first
+        n_seq_per_fam members in each family (useful for scaling the problem size down).
+
+        :param idx: index of family to grab.
+        :type idx: int
+        :return: set of labels and sequence associated with that set.
+        :rtype: Tuple[List[str], str]
+        """
         name = self.names[idx % len(self.names)]
         if self.n_seq_per_fam is None:
             sequence, labelset = self.label_to_sequence[name][
