@@ -42,12 +42,15 @@ class BaseModel(pl.LightningModule):
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        self.train_dataset = utils.ProteinSequenceDataset(self.train_files,
-                                                          self.n_seq_per_fam)
+        self.train_dataset = utils.ProteinSequenceDataset(
+            self.train_files, self.name_to_class_code, self.n_seq_per_fam
+        )
 
-        self.val_dataset = utils.ProteinSequenceDataset(self.val_files)
+        self.val_dataset = utils.SimpleSequenceIterator(
+            self.val_files, name_to_class_code=self.name_to_class_code
+        )
 
-        self.val_and_decoy_dataset = utils.ProteinSequenceDataset(self.val_files)
+        self.val_and_decoy_dataset = utils.SimpleSequenceIterator(self.val_files)
 
         self.class_code_mapping = self.val_dataset.name_to_class_code
         self.n_classes = len(self.class_code_mapping)

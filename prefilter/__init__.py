@@ -6,7 +6,10 @@ from argparse import ArgumentParser
 
 __version__ = "0.0.1"
 
-id_to_class_code = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources/accession_id_to_class_code.json")
+id_to_class_code = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "resources/accession_id_to_class_code.json",
+)
 
 array_job_template = """#!/usr/bin/env bash
 
@@ -70,7 +73,8 @@ def main():
     train_parser.add_argument("--project_name", type=str, default="prefilter")
     train_parser.add_argument("--shoptimize", action="store_true")
     train_parser.add_argument("--log_confusion_matrix", action="store_true")
-    train_parser.add_argument("--n_seq_per_fam", type=int, required=True)
+    train_parser.add_argument("--n_seq_per_fam", default=None)
+    train_parser.add_argument("--emission_sequence_path", default=None)
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

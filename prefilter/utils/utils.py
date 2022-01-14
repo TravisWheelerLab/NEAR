@@ -23,6 +23,7 @@ __all__ = [
     "PROT_ALPHABET",
     "LEN_PROTEIN_ALPHABET",
     "fasta_from_file",
+    "create_class_code_mapping",
 ]
 
 PROT_ALPHABET = {
@@ -103,6 +104,35 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
         return None
 
     return labels
+
+
+def create_class_code_mapping(fasta_files):
+    """
+    docstring
+    :param fasta_files:
+    :type fasta_files:
+    :return:
+    :rtype:
+    """
+
+    name_to_class_code = {}
+
+    class_code = 0
+    for fasta_file in fasta_files:
+        labels, sequences = fasta_from_file(fasta_file)
+        for label, sequence in zip(labels, sequences):
+            labelset = parse_labels(label)
+            if not len(labelset) or labelset is None:
+                raise ValueError(
+                    f"Line in {fasta_file} does not contain any labels. Please fix."
+                )
+            else:
+                for name in labelset:
+                    if name not in name_to_class_code:
+                        name_to_class_code[name] = class_code
+                        class_code += 1
+
+    return name_to_class_code
 
 
 def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:

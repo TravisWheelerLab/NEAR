@@ -138,7 +138,6 @@ class Prot2Vec(BaseModel):
         self.classification_layer = torch.nn.Linear(
             self.res_block_n_filters, self.n_classes
         )
-        print(self.classification_layer)
 
     def _masked_forward(self, x, mask):
         """

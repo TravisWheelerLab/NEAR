@@ -15,7 +15,7 @@ from glob import glob
 from argparse import ArgumentParser
 
 from prefilter.models import Prot2Vec
-from prefilter.utils import PROT_ALPHABET
+from prefilter.utils import PROT_ALPHABET, create_class_code_mapping
 
 
 def main(args):
@@ -26,6 +26,7 @@ def main(args):
             "--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor"
         )
 
+    # shopty-specific config
     if args.shoptimize:
         shopty_config = ShoptyConfig()
         result_file = shopty_config.results_path
@@ -38,13 +39,55 @@ def main(args):
         max_iter = args.epochs
 
     data_path = args.data_path
+    emission_sequence_path = args.emission_sequence_path
 
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
-    train_files = glob(os.path.join(data_path, "*train*"))
-    val_files = glob(os.path.join(data_path, "*valid*"))
+    # select a subset of files to train on
+    train_files = glob(os.path.join(data_path, "*train.fa"))[:100]
+    val_files = []
+    # then get their corresponding validation files (we don't want to validate on a set of files that don't have a
+    # relationship to the train files)
+    for f in train_files:
+        valid = f.replace("-train", "-valid")
+        if os.path.isfile(valid):
+            val_files.append(valid)
+
+    if not (len(val_files)):
+        raise ValueError("no valid files")
+
+    # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
+    # as our train sequences
+    if emission_sequence_path is not None:
+        if "$HOME" in emission_sequence_path:
+            emission_sequence_path = emission_sequence_path.replace(
+                "$HOME", os.environ["HOME"]
+            )
+        emission_files = []
+        for f in train_files:
+            emission_file = os.path.join(emission_sequence_path, os.path.basename(f))
+            if not os.path.isfile(emission_file):
+                raise ValueError(f"emission file {emission_file} isn't a file")
+            else:
+                emission_files.append(emission_file)
+
+    # create an overall class code mapping.
+    # This is done on each training run. The alternative is keeping a shared mapping of name to class code but this can
+    # waste a bunch of compute. For example, if you're training on a small subset of files you only want to classify the
+    # labels that appear in the small subset.
+
+    if emission_sequence_path is not None:
+        name_to_class_code = create_class_code_mapping(
+            train_files + val_files + emission_files
+        )
+    else:
+        name_to_class_code = create_class_code_mapping(train_files + val_files)
+
     decoy_files = glob(os.path.join(args.decoy_path, "*.fa"))
+
+    # these options are ingested into the class that all models should subclass. They control how the dataset
+    # behaves and what variables to log.
 
     data_and_optimizer_kwargs = {
         "learning_rate": args.learning_rate,
@@ -57,9 +100,10 @@ def main(args):
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
         "log_confusion_matrix": args.log_confusion_matrix,
-        "n_seq_per_fam": args.n_seq_per_fam
+        "n_seq_per_fam": args.n_seq_per_fam,
+        "name_to_class_code": name_to_class_code,
     }
-
+    # set up the model
     model = Prot2Vec(
         res_block_n_filters=args.res_block_n_filters,
         vocab_size=len(PROT_ALPHABET),
@@ -70,6 +114,7 @@ def main(args):
         **data_and_optimizer_kwargs,
     )
 
+    # create the checkpoint callbacks (shopty requires the one name "checkpoint callback")
     if args.shoptimize:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             dirpath=checkpoint_dir, save_last=True, save_top_k=0, verbose=True
@@ -87,7 +132,7 @@ def main(args):
         )
 
     last_epoch = 0
-
+    # if we're shoptimizing, check for a checkpoint and load it if it exists.
     if args.shoptimize:
         if os.path.isfile(checkpoint_file):
             checkpoint = torch.load(checkpoint_file)
@@ -99,8 +144,10 @@ def main(args):
                 else torch.device("cpu"),
             )
 
+    # callback to monitor learning rate in tensorboard
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
 
+    # create the arguments for the trainer
     trainer_kwargs = {
         "gpus": args.gpus,
         "num_nodes": args.num_nodes,
@@ -119,7 +166,6 @@ def main(args):
         if args.shoptimize
         else pl.loggers.TensorBoardLogger(args.log_dir),
     }
-
     if args.tune_initial_lr:
         trainer_kwargs["auto_lr_find"] = True
         trainer = pl.Trainer(**trainer_kwargs)
@@ -131,12 +177,16 @@ def main(args):
     if args.shoptimize:
         ckpt_path = checkpoint_file if os.path.isfile(checkpoint_file) else None
 
+    # finally, train the model
     trainer.fit(model, ckpt_path=ckpt_path)
 
     if args.shoptimize:
-
         results = trainer.validate(model)[0]
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
 
-    trainer.test(model)
+    # test it. This is actually running a custom plotting routine that's defined over the validation set
+    # using "test" is a little hacky but much less effort than trying to customize the pytorch lightning class.
+
+    res = trainer.test(model)
+    print(res)

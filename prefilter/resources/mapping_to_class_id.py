@@ -3,7 +3,7 @@ import json
 
 pfam_name_file = "./pfam_accession_ids.txt"
 
-with open(pfam_name_file, 'r') as src:
+with open(pfam_name_file, "r") as src:
     names = src.read().split("\n")
 
 pfam_accession_id_to_class_code = {}
