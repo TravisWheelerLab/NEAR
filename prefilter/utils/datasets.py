@@ -19,6 +19,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 log = logging.getLogger(__name__)
 
+__all__ = ["ProteinSequenceDataset", "DecoyIterator", "SimpleSequenceIterator"]
+
 
 class LabelMapping:
 
@@ -33,7 +35,7 @@ class LabelMapping:
     A separate data structure is used to keep track of the index for each family.
     """
 
-    def __init__(self, n_seq_per_fam: Optional[int] = None) -> None:
+    def __init__(self, n_seq_per_fam: Optional[int] = None, no_resample=True) -> None:
         """
         :param n_seq_per_fam: number of sequences to sample per family
         :type n_seq_per_fam: int
@@ -42,6 +44,8 @@ class LabelMapping:
         self.label_to_count = defaultdict(int)
         self.label_to_index = defaultdict(int)
         self.n_seq_per_fam = n_seq_per_fam
+        self.no_resample = no_resample
+        self.sequences_and_labels = []
         self.names = None
 
     def __setitem__(self, key: str, value: List[Tuple[str, List[str]]]) -> None:
@@ -70,41 +74,54 @@ class LabelMapping:
         :return: set of labels and sequence associated with that set.
         :rtype: Tuple[List[str], str]
         """
-        name = self.names[idx % len(self.names)]
-        if self.n_seq_per_fam is None:
-            sequence, labelset = self.label_to_sequence[name][
-                self.label_to_index[name] % len(self.label_to_sequence[name])
-            ]
+        if self.no_resample:
+            return self.sequences_and_labels[idx][1], self.sequences_and_labels[idx][0]
         else:
-            divisor = (
-                len(self.label_to_sequence[name])
-                if len(self.label_to_sequence[name]) < self.n_seq_per_fam
-                else self.n_seq_per_fam
-            )
-            sequence, labelset = self.label_to_sequence[name][
-                self.label_to_index[name] % divisor
-            ]
-        self.label_to_index[name] += 1
-        return labelset, sequence
+            name = self.names[idx % len(self.names)]
+            if self.n_seq_per_fam is None:
+                sequence, labelset = self.label_to_sequence[name][
+                    self.label_to_index[name] % len(self.label_to_sequence[name])
+                ]
+            else:
+                divisor = (
+                    len(self.label_to_sequence[name])
+                    if len(self.label_to_sequence[name]) < self.n_seq_per_fam
+                    else self.n_seq_per_fam
+                )
+                sequence, labelset = self.label_to_sequence[name][
+                    self.label_to_index[name] % divisor
+                ]
+            self.label_to_index[name] += 1
+            return labelset, sequence
 
     def __len__(self):
         # length is the number of unique pfam accession ids in the fasta files
         # which is NOT the number of classes we actually classify in our final classification
         # layer
-        return len(self.names)
+        if self.no_resample:
+            return len(self.sequences_and_labels)
+        else:
+            return len(self.names)
 
     def compute(self):
-        summation = sum(list(self.label_to_count.values()))
-        self.label_to_count = {k: v / summation for k, v in self.label_to_count.items()}
-        self.names = list(self.label_to_sequence.keys())
-        shuffle(self.names)
-        # shuffle the ordering of sequences in each family
-        x = {}
-        for k, v in self.label_to_sequence.items():
-            shuffle(v)
-            x[k] = v
+        if self.no_resample:
+            for label, sequenceset in self.label_to_sequence.items():
+                self.sequences_and_labels.extend(sequenceset)
+            shuffle(self.sequences_and_labels)
+        else:
+            summation = sum(list(self.label_to_count.values()))
+            self.label_to_count = {
+                k: v / summation for k, v in self.label_to_count.items()
+            }
+            self.names = list(self.label_to_sequence.keys())
+            shuffle(self.names)
+            # shuffle the ordering of sequences in each family
+            x = {}
+            for k, v in self.label_to_sequence.items():
+                shuffle(v)
+                x[k] = v
 
-        self.label_to_sequence = x
+            self.label_to_sequence = x
 
     def shuffle(self):
         """
@@ -241,14 +258,37 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         return len(self.sequences_and_labels)
 
 
+class DecoyIterator:
+    def __init__(self, decoy_files, name_to_class_code):
+
+        self.decoy_files = decoy_files
+        self.sequences = []
+        self.n_classes = len(name_to_class_code)
+        self._build_dataset()
+
+    def _build_dataset(self) -> None:
+        for fasta_file in self.decoy_files:
+            _, sequences = utils.fasta_from_file(fasta_file)
+            self.sequences.extend(sequences)
+
+    def _encoding_func(self, x):
+        return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
+
+    def __getitem__(self, idx):
+        example = self.sequences[idx]
+        return self._encoding_func(example[0]), torch.zeros(self.n_classes)
+
+    def __len__(self):
+        return len(self.sequences)
+
+
 if __name__ == "__main__":
 
     from glob import glob
 
-    psd = ProteinSequenceDataset(
+    psd = DecoyIterator(
         fasta_files=glob("/home/tc229954/subset/training_data0.5/*train.fa")
     )
     print(len(psd))
-    exit()
     for features, labels in psd:
         print(features.shape, labels.shape)

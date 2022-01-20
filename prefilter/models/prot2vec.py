@@ -89,6 +89,7 @@ class Prot2Vec(BaseModel):
         res_bottleneck_factor,
         dilation_rate,
         normalize_output_embedding=True,
+        training=True,
         **kwargs
     ):
 
@@ -101,14 +102,16 @@ class Prot2Vec(BaseModel):
         self.res_bottleneck_factor = res_bottleneck_factor
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
-        self.loss_func = torch.nn.BCEWithLogitsLoss()
+        self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
         self.class_act = torch.nn.Sigmoid()
 
-        self._create_datasets()
+        if training:
+            self._create_datasets()
+
         self._setup_layers()
 
         self.save_hyperparameters()
-        self.hparams["name_to_class_code"] = self.class_code_mapping
+        self.hparams["name_to_class_code"] = self.name_to_class_code
         self.hparams["n_classes"] = self.n_classes
         self.save_hyperparameters()
 

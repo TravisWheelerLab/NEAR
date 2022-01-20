@@ -489,7 +489,8 @@ class Generator:
         pfunc(
             f"Submitting labeling array job script. Labeling each .fa in {self.clustered_output_directory} with {self.hmmdb}"
         )
-        self.jobid_to_wait_for = self._submit(slurm_file)
+        jobid_to_wait_for = self._submit(slurm_file)
+        return self.jobid_to_wait_for
 
     def _submit(self, slurm_script):
         slurm_jobid = subprocess.check_output(

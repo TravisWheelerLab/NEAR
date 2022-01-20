@@ -9,6 +9,7 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 from pytorch_lightning.loggers import WandbLogger
+from random import shuffle
 from shopty import ShoptyConfig
 
 from glob import glob
@@ -45,7 +46,10 @@ def main(args):
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     # select a subset of files to train on
-    train_files = glob(os.path.join(data_path, "*train.fa"))[:100]
+    train_files = glob(os.path.join(data_path, "*train.fa"))
+    shuffle(train_files)
+    # no restriction
+    # train_files = train_files[:1000]
     val_files = []
     # then get their corresponding validation files (we don't want to validate on a set of files that don't have a
     # relationship to the train files)
@@ -67,10 +71,11 @@ def main(args):
         emission_files = []
         for f in train_files:
             emission_file = os.path.join(emission_sequence_path, os.path.basename(f))
-            if not os.path.isfile(emission_file):
-                raise ValueError(f"emission file {emission_file} isn't a file")
-            else:
+            if os.path.isfile(emission_file):
                 emission_files.append(emission_file)
+
+        if not len(emission_files):
+            raise ValueError(f"no emission files")
 
     # create an overall class code mapping.
     # This is done on each training run. The alternative is keeping a shared mapping of name to class code but this can
@@ -126,9 +131,9 @@ def main(args):
         )
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/loss",
-            filename="{epoch}-{val/loss:.5f}-{val/acc:.5f}",
-            save_top_k=1,
+            monitor="val/f1",
+            filename="{epoch}-{val/loss:.5f}-{val/f1:.5f}",
+            save_top_k=5,
         )
 
     last_epoch = 0

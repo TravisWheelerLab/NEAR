@@ -9,8 +9,6 @@ from typing import Union, List, Tuple
 import numpy as np
 import torch
 
-from prefilter.utils.datasets import GSCC_SAVED_TF_MODEL_PATH
-
 log = logging.getLogger(__name__)
 
 seed(1)
@@ -22,6 +20,7 @@ __all__ = [
     "stack_batch",
     "PROT_ALPHABET",
     "LEN_PROTEIN_ALPHABET",
+    "handle_figure_path",
     "fasta_from_file",
     "create_class_code_mapping",
 ]
@@ -53,6 +52,17 @@ PROT_ALPHABET = {
 }
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
+
+
+def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
+
+    bs = os.path.basename(figure_path)
+    name, curr_ext = os.path.splitext(bs)
+
+    if len(curr_ext) == 0:
+        figure_path = figure_path + ext
+
+    return figure_path
 
 
 def encode_protein_as_one_hot_vector(protein, maxlen=None):

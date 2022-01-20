@@ -52,8 +52,8 @@ class BaseModel(pl.LightningModule):
 
         self.val_and_decoy_dataset = utils.SimpleSequenceIterator(self.val_files)
 
-        self.class_code_mapping = self.val_dataset.name_to_class_code
-        self.n_classes = len(self.class_code_mapping)
+        self.name_to_class_code = self.val_dataset.name_to_class_code
+        self.n_classes = len(self.name_to_class_code)
 
         if self.log_confusion_matrix:
 
