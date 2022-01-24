@@ -14,11 +14,13 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
+    "load_sequences_and_labels",
     "encode_protein_as_one_hot_vector",
     "parse_labels",
     "pad_batch",
     "stack_batch",
     "PROT_ALPHABET",
+    "pad_batch_with_labels",
     "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
     "fasta_from_file",
@@ -52,6 +54,28 @@ PROT_ALPHABET = {
 }
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
+
+
+def load_sequences_and_labels(fasta_files: List[str]) -> List[Tuple[List[str], str]]:
+    """
+    :param fasta_files:
+    :type fasta_files:
+    :return: List of [labels, sequence].
+    :rtype:
+    """
+    labels_to_sequence = []
+    for fasta in fasta_files:
+        labelset, sequences = fasta_from_file(fasta)
+        # parse labels, get
+        for labelstring, sequence in zip(labelset, sequences):
+            labels = parse_labels(labelstring)
+            if labels is None:
+                print(labelstring)
+                continue
+            else:
+                labels_to_sequence.append([labels, sequence])
+
+    return labels_to_sequence
 
 
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
@@ -202,6 +226,14 @@ def pad_batch(batch):
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
     return features, features_mask, torch.stack(labels)
+
+
+def pad_batch_with_labels(batch):
+    features = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    string_labels = [b[2] for b in batch]
+    features, features_mask = _pad_sequences(features)
+    return features, features_mask, torch.stack(labels), string_labels
 
 
 def stack_batch(batch):

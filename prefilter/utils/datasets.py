@@ -19,7 +19,12 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 log = logging.getLogger(__name__)
 
-__all__ = ["ProteinSequenceDataset", "DecoyIterator", "SimpleSequenceIterator"]
+__all__ = [
+    "ProteinSequenceDataset",
+    "DecoyIterator",
+    "SimpleSequenceIterator",
+    "RankingIterator",
+]
 
 
 class LabelMapping:
@@ -162,7 +167,7 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
 
     def _build_dataset(self):
         # going to choose labels from a dictionary.
-        # LabelMapping is used to sample from at training time.
+        # LabelMapping is used to sample at training time.
         for fasta_file in self.fasta_files:
             labels, sequences = utils.fasta_from_file(fasta_file)
             for labelstring, sequence in zip(labels, sequences):
@@ -259,6 +264,10 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
 
 
 class DecoyIterator:
+    """
+    Iterates over label-less fasta files (decoys, usually).
+    """
+
     def __init__(self, decoy_files, name_to_class_code):
 
         self.decoy_files = decoy_files
@@ -282,13 +291,41 @@ class DecoyIterator:
         return len(self.sequences)
 
 
+class RankingIterator:
+    def __init__(self, fasta_files, name_to_class_code):
+
+        self.n_classes = len(name_to_class_code)
+        self.name_to_class_code = name_to_class_code
+        self.labels_and_sequences = utils.load_sequences_and_labels(fasta_files)
+
+    def _encoding_func(self, x):
+        return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
+
+    def _make_multi_hot(self, labels):
+        y = np.zeros(self.n_classes)
+        class_ids = [self.name_to_class_code[l] for l in labels]
+        for idx in class_ids:
+            y[idx] = 1
+        return torch.as_tensor(y)
+
+    def __getitem__(self, idx):
+        labelset, sequence = self.labels_and_sequences[idx]
+        return self._encoding_func(sequence), self._make_multi_hot(labelset), labelset
+
+    def __len__(self):
+        return len(self.labels_and_sequences)
+
+
 if __name__ == "__main__":
 
     from glob import glob
 
-    psd = DecoyIterator(
-        fasta_files=glob("/home/tc229954/subset/training_data0.5/*train.fa")
+    fs = glob("/home/tc229954/subset/training_data0.5/*train.fa")[:10]
+    name_to_class_code = utils.create_class_code_mapping(fs)
+    psd = RankingIterator(fasta_files=fs, name_to_class_code=name_to_class_code)
+    psd = torch.utils.data.DataLoader(
+        psd, batch_size=32, collate_fn=utils.pad_batch_with_labels
     )
     print(len(psd))
-    for features, labels in psd:
-        print(features.shape, labels.shape)
+    for features, masks, label_vector, labels in psd:
+        print(features.shape, labels)

@@ -10,30 +10,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from prefilter.utils import fasta_from_file, parse_labels, handle_figure_path
-
-
-def load_sequences_and_labels(fasta_files: List[str]) -> List[Tuple[List[str], str]]:
-    """
-
-    :param fasta_files:
-    :type fasta_files:
-    :return: List of [labels, sequence].
-    :rtype:
-    """
-    labels_to_sequence = []
-    for fasta in fasta_files:
-        labelset, sequences = fasta_from_file(fasta)
-        # parse labels, get
-        for labelstring, sequence in zip(labelset, sequences):
-            labels = parse_labels(labelstring)
-            if labels is None:
-                print(labelstring)
-                continue
-            else:
-                labels_to_sequence.append([labels, sequence])
-
-    return labels_to_sequence
+from prefilter.utils import (
+    fasta_from_file,
+    parse_labels,
+    handle_figure_path,
+    label_fasta,
+    load_sequences_and_labels,
+)
 
 
 def histogram_number_of_seqs_per_family(fasta_files, savefig=None):
@@ -282,18 +265,70 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
 
 
 def number_of_sequences_per_unique_label_combination(
-    files: str, figure_path: str
+    hparams: dict, figure_path: str
 ) -> None:
 
-    labels_and_seq = load_sequences_and_labels(files)
-    labelset_to_count = defaultdict(int)
-    for labelset, seq in labels_and_seq:
-        if len(labelset) > 1:
-            labelset_to_count[tuple(labelset)] += 1
+    train_labels_and_seq = load_sequences_and_labels(hparams["train_files"])
+    val_labels_and_seq = load_sequences_and_labels(hparams["val_files"])
 
-    counts = sorted(list(labelset_to_count.values()))
-    fig, ax = plt.subplots(figsize=(13, 10))
-    ax.bar(np.arange(len(counts)), counts)
+    train_labelset_to_count = defaultdict(int)
+    for labelset, seq in train_labels_and_seq:
+        if len(labelset) > 1:
+            train_labelset_to_count[tuple(labelset)] += 1
+
+    val_labelset_to_count = defaultdict(int)
+    for labelset, seq in val_labels_and_seq:
+        if len(labelset) > 1:
+            val_labelset_to_count[tuple(labelset)] += 1
+
+    val_counts = []
+    train_counts = []
+
+    for unique_label_combo in val_labelset_to_count.keys():
+        val_counts.append(val_labelset_to_count[unique_label_combo])
+        if unique_label_combo in train_labelset_to_count:
+            train_counts.append(train_labelset_to_count[unique_label_combo])
+        else:
+            train_counts.append(0)
+
+    val_counts = np.asarray(val_counts)
+    train_counts = np.asarray(train_counts)
+    idx = np.argsort(val_counts)
+    val_counts = val_counts[idx]
+    train_counts = train_counts[idx]
+
+    fig, ax = plt.subplots(figsize=(13, 10), nrows=2)
+    ax[0].bar(np.arange(len(train_counts)), train_counts, label="train")
+    ax[0].bar(np.arange(len(val_counts)), val_counts, label="val")
+    ax[0].set_xlabel("unique labelset")
+    ax[0].set_ylabel("count")
+    ax[0].set_ylim([0, 450])
+    ax[0].set_title("intersection of validation and train labelsets")
+    ax0 = ax[0].twinx()
+    ax0.plot(
+        np.arange(len(val_counts)),
+        np.cumsum(val_counts),
+        "b-",
+        label="cumulative val dist",
+    )
+    ax0.plot(
+        np.arange(len(train_counts)),
+        np.cumsum(train_counts),
+        "k-",
+        label="cumulative train dist",
+    )
+    ax0.legend()
+
+    ax[1].bar(np.arange(len(train_counts)), np.log(train_counts + 1), label="train")
+    ax[1].bar(np.arange(len(val_counts)), np.log(val_counts + 1), label="val")
+    ax[1].legend()
+
+    ax[1].set_title(
+        f"unique labelset (train, val) logged. pct of validation labelsets that don't have a match in train: {len(np.where(train_counts == 0)[0])/len(val_counts)}"
+    )
+    ax[1].set_xlabel("unique labelset")
+    ax[1].set_ylabel("logged count")
+
     plt.savefig(handle_figure_path(figure_path))
     plt.close()
 
@@ -301,12 +336,20 @@ def number_of_sequences_per_unique_label_combination(
 def parser():
     ap = ArgumentParser()
     sp = ap.add_subparsers(title="action", dest="command")
-
-    spf = sp.add_parser(name="seqs")
-    spf.add_argument("fasta_files", nargs="+")
+    spf = sp.add_parser(
+        name="seqs",
+        description="Histogram the number of sequences per family in the ingested fasta_files.",
+    )
+    spf.add_argument("fasta_files", nargs="+", help="fasta files(s) to histogram.")
     spf.add_argument("save_fig", type=str, help="where to save the figure")
 
-    neighbor = sp.add_parser(name="neigh")
+    neighbor = sp.add_parser(
+        name="neigh",
+        description="produce a figure describing "
+        "the distribution of sequences with and without "
+        "neighborhood labels. Accepts a single .yaml file"
+        " or a set of fasta files.",
+    )
     neighbor.add_argument(
         "files",
         nargs="+",
@@ -317,7 +360,11 @@ def parser():
         "--key", default="val_files", type=str, help="key to access in the .yaml file"
     )
 
-    comp = sp.add_parser(name="comp")
+    comp = sp.add_parser(
+        name="comp",
+        description="compare the distributions of training and validation labels."
+        " Accepts a single .yaml file with train_files and val_files as keys",
+    )
     comp.add_argument(
         "yaml_file",
         type=str,
@@ -325,14 +372,14 @@ def parser():
     )
     comp.add_argument("save_fig", type=str, help="where to save the figure")
 
-    uniq = sp.add_parser(name="uniq")
+    uniq = sp.add_parser(
+        name="uniq",
+        description="plot the number of sequences per unique label combination.",
+    )
     uniq.add_argument(
         "yaml_file",
         type=str,
         help=".yaml file containing train/val_file keys",
-    )
-    uniq.add_argument(
-        "--key", default="train_files", type=str, help="key to access in the .yaml file"
     )
     uniq.add_argument("save_fig", type=str, help="where to save the figure")
 
@@ -366,9 +413,7 @@ if __name__ == "__main__":
     elif args.command == "uniq":
         with open(args.yaml_file, "r") as src:
             hparams = yaml.safe_load(src)
-        number_of_sequences_per_unique_label_combination(
-            hparams[args.key], args.save_fig
-        )
+        number_of_sequences_per_unique_label_combination(hparams, args.save_fig)
 
     else:
         p.print_help()
