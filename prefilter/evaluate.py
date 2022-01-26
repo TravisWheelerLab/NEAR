@@ -28,11 +28,11 @@ def recall_for_each_significant_label(
     classification_threshold=0.5,
 ):
     """
-    Which labels do the models tend to get right?
-    Going to create a new dataloader that returns the index and order of labels.
-    Then, aggregate stats for the 1st label; the second label; the third; and so on.
-    :return:
-    :rtype:
+    Which rank of label do the models tend to get right?
+    Produce a plot that summarizes on which labels the models do poorly. Primary labels are expected to have the best
+    recall.
+    :return: None
+    :rtype: None
     """
 
     correct = defaultdict(int)
@@ -94,6 +94,21 @@ def recall_for_each_significant_label(
 def primary_and_neighborhood_recall(
     model, dataloader, name_to_class_code, figure_path, device="cuda"
 ):
+    """
+    Plot the recall of the model for primary and neighborhood labels.
+    :param model: model to evaluate
+    :type model:
+    :param dataloader: dataloader containing batched sequences/labels to evaluate
+    :type dataloader:
+    :param name_to_class_code: dictionary mapping pfam accession id to class code
+    :type name_to_class_code:
+    :param figure_path: where to save the figure
+    :type figure_path:
+    :param device: cuda or cpu - use the gpu or not?
+    :type device:
+    :return:
+    :rtype:
+    """
     thresholds = np.linspace(0.01, 1, 20)[::-1]
     threshold_to_tps_and_fps = {}
 
@@ -236,6 +251,30 @@ def recall_per_family(
     just_primary=False,
     just_neighborhood=False,
 ):
+    """
+    Plot the recall on a family-wise basis; try to answer "Does model performance increase when there are more sequences
+    in train from a given family?"
+    :param model: model to evaluate
+    :type model:
+    :param train_files: files containing train sequences
+    :type train_files: List[str]
+    :param val_dataloader: dataloader (batched) with val seq+labels (ingested into model)
+    :type val_dataloader:
+    :param name_to_class_code: dictionary mapping pfam accession id to class code
+    :type name_to_class_code: Dict[str, int]
+    :param figure_path: where to save the figure
+    :type figure_path: str
+    :param classification_threshold: sigmoid values above this will be shunted to 1 (a positive classification)
+    :type classification_threshold: float
+    :param device: cuda or cpu
+    :type device: str
+    :param just_primary: just analyze primary labels
+    :type just_primary: bool
+    :param just_neighborhood: just analyze neighborhood labels
+    :type just_neighborhood: bool
+    :return: None
+    :rtype: None
+    """
 
     train_labels_and_sequences = utils.load_sequences_and_labels(train_files)
     train_family_to_num_seq = defaultdict(int)
@@ -302,11 +341,33 @@ def recall_per_family(
 
 
 def tps_above_threshold_torch(prediction_array, label_array, threshold):
+    """
+    Calculate true positives above threshold in a prediction tensor.
+    :param prediction_array:
+    :type prediction_array:
+    :param label_array:
+    :type label_array:
+    :param threshold:
+    :type threshold:
+    :return:
+    :rtype:
+    """
     prediction_array[prediction_array >= threshold] = 1
     return torch.sum((prediction_array == 1) & (label_array == 1))
 
 
 def fps_above_threshold_torch(prediction_array, label_array, threshold):
+    """
+    Calculate true positives above threshold in a prediction tensor.
+    :param prediction_array:
+    :type prediction_array:
+    :param label_array:
+    :type label_array:
+    :param threshold:
+    :type threshold:
+    :return:
+    :rtype:
+    """
     prediction_array[prediction_array >= threshold] = 1
     return torch.sum((prediction_array == 1) & (label_array != 1))
 
