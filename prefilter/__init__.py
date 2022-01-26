@@ -6,9 +6,9 @@ from argparse import ArgumentParser
 
 __version__ = "0.0.1"
 
-id_to_class_code = os.path.join(
+name_to_accession_id = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "resources/accession_id_to_class_code.json",
+    "resources/name_to_pfam_accession_id.yaml",
 )
 
 array_job_template = """#!/usr/bin/env bash

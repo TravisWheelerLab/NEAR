@@ -68,14 +68,9 @@ def main(args):
             emission_sequence_path = emission_sequence_path.replace(
                 "$HOME", os.environ["HOME"]
             )
-        emission_files = []
-        for f in train_files:
-            emission_file = os.path.join(emission_sequence_path, os.path.basename(f))
-            if os.path.isfile(emission_file):
-                emission_files.append(emission_file)
-
+        emission_files = glob(os.path.join(emission_sequence_path, "*fa"))
         if not len(emission_files):
-            raise ValueError(f"no emission files")
+            raise ValueError(f"no emission files found at {emission_sequence_path}")
 
     # create an overall class code mapping.
     # This is done on each training run. The alternative is keeping a shared mapping of name to class code but this can
@@ -192,6 +187,4 @@ def main(args):
 
     # test it. This is actually running a custom plotting routine that's defined over the validation set
     # using "test" is a little hacky but much less effort than trying to customize the pytorch lightning class.
-
-    res = trainer.test(model)
-    print(res)
+    torch.save(model, args.model_name)

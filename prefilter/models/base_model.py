@@ -122,6 +122,7 @@ class BaseModel(pl.LightningModule):
         if self.log_confusion_matrix:
             self.log_cmat(self.train_confusion, "train/cmat")
         self.log("train/f1", self.train_f1.compute())
+        self.train_dataset.label_to_sequence.shuffle()
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)

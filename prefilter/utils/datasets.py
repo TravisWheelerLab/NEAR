@@ -111,6 +111,7 @@ class LabelMapping:
     def compute(self):
         if self.no_resample:
             for label, sequenceset in self.label_to_sequence.items():
+                # sequenceset contains [[lab1, lab2..], sequence]
                 self.sequences_and_labels.extend(sequenceset)
             shuffle(self.sequences_and_labels)
         else:
@@ -134,7 +135,10 @@ class LabelMapping:
         :return: None
         :rtype: None
         """
-        shuffle(self.names)
+        if self.no_resample:
+            shuffle(self.sequences_and_labels)
+        else:
+            shuffle(self.names)
 
 
 class ProteinSequenceDataset(torch.utils.data.Dataset):

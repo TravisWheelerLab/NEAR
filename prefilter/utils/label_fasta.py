@@ -1,17 +1,70 @@
 #!/usr/bin/env python3
 import pdb
 import subprocess
+import numpy as np
+import yaml
 import pandas as pd
 import logging
 import os
 import time
+from typing import List
 from glob import glob
 
 log = logging.getLogger(__name__)
 
 from argparse import ArgumentParser
-from prefilter import array_job_template, single_job_template
+from prefilter import array_job_template, single_job_template, name_to_accession_id
 import prefilter.utils as utils
+
+
+def emit_and_inject_labels(
+    fasta_files: List[str], output_directory: str, hmm_directory: str
+) -> None:
+
+    ns = [500, 1000, 1500, 2000]
+
+    with open(name_to_accession_id, "r") as src:
+        nta = yaml.safe_load(src)
+    accession_id_to_name = {v: k for k, v in nta.items()}
+
+    for fasta_file in fasta_files:
+        # get neighborhood labels
+        labels, _ = utils.fasta_from_file(fasta_file)
+        neighborhoods = [utils.parse_labels(labelset)[1:] for labelset in labels]
+        neighborhoods = set([l for n in neighborhoods for l in n])
+        for neighborhood_label in neighborhoods:
+            # convert the PF accession id to a name
+            try:
+                family_name = accession_id_to_name[neighborhood_label]
+                # get correct hmm
+                hmm_file = os.path.join(
+                    hmm_directory,
+                    os.path.splitext(os.path.basename(fasta_file))[0] + ".hmm",
+                )
+                tmp_emission_path = random_filename(".")
+                n = ns[int(np.random.rand() * len(ns))]
+                if os.path.isfile(hmm_file):
+                    outf = os.path.join(output_directory, family_name + "_emission.fa")
+
+                    if os.path.isfile(outf):
+                        pfunc(f"Emission sequences already generated for {family_name}")
+                        continue
+
+                    cmd = f"hmmemit -o {tmp_emission_path} -N {n} {hmm_file}"
+                    subprocess.call(cmd.split())
+                    labels, sequences = utils.fasta_from_file(tmp_emission_path)
+
+                    with open(outf, "w") as dst:
+                        for label, sequence in zip(labels, sequences):
+                            fasta_header = f">{label} | {neighborhood_label}"
+                            fasta_header += "\n" + sequence + "\n"
+                            dst.write(fasta_header)
+
+                    pfunc(outf)
+                    os.remove(tmp_emission_path)
+
+            except KeyError:
+                pfunc(f"fasta file {fasta_file} did not contain {family_name}")
 
 
 def emit_sequences(hmm_file, output_directory, n):
@@ -86,7 +139,7 @@ def parse_tblout(tbl):
         usecols=TBLOUT_COLS,
         names=TBLOUT_COL_NAMES,
     )
-    # - is empty label
+    # "-" is the empty label
     df["target_name"].loc[df["description"] != "-"] = (
         df["target_name"] + " " + df["description"]
     )
@@ -160,6 +213,20 @@ def create_parser():
         "output_directory", help="where to save the emitted sequences"
     )
     emission_parser.add_argument("n", type=int, help="number of sequences to emit")
+
+    injection_parser = subparsers.add_parser(
+        "inject",
+        description="inject neighborhood injection sequences into the"
+        " the training set",
+    )
+    injection_parser.add_argument("fasta_files", nargs="+")
+    injection_parser.add_argument(
+        "output_directory", help="where to save the emitted sequences"
+    )
+    injection_parser.add_argument(
+        "hmm_directory", help="where the .hmm files are saved"
+    )
+
     return parser
 
 
@@ -270,7 +337,6 @@ def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, 
 
 
 def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb):
-
     tblout_path = os.path.splitext(fasta_file)[0] + ".tblout"
 
     if not os.path.isfile(tblout_path) or os.stat(tblout_path).st_size == 0:
@@ -284,7 +350,6 @@ def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb):
 
 
 def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):
-
     if "train" not in os.path.basename(fasta_file):
         raise ValueError(f'{fasta_file} does not have "train" in it.')
 
@@ -490,7 +555,7 @@ class Generator:
             f"Submitting labeling array job script. Labeling each .fa in {self.clustered_output_directory} with {self.hmmdb}"
         )
         jobid_to_wait_for = self._submit(slurm_file)
-        return self.jobid_to_wait_for
+        return jobid_to_wait_for
 
     def _submit(self, slurm_script):
         slurm_jobid = subprocess.check_output(
@@ -558,6 +623,14 @@ if __name__ == "__main__":
             os.makedirs(program_args.output_directory)
         emit_sequences(
             program_args.hmm_file, program_args.output_directory, n=program_args.n
+        )
+    elif program_args.command == "inject":
+        if not os.path.isdir(program_args.output_directory):
+            os.makedirs(program_args.output_directory)
+        emit_and_inject_labels(
+            program_args.fasta_files,
+            program_args.output_directory,
+            program_args.hmm_directory,
         )
     else:
         pfunc(program_args)
