@@ -274,12 +274,12 @@ def number_of_sequences_per_unique_label_combination(
     train_labelset_to_count = defaultdict(int)
     for labelset, seq in train_labels_and_seq:
         if len(labelset) > 1:
-            train_labelset_to_count[tuple(labelset)] += 1
+            train_labelset_to_count["".join(sorted(labelset[1:]))] += 1
 
     val_labelset_to_count = defaultdict(int)
     for labelset, seq in val_labels_and_seq:
         if len(labelset) > 1:
-            val_labelset_to_count[tuple(labelset)] += 1
+            val_labelset_to_count["".join(sorted(labelset[1:]))] += 1
 
     val_counts = []
     train_counts = []
@@ -337,14 +337,14 @@ def parser():
     ap = ArgumentParser()
     sp = ap.add_subparsers(title="action", dest="command")
     spf = sp.add_parser(
-        name="seqs",
+        name="histogram_sequences",
         description="Histogram the number of sequences per family in the ingested fasta_files.",
     )
     spf.add_argument("fasta_files", nargs="+", help="fasta files(s) to histogram.")
     spf.add_argument("save_fig", type=str, help="where to save the figure")
 
     neighbor = sp.add_parser(
-        name="neigh",
+        name="neighborhood_labels",
         description="produce a figure describing "
         "the distribution of sequences with and without "
         "neighborhood labels. Accepts a single .yaml file"
@@ -361,7 +361,7 @@ def parser():
     )
 
     comp = sp.add_parser(
-        name="comp",
+        name="compare_valid_train_labels",
         description="compare the distributions of training and validation labels."
         " Accepts a single .yaml file with train_files and val_files as keys",
     )
@@ -373,9 +373,10 @@ def parser():
     comp.add_argument("save_fig", type=str, help="where to save the figure")
 
     uniq = sp.add_parser(
-        name="uniq",
-        description="plot the number of sequences per unique label combination.",
+        name="unique_label_combinations",
+        description="plot the number of sequences per unique label combination (for neighborhood labels).",
     )
+
     uniq.add_argument(
         "yaml_file",
         type=str,
@@ -390,9 +391,9 @@ if __name__ == "__main__":
 
     p = parser()
     args = p.parse_args()
-    if args.command == "seqs":
+    if args.command == "histogram_sequences":
         histogram_number_of_seqs_per_family(args.fasta_files, args.save_fig)
-    elif args.command == "neigh":
+    elif args.command == "neighborhood_labels":
         if len(args.files) == 1:
             file = args.files[0]
             if os.path.splitext(file)[1] == ".yaml":
@@ -406,11 +407,11 @@ if __name__ == "__main__":
         else:
             files = args.files
         neighborhood_labels(files, args.save_fig)
-    elif args.command == "comp":
+    elif args.command == "compare_valid_train_labels":
         with open(args.yaml_file, "r") as src:
             hparams = yaml.safe_load(src)
         compare_valid_and_train_labels(hparams, args.save_fig)
-    elif args.command == "uniq":
+    elif args.command == "unique_label_combinations":
         with open(args.yaml_file, "r") as src:
             hparams = yaml.safe_load(src)
         number_of_sequences_per_unique_label_combination(hparams, args.save_fig)

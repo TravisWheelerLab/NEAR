@@ -263,6 +263,7 @@ def recall_per_family(
     train_num_seq = []
     val_num_seq = []
     val_tps = []
+    # TODO: Check this once the cluster is up and running again.
 
     for family in val_family_to_tps.keys():
         train_num_seq.append(train_family_to_num_seq[family])
@@ -320,78 +321,13 @@ def fps_above_threshold(prediction_array, label_array, threshold):
     return np.sum((prediction_array == 1) & (label_array != 1))
 
 
-def predict_and_plot_dataloader(
-    model: pytorch_lightning.LightningModule,
-    loader: torch.utils.data.DataLoader,
-    figure_path: str,
-    device: str = "cuda",
-) -> None:
-    i = 0
-    tot = len(loader)
-    thresholds = np.linspace(0, 1, 20)[::-1]
-    threshold_to_tps_and_fps = {}
-    for threshold in thresholds:
-        threshold_to_tps_and_fps[threshold] = [0, 0]
-
-    number_of_true_labels = 0
-    number_sequences = 0
-    number_neighborhood_labels = 0
-
-    with torch.no_grad():
-        for features, masks, label in loader:
-            features = features.to(device)
-            masks = masks.to(device)
-            label = label.to(device)
-            n = torch.sum(label == 1).item()
-            number_of_true_labels += n
-            number_neighborhood_labels += n - label.shape[0]
-            number_sequences += features.shape[0]
-            pred = model.class_act(model(features, masks))
-
-            for threshold in thresholds:
-                tps = tps_above_threshold_torch(
-                    prediction_array=pred, label_array=label, threshold=threshold
-                )
-                fps = fps_above_threshold_torch(
-                    prediction_array=pred, label_array=label, threshold=threshold
-                )
-                threshold_to_tps_and_fps[threshold][0] += tps.item()
-                threshold_to_tps_and_fps[threshold][1] += fps.item()
-
-            stdout.write(f"{i / tot}\r")
-            i += 1
-
-    thresholds = list(threshold_to_tps_and_fps.keys())
-    tps = np.array([l[0] for l in list(threshold_to_tps_and_fps.values())])
-    fps = np.array([l[1] for l in list(threshold_to_tps_and_fps.values())])
-
-    print(number_sequences, number_of_true_labels, number_neighborhood_labels)
-
-    fig, ax = plt.subplots(figsize=(12, 10))
-    ax.plot(thresholds, tps / number_of_true_labels, "bo", label="tps recovered")
-    ax.plot(
-        thresholds,
-        tps / number_sequences,
-        "co",
-        label="number of family labels recovered",
-    )
-    ax.set_xlabel("sigmoid threshold")
-    ax.set_ylabel("percent of tps recovered")
-    ax.legend()
-    ax1 = ax.twinx()
-    ax1.plot(thresholds, fps / number_sequences, "ko", label="fps per seq.")
-    ax1.set_ylabel("fps per sequence")
-    plt.savefig(utils.handle_figure_path(figure_path))
-    plt.close()
-
-
 def create_parser():
     ap = ArgumentParser()
     sp = ap.add_subparsers(title="action", dest="command")
     recall_parser = sp.add_parser(
         name="recall",
         description="plot the recall and false positives passed at multiple sigmoid "
-        "thresholds.",
+        "thresholds. Break up into primary and neighborhood labels.",
     )
     recall_parser.add_argument("model_path")
     recall_parser.add_argument("hparams_path")
@@ -413,7 +349,7 @@ def create_parser():
     recall_per_fam_parser.add_argument("--just_neighborhood", action="store_true")
 
     primary_parser = sp.add_parser(
-        name="primary_recall", description="plot the recall for each rank of label."
+        name="ranked_recall", description="plot the recall for each rank of label."
     )
     primary_parser.add_argument("model_path")
     primary_parser.add_argument("hparams_path")
@@ -426,8 +362,7 @@ def create_parser():
     return ap
 
 
-if __name__ == "__main__":
-
+def main():
     argparser = create_parser()
     args = argparser.parse_args()
 
@@ -450,13 +385,17 @@ if __name__ == "__main__":
     if args.command == "recall":
         files = hparams[args.key]
         name_to_class_code = hparams["name_to_class_code"]
-
-        dataset = utils.SimpleSequenceIterator(files, name_to_class_code)
+        dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=64, collate_fn=utils.pad_batch
+            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
         )
-
-        predict_and_plot_dataloader(model, dataloader, args.figure_path, device=dev)
+        primary_and_neighborhood_recall(
+            model,
+            dataloader,
+            name_to_class_code,
+            args.figure_path,
+            device=dev,
+        )
     elif args.command == "recall_per_family":
         files = hparams["val_files"]
         name_to_class_code = hparams["name_to_class_code"]
@@ -477,19 +416,25 @@ if __name__ == "__main__":
             device=dev,
         )
 
-    elif args.command == "primary_recall":
+    elif args.command == "ranked_recall":
         files = hparams[args.key]
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
             dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
         )
-        primary_and_neighborhood_recall(
+        recall_for_each_significant_label(
             model,
             dataloader,
             name_to_class_code,
             args.figure_path,
+            classification_threshold=args.classification_threshold,
             device=dev,
         )
     else:
         argparser.print_help()
+
+
+if __name__ == "__main__":
+
+    main()
