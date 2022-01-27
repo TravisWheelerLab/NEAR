@@ -19,6 +19,7 @@ import prefilter.utils as utils
 import prefilter.models as models
 
 
+@torch.no_grad()
 def recall_for_each_significant_label(
     model,
     dataloader,
@@ -39,26 +40,24 @@ def recall_for_each_significant_label(
     total = defaultdict(int)
 
     j = 0
-    with torch.no_grad():
+    for features, masks, labels, string_labels in dataloader:
 
-        for features, masks, labels, string_labels in dataloader:
+        features = features.to(device)
+        masks = masks.to(device)
+        pred = model.class_act(model(features, masks))
 
-            features = features.to(device)
-            masks = masks.to(device)
-            pred = model.class_act(model(features, masks))
+        pred[pred >= classification_threshold] = 1
+        pred[pred < classification_threshold] = 0
 
-            pred[pred >= classification_threshold] = 1
-            pred[pred < classification_threshold] = 0
+        stdout.write(f"{j / len(dataloader)}\r")
+        j += 1
 
-            stdout.write(f"{j / len(dataloader)}\r")
-            j += 1
-
-            for seq, labelset in zip(pred, string_labels):
-                for i, label in enumerate(labelset):
-                    idx = name_to_class_code[label]
-                    if seq[idx] == 1:
-                        correct[i + 1] += 1
-                    total[i + 1] += 1
+        for seq, labelset in zip(pred, string_labels):
+            for i, label in enumerate(labelset):
+                idx = name_to_class_code[label]
+                if seq[idx] == 1:
+                    correct[i + 1] += 1
+                total[i + 1] += 1
 
     fig, ax = plt.subplots(nrows=2, figsize=(13, 10))
 
@@ -91,6 +90,7 @@ def recall_for_each_significant_label(
     plt.close()
 
 
+@torch.no_grad()
 def primary_and_neighborhood_recall(
     model, dataloader, name_to_class_code, figure_path, device="cuda"
 ):
@@ -125,31 +125,29 @@ def primary_and_neighborhood_recall(
         neighborhood_recall[threshold] = 0
         threshold_to_fps[threshold] = 0
 
-    with torch.no_grad():
+    for features, masks, labels, string_labels in dataloader:
 
-        for features, masks, labels, string_labels in dataloader:
-
-            features = features.to(device)
-            masks = masks.to(device)
-            labels = labels.to(device)
-            pred = model.class_act(model(features, masks))
-            stdout.write(f"{j / len(dataloader)}\r")
-            j += 1
-            for seq, labelset, labelvec in zip(pred, string_labels, labels):
+        features = features.to(device)
+        masks = masks.to(device)
+        labels = labels.to(device)
+        pred = model.class_act(model(features, masks))
+        stdout.write(f"{j / len(dataloader)}\r")
+        j += 1
+        for seq, labelset, labelvec in zip(pred, string_labels, labels):
+            for i, label in enumerate(labelset):
+                total[i] += 1
+            for threshold in thresholds:
+                seq[seq >= threshold] = 1
+                fps = torch.sum(
+                    seq[(labelvec != 1).bool() & (seq == 1).bool()]
+                ).item()
+                threshold_to_fps[threshold] += fps
                 for i, label in enumerate(labelset):
-                    total[i] += 1
-                for threshold in thresholds:
-                    seq[seq >= threshold] = 1
-                    fps = torch.sum(
-                        seq[(labelvec != 1).bool() & (seq == 1).bool()]
-                    ).item()
-                    threshold_to_fps[threshold] += fps
-                    for i, label in enumerate(labelset):
-                        idx = name_to_class_code[label]
-                        if seq[idx] == 1 and i == 0:
-                            primary_recall[threshold] += 1
-                        elif seq[idx] == 1 and i != 0:
-                            neighborhood_recall[threshold] += 1
+                    idx = name_to_class_code[label]
+                    if seq[idx] == 1 and i == 0:
+                        primary_recall[threshold] += 1
+                    elif seq[idx] == 1 and i != 0:
+                        neighborhood_recall[threshold] += 1
 
     total_primary_labels = total[0]
     total_neighborhood_labels = sum([total[i] for i in range(1, len(total))])
@@ -193,6 +191,7 @@ def primary_and_neighborhood_recall(
 
 # now I need to look at the recall of the model on a per-family basis;
 # how does the validation performance change based on the number of sequences in the family at train time?
+@torch.no_grad()
 def _aggregate_family_wise_metrics(
     model,
     dataloader,
@@ -206,36 +205,35 @@ def _aggregate_family_wise_metrics(
     family_to_tps = defaultdict(int)
     family_to_num_seq = defaultdict(int)
 
-    with torch.no_grad():
-        for features, masks, labels, string_labels in dataloader:
+    for features, masks, labels, string_labels in dataloader:
 
-            features = features.to(device)
-            masks = masks.to(device)
-            labels = labels.to(device)
-            pred = model.class_act(model(features, masks))
-            stdout.write(f"{j / len(dataloader)}\r")
-            j += 1
-            for seq, labelset, labelvec in zip(pred, string_labels, labels):
-                seq[seq >= classification_threshold] = 1
-                if just_primary:
-                    label = labelset[0]
+        features = features.to(device)
+        masks = masks.to(device)
+        labels = labels.to(device)
+        pred = model.class_act(model(features, masks))
+        stdout.write(f"{j / len(dataloader)}\r")
+        j += 1
+        for seq, labelset, labelvec in zip(pred, string_labels, labels):
+            seq[seq >= classification_threshold] = 1
+            if just_primary:
+                label = labelset[0]
+                idx = name_to_class_code[label]
+                family_to_num_seq[label] += 1
+                if seq[idx] == 1:
+                    family_to_tps[label] += 1
+            elif just_neighborhood:
+                labelset = labelset[1:]
+                for i, label in enumerate(labelset):
                     idx = name_to_class_code[label]
                     family_to_num_seq[label] += 1
                     if seq[idx] == 1:
                         family_to_tps[label] += 1
-                elif just_neighborhood:
-                    labelset = labelset[1:]
-                    for i, label in enumerate(labelset):
-                        idx = name_to_class_code[label]
-                        family_to_num_seq[label] += 1
-                        if seq[idx] == 1:
-                            family_to_tps[label] += 1
-                else:
-                    for i, label in enumerate(labelset):
-                        idx = name_to_class_code[label]
-                        family_to_num_seq[label] += 1
-                        if seq[idx] == 1:
-                            family_to_tps[label] += 1
+            else:
+                for i, label in enumerate(labelset):
+                    idx = name_to_class_code[label]
+                    family_to_num_seq[label] += 1
+                    if seq[idx] == 1:
+                        family_to_tps[label] += 1
 
     return family_to_tps, family_to_num_seq
 
