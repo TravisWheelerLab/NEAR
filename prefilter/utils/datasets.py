@@ -21,14 +21,69 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "ProteinSequenceDataset",
+    "SequenceDataset",
     "DecoyIterator",
     "SimpleSequenceIterator",
     "RankingIterator",
 ]
 
 
-class LabelMapping:
+class SequenceDataset(torch.utils.data.Dataset):
+    def __init__(
+        self, fasta_files: Union[str, List[str]], name_to_class_code: Dict[str, int]
+    ) -> None:
 
+        if not len(fasta_files):
+            raise ValueError("No fasta files found")
+
+        self.fasta_files = fasta_files
+        self.name_to_class_code = name_to_class_code
+
+        if not isinstance(self.fasta_files, list):
+            self.fasta_files = [self.fasta_files]
+
+    def _make_label_vector(self, labels, len_sequence):
+        y = np.zeros(len_sequence)
+        for labelstring in labels:
+            label, begin, end = labelstring.split(" ")
+            y[int(float(begin)) : int(float(end))] = self.name_to_class_code[label]
+        return torch.as_tensor(y)
+
+    def _class_id_vector(self, labels):
+        class_ids = []
+        for label in labels:
+            if " " in label:
+                label = label.split(" ")[0]
+            class_ids.append(self.name_to_class_code[label])
+        return class_ids
+
+    def _make_multi_hot(self, labels):
+        y = np.zeros(self.n_classes)
+        class_ids = self._class_id_vector(labels)
+        for idx in class_ids:
+            y[idx] = 1
+        return torch.as_tensor(y)
+
+    def _encoding_func(self, x):
+        return utils.encode_protein_as_one_hot_vector(x.upper())
+
+    def _build_dataset(self):
+        raise NotImplementedError("Must build the dataset for each custom iterator.")
+
+    def __len__(self):
+        raise NotImplementedError("Must specify length for each custom iterator.")
+
+    def __getitem__(self, idx):
+        raise NotImplementedError(
+            "Must implement __getitem__ for each custom iterator."
+        )
+
+    @property
+    def n_classes(self):
+        return len(self.name_to_class_code)
+
+
+class LabelMapping:
     """
     Container class that handles sampling from a set of labeled sequences.
     Pfam families have disparate number of sequences. This class samples from each family uniformly, in effect
@@ -141,33 +196,23 @@ class LabelMapping:
             shuffle(self.names)
 
 
-class ProteinSequenceDataset(torch.utils.data.Dataset):
+class ProteinSequenceDataset(SequenceDataset):
     def __init__(
         self,
         fasta_files: str,
-        name_to_class_code: Optional[Dict[str, int]],
+        name_to_class_code: Dict[str, int],
         n_seq_per_fam: Optional[int] = None,
+        no_resample: bool = True,
+        single_label: bool = True,
     ) -> None:
 
-        if not len(fasta_files):
-            raise ValueError("No fasta files found")
+        super().__init__(fasta_files, name_to_class_code)
 
-        self.fasta_files = fasta_files
-
-        if not isinstance(self.fasta_files, list):
-            self.fasta_files = [self.fasta_files]
-
-        if name_to_class_code is None:
-            with open(prefilter.id_to_class_code, "r") as src:
-                self.name_to_class_code = json.load(src)
-        else:
-            self.name_to_class_code = name_to_class_code
-
-        self.label_to_sequence = LabelMapping(n_seq_per_fam=n_seq_per_fam)
+        self.label_to_sequence = LabelMapping(
+            n_seq_per_fam=n_seq_per_fam, no_resample=no_resample
+        )
+        self.single_label = single_label
         self._build_dataset()
-
-    def _encoding_func(self, x):
-        return utils.encode_protein_as_one_hot_vector(x.upper())
 
     def _build_dataset(self):
         # going to choose labels from a dictionary.
@@ -189,46 +234,27 @@ class ProteinSequenceDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.label_to_sequence)
 
-    def _make_multi_hot(self, labels):
-        y = np.zeros(self.n_classes)
-        class_ids = [self.name_to_class_code[l] for l in labels]
-        for idx in class_ids:
-            y[idx] = 1
-        return torch.as_tensor(y)
-
-    @property
-    def n_classes(self):
-        return len(self.name_to_class_code)
-
     def __getitem__(self, idx):
         labels, features = self.label_to_sequence.sample(idx)
-        x = self._encoding_func(features)
-        y = self._make_multi_hot(labels)
-        return torch.as_tensor(x), y
+        encoded_features = self._encoding_func(features)
+        if self.single_label:
+            y = self._make_multi_hot(labels)
+        else:
+            y = self._make_label_vector(labels, len(features))
+        return torch.as_tensor(encoded_features), y
 
 
-class SimpleSequenceIterator(torch.utils.data.Dataset):
-
+class SimpleSequenceIterator(SequenceDataset):
     """
     Iterates over the sequences in a/the fasta file(s) and encodes them
     for ingestion into an ml algorithm.
     """
 
-    def __init__(
-        self, fasta_files: str, name_to_class_code: Optional[Dict[str, int]] = None
-    ) -> None:
+    def __init__(self, fasta_files, name_to_class_code):
 
-        self.fasta_files = fasta_files
+        super().__init__(fasta_files, name_to_class_code)
+
         self.sequences_and_labels = []
-
-        if not isinstance(self.fasta_files, list):
-            self.fasta_files = [self.fasta_files]
-
-        if name_to_class_code is None:
-            with open(prefilter.id_to_class_code, "r") as src:
-                self.name_to_class_code = json.load(src)
-        else:
-            self.name_to_class_code = name_to_class_code
 
         self._build_dataset()
 
@@ -245,20 +271,6 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
                 else:
                     self.sequences_and_labels.append([sequence, labelset])
 
-    def _make_multi_hot(self, labels):
-        y = np.zeros(self.n_classes)
-        class_ids = [self.name_to_class_code[l] for l in labels]
-        for idx in class_ids:
-            y[idx] = 1
-        return torch.as_tensor(y)
-
-    @property
-    def n_classes(self):
-        return len(self.name_to_class_code)
-
-    def _encoding_func(self, x):
-        return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
-
     def __getitem__(self, idx):
         example = self.sequences_and_labels[idx]
         return self._encoding_func(example[0]), self._make_multi_hot(example[1])
@@ -267,25 +279,21 @@ class SimpleSequenceIterator(torch.utils.data.Dataset):
         return len(self.sequences_and_labels)
 
 
-class DecoyIterator:
+class DecoyIterator(SequenceDataset):
     """
     Iterates over label-less fasta files (decoys, usually).
     """
 
-    def __init__(self, decoy_files, name_to_class_code):
+    def __init__(self, fasta_files, name_to_class_code):
+        super().__init__(fasta_files, name_to_class_code)
 
-        self.decoy_files = decoy_files
         self.sequences = []
-        self.n_classes = len(name_to_class_code)
         self._build_dataset()
 
     def _build_dataset(self) -> None:
-        for fasta_file in self.decoy_files:
+        for fasta_file in self.fasta_files:
             _, sequences = utils.fasta_from_file(fasta_file)
             self.sequences.extend(sequences)
-
-    def _encoding_func(self, x):
-        return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
 
     def __getitem__(self, idx):
         example = self.sequences[idx]
@@ -295,22 +303,14 @@ class DecoyIterator:
         return len(self.sequences)
 
 
-class RankingIterator:
+class RankingIterator(SequenceDataset):
     def __init__(self, fasta_files, name_to_class_code):
+        super().__init__(fasta_files, name_to_class_code)
 
-        self.n_classes = len(name_to_class_code)
-        self.name_to_class_code = name_to_class_code
-        self.labels_and_sequences = utils.load_sequences_and_labels(fasta_files)
+        self._build_dataset()
 
-    def _encoding_func(self, x):
-        return torch.as_tensor(utils.encode_protein_as_one_hot_vector(x.upper()))
-
-    def _make_multi_hot(self, labels):
-        y = np.zeros(self.n_classes)
-        class_ids = [self.name_to_class_code[l] for l in labels]
-        for idx in class_ids:
-            y[idx] = 1
-        return torch.as_tensor(y)
+    def _build_dataset(self):
+        self.labels_and_sequences = utils.load_sequences_and_labels(self.fasta_files)
 
     def __getitem__(self, idx):
         labelset, sequence = self.labels_and_sequences[idx]
@@ -321,15 +321,16 @@ class RankingIterator:
 
 
 if __name__ == "__main__":
-
     from glob import glob
 
-    fs = glob("/home/tc229954/subset/training_data0.5/*train.fa")[:10]
+    fs = glob("/home/tc229954/domtblouts/*fa")[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
-    psd = RankingIterator(fasta_files=fs, name_to_class_code=name_to_class_code)
-    psd = torch.utils.data.DataLoader(
-        psd, batch_size=32, collate_fn=utils.pad_batch_with_labels
+    psd = ProteinSequenceDataset(
+        fasta_files=fs, name_to_class_code=name_to_class_code, single_label=False
     )
-    print(len(psd))
-    for features, masks, label_vector, labels in psd:
-        print(features.shape, labels)
+    psd = torch.utils.data.DataLoader(
+        psd, batch_size=2, collate_fn=utils.pad_labels_and_features_in_batch
+    )
+    for x in psd:
+        print(x)
+        break

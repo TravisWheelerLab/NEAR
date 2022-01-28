@@ -16,6 +16,25 @@ from argparse import ArgumentParser
 from prefilter import array_job_template, single_job_template, name_to_accession_id
 import prefilter.utils as utils
 
+TBLOUT_COL_NAMES = [
+    "target_name",
+    "query_name",
+    "accession_id",
+    "e_value",
+    "description",
+]
+TBLOUT_COLS = [0, 2, 3, 4, 18]
+
+DOMTBLOUT_COLS = [0, 4, 11, 19, 20, 22]
+DOMTBLOUT_COL_NAMES = [
+    "target_name",
+    "accession_id",
+    "e_value",
+    "from",
+    "to",
+    "description",
+]
+
 
 def emit_and_inject_labels(
     fasta_files: List[str], output_directory: str, hmm_directory: str
@@ -110,35 +129,29 @@ def pfunc(str):
     print(str)
 
 
-TBLOUT_COL_NAMES = [
-    "target_name",
-    "query_name",
-    "accession_id",
-    "e_value",
-    "description",
-]
-TBLOUT_COLS = [0, 2, 3, 4, 18]
-
-
-def parse_tblout(tbl):
+def parse_domtblout(domtbl):
     """
-    Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
-    :param tbl: .tblout filename.
+    Parse a .domtblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
+    :param tbl: .domtblout filename.
     :type tbl: str
     :return: dataframe containing the rows of the .tblout.
     :rtype: pd.DataFrame
     """
-    if os.path.splitext(tbl)[1] != ".tblout":
-        raise ValueError(f"must pass a .tblout file, found {tbl}")
+
+    if os.path.splitext(domtbl)[1] != ".domtblout":
+        raise ValueError(f"must pass a .domtblout file, found {tbl}")
 
     df = pd.read_csv(
-        tbl,
+        domtbl,
         skiprows=3,
         header=None,
         delim_whitespace=True,
-        usecols=TBLOUT_COLS,
-        names=TBLOUT_COL_NAMES,
+        usecols=DOMTBLOUT_COLS,
+        names=DOMTBLOUT_COL_NAMES,
     )
+
+    df = df.dropna()
+
     # "-" is the empty label
     df["target_name"].loc[df["description"] != "-"] = (
         df["target_name"] + " " + df["description"]
@@ -200,7 +213,10 @@ def create_parser():
         required=True,
     )
 
-    train_hdb_parser = subparsers.add_parser("hdb")
+    train_hdb_parser = subparsers.add_parser(
+        "hdb",
+        description="extract training alignment from the alidb and" " create a new hmm",
+    )
     train_hdb_parser.add_argument(
         "fasta_file", help="fasta file containing train sequences"
     )
@@ -230,7 +246,7 @@ def create_parser():
     return parser
 
 
-def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
+def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
     """
     Grabs sequences in fasta_in and their corresponding labels in the
     .tblout dataframe (tblout_df), updates the sequence headers with the labels in
@@ -239,8 +255,8 @@ def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
     :type fasta_in: str
     :param fasta_out: File to save updated sequences in.
     :type fasta_out: str
-    :param tblout_df: dataframe containing .tblout.
-    :type tblout_df: pd.DataFrame
+    :param domtblout_df: dataframe containing .tblout.
+    :type domtblout_df: pd.DataFrame
     :param evalue_threshold: Threshold to keep sequences at.
     :type evalue_threshold: float
     :return: None.
@@ -259,7 +275,9 @@ def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
             else:
                 target_label = label
 
-            assigned_labels = tblout_df.loc[tblout_df["target_name"] == target_label]
+            assigned_labels = domtblout_df.loc[
+                domtblout_df["target_name"] == target_label
+            ]
 
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
@@ -270,34 +288,36 @@ def labels_from_file(fasta_in, fasta_out, tblout_df, evalue_threshold=1e-5):
                 )
                 target_label = target_label.split()[0]
                 # Sometimes the names don't have a description, and aren't found.
-                assigned_labels = tblout_df.loc[
-                    tblout_df["target_name"] == target_label
+                assigned_labels = domtblout_df.loc[
+                    domtblout_df["target_name"] == target_label
                 ]
                 if len(assigned_labels) == 0:
                     pfunc(
                         f"sequence named {target_label} not found in classification on {fasta_in}"
                     )
-                continue
+                    continue
             # each sequence should have at least one label, but we
             # only need to grab one since one sequence can be associated with
             # multiple pfam accession IDs
-            fasta_header = f">{label} | "
+            fasta_header = f">{label} |"
+            init_len = len(fasta_header)
 
-            labelset = []
-
-            for seq_label, e_value in zip(
-                assigned_labels["accession_id"], assigned_labels["e_value"]
+            for seq_label, e_value, begin_coord, end_coord in zip(
+                assigned_labels["accession_id"],
+                assigned_labels["e_value"],
+                assigned_labels["from"],
+                assigned_labels["to"],
             ):
                 if "PF" not in seq_label:
                     raise ValueError(
-                        f"Pfam accession ID not found in labels in {tblout_df}"
+                        f"Pfam accession ID not found in labels in {domtblout_df}"
                     )
 
                 if float(e_value) <= evalue_threshold:
-                    labelset.append(seq_label)
+                    fasta_header += f" {seq_label} ({begin_coord}, {end_coord})"
 
-            if len(labelset):
-                fasta_header += " ".join(labelset) + "\n" + sequence + "\n"
+            if len(fasta_header) != init_len:
+                fasta_header += "\n" + sequence + "\n"
                 dst.write(fasta_header)
 
 
@@ -337,16 +357,16 @@ def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, 
 
 
 def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb):
-    tblout_path = os.path.splitext(fasta_file)[0] + ".tblout"
+    domtblout_path = os.path.splitext(fasta_file)[0] + ".domtblout"
 
-    if not os.path.isfile(tblout_path) or os.stat(tblout_path).st_size == 0:
+    if not os.path.isfile(domtblout_path) or os.stat(domtblout_path).st_size == 0:
         subprocess.call(
-            f"hmmsearch -o /dev/null --tblout {tblout_path} {hmmdb} {fasta_file}".split()
+            f"hmmsearch -o /dev/null --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
         )
 
-    tblout = parse_tblout(tblout_path)
+    domtblout = parse_domtblout(domtblout_path)
 
-    labels_from_file(fasta_file, fasta_outfile, tblout)
+    labels_from_file(fasta_file, fasta_outfile, domtblout)
 
 
 def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):

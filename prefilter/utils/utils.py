@@ -1,5 +1,6 @@
 # pylint: disable=no-member
 import json
+import re
 import os
 import pdb
 import logging
@@ -8,6 +9,7 @@ from typing import Union, List, Tuple
 
 import numpy as np
 import torch
+from prefilter import MASK_FLAG
 
 log = logging.getLogger(__name__)
 
@@ -17,7 +19,8 @@ __all__ = [
     "load_sequences_and_labels",
     "encode_protein_as_one_hot_vector",
     "parse_labels",
-    "pad_batch",
+    "pad_features_in_batch",
+    "pad_labels_and_features_in_batch",
     "stack_batch",
     "PROT_ALPHABET",
     "pad_batch_with_labels",
@@ -119,6 +122,9 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     Each > line of the fasta file should look like this:
     >arbitrary name of sequence | PFAMID1 PFAMID2 PFAMID3 ... PFAMIDN
     <sequence>
+    or
+    >arbitrary name of sequence | PFAMID1 (begin1, end1) PFAMID2 (begin2, end2) PFAMID3 ... PFAMIDN
+    <sequence>
     Each sequence can have one or many pfam accession IDs as labels.
     If the fasta header doesn't have a | or it has a | followed by nothing list,
     :param labelstring: line to parse labels from
@@ -126,12 +132,17 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     :return: List of Pfam accession IDs
     :rtype: Union[List[str], None]
     """
-    delim = labelstring.find("|")
+    begin_char = labelstring.find("|")
 
-    if delim == -1:
+    if begin_char == -1:
         return None
 
-    labels = labelstring[delim + 1 :].split(" ")
+    if "(" in labelstring:
+        labels = labelstring[begin_char + 1 :].split(")")
+        labels = [l[l.find("P") :].replace("(", "").replace(",", "") for l in labels]
+    else:
+        labels = labelstring[begin_char + 1 :].split(" ")
+
     labels = list(filter(len, labels))
 
     if not len(labels):
@@ -162,6 +173,8 @@ def create_class_code_mapping(fasta_files):
                 )
             else:
                 for name in labelset:
+                    if " " in name:
+                        name = name.split(" ")[0]
                     if name not in name_to_class_code:
                         name_to_class_code[name] = class_code
                         class_code += 1
@@ -221,11 +234,27 @@ def _pad_sequences(sequences):
     return torch.tensor(padded_batch).float(), torch.tensor(masks).bool()
 
 
-def pad_batch(batch):
+def _pad_labels(labels):
+    mxlen = np.max([l.shape[-1] for l in labels])
+    padded_batch = np.ones((len(labels), mxlen)) * MASK_FLAG
+    for i, s in enumerate(labels):
+        padded_batch[i, : s.shape[-1]] = s
+    return torch.tensor(padded_batch).float()
+
+
+def pad_features_in_batch(batch):
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
     return features, features_mask, torch.stack(labels)
+
+
+def pad_labels_and_features_in_batch(batch):
+    features = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    features, features_mask = _pad_sequences(features)
+    labels = _pad_labels(labels)
+    return features, features_mask, labels
 
 
 def pad_batch_with_labels(batch):
@@ -237,7 +266,6 @@ def pad_batch_with_labels(batch):
 
 
 def stack_batch(batch):
-    """replicates default collate_fn for API consistency"""
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     return torch.stack(features), torch.stack(labels)

@@ -11,6 +11,8 @@ name_to_accession_id = os.path.join(
     "resources/name_to_pfam_accession_id.yaml",
 )
 
+MASK_FLAG = -1
+
 array_job_template = """#!/usr/bin/env bash
 
 #SBATCH --partition=wheeler_lab_small_cpu,wheeler_lab_large_cpu
