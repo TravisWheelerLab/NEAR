@@ -1,78 +1,14 @@
 import pdb
 
 import pytorch_lightning as pl
-import math
 import torch
 import torchmetrics
 import torch.nn as nn
 
 from prefilter.models.base_model import BaseModel
+from prefilter.models.layers import ResidualBlock
 
 __all__ = ["Prot2Vec"]
-
-
-class ResidualBlock(nn.Module):
-    def __init__(
-        self,
-        filters,
-        resnet_bottleneck_factor,
-        kernel_size,
-        layer_index,
-        first_dilated_layer,
-        dilation_rate,
-        stride=1,
-    ):
-
-        super(ResidualBlock, self).__init__()
-
-        self.filters = filters
-
-        shifted_layer_index = layer_index - first_dilated_layer + 1
-        dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
-        self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
-        self.bn1 = torch.nn.BatchNorm1d(self.filters)
-        # need to pad 'same', so output has the same size as input
-        # project down to a smaller number of self.filters with a larger kernel size
-        self.conv1 = torch.nn.Conv1d(
-            self.filters,
-            self.num_bottleneck_units,
-            kernel_size=kernel_size,
-            dilation=dilation_rate,
-            padding="same",
-        )
-
-        self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
-        # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
-        # linear transformation) No padding needed sin
-        self.conv2 = torch.nn.Conv1d(
-            self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
-        )
-
-    def _forward(self, x):
-        features = self.bn1(x)
-        features = torch.nn.functional.relu(features)
-        features = self.conv1(features)
-        features = self.bn2(features)
-        features = torch.nn.functional.relu(features)
-        features = self.conv2(features)
-        return features + x
-
-    def _masked_forward(self, x, mask):
-        features = self.bn1(x)
-        features = torch.nn.functional.relu(features)
-        features = self.conv1(features)
-        features[mask.expand(-1, self.num_bottleneck_units, -1)] = 0
-        features = self.bn2(features)
-        features = torch.nn.functional.relu(features)
-        features = self.conv2(features)
-        features[mask.expand(-1, self.filters, -1)] = 0
-        return features + x
-
-    def forward(self, x, mask=None):
-        if mask is None:
-            return self._forward(x)
-        else:
-            return self._masked_forward(x, mask)
 
 
 class Prot2Vec(BaseModel):
@@ -81,16 +17,17 @@ class Prot2Vec(BaseModel):
     """
 
     def __init__(
-        self,
-        res_block_n_filters,
-        vocab_size,
-        res_block_kernel_size,
-        n_res_blocks,
-        res_bottleneck_factor,
-        dilation_rate,
-        normalize_output_embedding=True,
-        training=True,
-        **kwargs
+            self,
+            res_block_n_filters,
+            vocab_size,
+            res_block_kernel_size,
+            n_res_blocks,
+            res_bottleneck_factor,
+            dilation_rate,
+            normalize_output_embedding=True,
+            training=True,
+            fcnn=False,
+            **kwargs
     ):
 
         super(Prot2Vec, self).__init__(**kwargs)
@@ -102,18 +39,23 @@ class Prot2Vec(BaseModel):
         self.res_bottleneck_factor = res_bottleneck_factor
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
-        self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
-        self.class_act = torch.nn.Sigmoid()
+        self.fcnn = fcnn
+        if self.fcnn:
+            self.loss_func = torch.nn.CrossEntropyLoss()
+            self.class_act = torch.nn.Softmax()
+        else:
+            self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
+            self.class_act = torch.nn.Sigmoid()
 
         if training:
             self._create_datasets()
 
         self._setup_layers()
 
-        self.save_hyperparameters()
-        self.hparams["name_to_class_code"] = self.name_to_class_code
-        self.hparams["n_classes"] = self.n_classes
-        self.save_hyperparameters()
+        # self.save_hyperparameters()
+        # self.hparams["name_to_class_code"] = self.name_to_class_code
+        # self.hparams["n_classes"] = self.n_classes
+        # self.save_hyperparameters()
 
     def _setup_layers(self):
 
@@ -138,9 +80,13 @@ class Prot2Vec(BaseModel):
                 )
             )
 
-        self.classification_layer = torch.nn.Linear(
-            self.res_block_n_filters, self.n_classes
-        )
+        if self.fcnn:
+            self.classification_layer = torch.nn.Conv1d(self.res_block_n_filters, self.n_classes,
+                                                        kernel_size=1)
+        else:
+            self.classification_layer = torch.nn.Linear(
+                self.res_block_n_filters, self.n_classes
+            )
 
     def _masked_forward(self, x, mask):
         """
@@ -158,13 +104,19 @@ class Prot2Vec(BaseModel):
         # TODO: replace denominator of mean with the correct
         # sequence length. Also add two learnable params:
         # a power on the denominator and numerator
-        return x.mean(axis=-1)
+        if self.fcnn:
+            return x
+        else:
+            return x.mean(axis=-1)
 
     def _forward(self, x):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        return x.mean(axis=-1)
+        if self.fcnn:
+            return x
+        else:
+            return x.mean(axis=-1)
 
     def forward(self, x, mask=None):
         if mask is None:
@@ -187,3 +139,12 @@ class Prot2Vec(BaseModel):
         loss = self.loss_func(logits, labels.float())
         acc = self.accuracy(preds, labels)
         return loss, acc, logits, labels
+
+
+if __name__ == "__main__":
+    model = Prot2Vec(1100, 23, 3, 5, 2, 2, fcnn=True, training=False,
+                     n_classes=1000)
+
+    tensor = torch.rand((32, 23, 233))
+    res = model(tensor)
+    print(res.shape)
