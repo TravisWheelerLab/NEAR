@@ -2,16 +2,17 @@ import torch
 import math
 import torch.nn as nn
 
+
 class ResidualBlock(nn.Module):
     def __init__(
-            self,
-            filters,
-            resnet_bottleneck_factor,
-            kernel_size,
-            layer_index,
-            first_dilated_layer,
-            dilation_rate,
-            stride=1,
+        self,
+        filters,
+        resnet_bottleneck_factor,
+        kernel_size,
+        layer_index,
+        first_dilated_layer,
+        dilation_rate,
+        stride=1,
     ):
 
         super(ResidualBlock, self).__init__()
@@ -64,5 +65,3 @@ class ResidualBlock(nn.Module):
             return self._forward(x)
         else:
             return self._masked_forward(x, mask)
-
-

@@ -236,9 +236,9 @@ def _pad_sequences(sequences):
 
 def _pad_labels(labels):
     mxlen = np.max([l.shape[-1] for l in labels])
-    padded_batch = np.ones((len(labels), mxlen)) * MASK_FLAG
+    padded_batch = np.ones((len(labels), labels[0].shape[0], mxlen)) * MASK_FLAG
     for i, s in enumerate(labels):
-        padded_batch[i, : s.shape[-1]] = s
+        padded_batch[i, :, : s.shape[-1]] = s
     return torch.tensor(padded_batch).float()
 
 

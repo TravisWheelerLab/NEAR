@@ -17,17 +17,17 @@ class Prot2Vec(BaseModel):
     """
 
     def __init__(
-            self,
-            res_block_n_filters,
-            vocab_size,
-            res_block_kernel_size,
-            n_res_blocks,
-            res_bottleneck_factor,
-            dilation_rate,
-            normalize_output_embedding=True,
-            training=True,
-            fcnn=False,
-            **kwargs
+        self,
+        res_block_n_filters,
+        vocab_size,
+        res_block_kernel_size,
+        n_res_blocks,
+        res_bottleneck_factor,
+        dilation_rate,
+        normalize_output_embedding=True,
+        training=True,
+        fcnn=False,
+        **kwargs
     ):
 
         super(Prot2Vec, self).__init__(**kwargs)
@@ -40,22 +40,19 @@ class Prot2Vec(BaseModel):
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
         self.fcnn = fcnn
-        if self.fcnn:
-            self.loss_func = torch.nn.CrossEntropyLoss()
-            self.class_act = torch.nn.Softmax()
-        else:
-            self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
-            self.class_act = torch.nn.Sigmoid()
+
+        self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
+        self.class_act = torch.nn.Sigmoid()
 
         if training:
             self._create_datasets()
 
         self._setup_layers()
 
-        # self.save_hyperparameters()
-        # self.hparams["name_to_class_code"] = self.name_to_class_code
-        # self.hparams["n_classes"] = self.n_classes
-        # self.save_hyperparameters()
+        self.save_hyperparameters()
+        self.hparams["name_to_class_code"] = self.name_to_class_code
+        self.hparams["n_classes"] = self.n_classes
+        self.save_hyperparameters()
 
     def _setup_layers(self):
 
@@ -81,8 +78,9 @@ class Prot2Vec(BaseModel):
             )
 
         if self.fcnn:
-            self.classification_layer = torch.nn.Conv1d(self.res_block_n_filters, self.n_classes,
-                                                        kernel_size=1)
+            self.classification_layer = torch.nn.Conv1d(
+                self.res_block_n_filters, self.n_classes, kernel_size=1
+            )
         else:
             self.classification_layer = torch.nn.Linear(
                 self.res_block_n_filters, self.n_classes
@@ -142,9 +140,11 @@ class Prot2Vec(BaseModel):
 
 
 if __name__ == "__main__":
-    model = Prot2Vec(1100, 23, 3, 5, 2, 2, fcnn=True, training=False,
-                     n_classes=1000)
+    model = Prot2Vec(1100, 23, 3, 5, 2, 2, fcnn=True, training=False, n_classes=1000)
 
+    # batch size x n AA x n characters
+    print("hello")
     tensor = torch.rand((32, 23, 233))
     res = model(tensor)
+    # output should be 32 1000 233
     print(res.shape)

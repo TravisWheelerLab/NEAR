@@ -43,10 +43,20 @@ class SequenceDataset(torch.utils.data.Dataset):
             self.fasta_files = [self.fasta_files]
 
     def _make_label_vector(self, labels, len_sequence):
-        y = np.zeros(len_sequence)
+        """
+        Create a label vector with len_sequence separate label vectors.
+        Each amino acid should have at least one label and up to N.
+        :param labels: list of strings
+        :type labels: List[str]
+        :param len_sequence: length of sequence
+        :type len_sequence: int
+        :return:
+        :rtype:
+        """
+        y = np.zeros((self.n_classes, len_sequence))
         for labelstring in labels:
             label, begin, end = labelstring.split(" ")
-            y[int(float(begin)) : int(float(end))] = self.name_to_class_code[label]
+            y[self.name_to_class_code[label], int(float(begin)) : int(float(end))] = 1
         return torch.as_tensor(y)
 
     def _class_id_vector(self, labels):
@@ -325,12 +335,12 @@ if __name__ == "__main__":
 
     fs = glob("/home/tc229954/domtblouts/*fa")[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
+    print(len(name_to_class_code))
     psd = ProteinSequenceDataset(
         fasta_files=fs, name_to_class_code=name_to_class_code, single_label=False
     )
     psd = torch.utils.data.DataLoader(
         psd, batch_size=2, collate_fn=utils.pad_labels_and_features_in_batch
     )
-    for x in psd:
-        print(x)
-        break
+    for x, y, z in psd:
+        print(x.shape, y.shape, z.shape)
