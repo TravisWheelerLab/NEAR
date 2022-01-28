@@ -243,6 +243,14 @@ def _pad_labels(labels):
 
 
 def pad_features_in_batch(batch):
+    """
+    Only pad the features in the batch.
+    Return the padded features and the corresponding mask plus stacked labels.
+    :param batch:
+    :type batch:
+    :return:
+    :rtype:
+    """
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
@@ -250,6 +258,14 @@ def pad_features_in_batch(batch):
 
 
 def pad_labels_and_features_in_batch(batch):
+    """
+    Pad both the labels and sequence to the max length in the batch.
+    Useful for training FCNNs on sequence data.
+    :param batch: Batch to pad.
+    :type batch:
+    :return:
+    :rtype:
+    """
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
@@ -258,6 +274,16 @@ def pad_labels_and_features_in_batch(batch):
 
 
 def pad_batch_with_labels(batch):
+    """
+    Pad the features in the batch to the max sequence length in the batch.
+    Returns a mask for non-data features.
+    Labels should be vectors of uniform size (not fcnn labels).
+    Also returns the string labels.
+    :param batch: Batch to pad.
+    :type batch: List[Tuple[np.ndarray, np.ndarray, List[str]]
+    :return: features, mask for features, labels, and string labels
+    :rtype: Tuple[torch.tensor, torch.tensor, torch.tensor, List[str]]
+    """
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     string_labels = [b[2] for b in batch]

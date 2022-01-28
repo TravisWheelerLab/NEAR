@@ -213,7 +213,7 @@ class ProteinSequenceDataset(SequenceDataset):
         name_to_class_code: Dict[str, int],
         n_seq_per_fam: Optional[int] = None,
         no_resample: bool = True,
-        single_label: bool = True,
+        single_embedding: bool = True,
     ) -> None:
 
         super().__init__(fasta_files, name_to_class_code)
@@ -221,7 +221,7 @@ class ProteinSequenceDataset(SequenceDataset):
         self.label_to_sequence = LabelMapping(
             n_seq_per_fam=n_seq_per_fam, no_resample=no_resample
         )
-        self.single_label = single_label
+        self.single_embedding = single_embedding
         self._build_dataset()
 
     def _build_dataset(self):
@@ -247,7 +247,7 @@ class ProteinSequenceDataset(SequenceDataset):
     def __getitem__(self, idx):
         labels, features = self.label_to_sequence.sample(idx)
         encoded_features = self._encoding_func(features)
-        if self.single_label:
+        if self.single_embedding:
             y = self._make_multi_hot(labels)
         else:
             y = self._make_label_vector(labels, len(features))
@@ -260,11 +260,12 @@ class SimpleSequenceIterator(SequenceDataset):
     for ingestion into an ml algorithm.
     """
 
-    def __init__(self, fasta_files, name_to_class_code):
+    def __init__(self, fasta_files, name_to_class_code, single_embedding):
 
         super().__init__(fasta_files, name_to_class_code)
 
         self.sequences_and_labels = []
+        self.single_embedding = single_embedding
 
         self._build_dataset()
 
@@ -283,7 +284,12 @@ class SimpleSequenceIterator(SequenceDataset):
 
     def __getitem__(self, idx):
         example = self.sequences_and_labels[idx]
-        return self._encoding_func(example[0]), self._make_multi_hot(example[1])
+        if self.single_embedding:
+            return self._encoding_func(example[0]), self._make_multi_hot(example[1])
+        else:
+            return self._encoding_func(example[0]), self._make_label_vector(
+                example[1], len(example[0])
+            )
 
     def __len__(self):
         return len(self.sequences_and_labels)
@@ -337,7 +343,7 @@ if __name__ == "__main__":
     name_to_class_code = utils.create_class_code_mapping(fs)
     print(len(name_to_class_code))
     psd = ProteinSequenceDataset(
-        fasta_files=fs, name_to_class_code=name_to_class_code, single_label=False
+        fasta_files=fs, name_to_class_code=name_to_class_code, single_embedding=False
     )
     psd = torch.utils.data.DataLoader(
         psd, batch_size=2, collate_fn=utils.pad_labels_and_features_in_batch

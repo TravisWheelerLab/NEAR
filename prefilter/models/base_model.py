@@ -36,21 +36,33 @@ class BaseModel(pl.LightningModule):
         self.total_true_labels = 0
         self.val_confusion = None
         self.train_confusion = None
-        self.train_f1 = torchmetrics.F1(ignore_index=0)
-        self.val_f1 = torchmetrics.F1(ignore_index=0)
-        self.accuracy = torchmetrics.Accuracy(ignore_index=0)
+        # self.train_f1 = torchmetrics.F1(ignore_index=0)
+        # self.val_f1 = torchmetrics.F1(ignore_index=0)
+        # self.accuracy = torchmetrics.Accuracy(ignore_index=0)
+        self.train_f1 = torchmetrics.F1()
+        self.val_f1 = torchmetrics.F1()
+        self.accuracy = torchmetrics.Accuracy()
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
         self.train_dataset = utils.ProteinSequenceDataset(
-            self.train_files, self.name_to_class_code, self.n_seq_per_fam
+            self.train_files,
+            self.name_to_class_code,
+            self.n_seq_per_fam,
+            single_embedding=not self.fcnn,
         )
 
         self.val_dataset = utils.SimpleSequenceIterator(
-            self.val_files, name_to_class_code=self.name_to_class_code
+            self.val_files,
+            name_to_class_code=self.name_to_class_code,
+            single_embedding=not self.fcnn,
         )
 
-        self.val_and_decoy_dataset = utils.SimpleSequenceIterator(self.val_files)
+        self.val_and_decoy_dataset = utils.SimpleSequenceIterator(
+            self.val_files,
+            name_to_class_code=self.name_to_class_code,
+            single_embedding=not self.fcnn,
+        )
 
         self.name_to_class_code = self.val_dataset.name_to_class_code
         self.n_classes = len(self.name_to_class_code)
@@ -71,10 +83,10 @@ class BaseModel(pl.LightningModule):
             "method"
         )
 
-    def _forward(self):
+    def _forward(self, x):
         raise NotImplementedError()
 
-    def _masked_forward(self):
+    def _masked_forward(self, x, mask):
         raise NotImplementedError()
 
     def forward(self, x, mask=None):
@@ -151,88 +163,35 @@ class BaseModel(pl.LightningModule):
         self.log("val/f1", self.val_f1.compute())
 
     def train_dataloader(self):
+        if self.batch_size == 1:
+            collate_fn = None
+        elif self.fcnn:
+            collate_fn = utils.pad_labels_and_features_in_batch
+        else:
+            collate_fn = utils.pad_features_in_batch
+
         train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
+            collate_fn=collate_fn,
         )
         return train_loader
 
     def val_dataloader(self):
+        if self.batch_size == 1:
+            collate_fn = None
+        elif self.fcnn:
+            collate_fn = utils.pad_labels_and_features_in_batch
+        else:
+            collate_fn = utils.pad_features_in_batch
+
         val_loader = torch.utils.data.DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
+            collate_fn=collate_fn,
         )
         return val_loader
-
-    def test_dataloader(self):
-        val_and_decoy_loader = torch.utils.data.DataLoader(
-            self.val_and_decoy_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            collate_fn=None if self.batch_size == 1 else utils.pad_batch,
-        )
-        return val_and_decoy_loader
-
-    def on_test_epoch_end(self):
-        percent_tps_recovered = [
-            [x, y / self.total_true_labels]
-            for x, y in zip(
-                self.thresholds,
-                [s.item() for s in self.sigmoid_threshold_to_tps_passed.values()],
-            )
-        ]
-        table = pd.DataFrame(
-            data=percent_tps_recovered, columns=["threshold", "tps_recovered"]
-        )
-        fig = plt.figure(figsize=(12, 10))
-        plt.plot(table["threshold"], table["tps_recovered"])
-        tag = "val/tps_recovered"
-        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
-        plt.close(fig)
-
-        mean_fps_per_sequence = [
-            [x, y / self.total_sequences]
-            for x, y in zip(
-                self.thresholds,
-                [s.item() for s in self.sigmoid_threshold_to_fps_passed.values()],
-            )
-        ]
-        table = pd.DataFrame(
-            data=mean_fps_per_sequence, columns=["threshold", "fps_per_sequence"]
-        )
-        fig = plt.figure(figsize=(12, 10))
-        plt.plot(table["threshold"], table["fps_per_sequence"])
-        tag = "val/fps_per_sequence"
-        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
-        plt.close(fig)
-
-    def test_step(self, batch, batch_nb):
-        features, masks, labels = batch
-        self.total_sequences += features.shape[0]
-        self.total_true_labels += torch.count_nonzero(labels)
-        logits = self.forward(features, masks)
-        scores = self.class_act(logits)
-        for threshold in self.thresholds:
-            scores[scores >= threshold] = 1
-            # TODO: do I need to include decoys?
-            true_positives = torch.sum(
-                torch.count_nonzero((scores == 1).bool() & (labels == 1).bool())
-            )
-            false_positives = torch.sum(
-                torch.count_nonzero((scores == 1).bool() & (labels == 0).bool())
-            )
-            misses = torch.sum(
-                torch.count_nonzero((scores != 1).bool() & (labels == 1).bool())
-            )
-            num_passed = torch.sum(torch.count_nonzero(scores == 1))
-            self.sigmoid_threshold_to_num_passed[threshold] += num_passed
-            self.sigmoid_threshold_to_tps_missed[threshold] += misses
-            self.sigmoid_threshold_to_tps_passed[threshold] += true_positives
-            self.sigmoid_threshold_to_fps_passed[threshold] += false_positives

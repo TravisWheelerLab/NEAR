@@ -5,6 +5,7 @@ import torch
 import torchmetrics
 import torch.nn as nn
 
+from prefilter import MASK_FLAG
 from prefilter.models.base_model import BaseModel
 from prefilter.models.layers import ResidualBlock
 
@@ -27,7 +28,7 @@ class Prot2Vec(BaseModel):
         normalize_output_embedding=True,
         training=True,
         fcnn=False,
-        **kwargs
+        **kwargs,
     ):
 
         super(Prot2Vec, self).__init__(**kwargs)
@@ -49,10 +50,11 @@ class Prot2Vec(BaseModel):
 
         self._setup_layers()
 
-        self.save_hyperparameters()
-        self.hparams["name_to_class_code"] = self.name_to_class_code
-        self.hparams["n_classes"] = self.n_classes
-        self.save_hyperparameters()
+        if training:
+            self.save_hyperparameters()
+            self.hparams["name_to_class_code"] = self.name_to_class_code
+            self.hparams["n_classes"] = self.n_classes
+            self.save_hyperparameters()
 
     def _setup_layers(self):
 
@@ -79,7 +81,7 @@ class Prot2Vec(BaseModel):
 
         if self.fcnn:
             self.classification_layer = torch.nn.Conv1d(
-                self.res_block_n_filters, self.n_classes, kernel_size=1
+                self.res_block_n_filters, self.n_classes, kernel_size=(1,)
             )
         else:
             self.classification_layer = torch.nn.Linear(
@@ -134,17 +136,36 @@ class Prot2Vec(BaseModel):
         labels = labels.int()
         logits = self.forward(features, masks)
         preds = torch.round(self.class_act(logits))
+        if self.fcnn:
+            logits = logits[labels != MASK_FLAG]
+            preds = preds[labels != MASK_FLAG]
+            labels = labels[labels != MASK_FLAG]
         loss = self.loss_func(logits, labels.float())
         acc = self.accuracy(preds, labels)
         return loss, acc, logits, labels
 
 
 if __name__ == "__main__":
-    model = Prot2Vec(1100, 23, 3, 5, 2, 2, fcnn=True, training=False, n_classes=1000)
-
+    model = Prot2Vec(256, 23, 3, 5, 2, 2, fcnn=True, training=False, n_classes=1000)
     # batch size x n AA x n characters
-    print("hello")
-    tensor = torch.rand((32, 23, 233))
-    res = model(tensor)
+    from sys import stdout
+
+    tensor = torch.rand((1, 23, 233))
+    labels = torch.rand((1, 1000, 233))
+    labels[labels < 0.9] = 0
+    labels[labels != 0] = 1
     # output should be 32 1000 233
-    print(res.shape)
+    optim = torch.optim.Adam(model.parameters())
+    lfunc = torch.nn.BCEWithLogitsLoss()
+
+    for _ in range(10000):
+        optim.zero_grad()
+        preds = model(tensor)
+        loss = model.loss_func(preds, labels)
+        loss.backward()
+        optim.step()
+        stdout.write(f"loss: {loss.item()}\r")
+
+    print(model.class_act(preds[0, :10]))
+    print(labels[0, :10])
+    print(loss.item())

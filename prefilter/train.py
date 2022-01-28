@@ -46,7 +46,11 @@ def main(args):
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     # select a subset of files to train on
-    train_files = glob(os.path.join(data_path, "*train.fa"))
+    train_files = glob(os.path.join(data_path, "*train.fa"))[:10]
+
+    if not (len(train_files)):
+        raise ValueError("no train files")
+
     shuffle(train_files)
     # no restriction
     # train_files = train_files[:1000]
@@ -111,6 +115,7 @@ def main(args):
         n_res_blocks=args.n_res_blocks,
         res_bottleneck_factor=args.res_bottleneck_factor,
         dilation_rate=args.dilation_rate,
+        fcnn=args.fcnn,
         **data_and_optimizer_kwargs,
     )
 
@@ -185,6 +190,4 @@ def main(args):
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
 
-    # test it. This is actually running a custom plotting routine that's defined over the validation set
-    # using "test" is a little hacky but much less effort than trying to customize the pytorch lightning class.
     torch.save(model, args.model_name)
