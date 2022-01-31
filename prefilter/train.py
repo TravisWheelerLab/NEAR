@@ -46,7 +46,7 @@ def main(args):
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     # select a subset of files to train on
-    train_files = glob(os.path.join(data_path, "*train.fa"))[:10]
+    train_files = glob(os.path.join(data_path, "*train.fa"))
 
     if not (len(train_files)):
         raise ValueError("no train files")
@@ -96,6 +96,7 @@ def main(args):
     data_and_optimizer_kwargs = {
         "learning_rate": args.learning_rate,
         "train_files": train_files,
+        "emission_files": emission_files if emission_sequence_path is not None else None,
         "val_files": val_files,
         "decoy_files": decoy_files,
         "schedule_lr": args.schedule_lr,
@@ -132,7 +133,8 @@ def main(args):
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             monitor="val/f1",
-            filename="{epoch}-{val/loss:.5f}-{val/f1:.5f}",
+            mode="max",
+            filename="{epoch}-{val/f1:.5f}",
             save_top_k=5,
         )
 

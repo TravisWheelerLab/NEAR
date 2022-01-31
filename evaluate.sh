@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 
-#SBATCH --partition=wheeler_lab_gpu
-#SBATCH --job-name=evaluate_model
-#SBATCH --output=evaluated
-#SBATCH --gres=gpu:1
+set -e
 
-source ~/anaconda/bin/activate
-conda activate tf15
+hparams=with_emission_sequences_no_resampling/default/version_2/hparams.yaml
+model=with_emission_sequences_no_resampling/default/version_2/checkpoints/epoch=15-val/loss=0.00140-val/f1=0.59126.ckpt
+eval_cmd="python prefilter/evaluate.py"
 
-LOG_ROOT=/home/tc229954/testpre/lightning_logs/
+# plot recall.
+$eval_cmd "recall" $model $hparams primary_and_neighborhood_recall.png
+echo "Done plotting recall."
 
-python -m prefilter eval --save_prefix /home/tc229954/gpu_8 \
-       --logs_dir $LOG_ROOT/version_2 \
-       --model_path $LOG_ROOT/version_2/model.pt \
-       --batch_size 128
+# plot recall per family (all, neighborhood, and primary).
+$eval_cmd "recall_per_family" $model $hparams recall_per_family.png
+echo "Done plotting recall per family."
+$eval_cmd "recall_per_family" $model $hparams recall_per_family_primary.png --just_primary
+echo "Done plotting recall per family (primary labels only)."
+$eval_cmd "recall_per_family" $model $hparams recall_per_family_neighborhood.png --just_neighborhood
+echo "Done plotting recall per family (neighborhood labels only)."
+
+$eval_cmd "recall_per_family" $model $hparams recall_per_family_neighborhood_with_emission.png --just_neighborhood \
+ --emission_sequence_path /home/tc229954/subset/training_data0.5/emission/training_data/
+
+# and finally the recall at each rank.
+$eval_cmd "ranked_recall" $model $hparams ranked_recall.png

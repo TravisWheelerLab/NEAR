@@ -21,12 +21,12 @@ import prefilter.models as models
 
 @torch.no_grad()
 def recall_for_each_significant_label(
-    model,
-    dataloader,
-    name_to_class_code,
-    figure_path,
-    device="cuda",
-    classification_threshold=0.5,
+        model,
+        dataloader,
+        name_to_class_code,
+        figure_path,
+        device="cuda",
+        classification_threshold=0.5,
 ):
     """
     Which rank of label do the models tend to get right?
@@ -47,7 +47,6 @@ def recall_for_each_significant_label(
         pred = model.class_act(model(features, masks))
 
         pred[pred >= classification_threshold] = 1
-        pred[pred < classification_threshold] = 0
 
         stdout.write(f"{j / len(dataloader)}\r")
         j += 1
@@ -78,13 +77,16 @@ def recall_for_each_significant_label(
     ax1 = ax[0].twinx()
     ax1.plot(np.arange(len(total)), np.cumsum(total), "k-", label="total")
     ax1.plot(np.arange(len(correct)), np.cumsum(correct), "b-", label="recalled")
-    ax1.legend()
-    ax[0].legend()
+    ax1.legend(loc="upper right")
+    ax[0].legend(loc="upper left")
     ax[0].set_xlabel("label rank (lower=lower e-value)")
     ax[0].set_ylabel("num labels")
 
     ax[1].bar(np.arange(len(correct)), correct / total, label="ratio of correct/total")
-    ax[1].legend()
+    ax[1].set_xlabel("label rank (lower=lower e-value)")
+    ax[1].set_ylabel("% of label at rank K recalled")
+    plt.suptitle("recall broken down by rank of label.")
+    ax[1].legend(loc="upper left")
 
     plt.savefig(utils.handle_figure_path(figure_path))
     plt.close()
@@ -92,7 +94,7 @@ def recall_for_each_significant_label(
 
 @torch.no_grad()
 def primary_and_neighborhood_recall(
-    model, dataloader, name_to_class_code, figure_path, device="cuda"
+        model, dataloader, name_to_class_code, figure_path, device="cuda"
 ):
     """
     Plot the recall of the model for primary and neighborhood labels.
@@ -138,9 +140,7 @@ def primary_and_neighborhood_recall(
                 total[i] += 1
             for threshold in thresholds:
                 seq[seq >= threshold] = 1
-                fps = torch.sum(
-                    seq[(labelvec != 1).bool() & (seq == 1).bool()]
-                ).item()
+                fps = torch.sum(seq[(labelvec != 1).bool() & (seq == 1).bool()]).item()
                 threshold_to_fps[threshold] += fps
                 for i, label in enumerate(labelset):
                     idx = name_to_class_code[label]
@@ -181,9 +181,12 @@ def primary_and_neighborhood_recall(
         "co",
         label="fps per seq",
     )
-    ax1.set_ylabel(200)
-    ax1.legend(loc="upper left")
-    ax.legend()
+    ax1.set_ylabel("false positives per sequence")
+    ax1.legend(loc="upper right")
+    ax.legend(loc="upper left")
+    ax.set_xlabel("sigmoid threshold")
+    ax.set_ylabel("% of true positives recalled")
+    ax.set_title("primary and neighborhood recall as a function of sigmoid threshold")
 
     plt.savefig(utils.handle_figure_path(figure_path))
     plt.close()
@@ -193,13 +196,13 @@ def primary_and_neighborhood_recall(
 # how does the validation performance change based on the number of sequences in the family at train time?
 @torch.no_grad()
 def _aggregate_family_wise_metrics(
-    model,
-    dataloader,
-    name_to_class_code,
-    classification_threshold,
-    just_primary,
-    just_neighborhood,
-    device="cuda",
+        model,
+        dataloader,
+        name_to_class_code,
+        classification_threshold,
+        just_primary,
+        just_neighborhood,
+        device="cuda",
 ):
     j = 0
     family_to_tps = defaultdict(int)
@@ -239,19 +242,22 @@ def _aggregate_family_wise_metrics(
 
 
 def recall_per_family(
-    model,
-    train_files,
-    val_dataloader,
-    name_to_class_code,
-    figure_path,
-    classification_threshold=0.5,
-    device="cuda",
-    just_primary=False,
-    just_neighborhood=False,
+        model,
+        train_files,
+        val_dataloader,
+        name_to_class_code,
+        figure_path,
+        emission_files=None,
+        classification_threshold=0.5,
+        device="cuda",
+        just_primary=False,
+        just_neighborhood=False,
 ):
     """
     Plot the recall on a family-wise basis; try to answer "Does model performance increase when there are more sequences
     in train from a given family?"
+    :param emission_files: files containing emission sequences
+    :type emission_files: List[str]
     :param model: model to evaluate
     :type model:
     :param train_files: files containing train sequences
@@ -288,6 +294,16 @@ def recall_per_family(
             for label in labelset:
                 train_family_to_num_seq[label] += 1
 
+    if emission_files is not None:
+        # load the emission sequences and count the number of instances per family.
+        # to plot the relationship b/t train seq and validation performance.
+        emission_labels_and_sequences = utils.load_sequences_and_labels(emission_files)
+        emission_family_to_num_seq = defaultdict(int)
+
+        for labelset, sequence in emission_labels_and_sequences:
+            for label in labelset:
+                emission_family_to_num_seq[label] += 1
+
     val_family_to_tps, val_family_to_num_seq = _aggregate_family_wise_metrics(
         model,
         val_dataloader,
@@ -300,10 +316,15 @@ def recall_per_family(
     train_num_seq = []
     val_num_seq = []
     val_tps = []
-    # TODO: Check this once the cluster is up and running again.
 
     for family in val_family_to_tps.keys():
-        train_num_seq.append(train_family_to_num_seq[family])
+        if emission_files is not None:
+            if family in emission_family_to_num_seq:
+                emission_seq = emission_family_to_num_seq[family]
+            train_num_seq.append(train_family_to_num_seq[family] + emission_seq)
+        else:
+            train_num_seq.append(train_family_to_num_seq[family])
+
         val_num_seq.append(val_family_to_num_seq[family])
         val_tps.append(val_family_to_tps[family])
 
@@ -328,11 +349,25 @@ def recall_per_family(
     )
     ax[1].bar(np.arange(len(val_num_seq)), np.log(val_num_seq), label="seq. in val")
     ax[1].bar(np.arange(len(val_tps)), np.log(val_tps), label="val tps")
+    ax[1].set_xlabel("family id (sorted by membership)")
+    ax[1].set_ylabel("ln(count)")
+    ax[0].set_ylabel("count")
+
     ax[0].legend()
     ax[1].legend()
+
     ax[2].plot(train_num_seq, val_tps / val_num_seq, "ko", markersize=2)
     ax[2].set_xlabel("number of sequences from family in train")
-    ax[2].set_ylabel("% of validation seq. recovered")
+    ax[2].set_ylabel("% of validation sequences recovered from family")
+
+    if just_primary:
+        title = "just primary labels."
+    elif just_neighborhood:
+        title = "just neighborhood labels."
+    else:
+        title = "all labels."
+
+    plt.suptitle(f"per-family performance, {title}")
 
     plt.savefig(utils.handle_figure_path(figure_path))
     plt.close()
@@ -386,7 +421,7 @@ def create_parser():
     recall_parser = sp.add_parser(
         name="recall",
         description="plot the recall and false positives passed at multiple sigmoid "
-        "thresholds. Break up into primary and neighborhood labels.",
+                    "thresholds. Break up into primary and neighborhood labels.",
     )
     recall_parser.add_argument("model_path")
     recall_parser.add_argument("hparams_path")
@@ -396,7 +431,7 @@ def create_parser():
     recall_per_fam_parser = sp.add_parser(
         name="recall_per_family",
         description="plot the comparison between train/val dists. and their "
-        "performance as a function of number of train labels",
+                    "performance as a function of number of train labels",
     )
     recall_per_fam_parser.add_argument("model_path")
     recall_per_fam_parser.add_argument("hparams_path")
@@ -406,6 +441,8 @@ def create_parser():
     )
     recall_per_fam_parser.add_argument("--just_primary", action="store_true")
     recall_per_fam_parser.add_argument("--just_neighborhood", action="store_true")
+    recall_per_fam_parser.add_argument("--emission_sequence_path", default=None, help="where emission sequences"
+                                                                                      " are stored.")
 
     primary_parser = sp.add_parser(
         name="ranked_recall", description="plot the recall for each rank of label."
@@ -438,11 +475,10 @@ def main():
     hparams["training"] = False
 
     model = models.Prot2Vec(**hparams).to(dev)
-    success = model.load_state_dict(state_dict)
     model.eval()
 
     if args.command == "recall":
-        files = hparams[args.key]
+        files = hparams[args.key][:1]
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
@@ -456,27 +492,37 @@ def main():
             device=dev,
         )
     elif args.command == "recall_per_family":
-        files = hparams["val_files"]
+        files = hparams["val_files"][:1]
         name_to_class_code = hparams["name_to_class_code"]
+
+        if args.emission_sequence_path is not None:
+            emission_files = glob(os.path.join(args.emission_sequence_path, "*fa"))[:1]
+        else:
+            emission_files = None
+
         dataset = utils.RankingIterator(files, name_to_class_code)
+
         dataloader = torch.utils.data.DataLoader(
             dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
         )
+
         if args.just_neighborhood and args.just_primary:
             raise ValueError("Can't specify just primary and just neighborhood.")
+
         recall_per_family(
             model,
-            hparams["train_files"],
+            hparams["train_files"][:1],
             dataloader,
             name_to_class_code,
             args.figure_path,
+            emission_files=emission_files,
             just_primary=args.just_primary,
             just_neighborhood=args.just_neighborhood,
             device=dev,
         )
 
     elif args.command == "ranked_recall":
-        files = hparams[args.key]
+        files = hparams[args.key][:1]
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
@@ -495,5 +541,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()

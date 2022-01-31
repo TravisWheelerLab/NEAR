@@ -1,23 +1,11 @@
 #!/bin/bash
 
-#SBATCH --partition=wheeler_lab_gpu
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:4
-#SBATCH --output=long_train.out
-
-
-
-source ~/anaconda/bin/activate
-conda activate prefilter
-cd /home/tc229954/share/prefilter
-
 time python -m prefilter train\
     --gpus 4 \
     --num_nodes 1 \
     --num_workers 32 \
-    --log_dir with_emission_sequences_no_resampling \
-    --emission_sequence_path /home/tc229954/subset/training_data0.5/emission/training_data \
-    --data_path /home/tc229954/data/prefilter/pfam/seed/training_data/0.5/real/ \
+    --log_dir fcnn \
+    --data_path /home/tc229954/domtblouts \
     --model_name long.pt \
     --decoy_path "$HOME"/tmp/ \
     --batch_size 32 \
@@ -33,4 +21,5 @@ time python -m prefilter train\
     --res_bottleneck_factor 0.5\
     --n_res_blocks 5\
     --dilation_rate 2 \
+    --fcnn
 

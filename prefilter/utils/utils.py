@@ -135,7 +135,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     begin_char = labelstring.find("|")
 
     if begin_char == -1:
-        return None
+        raise ValueError("File does not contain | as a delimiter. Exiting.")
 
     if "(" in labelstring:
         labels = labelstring[begin_char + 1 :].split(")")
@@ -167,6 +167,8 @@ def create_class_code_mapping(fasta_files):
         labels, sequences = fasta_from_file(fasta_file)
         for label, sequence in zip(labels, sequences):
             labelset = parse_labels(label)
+            if labelset is None:
+                continue
             if not len(labelset) or labelset is None:
                 raise ValueError(
                     f"Line in {fasta_file} does not contain any labels. Please fix."
