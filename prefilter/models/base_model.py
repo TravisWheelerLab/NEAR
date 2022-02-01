@@ -36,12 +36,28 @@ class BaseModel(pl.LightningModule):
         self.total_true_labels = 0
         self.val_confusion = None
         self.train_confusion = None
-        # self.train_f1 = torchmetrics.F1(ignore_index=0)
-        # self.val_f1 = torchmetrics.F1(ignore_index=0)
-        # self.accuracy = torchmetrics.Accuracy(ignore_index=0)
-        self.train_f1 = torchmetrics.F1()
-        self.val_f1 = torchmetrics.F1()
-        self.accuracy = torchmetrics.Accuracy()
+
+        if self.emission_files is not None:
+            self.train_files = self.train_files + self.emission_files
+
+    def _init_metrics(self):
+        if self.fcnn:
+            self.train_f1 = torchmetrics.F1()
+            self.val_f1 = torchmetrics.F1()
+            self.accuracy = torchmetrics.Accuracy()
+        else:
+            self.train_f1 = torchmetrics.F1(ignore_index=0)
+            self.val_f1 = torchmetrics.F1(ignore_index=0)
+            self.accuracy = torchmetrics.Accuracy(ignore_index=0)
+
+        if self.log_confusion_matrix:
+
+            self.val_confusion = torchmetrics.ConfusionMatrix(
+                num_classes=self.n_classes
+            )
+            self.train_confusion = torchmetrics.ConfusionMatrix(
+                num_classes=self.n_classes
+            )
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
@@ -66,15 +82,6 @@ class BaseModel(pl.LightningModule):
 
         self.name_to_class_code = self.val_dataset.name_to_class_code
         self.n_classes = len(self.name_to_class_code)
-
-        if self.log_confusion_matrix:
-
-            self.val_confusion = torchmetrics.ConfusionMatrix(
-                num_classes=self.n_classes
-            )
-            self.train_confusion = torchmetrics.ConfusionMatrix(
-                num_classes=self.n_classes
-            )
 
     def _setup_layers(self):
         raise NotImplementedError(

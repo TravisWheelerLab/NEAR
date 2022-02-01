@@ -52,8 +52,7 @@ def main(args):
         raise ValueError("no train files")
 
     shuffle(train_files)
-    # no restriction
-    # train_files = train_files[:1000]
+
     val_files = []
     # then get their corresponding validation files (we don't want to validate on a set of files that don't have a
     # relationship to the train files)
@@ -96,7 +95,9 @@ def main(args):
     data_and_optimizer_kwargs = {
         "learning_rate": args.learning_rate,
         "train_files": train_files,
-        "emission_files": emission_files if emission_sequence_path is not None else None,
+        "emission_files": emission_files
+        if emission_sequence_path is not None
+        else None,
         "val_files": val_files,
         "decoy_files": decoy_files,
         "schedule_lr": args.schedule_lr,
@@ -139,7 +140,7 @@ def main(args):
         )
 
     last_epoch = 0
-    # if we're shoptimizing, check for a checkpoint and load it if it exists.
+    # if we're optimizing, check for a checkpoint and load it if it exists.
     if args.shoptimize:
         if os.path.isfile(checkpoint_file):
             checkpoint = torch.load(checkpoint_file)
@@ -191,5 +192,3 @@ def main(args):
         results = trainer.validate(model)[0]
         with open(result_file, "w") as dst:
             dst.write(f"test_acc:{results['val/loss']}")
-
-    torch.save(model, args.model_name)

@@ -82,7 +82,6 @@ def load_sequences_and_labels(fasta_files: List[str]) -> List[Tuple[List[str], s
 
 
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
-
     bs = os.path.basename(figure_path)
     name, curr_ext = os.path.splitext(bs)
 
@@ -138,8 +137,19 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
         raise ValueError("File does not contain | as a delimiter. Exiting.")
 
     if "(" in labelstring:
-        labels = labelstring[begin_char + 1 :].split(")")
-        labels = [l[l.find("P") :].replace("(", "").replace(",", "") for l in labels]
+        labels = (
+            labelstring[begin_char + 1 :]
+            .replace(",", "")
+            .replace(")", "")
+            .replace("(", "")
+            .split(" ")
+        )
+        labels = list(filter(len, labels))
+        labelset = []
+        for i in range(0, len(labels), 3):
+            accession_id, begin, end = labels[i], labels[i + 1], labels[i + 2]
+            labelset.append([accession_id, begin, end])
+        labels = labelset
     else:
         labels = labelstring[begin_char + 1 :].split(" ")
 
@@ -153,7 +163,8 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
 
 def create_class_code_mapping(fasta_files):
     """
-    docstring
+    in order to create the mapping on the fly we have to load every sequence in our dataset!
+    This can take a long time. Is there a faster way to do it?
     :param fasta_files:
     :type fasta_files:
     :return:
@@ -164,19 +175,24 @@ def create_class_code_mapping(fasta_files):
 
     class_code = 0
     for fasta_file in fasta_files:
+        print(f"loading {fasta_file}")
         labels, sequences = fasta_from_file(fasta_file)
         for label, sequence in zip(labels, sequences):
+
             labelset = parse_labels(label)
-            if labelset is None:
-                continue
-            if not len(labelset) or labelset is None:
+
+            if labelset is None or len(labelset) == 0:
                 raise ValueError(
                     f"Line in {fasta_file} does not contain any labels. Please fix."
                 )
             else:
+
                 for name in labelset:
-                    if " " in name:
-                        name = name.split(" ")[0]
+                    # if we have an accession id plus two coordinates;
+                    # grab only the name
+                    if isinstance(name, list):
+                        name = name[0]
+                    # otherwise, don't mess with it.
                     if name not in name_to_class_code:
                         name_to_class_code[name] = class_code
                         class_code += 1

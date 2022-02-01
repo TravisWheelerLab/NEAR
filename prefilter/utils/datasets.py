@@ -55,16 +55,26 @@ class SequenceDataset(torch.utils.data.Dataset):
         """
         y = np.zeros((self.n_classes, len_sequence))
         for labelstring in labels:
-            label, begin, end = labelstring.split(" ")
+
+            if " " in labelstring:
+                label, begin, end = labelstring.split(" ")
+            else:
+                label = labelstring
+                begin, end = 0, len_sequence
+
             y[self.name_to_class_code[label], int(float(begin)) : int(float(end))] = 1
+
         return torch.as_tensor(y)
 
     def _class_id_vector(self, labels):
         class_ids = []
         for label in labels:
-            if " " in label:
-                label = label.split(" ")[0]
+
+            if isinstance(label, list):
+                label = label[0]
+
             class_ids.append(self.name_to_class_code[label])
+
         return class_ids
 
     def _make_multi_hot(self, labels):
@@ -128,6 +138,9 @@ class LabelMapping:
         :return: None.
         :rtype: None.
         """
+        if isinstance(key, list):
+            key = key[0]
+
         self.label_to_sequence[key].append(value)
         self.label_to_count[key] += 1
 

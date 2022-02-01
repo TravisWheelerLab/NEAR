@@ -47,6 +47,7 @@ class Prot2Vec(BaseModel):
 
         if training:
             self._create_datasets()
+            self._init_metrics()
 
         self._setup_layers()
 
