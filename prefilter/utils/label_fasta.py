@@ -279,6 +279,8 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
                 domtblout_df["target_name"] == target_label
             ]
 
+            assigned_labels = assigned_labels.sort_by(["e_value"], ascending=False)
+
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
                 # which means they're manually curated to be part of a family.
