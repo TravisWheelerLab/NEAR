@@ -56,8 +56,8 @@ class SequenceDataset(torch.utils.data.Dataset):
         y = np.zeros((self.n_classes, len_sequence))
         for labelstring in labels:
 
-            if " " in labelstring:
-                label, begin, end = labelstring.split(" ")
+            if isinstance(labelstring, list):
+                label, begin, end = labelstring
             else:
                 label = labelstring
                 begin, end = 0, len_sequence

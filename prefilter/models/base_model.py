@@ -65,19 +65,12 @@ class BaseModel(pl.LightningModule):
             self.train_files,
             self.name_to_class_code,
             self.n_seq_per_fam,
-            single_embedding=not self.fcnn,
         )
 
         self.val_dataset = utils.SimpleSequenceIterator(
             self.val_files,
             name_to_class_code=self.name_to_class_code,
-            single_embedding=not self.fcnn,
-        )
-
-        self.val_and_decoy_dataset = utils.SimpleSequenceIterator(
-            self.val_files,
-            name_to_class_code=self.name_to_class_code,
-            single_embedding=not self.fcnn,
+            single_embedding=True,
         )
 
         self.name_to_class_code = self.val_dataset.name_to_class_code
@@ -173,7 +166,7 @@ class BaseModel(pl.LightningModule):
         if self.batch_size == 1:
             collate_fn = None
         elif self.fcnn:
-            collate_fn = utils.pad_labels_and_features_in_batch
+            collate_fn = utils.pad_features_in_batch
         else:
             collate_fn = utils.pad_features_in_batch
 
@@ -190,7 +183,7 @@ class BaseModel(pl.LightningModule):
         if self.batch_size == 1:
             collate_fn = None
         elif self.fcnn:
-            collate_fn = utils.pad_labels_and_features_in_batch
+            collate_fn = utils.pad_features_in_batch
         else:
             collate_fn = utils.pad_features_in_batch
 

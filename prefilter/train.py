@@ -87,6 +87,7 @@ def main(args):
     else:
         name_to_class_code = create_class_code_mapping(train_files + val_files)
 
+    # TODO: remove decoy file stuff
     decoy_files = glob(os.path.join(args.decoy_path, "*.fa"))
 
     # these options are ingested into the class that all models should subclass. They control how the dataset

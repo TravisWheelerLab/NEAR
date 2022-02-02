@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from prefilter import MASK_FLAG
 from prefilter.models.base_model import BaseModel
-from prefilter.models.layers import ResidualBlock
+from prefilter.models.layers import ResidualBlock, MultiReceptiveFieldBlock
 
 __all__ = ["Prot2Vec"]
 
@@ -81,8 +81,11 @@ class Prot2Vec(BaseModel):
             )
 
         if self.fcnn:
+            self.multi_receptive = MultiReceptiveFieldBlock(
+                self.res_block_n_filters, self.res_block_n_filters // 2
+            )
             self.classification_layer = torch.nn.Conv1d(
-                self.res_block_n_filters, self.n_classes, kernel_size=(1,)
+                self.res_block_n_filters // 2, self.n_classes, kernel_size=(1,)
             )
         else:
             self.classification_layer = torch.nn.Linear(
@@ -128,21 +131,28 @@ class Prot2Vec(BaseModel):
         if self.normalize_output_embedding:
             embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
 
-        classified = self.classification_layer(embeddings)
+        if self.fcnn:
+            embeddings = self.multi_receptive(embeddings)
+            classified = self.classification_layer(embeddings)
+        else:
+            classified = self.classification_layer(embeddings)
 
         return classified
 
     def _shared_step(self, batch):
+
         features, masks, labels = batch
         labels = labels.int()
         logits = self.forward(features, masks)
         preds = torch.round(self.class_act(logits))
+
         if self.fcnn:
-            logits = logits[labels != MASK_FLAG]
-            preds = preds[labels != MASK_FLAG]
-            labels = labels[labels != MASK_FLAG]
+            labels = labels.unsqueeze(-1)
+            labels = labels.expand(-1, -1, logits.shape[-1])
+
         loss = self.loss_func(logits, labels.float())
         acc = self.accuracy(preds, labels)
+
         return loss, acc, logits, labels
 
 

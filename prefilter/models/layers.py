@@ -3,6 +3,74 @@ import math
 import torch.nn as nn
 
 
+class MultiReceptiveFieldBlock(nn.Module):
+    def __init__(
+        self,
+        in_filters,
+        out_filters,
+        min_stride=10,
+        max_stride=50,
+        min_dilation=1,
+        max_dilation=10,
+        min_kernel_size=3,
+        max_kernel_size=11,
+    ):
+
+        super(MultiReceptiveFieldBlock, self).__init__()
+
+        self.in_filters = in_filters
+        self.out_filters = out_filters
+        self.min_stride = min_stride
+        self.max_stride = max_stride
+        self.min_dilation = min_dilation
+        self.max_dilation = max_dilation
+        self.min_kernel_size = min_kernel_size
+        self.max_kernel_size = max_kernel_size
+
+        self.dilations = range(self.min_dilation, self.max_dilation, 2)
+        self.kernels = range(self.min_kernel_size, self.max_kernel_size + 2, 2)
+        self.act = torch.nn.ReLU()
+        self.layers = []
+        self._setup_layers()
+
+        for i, l in enumerate(self.layers):
+            setattr(self, f"conv{i}", l)
+
+    def _setup_layers(self):
+
+        for i, stride in enumerate(range(self.min_stride, self.max_stride, 10)[::-1]):
+            # smaller kernel, larger stride, smaller dilation
+            self.layers.append(
+                torch.nn.Conv1d(
+                    self.in_filters,
+                    self.out_filters,
+                    kernel_size=self.kernels[i],
+                    dilation=self.dilations[i],
+                    stride=stride,
+                )
+            )
+
+    def _forward(self, x):
+        acts = []
+        for conv in self.layers:
+            acts.append(self.act(conv(x)))
+        return acts
+
+    def _masked_forward(self, x, mask):
+        acts = []
+        for conv in self.layers:
+            y = self.act(conv(x))
+            y[mask.expand(-1, self.out_filters, -1)] = 0
+            acts.append(y)
+        return acts
+
+    def forward(self, x, mask=None):
+        if mask is None:
+            return torch.cat(self._forward(x), dim=-1)
+        else:
+            return torch.cat(self._masked_forward(x, mask), dim=-1)
+
+
 class ResidualBlock(nn.Module):
     def __init__(
         self,
