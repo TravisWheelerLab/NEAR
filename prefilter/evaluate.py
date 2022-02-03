@@ -122,13 +122,13 @@ def primary_and_neighborhood_recall(
     neighborhood_recall = defaultdict(int)
     threshold_to_fps = defaultdict(int)
     total = defaultdict(int)
+
     for threshold in thresholds:
         primary_recall[threshold] = 0
         neighborhood_recall[threshold] = 0
         threshold_to_fps[threshold] = 0
 
     for features, masks, labels, string_labels in dataloader:
-
         features = features.to(device)
         masks = masks.to(device)
         labels = labels.to(device)
@@ -143,6 +143,8 @@ def primary_and_neighborhood_recall(
                 fps = torch.sum(seq[(labelvec != 1).bool() & (seq == 1).bool()]).item()
                 threshold_to_fps[threshold] += fps
                 for i, label in enumerate(labelset):
+                    if isinstance(label, list):
+                        label = label[0]
                     idx = name_to_class_code[label]
                     if seq[idx] == 1 and i == 0:
                         primary_recall[threshold] += 1
@@ -220,6 +222,8 @@ def _aggregate_family_wise_metrics(
             seq[seq >= classification_threshold] = 1
             if just_primary:
                 label = labelset[0]
+                if isinstance(label, list):
+                    label = label[0]
                 idx = name_to_class_code[label]
                 family_to_num_seq[label] += 1
                 if seq[idx] == 1:
@@ -227,12 +231,16 @@ def _aggregate_family_wise_metrics(
             elif just_neighborhood:
                 labelset = labelset[1:]
                 for i, label in enumerate(labelset):
+                    if isinstance(label, list):
+                        label = label[0]
                     idx = name_to_class_code[label]
                     family_to_num_seq[label] += 1
                     if seq[idx] == 1:
                         family_to_tps[label] += 1
             else:
                 for i, label in enumerate(labelset):
+                    if isinstance(label, list):
+                        label = label[0]
                     idx = name_to_class_code[label]
                     family_to_num_seq[label] += 1
                     if seq[idx] == 1:
@@ -285,13 +293,20 @@ def recall_per_family(
 
     for labelset, sequence in train_labels_and_sequences:
         if just_primary:
-            train_family_to_num_seq[labelset[0]] += 1
+            if isinstance(labelset[0], list):
+                train_family_to_num_seq[labelset[0][0]] += 1
+            else:
+                train_family_to_num_seq[labelset[0]] += 1
         elif just_neighborhood:
             labelset = labelset[1:]
             for label in labelset:
+                if isinstance(label, list):
+                    label = label[0]
                 train_family_to_num_seq[label] += 1
         else:
             for label in labelset:
+                if isinstance(label, list):
+                    label = label[0]
                 train_family_to_num_seq[label] += 1
 
     if emission_files is not None:
@@ -302,6 +317,8 @@ def recall_per_family(
 
         for labelset, sequence in emission_labels_and_sequences:
             for label in labelset:
+                if isinstance(label, list):
+                    label = label[0]
                 emission_family_to_num_seq[label] += 1
 
     val_family_to_tps, val_family_to_num_seq = _aggregate_family_wise_metrics(
@@ -471,13 +488,16 @@ def main():
     with open(hparams_path, "r") as src:
         hparams = yaml.safe_load(src)
 
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    dev = "cuda:3" if torch.cuda.is_available() else "cpu"
     checkpoint = torch.load(model_path, map_location=torch.device(dev))
     state_dict = checkpoint["state_dict"]
-    state_dict["loss_func.pos_weight"] = torch.tensor(10)
+    del state_dict["loss_func.pos_weight"]
     hparams["training"] = False
 
     model = models.Prot2Vec(**hparams).to(dev)
+    success = model.load_state_dict(state_dict)
+    print(success)
+
     model.eval()
 
     if args.command == "recall":
@@ -485,7 +505,8 @@ def main():
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
+            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels,
+            shuffle=True,
         )
         primary_and_neighborhood_recall(
             model,
