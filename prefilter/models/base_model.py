@@ -165,8 +165,6 @@ class BaseModel(pl.LightningModule):
     def train_dataloader(self):
         if self.batch_size == 1:
             collate_fn = None
-        elif self.fcnn:
-            collate_fn = utils.pad_features_in_batch
         else:
             collate_fn = utils.pad_features_in_batch
 
@@ -182,8 +180,6 @@ class BaseModel(pl.LightningModule):
     def val_dataloader(self):
         if self.batch_size == 1:
             collate_fn = None
-        elif self.fcnn:
-            collate_fn = utils.pad_features_in_batch
         else:
             collate_fn = utils.pad_features_in_batch
 

@@ -42,7 +42,7 @@ class Prot2Vec(BaseModel):
         self.normalize_output_embedding = normalize_output_embedding
         self.fcnn = fcnn
 
-        self.loss_func = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10))
+        self.loss_func = torch.nn.BCEWithLogitsLoss()
         self.class_act = torch.nn.Sigmoid()
 
         if training:
@@ -82,10 +82,10 @@ class Prot2Vec(BaseModel):
 
         if self.fcnn:
             self.multi_receptive = MultiReceptiveFieldBlock(
-                self.res_block_n_filters, self.res_block_n_filters // 2
+                self.res_block_n_filters, self.res_block_n_filters // 10
             )
             self.classification_layer = torch.nn.Conv1d(
-                self.res_block_n_filters // 2, self.n_classes, kernel_size=(1,)
+                self.res_block_n_filters // 10, self.n_classes, kernel_size=(1,)
             )
         else:
             self.classification_layer = torch.nn.Linear(
@@ -157,19 +157,26 @@ class Prot2Vec(BaseModel):
 
 
 if __name__ == "__main__":
-    model = Prot2Vec(256, 23, 3, 5, 2, 2, fcnn=True, training=False, n_classes=1000)
+
+    model = Prot2Vec(256, 23, 3, 5, 2, 2, fcnn=False, training=False, n_classes=1000)
     # batch size x n AA x n characters
     from sys import stdout
 
     tensor = torch.rand((1, 23, 233))
-    labels = torch.rand((1, 1000, 233))
+    tensor[tensor < 0.5] = 0
+    labels = torch.rand((1, 1000))
     labels[labels < 0.9] = 0
     labels[labels != 0] = 1
     # output should be 32 1000 233
+
     optim = torch.optim.Adam(model.parameters())
     lfunc = torch.nn.BCEWithLogitsLoss()
+    model = model.to("cuda:2")
+    labels = labels.to("cuda:2")
+    tensor = tensor.to("cuda:2")
 
-    for _ in range(10000):
+    for _ in range(1000):
+
         optim.zero_grad()
         preds = model(tensor)
         loss = model.loss_func(preds, labels)

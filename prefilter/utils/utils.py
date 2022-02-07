@@ -238,8 +238,10 @@ def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
     return sequence_labels, sequence_strs
 
 
-def _pad_sequences(sequences):
+def _pad_sequences(sequences, minlen=60):
     mxlen = np.max([s.shape[-1] for s in sequences])
+    if mxlen < minlen:
+        mxlen = minlen
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
     for i, s in enumerate(sequences):

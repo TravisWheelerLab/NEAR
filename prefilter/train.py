@@ -87,6 +87,10 @@ def main(args):
     else:
         name_to_class_code = create_class_code_mapping(train_files + val_files)
 
+    print("=========")
+    print(len(name_to_class_code))
+    print("=========")
+
     # TODO: remove decoy file stuff
     decoy_files = glob(os.path.join(args.decoy_path, "*.fa"))
 

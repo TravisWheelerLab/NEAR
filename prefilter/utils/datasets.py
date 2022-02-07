@@ -157,55 +157,19 @@ class LabelMapping:
         :return: set of labels and sequence associated with that set.
         :rtype: Tuple[List[str], str]
         """
-        if self.no_resample:
-            return self.sequences_and_labels[idx][1], self.sequences_and_labels[idx][0]
-        else:
-            name = self.names[idx % len(self.names)]
-            if self.n_seq_per_fam is None:
-                sequence, labelset = self.label_to_sequence[name][
-                    self.label_to_index[name] % len(self.label_to_sequence[name])
-                ]
-            else:
-                divisor = (
-                    len(self.label_to_sequence[name])
-                    if len(self.label_to_sequence[name]) < self.n_seq_per_fam
-                    else self.n_seq_per_fam
-                )
-                sequence, labelset = self.label_to_sequence[name][
-                    self.label_to_index[name] % divisor
-                ]
-            self.label_to_index[name] += 1
-            return labelset, sequence
+        return self.sequences_and_labels[idx][1], self.sequences_and_labels[idx][0]
 
     def __len__(self):
         # length is the number of unique pfam accession ids in the fasta files
         # which is NOT the number of classes we actually classify in our final classification
         # layer
-        if self.no_resample:
-            return len(self.sequences_and_labels)
-        else:
-            return len(self.names)
+        return len(self.sequences_and_labels)
 
     def compute(self):
-        if self.no_resample:
-            for label, sequenceset in self.label_to_sequence.items():
-                # sequenceset contains [[lab1, lab2..], sequence]
-                self.sequences_and_labels.extend(sequenceset)
-            shuffle(self.sequences_and_labels)
-        else:
-            summation = sum(list(self.label_to_count.values()))
-            self.label_to_count = {
-                k: v / summation for k, v in self.label_to_count.items()
-            }
-            self.names = list(self.label_to_sequence.keys())
-            shuffle(self.names)
-            # shuffle the ordering of sequences in each family
-            x = {}
-            for k, v in self.label_to_sequence.items():
-                shuffle(v)
-                x[k] = v
-
-            self.label_to_sequence = x
+        for label, sequenceset in self.label_to_sequence.items():
+            # sequenceset contains [[lab1, lab2..], sequence]
+            self.sequences_and_labels.extend(sequenceset)
+        shuffle(self.sequences_and_labels)
 
     def shuffle(self):
         """
@@ -213,10 +177,7 @@ class LabelMapping:
         :return: None
         :rtype: None
         """
-        if self.no_resample:
-            shuffle(self.sequences_and_labels)
-        else:
-            shuffle(self.names)
+        shuffle(self.sequences_and_labels)
 
 
 class ProteinSequenceDataset(SequenceDataset):
