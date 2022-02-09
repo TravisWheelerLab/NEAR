@@ -28,6 +28,7 @@ class Prot2Vec(BaseModel):
         normalize_output_embedding=True,
         training=True,
         fcnn=False,
+        pos_weight=1,
         **kwargs,
     ):
 
@@ -41,8 +42,9 @@ class Prot2Vec(BaseModel):
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
         self.fcnn = fcnn
+        self.pos_weight = pos_weight
 
-        self.loss_func = torch.nn.BCEWithLogitsLoss()
+        self.loss_func = torch.nn.BCEWithLogitsLoss(torch.tensor(self.pos_weight))
         self.class_act = torch.nn.Sigmoid()
 
         if training:

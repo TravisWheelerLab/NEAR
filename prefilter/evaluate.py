@@ -25,6 +25,7 @@ def recall_for_each_significant_label(
     dataloader,
     name_to_class_code,
     figure_path,
+    multi_prediction,
     device="cuda",
     classification_threshold=0.5,
 ):
@@ -52,10 +53,18 @@ def recall_for_each_significant_label(
         j += 1
 
         for seq, labelset in zip(pred, string_labels):
+            if multi_prediction:
+                set_of_preds = set([t.item() for t in torch.where(seq == 1)[0]])
             for i, label in enumerate(labelset):
+                if isinstance(label, list):
+                    label = label[0]
                 idx = name_to_class_code[label]
-                if seq[idx] == 1:
-                    correct[i + 1] += 1
+                if multi_prediction:
+                    if idx in set_of_preds:
+                        correct[i + 1] += 1
+                else:
+                    if seq[idx] == 1:
+                        correct[i + 1] += 1
                 total[i + 1] += 1
 
     fig, ax = plt.subplots(nrows=2, figsize=(13, 10))
@@ -82,11 +91,17 @@ def recall_for_each_significant_label(
     ax[0].set_xlabel("label rank (lower=lower e-value)")
     ax[0].set_ylabel("num labels")
 
-    ax[1].bar(np.arange(len(correct)), correct / total, label="ratio of correct/total")
+    ax[1].plot(
+        np.arange(len(correct)), correct / total, "ko", label="ratio of correct/total"
+    )
     ax[1].set_xlabel("label rank (lower=lower e-value)")
     ax[1].set_ylabel("% of label at rank K recalled")
     plt.suptitle("recall broken down by rank of label.")
     ax[1].legend(loc="upper left")
+
+    if multi_prediction:
+        figure_path, ext = os.path.splitext(figure_path)
+        figure_path += "_multilabel" + ext
 
     plt.savefig(utils.handle_figure_path(figure_path))
     plt.close()
@@ -94,7 +109,13 @@ def recall_for_each_significant_label(
 
 @torch.no_grad()
 def primary_and_neighborhood_recall(
-    model, dataloader, name_to_class_code, figure_path, device="cuda"
+    model,
+    dataloader,
+    name_to_class_code,
+    figure_path,
+    multi_prediction,
+    titlestr,
+    device="cuda",
 ):
     """
     Plot the recall of the model for primary and neighborhood labels.
@@ -140,16 +161,33 @@ def primary_and_neighborhood_recall(
                 total[i] += 1
             for threshold in thresholds:
                 seq[seq >= threshold] = 1
-                fps = torch.sum(seq[(labelvec != 1).bool() & (seq == 1).bool()]).item()
+                if multi_prediction:
+                    # collapse set of predictions (n_classesxn_preds)
+                    # down to the unique predictions
+                    set_of_preds = set([t.item() for t in torch.where(seq == 1)[0]])
+                    set_of_tps = set([t.item() for t in torch.where(labelvec == 1)[0]])
+                    fps = len(set_of_preds - set_of_tps)
+                else:
+                    fps = torch.sum(
+                        seq[(labelvec != 1).bool() & (seq == 1).bool()]
+                    ).item()
+
                 threshold_to_fps[threshold] += fps
+
                 for i, label in enumerate(labelset):
                     if isinstance(label, list):
                         label = label[0]
                     idx = name_to_class_code[label]
-                    if seq[idx] == 1 and i == 0:
-                        primary_recall[threshold] += 1
-                    elif seq[idx] == 1 and i != 0:
-                        neighborhood_recall[threshold] += 1
+                    if multi_prediction:
+                        if idx in set_of_preds and i == 0:
+                            primary_recall[threshold] += 1
+                        elif idx in set_of_preds and i != 0:
+                            neighborhood_recall[threshold] += 1
+                    else:
+                        if seq[idx] == 1 and i == 0:
+                            primary_recall[threshold] += 1
+                        elif seq[idx] == 1 and i != 0:
+                            neighborhood_recall[threshold] += 1
 
     total_primary_labels = total[0]
     total_neighborhood_labels = sum([total[i] for i in range(1, len(total))])
@@ -187,10 +225,19 @@ def primary_and_neighborhood_recall(
     ax1.legend(loc="upper right")
     ax.legend(loc="upper left")
     ax.set_xlabel("sigmoid threshold")
+    ax.set_ylim([0, 1])
     ax.set_ylabel("% of true positives recalled")
     ax.set_title("primary and neighborhood recall as a function of sigmoid threshold")
 
+    if titlestr is not None:
+        ax.set_title(f"_{titlestr}")
+
+    if multi_prediction:
+        figure_path, ext = os.path.splitext(figure_path)
+        figure_path += "_multilabel" + ext
+
     plt.savefig(utils.handle_figure_path(figure_path))
+
     plt.close()
 
 
@@ -204,6 +251,7 @@ def _aggregate_family_wise_metrics(
     classification_threshold,
     just_primary,
     just_neighborhood,
+    multi_prediction,
     device="cuda",
 ):
     j = 0
@@ -220,14 +268,23 @@ def _aggregate_family_wise_metrics(
         j += 1
         for seq, labelset, labelvec in zip(pred, string_labels, labels):
             seq[seq >= classification_threshold] = 1
+
+            if multi_prediction:
+                set_of_preds = set([t.item() for t in torch.where(seq == 1)[0]])
+
             if just_primary:
                 label = labelset[0]
                 if isinstance(label, list):
                     label = label[0]
                 idx = name_to_class_code[label]
                 family_to_num_seq[label] += 1
-                if seq[idx] == 1:
-                    family_to_tps[label] += 1
+                if multi_prediction:
+                    if idx in set_of_preds:
+                        family_to_tps[label] += 1
+                else:
+                    if seq[idx] == 1:
+                        family_to_tps[label] += 1
+
             elif just_neighborhood:
                 labelset = labelset[1:]
                 for i, label in enumerate(labelset):
@@ -235,16 +292,26 @@ def _aggregate_family_wise_metrics(
                         label = label[0]
                     idx = name_to_class_code[label]
                     family_to_num_seq[label] += 1
-                    if seq[idx] == 1:
-                        family_to_tps[label] += 1
+
+                    if multi_prediction:
+                        if idx in set_of_preds:
+                            family_to_tps[label] += 1
+                    else:
+                        if seq[idx] == 1:
+                            family_to_tps[label] += 1
+
             else:
                 for i, label in enumerate(labelset):
                     if isinstance(label, list):
                         label = label[0]
                     idx = name_to_class_code[label]
                     family_to_num_seq[label] += 1
-                    if seq[idx] == 1:
-                        family_to_tps[label] += 1
+                    if multi_prediction:
+                        if idx in set_of_preds:
+                            family_to_tps[label] += 1
+                    else:
+                        if seq[idx] == 1:
+                            family_to_tps[label] += 1
 
     return family_to_tps, family_to_num_seq
 
@@ -260,10 +327,13 @@ def recall_per_family(
     device="cuda",
     just_primary=False,
     just_neighborhood=False,
+    multi_prediction=False,
 ):
     """
     Plot the recall on a family-wise basis; try to answer "Does model performance increase when there are more sequences
     in train from a given family?"
+    :param multi_prediction:
+    :type multi_prediction:
     :param emission_files: files containing emission sequences
     :type emission_files: List[str]
     :param model: model to evaluate
@@ -328,6 +398,7 @@ def recall_per_family(
         classification_threshold,
         just_primary=just_primary,
         just_neighborhood=just_neighborhood,
+        multi_prediction=multi_prediction,
         device=device,
     )
     train_num_seq = []
@@ -338,6 +409,8 @@ def recall_per_family(
         if emission_files is not None:
             if family in emission_family_to_num_seq:
                 emission_seq = emission_family_to_num_seq[family]
+            else:
+                emission_seq = 0
             train_num_seq.append(train_family_to_num_seq[family] + emission_seq)
         else:
             train_num_seq.append(train_family_to_num_seq[family])
@@ -386,7 +459,12 @@ def recall_per_family(
 
     plt.suptitle(f"per-family performance, {title}")
 
+    if multi_prediction:
+        figure_path, ext = os.path.splitext(figure_path)
+        figure_path += "_multilabel" + ext
+
     plt.savefig(utils.handle_figure_path(figure_path))
+
     plt.close()
 
 
@@ -443,7 +521,10 @@ def create_parser():
     recall_parser.add_argument("model_path")
     recall_parser.add_argument("hparams_path")
     recall_parser.add_argument("figure_path")
+    recall_parser.add_argument("-e", "--emission_sequence_path", default=None)
+    recall_parser.add_argument("-t", "--titlestr", default=None)
     recall_parser.add_argument("--key", default="val_files", type=str)
+    recall_parser.add_argument("--multilabel", action="store_true")
 
     recall_per_fam_parser = sp.add_parser(
         name="recall_per_family",
@@ -458,11 +539,7 @@ def create_parser():
     )
     recall_per_fam_parser.add_argument("--just_primary", action="store_true")
     recall_per_fam_parser.add_argument("--just_neighborhood", action="store_true")
-    recall_per_fam_parser.add_argument(
-        "--emission_sequence_path",
-        default=None,
-        help="where emission sequences" " are stored.",
-    )
+    recall_per_fam_parser.add_argument("--multilabel", action="store_true")
 
     primary_parser = sp.add_parser(
         name="ranked_recall", description="plot the recall for each rank of label."
@@ -470,6 +547,7 @@ def create_parser():
     primary_parser.add_argument("model_path")
     primary_parser.add_argument("hparams_path")
     primary_parser.add_argument("figure_path")
+    primary_parser.add_argument("--multilabel", action="store_true")
     primary_parser.add_argument("--key", default="val_files", type=str)
     primary_parser.add_argument(
         "-c", "--classification_threshold", default=0.5, type=float
@@ -488,11 +566,11 @@ def main():
     with open(hparams_path, "r") as src:
         hparams = yaml.safe_load(src)
 
-    dev = "cuda:3" if torch.cuda.is_available() else "cpu"
+    dev = "cuda:2" if torch.cuda.is_available() else "cpu"
     checkpoint = torch.load(model_path, map_location=torch.device(dev))
     state_dict = checkpoint["state_dict"]
-    del state_dict["loss_func.pos_weight"]
     hparams["training"] = False
+    state_dict["loss_func.weight"] = torch.tensor(10)
 
     model = models.Prot2Vec(**hparams).to(dev)
     success = model.load_state_dict(state_dict)
@@ -502,10 +580,15 @@ def main():
 
     if args.command == "recall":
         files = hparams[args.key]
+        if args.emission_sequence_path is not None:
+            emission_files = glob(os.path.join(args.emission_sequence_path, "*fa"))
+            files = emission_files
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
         dataloader = torch.utils.data.DataLoader(
-            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels,
+            dataset,
+            batch_size=64,
+            collate_fn=utils.pad_batch_with_labels,
             shuffle=True,
         )
         primary_and_neighborhood_recall(
@@ -513,16 +596,15 @@ def main():
             dataloader,
             name_to_class_code,
             args.figure_path,
+            titlestr=args.titlestr,
+            multi_prediction=args.multilabel,
             device=dev,
         )
     elif args.command == "recall_per_family":
         files = hparams["val_files"]
         name_to_class_code = hparams["name_to_class_code"]
-
-        if args.emission_sequence_path is not None:
-            emission_files = glob(os.path.join(args.emission_sequence_path, "*fa"))
-        else:
-            emission_files = None
+        # None or List[str].
+        emission_files = hparams.get("emission_files")
 
         dataset = utils.RankingIterator(files, name_to_class_code)
 
@@ -542,6 +624,7 @@ def main():
             emission_files=emission_files,
             just_primary=args.just_primary,
             just_neighborhood=args.just_neighborhood,
+            multi_prediction=args.multilabel,
             device=dev,
         )
 
@@ -557,6 +640,7 @@ def main():
             dataloader,
             name_to_class_code,
             args.figure_path,
+            args.multilabel,
             classification_threshold=args.classification_threshold,
             device=dev,
         )

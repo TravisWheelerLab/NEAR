@@ -57,7 +57,10 @@ class SequenceDataset(torch.utils.data.Dataset):
         for labelstring in labels:
 
             if isinstance(labelstring, list):
-                label, begin, end = labelstring
+                if len(labelstring) == 3:
+                    label, begin, end = labelstring
+                elif len(labelstring) == 4:
+                    label, begin, end, evalue = labelstring
             else:
                 label = labelstring
                 begin, end = 0, len_sequence

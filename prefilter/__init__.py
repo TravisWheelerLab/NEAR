@@ -78,6 +78,7 @@ def main():
     train_parser.add_argument("--n_seq_per_fam", default=None)
     train_parser.add_argument("--emission_sequence_path", default=None)
     train_parser.add_argument("--fcnn", action="store_true")
+    train_parser.add_argument("--pos_weight", type=int, default=1)
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

@@ -45,10 +45,14 @@ class BaseModel(pl.LightningModule):
             self.train_f1 = torchmetrics.F1()
             self.val_f1 = torchmetrics.F1()
             self.accuracy = torchmetrics.Accuracy()
+            self.train_recall = torchmetrics.Recall()
+            self.val_recall = torchmetrics.Recall()
         else:
             self.train_f1 = torchmetrics.F1(ignore_index=0)
             self.val_f1 = torchmetrics.F1(ignore_index=0)
             self.accuracy = torchmetrics.Accuracy(ignore_index=0)
+            self.train_recall = torchmetrics.Recall(ignore_index=0)
+            self.val_recall = torchmetrics.Recall(ignore_index=0)
 
         if self.log_confusion_matrix:
 
@@ -100,6 +104,7 @@ class BaseModel(pl.LightningModule):
         if self.log_confusion_matrix:
             self.train_confusion.update(logits, labels)
         self.train_f1.update(logits, labels)
+        self.train_recall.update(logits, labels)
         return {"loss": loss, "train_acc": acc}
 
     def validation_step(self, batch, batch_nb):
@@ -107,6 +112,7 @@ class BaseModel(pl.LightningModule):
         if self.log_confusion_matrix:
             self.val_confusion.update(logits, labels)
         self.val_f1.update(logits, labels)
+        self.val_recall.update(logits, labels)
         return {"val_loss": loss, "val_acc": acc}
 
     def configure_optimizers(self):
@@ -134,6 +140,7 @@ class BaseModel(pl.LightningModule):
         if self.log_confusion_matrix:
             self.log_cmat(self.train_confusion, "train/cmat")
         self.log("train/f1", self.train_f1.compute())
+        self.log("train/recall", self.train_recall.compute())
         self.train_dataset.label_to_sequence.shuffle()
 
     def on_train_start(self):
@@ -161,6 +168,7 @@ class BaseModel(pl.LightningModule):
         if self.log_confusion_matrix:
             self.log_cmat(self.val_confusion, "val/cmat")
         self.log("val/f1", self.val_f1.compute())
+        self.log("val/recall", self.val_recall.compute())
 
     def train_dataloader(self):
         if self.batch_size == 1:

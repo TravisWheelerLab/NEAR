@@ -123,6 +123,7 @@ def main(args):
         res_bottleneck_factor=args.res_bottleneck_factor,
         dilation_rate=args.dilation_rate,
         fcnn=args.fcnn,
+        pos_weight=args.pos_weight,
         **data_and_optimizer_kwargs,
     )
 
@@ -138,10 +139,10 @@ def main(args):
         )
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/f1",
-            mode="max",
-            filename="{epoch}-{val/f1:.5f}",
-            save_top_k=5,
+            monitor="val/loss",
+            mode="min",
+            filename="{epoch}-{val/loss:.5f}",
+            save_top_k=50,
         )
 
     last_epoch = 0

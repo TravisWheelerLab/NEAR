@@ -137,6 +137,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
         raise ValueError("File does not contain | as a delimiter. Exiting.")
 
     if "(" in labelstring:
+        # labelstring: ACC_ID (BEGIN, END, E_VALUE)
         labels = (
             labelstring[begin_char + 1 :]
             .replace(",", "")
@@ -146,9 +147,14 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
         )
         labels = list(filter(len, labels))
         labelset = []
-        for i in range(0, len(labels), 3):
-            accession_id, begin, end = labels[i], labels[i + 1], labels[i + 2]
-            labelset.append([accession_id, begin, end])
+        for i in range(0, len(labels), 4):
+            accession_id, begin, end, e_value = (
+                labels[i],
+                labels[i + 1],
+                labels[i + 2],
+                labels[i + 3],
+            )
+            labelset.append([accession_id, begin, end, e_value])
         labels = labelset
     else:
         labels = labelstring[begin_char + 1 :].split(" ")

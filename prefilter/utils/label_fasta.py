@@ -37,11 +37,13 @@ DOMTBLOUT_COL_NAMES = [
 
 
 def emit_and_inject_labels(
-    fasta_files: List[str], output_directory: str, hmm_directory: str
+    fasta_files: List[str],
+    output_directory: str,
+    ali_directory: str,
+    n: int,
+    relent: float = 0.59,
+    pid: float = 0.5,
 ) -> None:
-
-    ns = [500, 1000, 1500, 2000]
-
     with open(name_to_accession_id, "r") as src:
         nta = yaml.safe_load(src)
     accession_id_to_name = {v: k for k, v in nta.items()}
@@ -50,26 +52,41 @@ def emit_and_inject_labels(
         # get neighborhood labels
         labels, _ = utils.fasta_from_file(fasta_file)
         neighborhoods = [utils.parse_labels(labelset)[1:] for labelset in labels]
-        neighborhoods = set([l for n in neighborhoods for l in n])
+        neighborhoods_ = []
+        for neighborhood_label in neighborhoods:
+            if len(neighborhood_label) > 1:
+                for nn in neighborhood_label:
+                    neighborhoods_.append(nn[0])
+        neighborhoods = neighborhoods_
         for neighborhood_label in neighborhoods:
             # convert the PF accession id to a name
             try:
                 family_name = accession_id_to_name[neighborhood_label]
-                # get correct hmm
-                hmm_file = os.path.join(
-                    hmm_directory,
-                    os.path.splitext(os.path.basename(fasta_file))[0] + ".hmm",
+                # get correct alignment
+                ali_file = os.path.join(
+                    ali_directory,
+                    f"{family_name}.{pid}-train.sto",
                 )
+                tmp_hmm_file = random_filename(".")
+                # create hmm with correct --ere value (relative entropy)
+                # the default is 0.59, per hmmer user guide.
+
+                outf = os.path.join(output_directory, family_name + "_emission.fa")
+                if os.path.isfile(outf):
+                    pfunc(f"Emission sequences already generated for {family_name}")
+                    continue
+
+                if relent != 0.59:
+                    subprocess.call(
+                        f"hmmbuild --ere {relent} {tmp_hmm_file} {ali_file}".split()
+                    )
+                else:
+                    subprocess.call(f"hmmbuild {tmp_hmm_file} {ali_file}".split())
+
                 tmp_emission_path = random_filename(".")
-                n = ns[int(np.random.rand() * len(ns))]
-                if os.path.isfile(hmm_file):
-                    outf = os.path.join(output_directory, family_name + "_emission.fa")
+                if os.path.isfile(tmp_hmm_file):
 
-                    if os.path.isfile(outf):
-                        pfunc(f"Emission sequences already generated for {family_name}")
-                        continue
-
-                    cmd = f"hmmemit -o {tmp_emission_path} -N {n} {hmm_file}"
+                    cmd = f"hmmemit -o {tmp_emission_path} -N {n} {tmp_hmm_file}"
                     subprocess.call(cmd.split())
                     labels, sequences = utils.fasta_from_file(tmp_emission_path)
 
@@ -81,6 +98,9 @@ def emit_and_inject_labels(
 
                     pfunc(outf)
                     os.remove(tmp_emission_path)
+                    os.remove(tmp_hmm_file)
+                else:
+                    raise ValueError(f"no hmm file found for {family_name}")
 
             except KeyError:
                 pfunc(f"fasta file {fasta_file} did not contain {family_name}")
@@ -105,7 +125,11 @@ def random_filename(directory="/tmp/"):
     :return: random filename in directory
     :rtype: str
     """
-    return os.path.join(directory, str(time.time()))
+    x = os.path.join(directory, str(time.time()))
+    while os.path.isfile(x):
+        print("racing..")
+        x = os.path.join(directory, str(time.time()))
+    return x
 
 
 def job_completed(slurm_jobid):
@@ -139,7 +163,7 @@ def parse_domtblout(domtbl):
     """
 
     if os.path.splitext(domtbl)[1] != ".domtblout":
-        raise ValueError(f"must pass a .domtblout file, found {tbl}")
+        raise ValueError(f"must pass a .domtblout file, found {domtbl}")
 
     df = pd.read_csv(
         domtbl,
@@ -235,12 +259,19 @@ def create_parser():
         description="inject neighborhood injection sequences into the"
         " the training set",
     )
+    injection_parser.add_argument("n", help="how many emission sequences to generate")
     injection_parser.add_argument("fasta_files", nargs="+")
     injection_parser.add_argument(
         "output_directory", help="where to save the emitted sequences"
     )
     injection_parser.add_argument(
-        "hmm_directory", help="where the .hmm files are saved"
+        "ali_directory", help="where the .hmm files are saved"
+    )
+    injection_parser.add_argument(
+        "--relent",
+        default=0.59,
+        type=float,
+        help="relative entropy to use when building hmms",
     )
 
     return parser
@@ -262,7 +293,7 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
     :return: None.
     :rtype: None.
     """
-    if os.path.isfile(fasta_out):
+    if os.path.isfile(fasta_out) and os.stat(fasta_out).st_size != 0:
         pfunc(f"Already created labels for {fasta_out}.")
         return
 
@@ -279,7 +310,7 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
                 domtblout_df["target_name"] == target_label
             ]
 
-            assigned_labels = assigned_labels.sort_by(["e_value"], ascending=False)
+            assigned_labels = assigned_labels.sort_values(["e_value"])
 
             if len(assigned_labels) == 0:
                 # why are some sequences not classified? They're in Pfam-seed,
@@ -293,16 +324,18 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
                 assigned_labels = domtblout_df.loc[
                     domtblout_df["target_name"] == target_label
                 ]
+
                 if len(assigned_labels) == 0:
-                    pfunc(
-                        f"sequence named {target_label} not found in classification on {fasta_in}"
-                    )
+                    # pfunc(
+                    #     f"sequence named {target_label} not found in classification on {fasta_in}"
+                    # )
                     continue
             # each sequence should have at least one label, but we
             # only need to grab one since one sequence can be associated with
             # multiple pfam accession IDs
             fasta_header = f">{label} |"
             init_len = len(fasta_header)
+            prev_evalue = None
 
             for seq_label, e_value, begin_coord, end_coord in zip(
                 assigned_labels["accession_id"],
@@ -315,8 +348,15 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
                         f"Pfam accession ID not found in labels in {domtblout_df}"
                     )
 
+                if prev_evalue is None:
+                    prev_evalue = float(e_value)
+                elif prev_evalue > float(e_value):
+                    raise ValueError("Unsorted e-values. Please fix.")
+
                 if float(e_value) <= evalue_threshold:
-                    fasta_header += f" {seq_label} ({begin_coord}, {end_coord})"
+                    fasta_header += (
+                        f" {seq_label} ({begin_coord}, {end_coord}, {e_value})"
+                    )
 
             if len(fasta_header) != init_len:
                 fasta_header += "\n" + sequence + "\n"
@@ -652,7 +692,9 @@ if __name__ == "__main__":
         emit_and_inject_labels(
             program_args.fasta_files,
             program_args.output_directory,
-            program_args.hmm_directory,
+            program_args.ali_directory,
+            program_args.n,
+            relent=program_args.relent,
         )
     else:
         pfunc(program_args)
