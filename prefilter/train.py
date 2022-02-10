@@ -113,6 +113,7 @@ def main(args):
         "log_confusion_matrix": args.log_confusion_matrix,
         "n_seq_per_fam": args.n_seq_per_fam,
         "name_to_class_code": name_to_class_code,
+        "n_emission_sequences": args.n_emission_sequences,
     }
     # set up the model
     model = Prot2Vec(
@@ -128,6 +129,7 @@ def main(args):
     )
 
     # create the checkpoint callbacks (shopty requires the one name "checkpoint callback")
+    early_stopping_callback = None
     if args.shoptimize:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
             dirpath=checkpoint_dir, save_last=True, save_top_k=0, verbose=True
@@ -139,10 +141,17 @@ def main(args):
         )
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/loss",
-            mode="min",
-            filename="{epoch}-{val/loss:.5f}",
+            monitor="val/f1",
+            mode="max",
+            filename="epoch_{epoch}-val_loss_{val/loss:.5f}_val_f1_{val/f1:.5f}",
+            auto_insert_metric_name=False,
             save_top_k=50,
+        )
+        early_stopping_callback = pl.callbacks.EarlyStopping(
+            monitor="val/f1",
+            mode="max",
+            min_delta=0.0024,
+            patience=300,
         )
 
     last_epoch = 0
@@ -160,10 +169,22 @@ def main(args):
 
     # callback to monitor learning rate in tensorboard
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
+    gpus = args.gpus
+    if args.specify_gpus:
+        # consider the input as a LIST
+        if not isinstance(gpus, list):
+            gpus = [gpus]
+    else:
+        if len(gpus) != 1:
+            raise ValueError(
+                "Set --specify_gpus if you want to target training to a specific set of GPUs."
+            )
+        else:
+            gpus = gpus[0]
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": args.gpus,
+        "gpus": gpus,
         "num_nodes": args.num_nodes,
         "max_epochs": last_epoch + (max_iter * min_unit)
         if args.shoptimize
@@ -171,7 +192,7 @@ def main(args):
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
         "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt]
         if args.shoptimize
-        else [checkpoint_callback, log_lr],
+        else [checkpoint_callback, log_lr, early_stopping_callback],
         "accelerator": "ddp" if args.gpus else None,
         "plugins": DDPPlugin(find_unused_parameters=False),
         "precision": 16 if args.gpus else 32,

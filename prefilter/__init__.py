@@ -49,7 +49,12 @@ def main():
     # train parser ---------------------------------------------------
     train_parser = subparsers.add_parser("train", help="train a model")
     train_parser.add_argument("--log_dir", required=True)
-    train_parser.add_argument("--gpus", type=int, required=True)
+    train_parser.add_argument(
+        "--gpus",
+        nargs="+",
+        type=int,
+        help="list of specific GPUs to use." " without --specify_gpus set ",
+    )
     train_parser.add_argument("--num_nodes", type=int, required=True)
     train_parser.add_argument("--epochs", type=int, required=True)
     train_parser.add_argument("--normalize_output_embedding", action="store_true")
@@ -79,6 +84,8 @@ def main():
     train_parser.add_argument("--emission_sequence_path", default=None)
     train_parser.add_argument("--fcnn", action="store_true")
     train_parser.add_argument("--pos_weight", type=int, default=1)
+    train_parser.add_argument("--n_emission_sequences", type=int)
+    train_parser.add_argument("--specify_gpus", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")
