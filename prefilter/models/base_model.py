@@ -22,18 +22,10 @@ class BaseModel(pl.LightningModule):
 
         super().__init__()
 
+        # is this bad style? Instead of defining these args in the constructor, I was lazy.
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-        self.sigmoid_threshold_to_tps_passed = defaultdict(int)
-        self.sigmoid_threshold_to_num_passed = defaultdict(int)
-        self.sigmoid_threshold_to_decoys_passed = defaultdict(int)
-        self.sigmoid_threshold_to_tps_missed = defaultdict(int)
-        self.sigmoid_threshold_to_fps_passed = defaultdict(int)
-        self.thresholds = range(10, 101, 5)[::-1]
-        self.thresholds = [t / 100 for t in self.thresholds]
-        self.total_sequences = 0
-        self.total_true_labels = 0
         self.val_confusion = None
         self.train_confusion = None
 
@@ -42,8 +34,8 @@ class BaseModel(pl.LightningModule):
 
     def _init_metrics(self):
         if self.fcnn:
-            self.train_f1 = torchmetrics.F1()
-            self.val_f1 = torchmetrics.F1()
+            self.train_f1 = torchmetrics.F1(threshold=0.05)
+            self.val_f1 = torchmetrics.F1(threshold=0.05)
             self.accuracy = torchmetrics.Accuracy()
             self.train_recall = torchmetrics.Recall()
             self.val_recall = torchmetrics.Recall()
@@ -69,6 +61,7 @@ class BaseModel(pl.LightningModule):
             self.train_files,
             self.name_to_class_code,
             self.n_seq_per_fam,
+            self.n_emission_sequences,
         )
 
         self.val_dataset = utils.SimpleSequenceIterator(

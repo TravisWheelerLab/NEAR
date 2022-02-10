@@ -54,6 +54,7 @@ class Prot2Vec(BaseModel):
         self._setup_layers()
 
         if training:
+            # TODO: Why is self.hparams not intialized before self.save_hyperparameters() is called?
             self.save_hyperparameters()
             self.hparams["name_to_class_code"] = self.name_to_class_code
             self.hparams["n_classes"] = self.n_classes
@@ -156,36 +157,3 @@ class Prot2Vec(BaseModel):
         acc = self.accuracy(preds, labels)
 
         return loss, acc, logits, labels
-
-
-if __name__ == "__main__":
-
-    model = Prot2Vec(256, 23, 3, 5, 2, 2, fcnn=False, training=False, n_classes=1000)
-    # batch size x n AA x n characters
-    from sys import stdout
-
-    tensor = torch.rand((1, 23, 233))
-    tensor[tensor < 0.5] = 0
-    labels = torch.rand((1, 1000))
-    labels[labels < 0.9] = 0
-    labels[labels != 0] = 1
-    # output should be 32 1000 233
-
-    optim = torch.optim.Adam(model.parameters())
-    lfunc = torch.nn.BCEWithLogitsLoss()
-    model = model.to("cuda:2")
-    labels = labels.to("cuda:2")
-    tensor = tensor.to("cuda:2")
-
-    for _ in range(1000):
-
-        optim.zero_grad()
-        preds = model(tensor)
-        loss = model.loss_func(preds, labels)
-        loss.backward()
-        optim.step()
-        stdout.write(f"loss: {loss.item()}\r")
-
-    print(model.class_act(preds[0, :10]))
-    print(labels[0, :10])
-    print(loss.item())
