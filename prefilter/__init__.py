@@ -65,8 +65,6 @@ def main():
     train_parser.add_argument("--check_val_every_n_epoch", type=int, required=True)
     train_parser.add_argument("--model_name", type=str, required=True)
     train_parser.add_argument("--data_path", type=str, required=True)
-    train_parser.add_argument("--decoy_path", type=str, required=True)
-    train_parser.add_argument("--tune_initial_lr", action="store_true")
     train_parser.add_argument("--schedule_lr", action="store_true")
     train_parser.add_argument("--step_lr_step_size", type=int, default=None)
     train_parser.add_argument("--step_lr_decay_factor", type=float, default=None)
@@ -81,7 +79,9 @@ def main():
     train_parser.add_argument("--shoptimize", action="store_true")
     train_parser.add_argument("--log_confusion_matrix", action="store_true")
     train_parser.add_argument("--n_seq_per_fam", default=None)
-    train_parser.add_argument("--emission_sequence_path", default=None)
+    train_parser.add_argument(
+        "--emission_sequence_path", nargs="+", type=str, default=None
+    )
     train_parser.add_argument("--fcnn", action="store_true")
     train_parser.add_argument("--pos_weight", type=int, default=1)
     train_parser.add_argument("--n_emission_sequences", type=int)

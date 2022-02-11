@@ -40,13 +40,13 @@ def main(args):
         max_iter = args.epochs
 
     data_path = args.data_path
-    emission_sequence_path = args.emission_sequence_path
 
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     # select a subset of files to train on
-    train_files = glob(os.path.join(data_path, "*train.fa"))
+    train_files = glob(os.path.join(data_path, "*train.fa"))[:4]
+    print(train_files)
 
     if not (len(train_files)):
         raise ValueError("no train files")
@@ -66,33 +66,25 @@ def main(args):
 
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences
-    if emission_sequence_path is not None:
-        if "$HOME" in emission_sequence_path:
-            emission_sequence_path = emission_sequence_path.replace(
-                "$HOME", os.environ["HOME"]
-            )
-        emission_files = glob(os.path.join(emission_sequence_path, "*fa"))
-        if not len(emission_files):
-            raise ValueError(f"no emission files found at {emission_sequence_path}")
+    if args.emission_sequence_path is not None:
+        emission_files = []
+        for emission_sequence_path in args.emission_sequence_path:
+            break
+            print(emission_sequence_path)
+            if "$HOME" in emission_sequence_path:
+                emission_sequence_path = emission_sequence_path.replace(
+                    "$HOME", os.environ["HOME"]
+                )
+            emission_files.extend(glob(os.path.join(emission_sequence_path, "*fa")))
+            if not len(emission_files):
+                raise ValueError(f"no emission files found at {emission_sequence_path}")
 
-    # create an overall class code mapping.
-    # This is done on each training run. The alternative is keeping a shared mapping of name to class code but this can
-    # waste a bunch of compute. For example, if you're training on a small subset of files you only want to classify the
-    # labels that appear in the small subset.
-
-    if emission_sequence_path is not None:
+    if args.emission_sequence_path is not None:
         name_to_class_code = create_class_code_mapping(
             train_files + val_files + emission_files
         )
     else:
         name_to_class_code = create_class_code_mapping(train_files + val_files)
-
-    print("=========")
-    print(len(name_to_class_code))
-    print("=========")
-
-    # TODO: remove decoy file stuff
-    decoy_files = glob(os.path.join(args.decoy_path, "*.fa"))
 
     # these options are ingested into the class that all models should subclass. They control how the dataset
     # behaves and what variables to log.
@@ -104,13 +96,11 @@ def main(args):
         if emission_sequence_path is not None
         else None,
         "val_files": val_files,
-        "decoy_files": decoy_files,
         "schedule_lr": args.schedule_lr,
         "step_lr_step_size": args.step_lr_step_size,
         "step_lr_decay_factor": args.step_lr_decay_factor,
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
-        "log_confusion_matrix": args.log_confusion_matrix,
         "n_seq_per_fam": args.n_seq_per_fam,
         "name_to_class_code": name_to_class_code,
         "n_emission_sequences": args.n_emission_sequences,
@@ -125,10 +115,20 @@ def main(args):
         dilation_rate=args.dilation_rate,
         fcnn=args.fcnn,
         pos_weight=args.pos_weight,
-        **data_and_optimizer_kwargs,
+        learning_rate=args.learning_rate,
+        train_files=train_files,
+        emission_files=emission_files,
+        val_files=val_files,
+        schedule_lr=args.schedule_lr,
+        step_lr_step_size=args.step_lr_step_size,
+        step_lr_decay_factor=args.step_lr_decay_factor,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        n_seq_per_fam=args.n_seq_per_fam,
+        name_to_class_code=name_to_class_code,
     )
 
-    # create the checkpoint callbacks (shopty requires the one name "checkpoint callback")
+    # create the checkpoint callbacks (shopty requires the one named "checkpoint callback")
     early_stopping_callback = None
     if args.shoptimize:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
@@ -171,7 +171,6 @@ def main(args):
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
     gpus = args.gpus
     if args.specify_gpus:
-        # consider the input as a LIST
         if not isinstance(gpus, list):
             gpus = [gpus]
     else:
@@ -201,12 +200,8 @@ def main(args):
         if args.shoptimize
         else pl.loggers.TensorBoardLogger(args.log_dir),
     }
-    if args.tune_initial_lr:
-        trainer_kwargs["auto_lr_find"] = True
-        trainer = pl.Trainer(**trainer_kwargs)
-        trainer.tune(model)
-    else:
-        trainer = pl.Trainer(**trainer_kwargs)
+
+    trainer = pl.Trainer(**trainer_kwargs)
 
     ckpt_path = None
     if args.shoptimize:
