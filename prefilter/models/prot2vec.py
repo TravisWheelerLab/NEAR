@@ -25,14 +25,36 @@ class Prot2Vec(BaseModel):
         n_res_blocks,
         res_bottleneck_factor,
         dilation_rate,
+        learning_rate,
+        train_files,
+        val_files,
+        emission_files,
+        schedule_lr,
+        step_lr_step_size,
+        step_lr_decay_factor,
+        batch_size,
+        num_workers,
+        n_seq_per_fam,
+        name_to_class_code,
         normalize_output_embedding=True,
         training=True,
         fcnn=False,
         pos_weight=1,
-        **kwargs,
     ):
 
-        super(Prot2Vec, self).__init__(**kwargs)
+        super(Prot2Vec, self).__init__(
+            learning_rate=learning_rate,
+            train_files=train_files,
+            val_files=val_files,
+            emission_files=emission_files,
+            schedule_lr=schedule_lr,
+            step_lr_step_size=step_lr_step_size,
+            step_lr_decay_factor=step_lr_decay_factor,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            name_to_class_code=name_to_class_code,
+            n_seq_per_fam=n_seq_per_fam,
+        )
 
         self.res_block_n_filters = res_block_n_filters
         self.vocab_size = vocab_size

@@ -12,25 +12,43 @@ import torch
 import seaborn as sn
 import matplotlib.pyplot as plt
 from PIL import Image
+from typing import NamedTuple, List, Optional, Dict
 from collections import defaultdict
 
 __all__ = ["BaseModel"]
 
 
 class BaseModel(pl.LightningModule):
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        learning_rate: float,
+        train_files: List[str],
+        val_files: List[str],
+        emission_files: Optional[List[str]],
+        schedule_lr: bool,
+        step_lr_step_size: int,
+        step_lr_decay_factor: float,
+        batch_size: int,
+        num_workers: int,
+        n_seq_per_fam: int,
+        name_to_class_code: Dict[str, int],
+        n_emission_sequences: int,
+    ):
 
-        super().__init__()
+        super(BaseModel, self).__init__()
 
-        # is this bad style? Instead of defining these args in the constructor, I was lazy.
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-        self.val_confusion = None
-        self.train_confusion = None
-
-        if self.emission_files is not None:
-            self.train_files = self.train_files + self.emission_files
+        self.learning_rate = learning_rate
+        self.train_files = train_files
+        self.val_files = val_files
+        self.emission_files = emission_files
+        self.schedule_lr = schedule_lr
+        self.step_lr_step_size = step_lr_step_size
+        self.step_lr_decay_factor = step_lr_decay_factor
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.n_seq_per_fam = n_seq_per_fam
+        self.name_to_class_code = name_to_class_code
+        self.n_emission_sequences = n_emission_sequences
 
     def _init_metrics(self):
         if self.fcnn:
@@ -46,23 +64,22 @@ class BaseModel(pl.LightningModule):
             self.train_recall = torchmetrics.Recall(ignore_index=0)
             self.val_recall = torchmetrics.Recall(ignore_index=0)
 
-        if self.log_confusion_matrix:
-
-            self.val_confusion = torchmetrics.ConfusionMatrix(
-                num_classes=self.n_classes
-            )
-            self.train_confusion = torchmetrics.ConfusionMatrix(
-                num_classes=self.n_classes
-            )
-
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        self.train_dataset = utils.ProteinSequenceDataset(
-            self.train_files,
-            self.name_to_class_code,
-            self.n_seq_per_fam,
-            self.n_emission_sequences,
-        )
+        if self.emission_files is not None:
+            self.train_dataset = utils.ProteinSequenceDataset(
+                self.train_files + self.emission_files,
+                self.name_to_class_code,
+                self.n_seq_per_fam,
+                self.n_emission_sequences,
+            )
+        else:
+            self.train_dataset = utils.ProteinSequenceDataset(
+                self.train_files,
+                self.name_to_class_code,
+                self.n_seq_per_fam,
+                self.n_emission_sequences,
+            )
 
         self.val_dataset = utils.SimpleSequenceIterator(
             self.val_files,
@@ -94,16 +111,12 @@ class BaseModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         loss, acc, logits, labels = self._shared_step(batch)
-        if self.log_confusion_matrix:
-            self.train_confusion.update(logits, labels)
         self.train_f1.update(logits, labels)
         self.train_recall.update(logits, labels)
         return {"loss": loss, "train_acc": acc}
 
     def validation_step(self, batch, batch_nb):
         loss, acc, logits, labels = self._shared_step(batch)
-        if self.log_confusion_matrix:
-            self.val_confusion.update(logits, labels)
         self.val_f1.update(logits, labels)
         self.val_recall.update(logits, labels)
         return {"val_loss": loss, "val_acc": acc}
@@ -130,26 +143,12 @@ class BaseModel(pl.LightningModule):
         self.log("train/loss", loss)
         self.log("train/acc", acc)
         self.log("learning_rate", self.learning_rate)
-        if self.log_confusion_matrix:
-            self.log_cmat(self.train_confusion, "train/cmat")
         self.log("train/f1", self.train_f1.compute())
         self.log("train/recall", self.train_recall.compute())
         self.train_dataset.label_to_sequence.shuffle()
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
-
-    def log_cmat(self, cmat, tag):
-        conf_mat = cmat.compute().detach().cpu().numpy().astype(np.int)
-        df_cm = pd.DataFrame(
-            conf_mat, index=np.arange(self.n_classes), columns=np.arange(self.n_classes)
-        )
-
-        fig = plt.figure(figsize=(12, 10), dpi=300)
-        sn.heatmap(df_cm, annot=True, annot_kws={"size": 1}, fmt="d")
-        self.logger.experiment.add_figure(tag, fig, global_step=self.global_step)
-        plt.close(fig)
-        cmat.reset()
 
     def validation_epoch_end(self, outputs):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
@@ -158,8 +157,6 @@ class BaseModel(pl.LightningModule):
         val_acc = torch.mean(torch.stack(val_acc))
         self.log("val/loss", val_loss)
         self.log("val/acc", val_acc)
-        if self.log_confusion_matrix:
-            self.log_cmat(self.val_confusion, "val/cmat")
         self.log("val/f1", self.val_f1.compute())
         self.log("val/recall", self.val_recall.compute())
 
