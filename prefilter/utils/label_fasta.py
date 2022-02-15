@@ -153,6 +153,38 @@ def pfunc(str):
     print(str)
 
 
+def parse_tblout(tbl):
+    """
+    Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
+    :param tbl: .domtblout filename.
+    :type tbl: str
+    :return: dataframe containing the rows of the .tblout.
+    :rtype: pd.DataFrame
+    """
+
+    if os.path.splitext(tbl)[1] != ".tblout":
+        raise ValueError(f"must pass a .tblout file, found {tbl}")
+
+    df = pd.read_csv(
+        tbl,
+        skiprows=3,
+        header=None,
+        delim_whitespace=True,
+        usecols=TBLOUT_COLS,
+        names=TBLOUT_COL_NAMES,
+        skipfooter=10,
+    )
+
+    df = df.dropna()
+
+    # "-" is the empty label
+    df["target_name"].loc[df["description"] != "-"] = (
+        df["target_name"] + " " + df["description"]
+    )
+
+    return df
+
+
 def parse_domtblout(domtbl):
     """
     Parse a .domtblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
@@ -256,8 +288,8 @@ def create_parser():
 
     injection_parser = subparsers.add_parser(
         "inject",
-        description="inject neighborhood injection sequences into the"
-        " the training set",
+        description="generate neighborhood emission sequences from the neighborhood labels contained in"
+        " fasta_files.",
     )
     injection_parser.add_argument("n", help="how many emission sequences to generate")
     injection_parser.add_argument("fasta_files", nargs="+")
@@ -265,7 +297,7 @@ def create_parser():
         "output_directory", help="where to save the emitted sequences"
     )
     injection_parser.add_argument(
-        "ali_directory", help="where the .hmm files are saved"
+        "ali_directory", help="where the .sto files are saved"
     )
     injection_parser.add_argument(
         "--relent",

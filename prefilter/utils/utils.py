@@ -147,12 +147,14 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
         )
         labels = list(filter(len, labels))
         labelset = []
-        for i in range(0, len(labels), 4):
-            accession_id, begin, end, e_value = (
+        e_value = 1e-100
+
+        for i in range(0, len(labels), 3):
+            accession_id, begin, end = (
                 labels[i],
                 labels[i + 1],
                 labels[i + 2],
-                labels[i + 3],
+                # labels[i + 3],
             )
             labelset.append([accession_id, begin, end, e_value])
         labels = labelset
@@ -161,6 +163,8 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
 
     labels = list(filter(len, labels))
 
+    print("FU")
+    exit()
     if not len(labels):
         return None
 

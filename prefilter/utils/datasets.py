@@ -3,11 +3,9 @@ import os
 import pdb
 import json
 import time
-
-import prefilter
 import torch
 import numpy as np
-import logging
+
 from collections import defaultdict
 from random import shuffle
 from typing import List, Union, Tuple, Optional, Dict
@@ -17,7 +15,6 @@ import prefilter.utils as utils
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-log = logging.getLogger(__name__)
 
 __all__ = [
     "ProteinSequenceDataset",
@@ -191,6 +188,7 @@ class ProteinSequenceDataset(SequenceDataset):
         n_seq_per_fam: Optional[int] = None,
         no_resample: bool = True,
         single_embedding: bool = True,
+        n_emission_sequences: int = 50,
     ) -> None:
 
         super().__init__(fasta_files, name_to_class_code)
@@ -199,6 +197,7 @@ class ProteinSequenceDataset(SequenceDataset):
             n_seq_per_fam=n_seq_per_fam, no_resample=no_resample
         )
         self.single_embedding = single_embedding
+        self.n_emission_sequences = n_emission_sequences
         self._build_dataset()
 
     def _build_dataset(self):
@@ -206,6 +205,12 @@ class ProteinSequenceDataset(SequenceDataset):
         # LabelMapping is used to sample at training time.
         for fasta_file in self.fasta_files:
             labels, sequences = utils.fasta_from_file(fasta_file)
+
+            if "emission" in os.path.basename(fasta_file):
+                # cut off the emission sequences at n_emission_seqs
+                labels = labels[: self.n_emission_sequences]
+                sequences = sequences[: self.n_emission_sequences]
+
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)
                 if not len(labelset):
