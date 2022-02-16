@@ -309,7 +309,7 @@ def create_parser():
     return parser
 
 
-def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
+def labels_from_file(fasta_in, fasta_out, domtblout_df):
     """
     Grabs sequences in fasta_in and their corresponding labels in the
     .tblout dataframe (tblout_df), updates the sequence headers with the labels in
@@ -385,10 +385,8 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df, evalue_threshold=1e-5):
                 elif prev_evalue > float(e_value):
                     raise ValueError("Unsorted e-values. Please fix.")
 
-                if float(e_value) <= evalue_threshold:
-                    fasta_header += (
-                        f" {seq_label} ({begin_coord}, {end_coord}, {e_value})"
-                    )
+                # removed e-value thresholding (should be done at train time)
+                fasta_header += f" {seq_label} ({begin_coord} {end_coord} {e_value})"
 
             if len(fasta_header) != init_len:
                 fasta_header += "\n" + sequence + "\n"
