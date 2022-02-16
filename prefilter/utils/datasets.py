@@ -12,9 +12,9 @@ from typing import List, Union, Tuple, Optional, Dict
 
 import prefilter
 import prefilter.utils as utils
+import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 
 __all__ = [
     "ProteinSequenceDataset",
@@ -23,6 +23,15 @@ __all__ = [
     "SimpleSequenceIterator",
     "RankingIterator",
 ]
+
+# this could be sped up if i did it vectorized
+# but whatever for now
+def _compute_soft_label(e_value: float):
+    # take care of underflow / inf values in the np.log10
+    if e_value < 1e-20:
+        e_value = 1e-20
+    x = np.clip(np.log10(e_value) * -1, 0, 20) / 20
+    return x
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -83,6 +92,13 @@ class SequenceDataset(torch.utils.data.Dataset):
         for idx in class_ids:
             y[idx] = 1
         return torch.as_tensor(y)
+
+    def _make_distillation_vector(self, labels, e_values):
+        y = np.zeros(self.n_classes)
+        class_ids = self._class_id_vector(labels)
+        for idx, e_value in zip(class_ids, e_values):
+            y[idx] = _compute_soft_label(float(e_value))
+        return torch.as_tensor(y, dtype=torch.float32)
 
     def _encoding_func(self, x):
         return utils.encode_protein_as_one_hot_vector(x.upper())
@@ -187,8 +203,8 @@ class ProteinSequenceDataset(SequenceDataset):
         name_to_class_code: Dict[str, int],
         n_seq_per_fam: Optional[int] = None,
         no_resample: bool = True,
-        single_embedding: bool = True,
         n_emission_sequences: int = 50,
+        distillation_labels: bool = False,
     ) -> None:
 
         super().__init__(fasta_files, name_to_class_code)
@@ -196,8 +212,8 @@ class ProteinSequenceDataset(SequenceDataset):
         self.label_to_sequence = LabelMapping(
             n_seq_per_fam=n_seq_per_fam, no_resample=no_resample
         )
-        self.single_embedding = single_embedding
         self.n_emission_sequences = n_emission_sequences
+        self.distillation_labels = distillation_labels
         self._build_dataset()
 
     def _build_dataset(self):
@@ -219,7 +235,10 @@ class ProteinSequenceDataset(SequenceDataset):
                     )
                 else:
                     for label in labelset:
-                        self.label_to_sequence[label] = [sequence, labelset]
+                        if isinstance(label, list):
+                            self.label_to_sequence[label[0]] = [sequence, labelset]
+                        else:
+                            self.label_to_sequence[label] = [sequence, labelset]
 
         self.label_to_sequence.compute()
 
@@ -229,10 +248,12 @@ class ProteinSequenceDataset(SequenceDataset):
     def __getitem__(self, idx):
         labels, features = self.label_to_sequence.sample(idx)
         encoded_features = self._encoding_func(features)
-        if self.single_embedding:
-            y = self._make_multi_hot(labels)
+        if self.distillation_labels:
+            e_values = [l[3] for l in labels]
+            labels = [l[0] for l in labels]
+            y = self._make_distillation_vector(labels, e_values)
         else:
-            y = self._make_label_vector(labels, len(features))
+            y = self._make_multi_hot(labels, len(features))
         return torch.as_tensor(encoded_features), y
 
 
@@ -242,12 +263,12 @@ class SimpleSequenceIterator(SequenceDataset):
     for ingestion into an ml algorithm.
     """
 
-    def __init__(self, fasta_files, name_to_class_code, single_embedding):
+    def __init__(self, fasta_files, name_to_class_code, distillation_labels):
 
         super().__init__(fasta_files, name_to_class_code)
 
         self.sequences_and_labels = []
-        self.single_embedding = single_embedding
+        self.distillation_labels = distillation_labels
 
         self._build_dataset()
 
@@ -266,12 +287,14 @@ class SimpleSequenceIterator(SequenceDataset):
 
     def __getitem__(self, idx):
         example = self.sequences_and_labels[idx]
-        if self.single_embedding:
-            return self._encoding_func(example[0]), self._make_multi_hot(example[1])
+        encoded_features = self._encoding_func(example[0])
+        if self.distillation_labels:
+            e_values = [l[3] for l in example[1]]
+            labels = [l[0] for l in example[1]]
+            y = self._make_distillation_vector(labels, e_values)
         else:
-            return self._encoding_func(example[0]), self._make_label_vector(
-                example[1], len(example[0])
-            )
+            y = self._make_multi_hot(labels, len(features))
+        return torch.as_tensor(encoded_features), y
 
     def __len__(self):
         return len(self.sequences_and_labels)
@@ -321,14 +344,21 @@ class RankingIterator(SequenceDataset):
 if __name__ == "__main__":
     from glob import glob
 
-    fs = glob("/home/tc229954/domtblouts/*fa")[:10]
+    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset/*fa"
+    fs = glob(fpath)[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
-    print(len(name_to_class_code))
-    psd = ProteinSequenceDataset(
-        fasta_files=fs, name_to_class_code=name_to_class_code, single_embedding=False
+    # psd = ProteinSequenceDataset(
+    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True,
+    # )
+    psd = SimpleSequenceIterator(
+        fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True
     )
     psd = torch.utils.data.DataLoader(
-        psd, batch_size=2, collate_fn=utils.pad_labels_and_features_in_batch
+        psd,
+        batch_size=2,
+        collate_fn=utils.pad_features_in_batch,
     )
+
     for x, y, z in psd:
-        print(x.shape, y.shape, z.shape)
+        print(z)
+        pass

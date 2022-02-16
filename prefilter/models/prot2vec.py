@@ -38,8 +38,10 @@ class Prot2Vec(BaseModel):
         name_to_class_code,
         normalize_output_embedding=True,
         training=True,
-        fcnn=False,
+        n_emission_sequences=None,
         pos_weight=1,
+        distill=False,
+        subsample_neg_labels=False,
     ):
 
         super(Prot2Vec, self).__init__(
@@ -54,6 +56,8 @@ class Prot2Vec(BaseModel):
             num_workers=num_workers,
             name_to_class_code=name_to_class_code,
             n_seq_per_fam=n_seq_per_fam,
+            n_emission_sequences=n_emission_sequences,
+            distill=distill,
         )
 
         self.res_block_n_filters = res_block_n_filters
@@ -63,8 +67,9 @@ class Prot2Vec(BaseModel):
         self.res_bottleneck_factor = res_bottleneck_factor
         self.dilation_rate = dilation_rate
         self.normalize_output_embedding = normalize_output_embedding
-        self.fcnn = fcnn
         self.pos_weight = pos_weight
+        self.n_classes = len(name_to_class_code)
+        self.subsample_neg_labels = subsample_neg_labels
 
         self.loss_func = torch.nn.BCEWithLogitsLoss(torch.tensor(self.pos_weight))
         self.class_act = torch.nn.Sigmoid()
@@ -79,7 +84,6 @@ class Prot2Vec(BaseModel):
             # TODO: Why is self.hparams not intialized before self.save_hyperparameters() is called?
             self.save_hyperparameters()
             self.hparams["name_to_class_code"] = self.name_to_class_code
-            self.hparams["n_classes"] = self.n_classes
             self.save_hyperparameters()
 
     def _setup_layers(self):
@@ -105,17 +109,9 @@ class Prot2Vec(BaseModel):
                 )
             )
 
-        if self.fcnn:
-            self.multi_receptive = MultiReceptiveFieldBlock(
-                self.res_block_n_filters, self.res_block_n_filters // 10
-            )
-            self.classification_layer = torch.nn.Conv1d(
-                self.res_block_n_filters // 10, self.n_classes, kernel_size=(1,)
-            )
-        else:
-            self.classification_layer = torch.nn.Linear(
-                self.res_block_n_filters, self.n_classes
-            )
+        self.classification_layer = torch.nn.Linear(
+            self.res_block_n_filters, self.n_classes
+        )
 
     def _masked_forward(self, x, mask):
         """
@@ -133,19 +129,13 @@ class Prot2Vec(BaseModel):
         # TODO: replace denominator of mean with the correct
         # sequence length. Also add two learnable params:
         # a power on the denominator and numerator
-        if self.fcnn:
-            return x
-        else:
-            return x.mean(axis=-1)
+        return x.mean(axis=-1)
 
     def _forward(self, x):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        if self.fcnn:
-            return x
-        else:
-            return x.mean(axis=-1)
+        return x.mean(axis=-1)
 
     def forward(self, x, mask=None):
         if mask is None:
@@ -156,26 +146,27 @@ class Prot2Vec(BaseModel):
         if self.normalize_output_embedding:
             embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
 
-        if self.fcnn:
-            embeddings = self.multi_receptive(embeddings)
-            classified = self.classification_layer(embeddings)
-        else:
-            classified = self.classification_layer(embeddings)
+        classified = self.classification_layer(embeddings)
 
         return classified
 
     def _shared_step(self, batch):
 
         features, masks, labels = batch
-        labels = labels.int()
         logits = self.forward(features, masks)
-        preds = torch.round(self.class_act(logits))
-
-        if self.fcnn:
-            labels = labels.unsqueeze(-1)
-            labels = labels.expand(-1, -1, logits.shape[-1])
+        if self.subsample_neg_labels:
+            logits = logits.ravel()
+            labels = labels.ravel()
+            # torch where returns tuple
+            bad = torch.where(labels == 0)[0]
+            good = torch.where(labels != 0)[0]
+            # grab 1/100 of the negatives
+            idx = torch.randperm(bad.shape[0])
+            bad = bad[idx]
+            bad = bad[: bad.shape[0] // 100]
+            logits = logits[torch.cat((bad, good))]
+            labels = labels[torch.cat((bad, good))]
 
         loss = self.loss_func(logits, labels.float())
-        acc = self.accuracy(preds, labels)
 
-        return loss, acc, logits, labels
+        return loss, logits, labels

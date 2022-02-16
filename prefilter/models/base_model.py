@@ -33,6 +33,7 @@ class BaseModel(pl.LightningModule):
         n_seq_per_fam: int,
         name_to_class_code: Dict[str, int],
         n_emission_sequences: int,
+        distill: bool,
     ):
 
         super(BaseModel, self).__init__()
@@ -49,20 +50,13 @@ class BaseModel(pl.LightningModule):
         self.n_seq_per_fam = n_seq_per_fam
         self.name_to_class_code = name_to_class_code
         self.n_emission_sequences = n_emission_sequences
+        self.distill = distill
 
     def _init_metrics(self):
-        if self.fcnn:
-            self.train_f1 = torchmetrics.F1(threshold=0.05)
-            self.val_f1 = torchmetrics.F1(threshold=0.05)
-            self.accuracy = torchmetrics.Accuracy()
-            self.train_recall = torchmetrics.Recall()
-            self.val_recall = torchmetrics.Recall()
-        else:
-            self.train_f1 = torchmetrics.F1(ignore_index=0)
-            self.val_f1 = torchmetrics.F1(ignore_index=0)
-            self.accuracy = torchmetrics.Accuracy(ignore_index=0)
-            self.train_recall = torchmetrics.Recall(ignore_index=0)
-            self.val_recall = torchmetrics.Recall(ignore_index=0)
+        self.train_f1 = torchmetrics.F1()
+        self.val_f1 = torchmetrics.F1()
+        self.train_recall = torchmetrics.Recall()
+        self.val_recall = torchmetrics.Recall()
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
@@ -72,6 +66,7 @@ class BaseModel(pl.LightningModule):
                 self.name_to_class_code,
                 self.n_seq_per_fam,
                 self.n_emission_sequences,
+                distillation_labels=self.distill,
             )
         else:
             self.train_dataset = utils.ProteinSequenceDataset(
@@ -79,12 +74,13 @@ class BaseModel(pl.LightningModule):
                 self.name_to_class_code,
                 self.n_seq_per_fam,
                 self.n_emission_sequences,
+                distillation_labels=self.distill,
             )
 
         self.val_dataset = utils.SimpleSequenceIterator(
             self.val_files,
             name_to_class_code=self.name_to_class_code,
-            single_embedding=True,
+            distillation_labels=self.distill,
         )
 
         self.name_to_class_code = self.val_dataset.name_to_class_code
@@ -110,16 +106,16 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError()
 
     def training_step(self, batch, batch_nb):
-        loss, acc, logits, labels = self._shared_step(batch)
-        self.train_f1.update(logits, labels)
-        self.train_recall.update(logits, labels)
-        return {"loss": loss, "train_acc": acc}
+        loss, logits, labels = self._shared_step(batch)
+        self.train_f1.update(logits, labels.int())
+        self.train_recall.update(logits, labels.int())
+        return {"loss": loss}
 
     def validation_step(self, batch, batch_nb):
-        loss, acc, logits, labels = self._shared_step(batch)
-        self.val_f1.update(logits, labels)
-        self.val_recall.update(logits, labels)
-        return {"val_loss": loss, "val_acc": acc}
+        loss, logits, labels = self._shared_step(batch)
+        self.val_f1.update(logits, labels.int())
+        self.val_recall.update(logits, labels.int())
+        return {"val_loss": loss}
 
     def configure_optimizers(self):
         if self.schedule_lr:
@@ -137,11 +133,8 @@ class BaseModel(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])
-        train_acc = self.all_gather([x["train_acc"] for x in outputs])
         loss = torch.mean(torch.stack(train_loss))
-        acc = torch.mean(torch.stack(train_acc))
         self.log("train/loss", loss)
-        self.log("train/acc", acc)
         self.log("learning_rate", self.learning_rate)
         self.log("train/f1", self.train_f1.compute())
         self.log("train/recall", self.train_recall.compute())
@@ -152,11 +145,8 @@ class BaseModel(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
-        val_acc = self.all_gather([x["val_acc"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
-        val_acc = torch.mean(torch.stack(val_acc))
         self.log("val/loss", val_loss)
-        self.log("val/acc", val_acc)
         self.log("val/f1", self.val_f1.compute())
         self.log("val/recall", self.val_recall.compute())
 

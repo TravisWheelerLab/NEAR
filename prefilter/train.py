@@ -3,7 +3,7 @@ import os
 from pytorch_lightning import seed_everything
 from time import time
 
-seed = 1639426
+seed = 16394
 seed_everything(seed)
 import torch
 import pytorch_lightning as pl
@@ -45,8 +45,7 @@ def main(args):
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     # select a subset of files to train on
-    train_files = glob(os.path.join(data_path, "*train.fa"))[:4]
-    print(train_files)
+    train_files = glob(os.path.join(data_path, "*train.fa"))
 
     if not (len(train_files)):
         raise ValueError("no train files")
@@ -69,7 +68,6 @@ def main(args):
     if args.emission_sequence_path is not None:
         emission_files = []
         for emission_sequence_path in args.emission_sequence_path:
-            break
             print(emission_sequence_path)
             if "$HOME" in emission_sequence_path:
                 emission_sequence_path = emission_sequence_path.replace(
@@ -86,26 +84,6 @@ def main(args):
     else:
         name_to_class_code = create_class_code_mapping(train_files + val_files)
 
-    # these options are ingested into the class that all models should subclass. They control how the dataset
-    # behaves and what variables to log.
-
-    data_and_optimizer_kwargs = {
-        "learning_rate": args.learning_rate,
-        "train_files": train_files,
-        "emission_files": emission_files
-        if emission_sequence_path is not None
-        else None,
-        "val_files": val_files,
-        "schedule_lr": args.schedule_lr,
-        "step_lr_step_size": args.step_lr_step_size,
-        "step_lr_decay_factor": args.step_lr_decay_factor,
-        "batch_size": args.batch_size,
-        "num_workers": args.num_workers,
-        "n_seq_per_fam": args.n_seq_per_fam,
-        "name_to_class_code": name_to_class_code,
-        "n_emission_sequences": args.n_emission_sequences,
-    }
-    # set up the model
     model = Prot2Vec(
         res_block_n_filters=args.res_block_n_filters,
         vocab_size=len(PROT_ALPHABET),
@@ -113,11 +91,12 @@ def main(args):
         n_res_blocks=args.n_res_blocks,
         res_bottleneck_factor=args.res_bottleneck_factor,
         dilation_rate=args.dilation_rate,
-        fcnn=args.fcnn,
         pos_weight=args.pos_weight,
         learning_rate=args.learning_rate,
         train_files=train_files,
-        emission_files=emission_files,
+        emission_files=emission_files
+        if args.emission_sequence_path is not None
+        else None,
         val_files=val_files,
         schedule_lr=args.schedule_lr,
         step_lr_step_size=args.step_lr_step_size,
@@ -126,6 +105,9 @@ def main(args):
         num_workers=args.num_workers,
         n_seq_per_fam=args.n_seq_per_fam,
         name_to_class_code=name_to_class_code,
+        n_emission_sequences=args.n_emission_sequences,
+        distill=args.distill,
+        subsample_neg_labels=args.subsample_neg_labels,
     )
 
     # create the checkpoint callbacks (shopty requires the one named "checkpoint callback")
@@ -141,11 +123,11 @@ def main(args):
         )
     else:
         checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/f1",
-            mode="max",
+            monitor="val/loss",
+            mode="min",
             filename="epoch_{epoch}-val_loss_{val/loss:.5f}_val_f1_{val/f1:.5f}",
             auto_insert_metric_name=False,
-            save_top_k=50,
+            save_top_k=500,
         )
         early_stopping_callback = pl.callbacks.EarlyStopping(
             monitor="val/f1",
@@ -192,10 +174,9 @@ def main(args):
         "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt]
         if args.shoptimize
         else [checkpoint_callback, log_lr, early_stopping_callback],
-        "accelerator": "ddp" if args.gpus else None,
-        "plugins": DDPPlugin(find_unused_parameters=False),
+        "strategy": "ddp" if args.gpus else None,
         "precision": 16 if args.gpus else 32,
-        "terminate_on_nan": True,
+        "detect_anomaly": True,
         "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
         if args.shoptimize
         else pl.loggers.TensorBoardLogger(args.log_dir),
