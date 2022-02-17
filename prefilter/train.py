@@ -46,6 +46,10 @@ def main(args):
 
     # select a subset of files to train on
     train_files = glob(os.path.join(data_path, "*train.fa"))
+    if args.decoy_path is not None:
+        decoy_files = glob(os.path.join(args.decoy_path, "*train.fa"))
+        if not len(decoy_files):
+            raise ValueError("no decoy files")
 
     if not (len(train_files)):
         raise ValueError("no train files")
@@ -103,11 +107,12 @@ def main(args):
         step_lr_decay_factor=args.step_lr_decay_factor,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        n_seq_per_fam=args.n_seq_per_fam,
         name_to_class_code=name_to_class_code,
         n_emission_sequences=args.n_emission_sequences,
         distill=args.distill,
         subsample_neg_labels=args.subsample_neg_labels,
+        xent=args.xent,
+        decoy_files=decoy_files if args.decoy_path is not None else None,
     )
 
     # create the checkpoint callbacks (shopty requires the one named "checkpoint callback")
@@ -176,7 +181,6 @@ def main(args):
         else [checkpoint_callback, log_lr, early_stopping_callback],
         "strategy": "ddp" if args.gpus else None,
         "precision": 16 if args.gpus else 32,
-        "detect_anomaly": True,
         "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
         if args.shoptimize
         else pl.loggers.TensorBoardLogger(args.log_dir),

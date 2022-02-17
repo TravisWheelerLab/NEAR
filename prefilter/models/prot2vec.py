@@ -34,7 +34,6 @@ class Prot2Vec(BaseModel):
         step_lr_decay_factor,
         batch_size,
         num_workers,
-        n_seq_per_fam,
         name_to_class_code,
         normalize_output_embedding=True,
         training=True,
@@ -42,6 +41,8 @@ class Prot2Vec(BaseModel):
         pos_weight=1,
         distill=False,
         subsample_neg_labels=False,
+        xent=False,
+        decoy_files=None,
     ):
 
         super(Prot2Vec, self).__init__(
@@ -55,9 +56,10 @@ class Prot2Vec(BaseModel):
             batch_size=batch_size,
             num_workers=num_workers,
             name_to_class_code=name_to_class_code,
-            n_seq_per_fam=n_seq_per_fam,
             n_emission_sequences=n_emission_sequences,
             distill=distill,
+            xent=xent,
+            decoy_files=decoy_files,
         )
 
         self.res_block_n_filters = res_block_n_filters
@@ -71,8 +73,12 @@ class Prot2Vec(BaseModel):
         self.n_classes = len(name_to_class_code)
         self.subsample_neg_labels = subsample_neg_labels
 
-        self.loss_func = torch.nn.BCEWithLogitsLoss(torch.tensor(self.pos_weight))
-        self.class_act = torch.nn.Sigmoid()
+        if self.xent:
+            self.loss_func = torch.nn.CrossEntropyLoss()
+            self.class_act = torch.nn.Softmax()
+        else:
+            self.loss_func = torch.nn.BCEWithLogitsLoss(torch.tensor(self.pos_weight))
+            self.class_act = torch.nn.Sigmoid()
 
         if training:
             self._create_datasets()
@@ -154,6 +160,32 @@ class Prot2Vec(BaseModel):
 
         features, masks, labels = batch
         logits = self.forward(features, masks)
+
+        if self.decoy_files is not None:
+            decoys = []
+            reals = []
+            for i, labelvec in enumerate(labels):
+                if torch.all(labelvec == 0):
+                    decoys.append(i)
+                else:
+                    reals.append(i)
+
+            decoy_logits = logits[decoys].ravel()
+            decoy_labels = labels[decoys].ravel()
+
+            real_logits = logits[reals]
+            real_labels = labels[reals]
+            # remove ALL nodes with 0 labels
+            real_logits = real_logits[real_labels != 0]
+            real_labels = real_labels[real_labels != 0]
+            # concatenate back together to calc. loss
+            if len(decoys):
+                logits = torch.cat((real_logits, decoy_logits))
+                labels = torch.cat((real_labels, decoy_labels))
+            else:
+                logits = real_logits
+                labels = real_labels
+
         if self.subsample_neg_labels:
             logits = logits.ravel()
             labels = labels.ravel()

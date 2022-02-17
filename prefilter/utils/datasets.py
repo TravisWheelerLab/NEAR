@@ -12,6 +12,7 @@ from typing import List, Union, Tuple, Optional, Dict
 
 import prefilter
 import prefilter.utils as utils
+from prefilter import DECOY_FLAG
 import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -79,8 +80,11 @@ class SequenceDataset(torch.utils.data.Dataset):
         class_ids = []
         for label in labels:
 
-            if isinstance(label, list):
+            if isinstance(label, list) and len(label) != 1:
                 label = label[0]
+
+            if label == DECOY_FLAG:
+                return []
 
             class_ids.append(self.name_to_class_code[label])
 
@@ -131,7 +135,7 @@ class LabelMapping:
     A separate data structure is used to keep track of the index for each family.
     """
 
-    def __init__(self, n_seq_per_fam: Optional[int] = None, no_resample=True) -> None:
+    def __init__(self) -> None:
         """
         :param n_seq_per_fam: number of sequences to sample per family
         :type n_seq_per_fam: int
@@ -139,8 +143,6 @@ class LabelMapping:
         self.label_to_sequence = defaultdict(list)
         self.label_to_count = defaultdict(int)
         self.label_to_index = defaultdict(int)
-        self.n_seq_per_fam = n_seq_per_fam
-        self.no_resample = no_resample
         self.sequences_and_labels = []
         self.names = None
 
@@ -201,17 +203,13 @@ class ProteinSequenceDataset(SequenceDataset):
         self,
         fasta_files: str,
         name_to_class_code: Dict[str, int],
-        n_seq_per_fam: Optional[int] = None,
-        no_resample: bool = True,
         n_emission_sequences: int = 50,
         distillation_labels: bool = False,
     ) -> None:
 
         super().__init__(fasta_files, name_to_class_code)
 
-        self.label_to_sequence = LabelMapping(
-            n_seq_per_fam=n_seq_per_fam, no_resample=no_resample
-        )
+        self.label_to_sequence = LabelMapping()
         self.n_emission_sequences = n_emission_sequences
         self.distillation_labels = distillation_labels
         self._build_dataset()
@@ -250,7 +248,6 @@ class ProteinSequenceDataset(SequenceDataset):
         encoded_features = self._encoding_func(features)
         if self.distillation_labels:
             e_values = [ex[3] for ex in labels]
-            labels = [ex[0] for ex in labels]
             y = self._make_distillation_vector(labels, e_values)
         else:
             y = self._make_multi_hot(labels)
@@ -263,7 +260,7 @@ class SimpleSequenceIterator(SequenceDataset):
     for ingestion into an ml algorithm.
     """
 
-    def __init__(self, fasta_files, name_to_class_code, distillation_labels):
+    def __init__(self, fasta_files, name_to_class_code, distillation_labels=False):
 
         super().__init__(fasta_files, name_to_class_code)
 
@@ -290,10 +287,8 @@ class SimpleSequenceIterator(SequenceDataset):
         encoded_features = self._encoding_func(features)
         if self.distillation_labels:
             e_values = [ex[3] for ex in labels]
-            labels = [ex[0] for ex in labels]
             y = self._make_distillation_vector(labels, e_values)
         else:
-            labels = [ex[0] for ex in labels]
             y = self._make_multi_hot(labels)
         return torch.as_tensor(encoded_features), y
 
@@ -345,15 +340,18 @@ class RankingIterator(SequenceDataset):
 if __name__ == "__main__":
     from glob import glob
 
-    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset/*fa"
+    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/shuffled_training_data/200_file_subset/*fa"
     fs = glob(fpath)[:10]
+    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset/*fa"
+    fs += glob(fpath)[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
-    # psd = ProteinSequenceDataset(
-    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True,
-    # )
-    psd = SimpleSequenceIterator(
+    psd = ProteinSequenceDataset(
         fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True
     )
+    # psd = SimpleSequenceIterator(
+    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True
+    # )
+
     psd = torch.utils.data.DataLoader(
         psd,
         batch_size=2,
@@ -361,5 +359,8 @@ if __name__ == "__main__":
     )
 
     for x, y, z in psd:
-        print(z)
-        pass
+        all_0 = []
+        for zz in z:
+            all_0.append(torch.all(zz == 0))
+        print(z[z != 0])
+        print(all_0)

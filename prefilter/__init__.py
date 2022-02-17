@@ -12,6 +12,7 @@ name_to_accession_id = os.path.join(
 )
 
 MASK_FLAG = -1
+DECOY_FLAG = "DECOY"
 
 array_job_template = """#!/usr/bin/env bash
 
@@ -65,6 +66,7 @@ def main():
     train_parser.add_argument("--check_val_every_n_epoch", type=int, required=True)
     train_parser.add_argument("--model_name", type=str, required=True)
     train_parser.add_argument("--data_path", type=str, required=True)
+    train_parser.add_argument("--decoy_path", type=str, default=None)
     train_parser.add_argument("--schedule_lr", action="store_true")
     train_parser.add_argument("--step_lr_step_size", type=int, default=None)
     train_parser.add_argument("--step_lr_decay_factor", type=float, default=None)
@@ -78,7 +80,6 @@ def main():
     train_parser.add_argument("--project_name", type=str, default="prefilter")
     train_parser.add_argument("--shoptimize", action="store_true")
     train_parser.add_argument("--log_confusion_matrix", action="store_true")
-    train_parser.add_argument("--n_seq_per_fam", default=None)
     train_parser.add_argument(
         "--emission_sequence_path", nargs="+", type=str, default=None
     )
@@ -87,6 +88,7 @@ def main():
     train_parser.add_argument("--specify_gpus", action="store_true")
     train_parser.add_argument("--distill", action="store_true")
     train_parser.add_argument("--subsample_neg_labels", action="store_true")
+    train_parser.add_argument("--xent", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

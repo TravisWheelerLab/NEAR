@@ -30,10 +30,11 @@ class BaseModel(pl.LightningModule):
         step_lr_decay_factor: float,
         batch_size: int,
         num_workers: int,
-        n_seq_per_fam: int,
         name_to_class_code: Dict[str, int],
         n_emission_sequences: int,
         distill: bool,
+        xent: bool,
+        decoy_files: List[str],
     ):
 
         super(BaseModel, self).__init__()
@@ -42,15 +43,16 @@ class BaseModel(pl.LightningModule):
         self.train_files = train_files
         self.val_files = val_files
         self.emission_files = emission_files
+        self.decoy_files = decoy_files
         self.schedule_lr = schedule_lr
         self.step_lr_step_size = step_lr_step_size
         self.step_lr_decay_factor = step_lr_decay_factor
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.n_seq_per_fam = n_seq_per_fam
         self.name_to_class_code = name_to_class_code
         self.n_emission_sequences = n_emission_sequences
         self.distill = distill
+        self.xent = xent
 
     def _init_metrics(self):
         self.train_f1 = torchmetrics.F1()
@@ -61,21 +63,17 @@ class BaseModel(pl.LightningModule):
     def _create_datasets(self):
         # This will be shared between every model that I train.
         if self.emission_files is not None:
-            self.train_dataset = utils.ProteinSequenceDataset(
-                self.train_files + self.emission_files,
-                self.name_to_class_code,
-                self.n_seq_per_fam,
-                self.n_emission_sequences,
-                distillation_labels=self.distill,
-            )
-        else:
-            self.train_dataset = utils.ProteinSequenceDataset(
-                self.train_files,
-                self.name_to_class_code,
-                self.n_seq_per_fam,
-                self.n_emission_sequences,
-                distillation_labels=self.distill,
-            )
+            self.train_files = self.train_files + self.emission_files
+
+        if self.decoy_files is not None:
+            self.train_files = self.train_files + self.decoy_files
+
+        self.train_dataset = utils.ProteinSequenceDataset(
+            self.train_files,
+            self.name_to_class_code,
+            self.n_emission_sequences,
+            distillation_labels=self.distill,
+        )
 
         self.val_dataset = utils.SimpleSequenceIterator(
             self.val_files,

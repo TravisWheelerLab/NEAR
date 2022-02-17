@@ -9,7 +9,7 @@ from typing import Union, List, Tuple
 
 import numpy as np
 import torch
-from prefilter import MASK_FLAG
+from prefilter import MASK_FLAG, DECOY_FLAG
 
 log = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     begin_char = labelstring.find("|")
 
     if begin_char == -1:
-        raise ValueError("File does not contain | as a delimiter. Exiting.")
+        return [DECOY_FLAG]
 
     if "(" in labelstring:
         # labelstring: ACC_ID (BEGIN END E_VALUE)
