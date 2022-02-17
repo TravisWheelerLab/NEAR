@@ -249,11 +249,11 @@ class ProteinSequenceDataset(SequenceDataset):
         labels, features = self.label_to_sequence.sample(idx)
         encoded_features = self._encoding_func(features)
         if self.distillation_labels:
-            e_values = [l[3] for l in labels]
-            labels = [l[0] for l in labels]
+            e_values = [ex[3] for ex in labels]
+            labels = [ex[0] for ex in labels]
             y = self._make_distillation_vector(labels, e_values)
         else:
-            y = self._make_multi_hot(labels, len(features))
+            y = self._make_multi_hot(labels)
         return torch.as_tensor(encoded_features), y
 
 
@@ -286,14 +286,15 @@ class SimpleSequenceIterator(SequenceDataset):
                     self.sequences_and_labels.append([sequence, labelset])
 
     def __getitem__(self, idx):
-        example = self.sequences_and_labels[idx]
-        encoded_features = self._encoding_func(example[0])
+        features, labels = self.sequences_and_labels[idx]
+        encoded_features = self._encoding_func(features)
         if self.distillation_labels:
-            e_values = [l[3] for l in example[1]]
-            labels = [l[0] for l in example[1]]
+            e_values = [ex[3] for ex in labels]
+            labels = [ex[0] for ex in labels]
             y = self._make_distillation_vector(labels, e_values)
         else:
-            y = self._make_multi_hot(labels, len(features))
+            labels = [ex[0] for ex in labels]
+            y = self._make_multi_hot(labels)
         return torch.as_tensor(encoded_features), y
 
     def __len__(self):

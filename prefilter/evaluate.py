@@ -103,7 +103,7 @@ def recall_for_each_significant_label(
         figure_path, ext = os.path.splitext(figure_path)
         figure_path += "_multilabel" + ext
 
-    plt.savefig(utils.handle_figure_path(figure_path))
+    plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
     plt.close()
 
 
@@ -119,6 +119,10 @@ def primary_and_neighborhood_recall(
 ):
     """
     Plot the recall of the model for primary and neighborhood labels.
+    :param titlestr:
+    :type titlestr:
+    :param multi_prediction:
+    :type multi_prediction:
     :param model: model to evaluate
     :type model:
     :param dataloader: dataloader containing batched sequences/labels to evaluate
@@ -154,6 +158,7 @@ def primary_and_neighborhood_recall(
         masks = masks.to(device)
         labels = labels.to(device)
         pred = model.class_act(model(features, masks))
+        print(pred)
         stdout.write(f"{j / len(dataloader)}\r")
         j += 1
         for seq, labelset, labelvec in zip(pred, string_labels, labels):
@@ -223,7 +228,7 @@ def primary_and_neighborhood_recall(
     )
     ax1.set_ylabel("false positives per sequence")
     ax1.legend(loc="upper right")
-    ax.legend(loc="upper left")
+    ax.legend(loc="upper center")
     ax.set_xlabel("sigmoid threshold")
     ax.set_ylim([0, 1])
     ax.set_ylabel("% of true positives recalled")
@@ -236,7 +241,10 @@ def primary_and_neighborhood_recall(
         figure_path, ext = os.path.splitext(figure_path)
         figure_path += "_multilabel" + ext
 
-    plt.savefig(utils.handle_figure_path(figure_path))
+    if "/" in figure_path:
+        figure_path = figure_path.replace("/", "")
+
+    plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
 
     plt.close()
 
@@ -463,7 +471,7 @@ def recall_per_family(
         figure_path, ext = os.path.splitext(figure_path)
         figure_path += "_multilabel" + ext
 
-    plt.savefig(utils.handle_figure_path(figure_path))
+    plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
 
     plt.close()
 
@@ -566,11 +574,10 @@ def main():
     with open(hparams_path, "r") as src:
         hparams = yaml.safe_load(src)
 
-    dev = "cuda:2" if torch.cuda.is_available() else "cpu"
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
     checkpoint = torch.load(model_path, map_location=torch.device(dev))
     state_dict = checkpoint["state_dict"]
     hparams["training"] = False
-    state_dict["loss_func.weight"] = torch.tensor(10)
 
     model = models.Prot2Vec(**hparams).to(dev)
     success = model.load_state_dict(state_dict)
@@ -583,8 +590,15 @@ def main():
         if args.emission_sequence_path is not None:
             emission_files = glob(os.path.join(args.emission_sequence_path, "*fa"))
             files = emission_files
+        for f in files:
+            if "emission" in os.path.basename(f):
+                raise ValueError(
+                    f"key {args.key} had files with ``emission'' in them ({f})"
+                )
+
         name_to_class_code = hparams["name_to_class_code"]
         dataset = utils.RankingIterator(files, name_to_class_code)
+
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=64,
