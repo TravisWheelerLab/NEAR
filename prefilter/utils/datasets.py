@@ -227,16 +227,23 @@ class ProteinSequenceDataset(SequenceDataset):
 
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)
+
                 if not len(labelset):
                     raise ValueError(
                         f"Line in {fasta_file} does not contain any labels. Please fix."
                     )
+                if self.distillation_labels:
+                    lvec = self._make_distillation_vector(
+                        [l[0] for l in labelset], [l[-1] for l in labelset]
+                    )
                 else:
-                    for label in labelset:
-                        if isinstance(label, list):
-                            self.label_to_sequence[label[0]] = [sequence, labelset]
-                        else:
-                            self.label_to_sequence[label] = [sequence, labelset]
+                    lvec = self._make_multi_hot(l[0] for l in labelset)
+
+                for label in labelset:
+                    if isinstance(label, list):
+                        self.label_to_sequence[label[0]] = [sequence, lvec]
+                    else:
+                        self.label_to_sequence[label] = [sequence, lvec]
 
         self.label_to_sequence.compute()
 
@@ -246,12 +253,7 @@ class ProteinSequenceDataset(SequenceDataset):
     def __getitem__(self, idx):
         labels, features = self.label_to_sequence.sample(idx)
         encoded_features = self._encoding_func(features)
-        if self.distillation_labels:
-            e_values = [ex[3] for ex in labels]
-            y = self._make_distillation_vector(labels, e_values)
-        else:
-            y = self._make_multi_hot(labels)
-        return torch.as_tensor(encoded_features), y
+        return torch.as_tensor(encoded_features), labels
 
 
 class SimpleSequenceIterator(SequenceDataset):
@@ -279,18 +281,20 @@ class SimpleSequenceIterator(SequenceDataset):
                     raise ValueError(
                         f"Line in {fasta_file} does not contain any labels. Please fix."
                     )
+
+                if self.distillation_labels:
+                    lvec = self._make_distillation_vector(
+                        [l[0] for l in labelset], [l[-1] for l in labelset]
+                    )
                 else:
-                    self.sequences_and_labels.append([sequence, labelset])
+                    lvec = self._make_multi_hot(l[0] for l in labelset)
+
+                self.sequences_and_labels.append([sequence, lvec])
 
     def __getitem__(self, idx):
         features, labels = self.sequences_and_labels[idx]
         encoded_features = self._encoding_func(features)
-        if self.distillation_labels:
-            e_values = [ex[3] for ex in labels]
-            y = self._make_distillation_vector(labels, e_values)
-        else:
-            y = self._make_multi_hot(labels)
-        return torch.as_tensor(encoded_features), y
+        return torch.as_tensor(encoded_features), labels
 
     def __len__(self):
         return len(self.sequences_and_labels)
@@ -321,13 +325,15 @@ class DecoyIterator(SequenceDataset):
 
 
 class RankingIterator(SequenceDataset):
-    def __init__(self, fasta_files, name_to_class_code):
+    def __init__(self, fasta_files, name_to_class_code, max_labels_per_seq):
         super().__init__(fasta_files, name_to_class_code)
 
-        self._build_dataset()
+        self._build_dataset(max_labels_per_seq)
 
-    def _build_dataset(self):
-        self.labels_and_sequences = utils.load_sequences_and_labels(self.fasta_files)
+    def _build_dataset(self, max_labels_per_seq):
+        self.labels_and_sequences = utils.load_sequences_and_labels(
+            self.fasta_files, max_labels_per_seq
+        )
 
     def __getitem__(self, idx):
         labelset, sequence = self.labels_and_sequences[idx]
@@ -340,27 +346,21 @@ class RankingIterator(SequenceDataset):
 if __name__ == "__main__":
     from glob import glob
 
-    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/shuffled_training_data/200_file_subset/*fa"
+    fpath = "/home/tc229954/max_hmmsearch/200_file_subset/*fa"
     fs = glob(fpath)[:10]
-    fpath = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset/*fa"
-    fs += glob(fpath)[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
-    psd = ProteinSequenceDataset(
-        fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True
-    )
-    # psd = SimpleSequenceIterator(
-    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=True
+    # psd = ProteinSequenceDataset(
+    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
     # )
+    psd = SimpleSequenceIterator(
+        fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
+    )
 
     psd = torch.utils.data.DataLoader(
         psd,
-        batch_size=2,
+        batch_size=1,
         collate_fn=utils.pad_features_in_batch,
     )
 
     for x, y, z in psd:
-        all_0 = []
-        for zz in z:
-            all_0.append(torch.all(zz == 0))
-        print(z[z != 0])
-        print(all_0)
+        print(torch.sum(z[z != 0]), z.shape)

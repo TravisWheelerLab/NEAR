@@ -59,8 +59,12 @@ PROT_ALPHABET = {
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
 
-def load_sequences_and_labels(fasta_files: List[str]) -> List[Tuple[List[str], str]]:
+def load_sequences_and_labels(
+    fasta_files: List[str], max_labels_per_seq: int = None
+) -> List[Tuple[List[str], str]]:
     """
+    :param max_labels_per_seq:
+    :type max_labels_per_seq:
     :param fasta_files:
     :type fasta_files:
     :return: List of [labels, sequence].
@@ -72,6 +76,8 @@ def load_sequences_and_labels(fasta_files: List[str]) -> List[Tuple[List[str], s
         # parse labels, get
         for labelstring, sequence in zip(labelset, sequences):
             labels = parse_labels(labelstring)
+            if max_labels_per_seq is not None:
+                labels = labels[:max_labels_per_seq]
             if labels is None:
                 print(labelstring)
                 continue

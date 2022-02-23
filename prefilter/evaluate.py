@@ -20,6 +20,97 @@ import prefilter.models as models
 
 
 @torch.no_grad()
+def sigmoid_as_a_function_of_evalue(
+    model, dataloader, name_to_class_code, figure_path, device
+):
+    sigmoid_activation_and_evalue = []
+    for features, features_mask, labelvec, string_labels in dataloader:
+        features = features.to(device)
+        features_mask = features_mask.to(device)
+        preds = model.class_act(model(features, features_mask)).detach().cpu().numpy()
+        for pred, labels in zip(preds, string_labels):
+            for label in labels:
+                class_idx = name_to_class_code[label[0]]
+                e_value = float(label[-1])
+                sigmoid_activation_and_evalue.append([pred[class_idx], e_value])
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    sigmoid_activation = [r[0] for r in sigmoid_activation_and_evalue]
+    e_value = [np.log10(r[1]) for r in sigmoid_activation_and_evalue]
+    ax.plot(e_value, sigmoid_activation, "k.")
+    ax.set_title("sigmoid output as a function of e-value")
+    ax.set_xlabel("log10(evalue)")
+    ax.set_ylabel("sigmoid activation")
+    plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
+
+
+@torch.no_grad()
+def bin_recall_by_evalue(
+    model,
+    dataloader,
+    name_to_class_code,
+    figure_path,
+    device,
+    classification_threshold=0.5,
+):
+    # I could do this myself I guess...
+    # e_value bin to count, e_value bin to recovered.
+    # what if i just stored true/false and e-value pairs? and then post-processed?
+    recalled_and_evalue = []
+    for features, features_mask, labelvec, string_labels in dataloader:
+        features = features.to(device)
+        features_mask = features_mask.to(device)
+        preds = model.class_act(model(features, features_mask)).detach().cpu().numpy()
+        preds[preds < classification_threshold] = 0
+        preds[preds >= classification_threshold] = 1
+        for pred, labels in zip(preds, string_labels):
+            for label in labels:
+                class_idx = name_to_class_code[label[0]]
+                e_value = float(label[-1])
+                if e_value == 0.0:
+                    e_value = 1e-100
+                recalled_and_evalue.append([pred[class_idx], np.log10(e_value)])
+
+    recalled_and_evalue = sorted(recalled_and_evalue, key=lambda x: x[1])
+    bin_edges = np.histogram_bin_edges([r[1] for r in recalled_and_evalue], bins=50)
+    # bin_edges goes from min->max
+    # sorted recalled and e-value from min->max too
+    i = 0
+    # grab the left-hand bin edge
+    bin_to_correct = {k: [] for k in bin_edges[:-1]}
+
+    # iterate over bins.
+    # i was having an error because there are some empty bins which then don't show up
+    # in bin_to_correct
+    for j in range(0, len(bin_edges) - 1):
+        lower_edge = bin_edges[j]
+        upper_edge = bin_edges[j + 1]
+        while lower_edge <= recalled_and_evalue[i][1] < upper_edge:
+            bin_to_correct[lower_edge].append(recalled_and_evalue[i][0])
+            i += 1
+
+    totals = [len(x) for x in bin_to_correct.values()]
+    correct = [sum(x) for x in bin_to_correct.values()]
+    ratio = [c / t if t != 0 else c for c, t in zip(correct, totals)]
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    ax.bar(
+        bin_edges[:-1], ratio, width=np.diff(bin_edges), edgecolor="black", align="edge"
+    )
+
+    for total, p in zip(totals, ax.patches):
+        ax.annotate(str(f"n={total}"), (p.get_x() * 1.005, p.get_height() * 1.005))
+
+    ax.set_ylabel("ratio of correct/total")
+    ax.set_xlabel("e-value bin")
+    ax.set_title(
+        f"recall by e-value bucket, classification threshold={classification_threshold}"
+    )
+    plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
+
+
+@torch.no_grad()
 def recall_for_each_significant_label(
     model,
     dataloader,
@@ -158,12 +249,18 @@ def primary_and_neighborhood_recall(
         masks = masks.to(device)
         labels = labels.to(device)
         pred = model.class_act(model(features, masks))
-        print(pred)
         stdout.write(f"{j / len(dataloader)}\r")
         j += 1
         for seq, labelset, labelvec in zip(pred, string_labels, labels):
+            new_labelset = []
+            for l in labelset:
+                if float(l[-1]) <= 1e-5:
+                    new_labelset.append(l)
+            labelset = new_labelset
+
             for i, label in enumerate(labelset):
                 total[i] += 1
+
             for threshold in thresholds:
                 seq[seq >= threshold] = 1
                 if multi_prediction:
@@ -181,6 +278,8 @@ def primary_and_neighborhood_recall(
 
                 for i, label in enumerate(labelset):
                     if isinstance(label, list):
+                        if float(label[-1]) > 1e-5:
+                            continue
                         label = label[0]
                     idx = name_to_class_code[label]
                     if multi_prediction:
@@ -526,13 +625,37 @@ def create_parser():
         description="plot the recall and false positives passed at multiple sigmoid "
         "thresholds. Break up into primary and neighborhood labels.",
     )
-    recall_parser.add_argument("model_path")
-    recall_parser.add_argument("hparams_path")
+    recall_parser.add_argument("model_root")
     recall_parser.add_argument("figure_path")
     recall_parser.add_argument("-e", "--emission_sequence_path", default=None)
     recall_parser.add_argument("-t", "--titlestr", default=None)
+    recall_parser.add_argument("-m", "--metric", default="loss")
+    recall_parser.add_argument("-mo", "--monitor", default="min")
     recall_parser.add_argument("--key", default="val_files", type=str)
     recall_parser.add_argument("--multilabel", action="store_true")
+
+    evalue_bucket_parser = sp.add_parser(
+        name="evalue", description="plot recall as a function of e-value threshold"
+    )
+    evalue_bucket_parser.add_argument("model_root")
+    evalue_bucket_parser.add_argument("figure_path")
+    evalue_bucket_parser.add_argument("-t", "--titlestr", default=None)
+    evalue_bucket_parser.add_argument("-m", "--metric", default="loss")
+    evalue_bucket_parser.add_argument("-mo", "--monitor", default="min")
+    evalue_bucket_parser.add_argument(
+        "-c", "--classification_threshold", default=0.5, type=float
+    )
+    evalue_bucket_parser.add_argument("--key", default="val_files", type=str)
+
+    sigmoid_parser = sp.add_parser(
+        name="sigmoid", description="plot recall as a function of e-value threshold"
+    )
+    sigmoid_parser.add_argument("model_root")
+    sigmoid_parser.add_argument("figure_path")
+    sigmoid_parser.add_argument("-t", "--titlestr", default=None)
+    sigmoid_parser.add_argument("-m", "--metric", default="loss")
+    sigmoid_parser.add_argument("-mo", "--monitor", default="min")
+    sigmoid_parser.add_argument("--key", default="val_files", type=str)
 
     recall_per_fam_parser = sp.add_parser(
         name="recall_per_family",
@@ -568,28 +691,68 @@ def main():
     argparser = create_parser()
     args = argparser.parse_args()
 
-    model_path = args.model_path
-    hparams_path = args.hparams_path
+    model_root = args.model_root
+
+    hparams_path = os.path.join(model_root, "hparams.yaml")
+
+    if not os.path.isfile(hparams_path):
+        raise ValueError(f"Couldn't find hparams at {hparams_path}")
 
     with open(hparams_path, "r") as src:
         hparams = yaml.safe_load(src)
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    checkpoint = torch.load(model_path, map_location=torch.device(dev))
+
+    model_candidates = glob(os.path.join(model_root, "checkpoints/*ckpt"))
+
+    if not len(model_candidates):
+        raise ValueError(
+            f"Couldn't find models at {os.path.join(model_root, 'checkpoints/*ckpt')}"
+        )
+    # get best-performing model based on monitored metric passed in
+    # Assumes metric is encoded as NAME_VALUE
+    if args.monitor == "min":
+        best_metric = np.inf
+    elif args.monitor == "max":
+        best_metric = -np.inf
+    else:
+        raise ValueError("--monitor only accepts <max, min> as arguments")
+
+    best_model_path = None
+
+    for model_path in model_candidates:
+
+        metric_name, rest_of_path = os.path.splitext(os.path.basename(model_path))[
+            0
+        ].split(args.metric)
+        if rest_of_path[0] == "_":
+            rest_of_path = rest_of_path[1:]
+        metric_value = float(rest_of_path.split("_")[0])
+        if args.monitor == "min":
+            if metric_value < best_metric:
+                best_metric = metric_value
+                best_model_path = model_path
+        else:
+            if metric_value > best_metric:
+                best_metric = metric_value
+                best_model_path = model_path
+
+    checkpoint = torch.load(best_model_path, map_location=torch.device(dev))
     state_dict = checkpoint["state_dict"]
     hparams["training"] = False
-
     model = models.Prot2Vec(**hparams).to(dev)
     success = model.load_state_dict(state_dict)
-    print(success)
+    print(f"{success} for model {best_model_path}")
 
     model.eval()
 
     if args.command == "recall":
         files = hparams[args.key]
+
         if args.emission_sequence_path is not None:
             emission_files = glob(os.path.join(args.emission_sequence_path, "*fa"))
             files = emission_files
+
         for f in files:
             if "emission" in os.path.basename(f):
                 raise ValueError(
@@ -597,7 +760,11 @@ def main():
                 )
 
         name_to_class_code = hparams["name_to_class_code"]
-        dataset = utils.RankingIterator(files, name_to_class_code)
+        print(len(name_to_class_code))
+        exit()
+        dataset = utils.RankingIterator(
+            files, name_to_class_code, max_labels_per_seq=100
+        )
 
         dataloader = torch.utils.data.DataLoader(
             dataset,
@@ -656,6 +823,35 @@ def main():
             args.figure_path,
             args.multilabel,
             classification_threshold=args.classification_threshold,
+            device=dev,
+        )
+    elif args.command == "evalue":
+        files = hparams[args.key]
+        name_to_class_code = hparams["name_to_class_code"]
+        dataset = utils.RankingIterator(files, name_to_class_code)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
+        )
+        bin_recall_by_evalue(
+            model,
+            dataloader,
+            name_to_class_code,
+            args.figure_path,
+            device=dev,
+            classification_threshold=args.classification_threshold,
+        )
+    elif args.command == "sigmoid":
+        files = hparams[args.key]
+        name_to_class_code = hparams["name_to_class_code"]
+        dataset = utils.RankingIterator(files, name_to_class_code)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=64, collate_fn=utils.pad_batch_with_labels
+        )
+        sigmoid_as_a_function_of_evalue(
+            model,
+            dataloader,
+            name_to_class_code,
+            args.figure_path,
             device=dev,
         )
     else:
