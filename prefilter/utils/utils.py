@@ -172,6 +172,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
 
 def create_class_code_mapping(fasta_files):
     """
+    TODO: CONVERT TO RUST.
     in order to create the mapping on the fly we have to load every sequence in our dataset!
     This can take a long time. Is there a faster way to do it?
     :param fasta_files:

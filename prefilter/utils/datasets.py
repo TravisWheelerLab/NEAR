@@ -18,10 +18,9 @@ import warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 __all__ = [
-    "ProteinSequenceDataset",
     "SequenceDataset",
     "DecoyIterator",
-    "SimpleSequenceIterator",
+    "SequenceIterator",
     "RankingIterator",
 ]
 
@@ -29,6 +28,8 @@ __all__ = [
 # but whatever for now
 def _compute_soft_label(e_value: float):
     # take care of underflow / inf values in the np.log10
+    # TODO: change this... should have 1s be everything above 1e-5, and linearly
+    # decaying down to 0 after. TODO
     if e_value < 1e-20:
         e_value = 1e-20
     x = np.clip(np.log10(e_value) * -1, 0, 20) / 20
@@ -123,140 +124,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         return len(self.name_to_class_code)
 
 
-class LabelMapping:
-    """
-    Container class that handles sampling from a set of labeled sequences.
-    Pfam families have disparate number of sequences. This class samples from each family uniformly, in effect
-    balancing the number of sequences per family.
-
-    It accomplishes this by creating a data structure that maps pfam accession ID to sequence:
-    mapping = {PF1111: [[seq1, labelset1], [seq2, labelset2]....[seqN, labelsetN], PF1112: [[seq1, labelset1], [seq2, labelset2]....[seqN, labelsetN],..}
-    At "sample" time, it iterates over the pfam accession IDs and grabs the ith [sequence, labelset].
-    A separate data structure is used to keep track of the index for each family.
-    """
-
-    def __init__(self) -> None:
-        """
-        :param n_seq_per_fam: number of sequences to sample per family
-        :type n_seq_per_fam: int
-        """
-        self.label_to_sequence = defaultdict(list)
-        self.label_to_count = defaultdict(int)
-        self.label_to_index = defaultdict(int)
-        self.sequences_and_labels = []
-        self.names = None
-
-    def __setitem__(self, key: str, value: List[Tuple[str, List[str]]]) -> None:
-        """
-        :param key: Pfam accession id.
-        :type key: str
-        :param value: List with the sequence as the first element and the set of labels assoc. with the sequence
-        as the second element.
-        :type value: List[str, List[str]].
-        :return: None.
-        :rtype: None.
-        """
-        if isinstance(key, list):
-            key = key[0]
-
-        self.label_to_sequence[key].append(value)
-        self.label_to_count[key] += 1
-
-    def __getitem__(self, key):
-        return self.label_to_sequence[key]
-
-    def sample(self, idx: int) -> Tuple[List[str], str]:
-        """
-        Return a labelset, sequence pair. If n_seq_per_fam is specified, only grab from the first
-        n_seq_per_fam members in each family (useful for scaling the problem size down).
-
-        :param idx: index of family to grab.
-        :type idx: int
-        :return: set of labels and sequence associated with that set.
-        :rtype: Tuple[List[str], str]
-        """
-        return self.sequences_and_labels[idx][1], self.sequences_and_labels[idx][0]
-
-    def __len__(self):
-        # length is the number of unique pfam accession ids in the fasta files
-        # which is NOT the number of classes we actually classify in our final classification
-        # layer
-        return len(self.sequences_and_labels)
-
-    def compute(self):
-        for label, sequenceset in self.label_to_sequence.items():
-            # sequenceset contains [[lab1, lab2..], sequence]
-            self.sequences_and_labels.extend(sequenceset)
-        shuffle(self.sequences_and_labels)
-
-    def shuffle(self):
-        """
-        Use this at the end of an epoch to shuffle the ordering of names that you sample.
-        :return: None
-        :rtype: None
-        """
-        shuffle(self.sequences_and_labels)
-
-
-class ProteinSequenceDataset(SequenceDataset):
-    def __init__(
-        self,
-        fasta_files: str,
-        name_to_class_code: Dict[str, int],
-        n_emission_sequences: int = 50,
-        distillation_labels: bool = False,
-    ) -> None:
-
-        super().__init__(fasta_files, name_to_class_code)
-
-        self.label_to_sequence = LabelMapping()
-        self.n_emission_sequences = n_emission_sequences
-        self.distillation_labels = distillation_labels
-        self._build_dataset()
-
-    def _build_dataset(self):
-        # going to choose labels from a dictionary.
-        # LabelMapping is used to sample at training time.
-        for fasta_file in self.fasta_files:
-            labels, sequences = utils.fasta_from_file(fasta_file)
-
-            if "emission" in os.path.basename(fasta_file):
-                # cut off the emission sequences at n_emission_seqs
-                labels = labels[: self.n_emission_sequences]
-                sequences = sequences[: self.n_emission_sequences]
-
-            for labelstring, sequence in zip(labels, sequences):
-                labelset = utils.parse_labels(labelstring)
-
-                if not len(labelset):
-                    raise ValueError(
-                        f"Line in {fasta_file} does not contain any labels. Please fix."
-                    )
-                if self.distillation_labels:
-                    lvec = self._make_distillation_vector(
-                        [l[0] for l in labelset], [l[-1] for l in labelset]
-                    )
-                else:
-                    lvec = self._make_multi_hot(l[0] for l in labelset)
-
-                for label in labelset:
-                    if isinstance(label, list):
-                        self.label_to_sequence[label[0]] = [sequence, lvec]
-                    else:
-                        self.label_to_sequence[label] = [sequence, lvec]
-
-        self.label_to_sequence.compute()
-
-    def __len__(self):
-        return len(self.label_to_sequence)
-
-    def __getitem__(self, idx):
-        labels, features = self.label_to_sequence.sample(idx)
-        encoded_features = self._encoding_func(features)
-        return torch.as_tensor(encoded_features), labels
-
-
-class SimpleSequenceIterator(SequenceDataset):
+class SequenceIterator(SequenceDataset):
     """
     Iterates over the sequences in a/the fasta file(s) and encodes them
     for ingestion into an ml algorithm.
@@ -272,8 +140,9 @@ class SimpleSequenceIterator(SequenceDataset):
         self._build_dataset()
 
     def _build_dataset(self) -> None:
-        # Could refactor to not keep seqs in mem (just load on the fly).
+        # TODO: Write rust extension for this.
         for fasta_file in self.fasta_files:
+            print("HELLO!", fasta_file)
             labels, sequences = utils.fasta_from_file(fasta_file)
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)
@@ -290,6 +159,7 @@ class SimpleSequenceIterator(SequenceDataset):
                     lvec = self._make_multi_hot(l[0] for l in labelset)
 
                 self.sequences_and_labels.append([sequence, lvec])
+        print(len(self.sequences_and_labels))
 
     def __getitem__(self, idx):
         features, labels = self.sequences_and_labels[idx]
@@ -298,6 +168,9 @@ class SimpleSequenceIterator(SequenceDataset):
 
     def __len__(self):
         return len(self.sequences_and_labels)
+
+    def shuffle(self):
+        shuffle(self.sequences_and_labels)
 
 
 class DecoyIterator(SequenceDataset):
@@ -352,7 +225,7 @@ if __name__ == "__main__":
     # psd = ProteinSequenceDataset(
     #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
     # )
-    psd = SimpleSequenceIterator(
+    psd = SequenceIterator(
         fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
     )
 

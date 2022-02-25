@@ -68,20 +68,20 @@ class BaseModel(pl.LightningModule):
         if self.decoy_files is not None:
             self.train_files = self.train_files + self.decoy_files
 
-        self.train_dataset = utils.ProteinSequenceDataset(
+        self.train_dataset = utils.SequenceIterator(
             self.train_files,
             self.name_to_class_code,
-            self.n_emission_sequences,
             distillation_labels=self.distill,
         )
 
-        self.val_dataset = utils.SimpleSequenceIterator(
+        self.train_dataset.shuffle()
+
+        self.val_dataset = utils.SequenceIterator(
             self.val_files,
             name_to_class_code=self.name_to_class_code,
             distillation_labels=self.distill,
         )
 
-        self.name_to_class_code = self.val_dataset.name_to_class_code
         self.n_classes = len(self.name_to_class_code)
 
     def _setup_layers(self):
@@ -136,7 +136,7 @@ class BaseModel(pl.LightningModule):
         self.log("learning_rate", self.learning_rate)
         self.log("train/f1", self.train_f1.compute())
         self.log("train/recall", self.train_recall.compute())
-        self.train_dataset.label_to_sequence.shuffle()
+        self.train_dataset.shuffle()
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)

@@ -84,7 +84,7 @@ def main():
         "--emission_sequence_path", nargs="+", type=str, default=None
     )
     train_parser.add_argument("--pos_weight", type=int, default=1)
-    train_parser.add_argument("--n_emission_sequences", type=int)
+    train_parser.add_argument("--n_emission_sequences", type=int, default=100)
     train_parser.add_argument("--specify_gpus", action="store_true")
     train_parser.add_argument("--distill", action="store_true")
     train_parser.add_argument("--subsample_neg_labels", action="store_true")

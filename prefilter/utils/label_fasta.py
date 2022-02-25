@@ -430,17 +430,13 @@ def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, 
 
 
 def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb, overwrite=True):
+
     domtblout_path = os.path.splitext(fasta_file)[0] + ".domtblout"
 
     if overwrite:
         subprocess.call(
             f"hmmsearch -o /dev/null --max --incE 100 --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
         )
-
-    # if not os.path.isfile(domtblout_path) or os.stat(domtblout_path).st_size == 0:
-    #     subprocess.call(
-    #         f"hmmsearch -o /dev/null --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
-    #     )
 
     domtblout = parse_domtblout(domtblout_path)
 

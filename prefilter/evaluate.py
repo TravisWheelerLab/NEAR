@@ -760,8 +760,7 @@ def main():
                 )
 
         name_to_class_code = hparams["name_to_class_code"]
-        print(len(name_to_class_code))
-        exit()
+        # max_labels_per_seq is 1000 since we only really care about hitting the better labels.
         dataset = utils.RankingIterator(
             files, name_to_class_code, max_labels_per_seq=100
         )
