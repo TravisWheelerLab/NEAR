@@ -161,43 +161,17 @@ class Prot2Vec(BaseModel):
         features, masks, labels = batch
         logits = self.forward(features, masks)
 
-        if self.decoy_files is not None:
-            decoys = []
-            reals = []
-            for i, labelvec in enumerate(labels):
-                if torch.all(labelvec == 0):
-                    decoys.append(i)
-                else:
-                    reals.append(i)
-
-            decoy_logits = logits[decoys].ravel()
-            decoy_labels = labels[decoys].ravel()
-
-            real_logits = logits[reals]
-            real_labels = labels[reals]
-            # remove ALL nodes with 0 labels
-            real_logits = real_logits[real_labels != 0]
-            real_labels = real_labels[real_labels != 0]
-            # concatenate back together to calc. loss
-            if len(decoys):
-                logits = torch.cat((real_logits, decoy_logits))
-                labels = torch.cat((real_labels, decoy_labels))
-            else:
-                logits = real_logits
-                labels = real_labels
-
-        if self.subsample_neg_labels:
+        if not self.distill:
             logits = logits.ravel()
             labels = labels.ravel()
             # torch where returns tuple
-            bad = torch.where(labels == 0)[0]
-            good = torch.where(labels != 0)[0]
-            # grab 1/100 of the negatives
-            idx = torch.randperm(bad.shape[0])
-            bad = bad[idx]
-            bad = bad[: bad.shape[0] // 100]
-            logits = logits[torch.cat((bad, good))]
-            labels = labels[torch.cat((bad, good))]
+            # if we're not distilling, throw away positions that contain labels that are not
+            # 0 or 1.
+            # I'm thinking that there are a huge amount of 0s still, but maybe enough to .
+            # still get a good positive signal.
+            bad = torch.where((labels == 0) | (labels == 1))[0]
+            logits = logits[~bad]
+            labels = labels[~bad]
 
         loss = self.loss_func(logits, labels.float())
 

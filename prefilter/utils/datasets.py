@@ -28,11 +28,9 @@ __all__ = [
 # but whatever for now
 def _compute_soft_label(e_value: float):
     # take care of underflow / inf values in the np.log10
-    # TODO: change this... should have 1s be everything above 1e-5, and linearly
-    # decaying down to 0 after. TODO
     if e_value < 1e-20:
         e_value = 1e-20
-    x = np.clip(np.log10(e_value) * -1, 0, 20) / 20
+    x = np.clip(np.log10(e_value) * -1, 0, 5) / 5
     return x
 
 
@@ -142,7 +140,6 @@ class SequenceIterator(SequenceDataset):
     def _build_dataset(self) -> None:
         # TODO: Write rust extension for this.
         for fasta_file in self.fasta_files:
-            print("HELLO!", fasta_file)
             labels, sequences = utils.fasta_from_file(fasta_file)
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)
@@ -151,15 +148,11 @@ class SequenceIterator(SequenceDataset):
                         f"Line in {fasta_file} does not contain any labels. Please fix."
                     )
 
-                if self.distillation_labels:
-                    lvec = self._make_distillation_vector(
-                        [l[0] for l in labelset], [l[-1] for l in labelset]
-                    )
-                else:
-                    lvec = self._make_multi_hot(l[0] for l in labelset)
+                lvec = self._make_distillation_vector(
+                    [l[0] for l in labelset], [l[-1] for l in labelset]
+                )
 
                 self.sequences_and_labels.append([sequence, lvec])
-        print(len(self.sequences_and_labels))
 
     def __getitem__(self, idx):
         features, labels = self.sequences_and_labels[idx]
