@@ -27,10 +27,10 @@ __all__ = [
 # this could be sped up if i did it vectorized
 # but whatever for now
 def _compute_soft_label(e_value: float):
+    if e_value < 1e-30:
+        e_value = 1e-30
     # take care of underflow / inf values in the np.log10
-    if e_value < 1e-20:
-        e_value = 1e-20
-    x = np.clip(np.log10(e_value) * -1, 0, 5) / 5
+    x = np.clip(np.floor(np.log10(e_value)) * -1, 0, 5) / 5
     return x
 
 
@@ -76,6 +76,8 @@ class SequenceDataset(torch.utils.data.Dataset):
         return torch.as_tensor(y)
 
     def _class_id_vector(self, labels):
+        if isinstance(labels, str):
+            labels = [labels]
         class_ids = []
         for label in labels:
 
@@ -101,7 +103,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         class_ids = self._class_id_vector(labels)
         for idx, e_value in zip(class_ids, e_values):
             y[idx] = _compute_soft_label(float(e_value))
-        return torch.as_tensor(y, dtype=torch.float32)
+        return torch.as_tensor(y, dtype=torch.float32, device=torch.device("cpu"))
 
     def _encoding_func(self, x):
         return utils.encode_protein_as_one_hot_vector(x.upper())
@@ -128,12 +130,19 @@ class SequenceIterator(SequenceDataset):
     for ingestion into an ml algorithm.
     """
 
-    def __init__(self, fasta_files, name_to_class_code, distillation_labels=False):
+    def __init__(
+        self,
+        fasta_files,
+        name_to_class_code,
+        evalue_threshold=None,
+        distillation_labels=False,
+    ):
 
         super().__init__(fasta_files, name_to_class_code)
 
         self.sequences_and_labels = []
         self.distillation_labels = distillation_labels
+        self.evalue_threshold = evalue_threshold
 
         self._build_dataset()
 
@@ -143,14 +152,33 @@ class SequenceIterator(SequenceDataset):
             labels, sequences = utils.fasta_from_file(fasta_file)
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)
+                if self.evalue_threshold is not None:
+                    new_labelset = []
+                    for example in labelset:
+                        if float(example[-1]) <= self.evalue_threshold:
+                            new_labelset.append(example)
+                    labelset = new_labelset
                 if not len(labelset):
                     raise ValueError(
                         f"Line in {fasta_file} does not contain any labels. Please fix."
                     )
 
-                lvec = self._make_distillation_vector(
-                    [l[0] for l in labelset], [l[-1] for l in labelset]
-                )
+                if len(labelset) == 1:
+                    if labelset[0] == "DECOY":
+                        # no labels for decoys
+                        lvec = torch.as_tensor(np.zeros(self.n_classes))
+                    elif len(labelset[0]) != 4:
+                        # it's an emission sequence
+                        lvec = self._make_distillation_vector(labelset, [1e-30])
+                    else:
+                        # its eeal but only has one label
+                        lvec = self._make_distillation_vector(
+                            [l[0] for l in labelset], [l[-1] for l in labelset]
+                        )
+                else:
+                    lvec = self._make_distillation_vector(
+                        [l[0] for l in labelset], [l[-1] for l in labelset]
+                    )
 
                 self.sequences_and_labels.append([sequence, lvec])
 

@@ -44,7 +44,6 @@ def main(args):
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
-    # select a subset of files to train on
     train_files = glob(os.path.join(data_path, "*train.fa"))
     if args.decoy_path is not None:
         decoy_files = glob(os.path.join(args.decoy_path, "*train.fa"))
@@ -72,7 +71,6 @@ def main(args):
     if args.emission_sequence_path is not None:
         emission_files = []
         for emission_sequence_path in args.emission_sequence_path:
-            print(emission_sequence_path)
             if "$HOME" in emission_sequence_path:
                 emission_sequence_path = emission_sequence_path.replace(
                     "$HOME", os.environ["HOME"]

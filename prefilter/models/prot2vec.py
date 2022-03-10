@@ -161,17 +161,21 @@ class Prot2Vec(BaseModel):
         features, masks, labels = batch
         logits = self.forward(features, masks)
 
-        if not self.distill:
+        if self.subsample_neg_labels:
             logits = logits.ravel()
             labels = labels.ravel()
-            # torch where returns tuple
-            # if we're not distilling, throw away positions that contain labels that are not
-            # 0 or 1.
-            # I'm thinking that there are a huge amount of 0s still, but maybe enough to .
-            # still get a good positive signal.
-            bad = torch.where((labels == 0) | (labels == 1))[0]
-            logits = logits[~bad]
-            labels = labels[~bad]
+            neg = torch.where(labels == 0)[0]
+            pos = torch.where(labels == 1)[0]
+            idx = torch.randperm(neg.shape[0], device=self.device)[
+                : neg.shape[0] // 100
+            ]
+            idx = torch.concat((pos, neg[idx]))
+            logits = logits[idx]
+            labels = labels[idx]
+
+        if self.distill:
+            print("hoooooptdi")
+            exit()
 
         loss = self.loss_func(logits, labels.float())
 

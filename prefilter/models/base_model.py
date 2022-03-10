@@ -63,10 +63,10 @@ class BaseModel(pl.LightningModule):
     def _create_datasets(self):
         # This will be shared between every model that I train.
         if self.emission_files is not None:
-            self.train_files = self.train_files + self.emission_files
+            self.train_files = self.emission_files + self.train_files
 
         if self.decoy_files is not None:
-            self.train_files = self.train_files + self.decoy_files
+            self.train_files = self.decoy_files + self.train_files
 
         self.train_dataset = utils.SequenceIterator(
             self.train_files,
@@ -80,6 +80,7 @@ class BaseModel(pl.LightningModule):
             self.val_files,
             name_to_class_code=self.name_to_class_code,
             distillation_labels=self.distill,
+            evalue_threshold=1e-5,
         )
 
         self.n_classes = len(self.name_to_class_code)

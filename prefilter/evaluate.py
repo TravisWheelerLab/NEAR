@@ -253,9 +253,13 @@ def primary_and_neighborhood_recall(
         j += 1
         for seq, labelset, labelvec in zip(pred, string_labels, labels):
             new_labelset = []
-            for l in labelset:
-                if float(l[-1]) <= 1e-5:
-                    new_labelset.append(l)
+            for example in labelset:
+                if float(example[-1]) <= 1e-5:
+                    new_labelset.append(example)
+
+            if len(new_labelset) > 100:
+                pdb.set_trace()
+
             labelset = new_labelset
 
             for i, label in enumerate(labelset):
