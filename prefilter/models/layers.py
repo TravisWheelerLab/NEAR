@@ -2,6 +2,8 @@ import torch
 import math
 import torch.nn as nn
 
+__all__ = ["ResidualBlock"]
+
 
 class MultiReceptiveFieldBlock(nn.Module):
     def __init__(
@@ -81,6 +83,7 @@ class ResidualBlock(nn.Module):
         first_dilated_layer,
         dilation_rate,
         stride=1,
+        typ="1d",
     ):
 
         super(ResidualBlock, self).__init__()
@@ -88,25 +91,47 @@ class ResidualBlock(nn.Module):
         self.filters = filters
 
         shifted_layer_index = layer_index - first_dilated_layer + 1
-        dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
+        if dilation_rate is not None:
+            dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
+        else:
+            dilation_rate = 1
         self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
-        self.bn1 = torch.nn.BatchNorm1d(self.filters)
-        # need to pad 'same', so output has the same size as input
-        # project down to a smaller number of self.filters with a larger kernel size
-        self.conv1 = torch.nn.Conv1d(
-            self.filters,
-            self.num_bottleneck_units,
-            kernel_size=kernel_size,
-            dilation=dilation_rate,
-            padding="same",
-        )
+        if typ == "1d":
+            self.bn1 = torch.nn.BatchNorm1d(self.filters)
+            # need to pad 'same', so output has the same size as input
+            # project down to a smaller number of self.filters with a larger kernel size
+            self.conv1 = torch.nn.Conv1d(
+                self.filters,
+                self.num_bottleneck_units,
+                kernel_size=kernel_size,
+                dilation=dilation_rate,
+                padding="same",
+            )
 
-        self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
-        # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
-        # linear transformation) No padding needed sin
-        self.conv2 = torch.nn.Conv1d(
-            self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
-        )
+            self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
+            # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
+            # linear transformation) No padding needed sin
+            self.conv2 = torch.nn.Conv1d(
+                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
+            )
+        else:
+            self.bn1 = torch.nn.BatchNorm2d(self.filters)
+            # need to pad 'same', so output has the same size as input
+            # project down to a smaller number of self.filters with a larger kernel size
+            self.conv1 = torch.nn.Conv2d(
+                self.filters,
+                self.num_bottleneck_units,
+                kernel_size=kernel_size,
+                dilation=dilation_rate,
+                padding="same",
+            )
+
+            self.bn2 = torch.nn.BatchNorm2d(self.num_bottleneck_units)
+            # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
+            # linear transformation) No padding needed sin
+            self.conv2 = torch.nn.Conv2d(
+                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
+            )
 
     def _forward(self, x):
         features = self.bn1(x)

@@ -238,6 +238,33 @@ class RankingIterator(SequenceDataset):
         return len(self.labels_and_sequences)
 
 
+class Triplets(SequenceDataset):
+    def __init__(self, fasta_files, afa_files, name_to_class_code):
+
+        if not len(fasta_files):
+            raise ValueError("No fasta files found")
+
+        self.fasta_files = fasta_files
+        self.name_to_class_code = name_to_class_code
+
+        if not isinstance(self.fasta_files, list):
+            self.fasta_files = [self.fasta_files]
+
+    def _build_dataset(self):
+        for fasta_file in self.fasta_files:
+            print(os.path.basename(fasta_file))
+            labels, sequences = utils.fasta_from_file(fasta_file)
+            for labelstring, sequence in zip(labels, sequences):
+                label = labelstring[0]
+                print(label)
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self):
+        pass
+
+
 if __name__ == "__main__":
     from glob import glob
 

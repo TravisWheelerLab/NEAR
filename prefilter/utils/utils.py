@@ -29,6 +29,7 @@ __all__ = [
     "fasta_from_file",
     "create_class_code_mapping",
     "msa_from_file",
+    "encode_msa",
 ]
 
 PROT_ALPHABET = {
@@ -55,9 +56,20 @@ PROT_ALPHABET = {
     "X": 20,
     "Y": 21,
     "Z": 22,
+    ".": 23,
+    "-": 24,
 }
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
+
+
+def encode_msa(msa_seqs: List[List[str]]):
+    # CxHxW
+    out = np.zeros((len(PROT_ALPHABET), len(msa_seqs), len(msa_seqs[0])))
+    for i, seq in enumerate(msa_seqs):
+        single_encoding = encode_protein_as_one_hot_vector(seq)
+        out[:, i, :] = single_encoding
+    return out
 
 
 def load_sequences_and_labels(
