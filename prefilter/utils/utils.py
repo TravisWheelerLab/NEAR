@@ -28,6 +28,7 @@ __all__ = [
     "handle_figure_path",
     "fasta_from_file",
     "create_class_code_mapping",
+    "msa_from_file",
 ]
 
 PROT_ALPHABET = {
@@ -85,6 +86,15 @@ def load_sequences_and_labels(
                 labels_to_sequence.append([labels, sequence])
 
     return labels_to_sequence
+
+
+def msa_from_file(msa_filepath: str):
+    msa_ext = os.path.splitext(msa_filepath)[1]
+    if msa_ext != ".afa":
+        raise ValueError(f"Ext must be .afa, got {msa_ext}")
+
+    labels, sequences = fasta_from_file(msa_filepath)
+    return labels, sequences
 
 
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:

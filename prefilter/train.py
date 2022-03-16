@@ -168,7 +168,7 @@ def main(args):
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": gpus,
+        "gpus": [0],
         "num_nodes": args.num_nodes,
         "max_epochs": last_epoch + (max_iter * min_unit)
         if args.shoptimize
@@ -177,7 +177,7 @@ def main(args):
         "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt]
         if args.shoptimize
         else [checkpoint_callback, log_lr, early_stopping_callback],
-        "strategy": "ddp" if args.gpus else None,
+        "strategy": None,
         "precision": 16 if args.gpus else 32,
         "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
         if args.shoptimize

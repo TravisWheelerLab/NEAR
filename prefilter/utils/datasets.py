@@ -149,6 +149,7 @@ class SequenceIterator(SequenceDataset):
     def _build_dataset(self) -> None:
         # TODO: Write rust extension for this.
         for fasta_file in self.fasta_files:
+            print(os.path.basename(fasta_file))
             labels, sequences = utils.fasta_from_file(fasta_file)
             for labelstring, sequence in zip(labels, sequences):
                 labelset = utils.parse_labels(labelstring)

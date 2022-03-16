@@ -25,10 +25,9 @@ for fasta_file in fasta_files:
 fig, ax = plt.subplots(figsize=(12, 10))
 
 ax.semilogy()
-ax.hist(np.log10(e_values), bins=100, histtype='step')
+ax.hist(np.log10(e_values), bins=100, histtype="step")
 
 ax.set_xlabel("log$_{10}$(e_value)")
 ax.set_ylabel("log(count)")
 plt.savefig("train_evalue_hist.png", bbox_inches="tight")
 plt.close()
-
