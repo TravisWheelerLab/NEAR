@@ -30,6 +30,7 @@ __all__ = [
     "create_class_code_mapping",
     "msa_from_file",
     "encode_msa",
+    "logo_from_file",
 ]
 
 PROT_ALPHABET = {
@@ -53,11 +54,6 @@ PROT_ALPHABET = {
     "T": 17,
     "V": 18,
     "W": 19,
-    "X": 20,
-    "Y": 21,
-    "Z": 22,
-    ".": 23,
-    "-": 24,
 }
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
@@ -109,6 +105,14 @@ def msa_from_file(msa_filepath: str):
     return labels, sequences
 
 
+def logo_from_file(logo_filepath: str):
+    logo_ext = os.path.splitext(logo_filepath)[1]
+    if logo_ext != ".logo":
+        raise ValueError(f"Ext must be .logo, got {logo_ext}")
+    logo = np.genfromtxt(logo_filepath, skip_header=2)[:, 1:-2]
+    return logo.T
+
+
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
     bs = os.path.basename(figure_path)
     name, curr_ext = os.path.splitext(bs)
@@ -137,7 +141,9 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
         try:
             one_hot_encoding[PROT_ALPHABET[residue], i] = 1
         except KeyError:
-            one_hot_encoding[PROT_ALPHABET["X"], i] = 1  # X is "any amino acid"
+            # AA doesn't exist or is unknown
+            pass
+            # one_hot_encoding[PROT_ALPHABET["X"], i] = 1  # X is "any amino acid"
 
     return one_hot_encoding
 
