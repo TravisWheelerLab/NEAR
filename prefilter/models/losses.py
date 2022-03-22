@@ -4,10 +4,14 @@ Date: May 07, 2020
 """
 from __future__ import print_function
 
+import pdb
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss"]
+__all__ = ["SupConLoss", "SupervisedContrastiveLoss"]
 
 
 class SupConLoss(nn.Module):
@@ -33,7 +37,7 @@ class SupConLoss(nn.Module):
         Returns:
             A loss scalar.
         """
-        device = torch.device("cuda:3") if features.is_cuda else torch.device("cpu")
+        device = torch.device("cuda") if features.is_cuda else torch.device("cpu")
 
         if len(features.shape) < 3:
             raise ValueError(
@@ -98,3 +102,26 @@ class SupConLoss(nn.Module):
         loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
+
+
+class SupervisedContrastiveLoss(nn.Module):
+    """
+    Credit: https://www.kaggle.com/debarshichanda/pytorch-supervised-contrastive-learning
+    """
+
+    def __init__(self, temperature=0.1):
+        super(SupervisedContrastiveLoss, self).__init__()
+        self.temperature = temperature
+
+    def forward(self, feature_vectors, labels):
+        # Normalize feature vectors
+        feature_vectors_normalized = F.normalize(feature_vectors, p=2, dim=1)
+        # Compute logits
+        logits = torch.div(
+            torch.matmul(
+                feature_vectors_normalized,
+                torch.transpose(feature_vectors_normalized, 0, 1),
+            ),
+            self.temperature,
+        )
+        return NTXentLoss(temperature=0.07)(logits, torch.squeeze(labels))

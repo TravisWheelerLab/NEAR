@@ -22,7 +22,9 @@ __all__ = [
     "DecoyIterator",
     "SequenceIterator",
     "RankingIterator",
+    "Triplets",
 ]
+
 
 # this could be sped up if i did it vectorized
 # but whatever for now
@@ -239,30 +241,69 @@ class RankingIterator(SequenceDataset):
 
 
 class Triplets(SequenceDataset):
-    def __init__(self, fasta_files, afa_files, name_to_class_code):
+    def __init__(self, fasta_files, logo_files, name_to_class_code):
 
         if not len(fasta_files):
             raise ValueError("No fasta files found")
 
         self.fasta_files = fasta_files
-        self.name_to_class_code = name_to_class_code
+        self.logo_files = logo_files
+        self.name_to_sequences = {}
+        self.name_to_logo = {}
+        self.name_to_class_code = {}
 
         if not isinstance(self.fasta_files, list):
             self.fasta_files = [self.fasta_files]
+        self._build_dataset()
 
     def _build_dataset(self):
+        fasta_set = set()
+
         for fasta_file in self.fasta_files:
-            print(os.path.basename(fasta_file))
+            bs = os.path.basename(fasta_file)
+            bs = bs.split(".0.5")[0]
+            fasta_set.add(bs)
             labels, sequences = utils.fasta_from_file(fasta_file)
-            for labelstring, sequence in zip(labels, sequences):
-                label = labelstring[0]
-                print(label)
+            self.name_to_sequences[bs] = [
+                utils.encode_protein_as_one_hot_vector(s) for s in sequences
+            ]
+
+        for logo in self.logo_files:
+            bs = os.path.basename(logo)
+            bs = bs.split(".0.5")[0]
+            if bs in fasta_set:
+                self.name_to_logo[bs] = utils.logo_from_file(logo)
+
+        self.names = list(self.name_to_logo.keys())
+
+        for i, name in enumerate(self.names):
+            self.name_to_class_code[name] = i
+        self.len = sum(list(map(len, list(self.name_to_sequences.values()))))
 
     def __len__(self):
-        pass
+        return self.len
 
-    def __getitem__(self):
-        pass
+    def __getitem__(self, idx):
+        name_idx = int(np.random.rand() * len(self.names))
+        name = self.names[name_idx]
+        pos_seqs, pos_logo = self.name_to_sequences[name], self.name_to_logo[name]
+        seq_idx = int(np.random.rand() * len(pos_seqs))
+        pos_seq = pos_seqs[seq_idx]
+        # pad w/ zeros
+        if pos_seq.shape[-1] > pos_logo.shape[-1]:
+            _pos_logo = np.zeros_like(pos_seq)
+            _pos_logo[:, : pos_logo.shape[-1]] = pos_logo
+            pos_logo = _pos_logo
+        elif pos_logo.shape[-1] > pos_seq.shape[-1]:
+            _pos_seq = np.zeros_like(pos_logo)
+            _pos_seq[:, : pos_seq.shape[-1]] = pos_seq
+            pos_seq = _pos_seq
+
+        # if I want a final size of bsz, n_views, ...
+        # i am going to return a tensor of size n_viewsx...
+        return np.concatenate(
+            (pos_seq[np.newaxis, :], pos_logo[np.newaxis, :]), axis=0
+        ), [self.name_to_class_code[name]]
 
 
 if __name__ == "__main__":

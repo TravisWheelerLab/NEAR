@@ -6,118 +6,58 @@ from glob import glob
 from sklearn.neighbors import BallTree
 import yaml
 
-from prefilter.models import ResNet2d, ResNet1d, SupConLoss
-from prefilter.utils import (
-    PROT_ALPHABET,
-    fasta_from_file,
-    msa_from_file,
-    encode_protein_as_one_hot_vector,
-    encode_msa,
-    logo_from_file,
-)
-
-# dataset of N pairs:
-# anchor + positive, anchor + N negatives
-# start w/ BCE
+from prefilter.models import ResNet1d, SupConLoss
+from prefilter.utils import Triplets, pad_view_batches
 
 logo_path = "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/"
 fasta_path = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset"
 
-fasta_files = glob(os.path.join(fasta_path, "*-valid.fa"))
-fasta_set = set()
-name_to_sequences = {}
-for fasta in fasta_files:
-    bs = os.path.basename(fasta)
-    bs = bs.split(".0.5")[0]
-    fasta_set.add(bs)
-    labels, sequences = fasta_from_file(fasta)
-    name_to_sequences[bs] = [encode_protein_as_one_hot_vector(s) for s in sequences]
-
+fasta_files = glob(os.path.join(fasta_path, "*-train.fa"))
 logo_files = glob(os.path.join(logo_path, "*.logo"))
-# only going to eval at the end
-logo_train = []
-i = 0
-names = []
-name_to_logo = {}
 
-for logo in logo_files:
-    bs = os.path.basename(logo)
-    bs = bs.split(".0.5")[0]
-    if bs in fasta_set:
-        logo_train.append(logo)
-        names.append(bs)
-        name_to_logo[bs] = logo_from_file(logo)
+dataset = Triplets(fasta_files, logo_files, name_to_class_code=None)
 
+batch_size = 256
+dataloader = torch.utils.data.DataLoader(
+    dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_view_batches
+)
 
-def sample_pos():
-    name_idx = int(np.random.rand() * len(names))
-    name = names[name_idx]
-    pos_seqs, pos_logo = name_to_sequences[name], name_to_logo[name]
-    seq_idx = int(np.random.rand() * len(pos_seqs))
-    pos_seq = pos_seqs[seq_idx]
-    return torch.as_tensor(pos_seq).unsqueeze(0), torch.as_tensor(pos_logo).unsqueeze(0)
-
-
-def sample_neg():
-    neg_idx_seq = int(np.random.rand() * len(names))
-    neg_idx_logo = int(np.random.rand() * len(names))
-    while neg_idx_logo == neg_idx_seq:
-        neg_idx_logo = int(np.random.rand() * len(names))
-    neg_seqs, neg_logo = (
-        name_to_sequences[names[neg_idx_seq]],
-        name_to_logo[names[neg_idx_logo]],
-    )
-    neg_seq_idx = int(np.random.rand() * len(neg_seqs))
-    neg_seq = neg_seqs[neg_seq_idx]
-    return torch.as_tensor(neg_seq).unsqueeze(0), torch.as_tensor(neg_logo).unsqueeze(0)
-
-
-device = "cuda:2"
+device = "cuda"
 encoder = ResNet1d().to(device)
-optim = torch.optim.Adam(encoder.parameters(), lr=6e-5)
-labels = torch.as_tensor([1, 0, 0, 0]).to(device).float()
+optim = torch.optim.SGD(encoder.parameters(), lr=0.5, momentum=0.9)
 i = 0
 cos_sim = torch.nn.CosineSimilarity(dim=-1)
+crit = SupConLoss()
+# i think this is correct...
 
-if not os.path.isfile("trained_encoder.pt"):
+for epoch in range(100):
+    mn_loss = 0
+    j = 0
+    for features, labels in dataloader:
+        j += 1
+        optim.zero_grad()
+        if features.shape[0] != 2 * batch_size:
+            continue
 
-    for epoch in range(100):
+        # 2*batch_sizex256
+        embeddings = encoder(features.to(device).float())
+        # normalize over the embedding dimension
 
-        for batch_idx in range(200):
+        embeddings = torch.nn.functional.normalize(embeddings, dim=1)
+        # then stack into pos/pos pairs
+        embeddings = embeddings.view(batch_size, 2, 128)
 
-            optim.zero_grad()
-            pos_seq, pos_logo = sample_pos()
-            neg_seq, neg_logo = sample_neg()
+        loss = crit(embeddings, labels)
+        mn_loss += loss.item()
+        loss.backward()
+        optim.step()
 
-            # anchor
-            pos_seq_embed = encoder(pos_seq.to(device).float()).squeeze()
-            # positive
-            pos_logo_embed = encoder(pos_logo.to(device).float()).squeeze()
-            # negative
-            neg_logo_embed = encoder(neg_logo.to(device).float()).squeeze()
-
-            # a should be small
-            a = 1 - cos_sim(pos_seq_embed, pos_logo_embed).float().to(device)
-            # b should be large
-            b = 1 - cos_sim(pos_seq_embed, neg_logo_embed).float().to(device)
-
-            z = a - b + 1
-            loss = torch.max(torch.tensor(0).to(device), z)
-
-            # print(a.item(), b.item(), c.item(), d.item())
-            if i % 20 == 0:
-                print(f"{loss.item():.3f}, {a.item():.3f}, {b.item():.3f}\r")
-            i += 1
-            loss.backward()
-            optim.step()
-
-    torch.save(encoder, "trained_encoder.pt")
-else:
-    encoder = torch.load("trained_encoder.pt", map_location=torch.device(device))
+    print(f"epoch: {epoch}, loss: {loss.item()}, mn_loss: {mn_loss/j}")
 
 # eval. all logos
-logos = [name_to_logo[n] for n in names]
-logo_embeddings = np.zeros((len(logos), 256))
+logos = [dataset.name_to_logo[n] for n in dataset.names]
+names = dataset.names
+logo_embeddings = np.zeros((len(logos), 128))
 with torch.no_grad():
     for i, logo in enumerate(logos):
         embedding = encoder(torch.as_tensor(logo).to(device).float().unsqueeze(0))
@@ -132,7 +72,7 @@ total = 0
 correct = 0
 with torch.no_grad():
     for i, name in enumerate(names):
-        sequences = name_to_sequences[name]
+        sequences = dataset.name_to_sequences[name]
         total += len(sequences)
         for sequence in sequences:
             predicted_embedding = encoder(

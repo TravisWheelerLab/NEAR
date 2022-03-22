@@ -30,6 +30,7 @@ __all__ = [
     "create_class_code_mapping",
     "msa_from_file",
     "encode_msa",
+    "pad_view_batches",
     "logo_from_file",
 ]
 
@@ -313,6 +314,32 @@ def pad_features_in_batch(batch):
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
     return features, features_mask, torch.stack(labels)
+
+
+def pad_view_batches(batch, n_views=2):
+    """
+    Pad batches with views as a dim.
+    Input: [n_viewsx...]
+    :param n_views:  num views to allow
+    :type n_views: int
+    :param batch: list of np.ndarrays encoding protein sequences/logos
+    :type batch: List[np.ndarray]
+    :return: torch.tensor
+    :rtype: torch.tensor
+    """
+
+    features = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    mxlen = np.max([s.shape[-1] for s in features])
+    padded_batch = np.zeros((len(features) * n_views, LEN_PROTEIN_ALPHABET, mxlen))
+    # feat is n_views x len
+    for i, feat in enumerate(features):
+        padded_batch[i : i + 2, :, : feat.shape[-1]] = feat
+    _labels = []
+    for l in labels:
+        _labels.extend(l)
+    labels = _labels
+    return torch.tensor(padded_batch), torch.as_tensor(labels)
 
 
 def pad_labels_and_features_in_batch(batch):
