@@ -7,7 +7,7 @@ from sklearn.neighbors import BallTree
 import yaml
 
 from prefilter.models import ResNet1d, SupConLoss
-from prefilter.utils import Triplets, pad_view_batches
+from prefilter.utils import ContrastiveGenerator, pad_view_batches
 
 logo_path = "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/"
 fasta_path = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset"
@@ -15,7 +15,7 @@ fasta_path = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_
 fasta_files = glob(os.path.join(fasta_path, "*-train.fa"))
 logo_files = glob(os.path.join(logo_path, "*.logo"))
 
-dataset = Triplets(fasta_files, logo_files, name_to_class_code=None)
+dataset = ContrastiveGenerator(fasta_files, logo_files, name_to_class_code=None)
 
 batch_size = 256
 dataloader = torch.utils.data.DataLoader(

@@ -54,41 +54,22 @@ def main():
         "--gpus",
         nargs="+",
         type=int,
-        help="list of specific GPUs to use." " without --specify_gpus set ",
+        help="list of specific GPUs to use with --specify_gpus set",
     )
     train_parser.add_argument("--num_nodes", type=int, required=True)
     train_parser.add_argument("--epochs", type=int, required=True)
-    train_parser.add_argument("--normalize_output_embedding", action="store_true")
     train_parser.add_argument("--learning_rate", type=float, required=True)
     train_parser.add_argument("--batch_size", type=int, required=True)
     train_parser.add_argument("--num_workers", type=int, required=True)
-    train_parser.add_argument("--evaluating", action="store_true")
-    train_parser.add_argument("--check_val_every_n_epoch", type=int, required=True)
-    train_parser.add_argument("--model_name", type=str, required=True)
+    train_parser.add_argument("--check_val_every_n_epoch", default=10)
     train_parser.add_argument("--data_path", type=str, required=True)
+    train_parser.add_argument("--logo_path", type=str, required=True)
     train_parser.add_argument("--decoy_path", type=str, default=None)
-    train_parser.add_argument("--schedule_lr", action="store_true")
-    train_parser.add_argument("--step_lr_step_size", type=int, default=None)
-    train_parser.add_argument("--step_lr_decay_factor", type=float, default=None)
-    train_parser.add_argument("--min_unit", type=int, default=1)
-    train_parser.add_argument("--res_block_n_filters", type=int, default=None)
-    train_parser.add_argument("--vocab_size", type=int, default=None)
-    train_parser.add_argument("--res_block_kernel_size", type=int, default=None)
-    train_parser.add_argument("--n_res_blocks", type=int, default=None)
-    train_parser.add_argument("--res_bottleneck_factor", type=float, default=None)
-    train_parser.add_argument("--dilation_rate", type=float, default=None)
-    train_parser.add_argument("--project_name", type=str, default="prefilter")
-    train_parser.add_argument("--shoptimize", action="store_true")
-    train_parser.add_argument("--log_confusion_matrix", action="store_true")
+    train_parser.add_argument("--debug", action="store_true")
     train_parser.add_argument(
         "--emission_sequence_path", nargs="+", type=str, default=None
     )
-    train_parser.add_argument("--pos_weight", type=int, default=1)
-    train_parser.add_argument("--n_emission_sequences", type=int, default=100)
     train_parser.add_argument("--specify_gpus", action="store_true")
-    train_parser.add_argument("--distill", action="store_true")
-    train_parser.add_argument("--subsample_neg_labels", action="store_true")
-    train_parser.add_argument("--xent", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

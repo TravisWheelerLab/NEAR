@@ -10,6 +10,8 @@ from collections import defaultdict
 from random import shuffle
 from typing import List, Union, Tuple, Optional, Dict
 
+import yaml
+
 import prefilter
 import prefilter.utils as utils
 from prefilter import DECOY_FLAG
@@ -22,7 +24,7 @@ __all__ = [
     "DecoyIterator",
     "SequenceIterator",
     "RankingIterator",
-    "Triplets",
+    "ContrastiveGenerator",
 ]
 
 
@@ -240,70 +242,73 @@ class RankingIterator(SequenceDataset):
         return len(self.labels_and_sequences)
 
 
-class Triplets(SequenceDataset):
-    def __init__(self, fasta_files, logo_files, name_to_class_code):
+class ContrastiveGenerator(SequenceDataset):
+    def __init__(self, fasta_files, logo_path, name_to_class_code):
 
         if not len(fasta_files):
             raise ValueError("No fasta files found")
 
         self.fasta_files = fasta_files
-        self.logo_files = logo_files
-        self.name_to_sequences = {}
+        self.logo_path = logo_path
+        self.name_to_sequences = defaultdict(list)
+        self.name_to_class_code = name_to_class_code
         self.name_to_logo = {}
-        self.name_to_class_code = {}
+        self.names = None
 
         if not isinstance(self.fasta_files, list):
             self.fasta_files = [self.fasta_files]
+
         self._build_dataset()
 
     def _build_dataset(self):
-        fasta_set = set()
+
+        with open(prefilter.name_to_accession_id, "r") as src:
+            name_to_acc_id = yaml.safe_load(src)
+
+        acc_id_to_name = {v: k for k, v in name_to_acc_id.items()}
+        del name_to_acc_id
 
         for fasta_file in self.fasta_files:
-            bs = os.path.basename(fasta_file)
-            bs = bs.split(".0.5")[0]
-            fasta_set.add(bs)
+            print(f"loading sequences from {fasta_file}")
             labels, sequences = utils.fasta_from_file(fasta_file)
-            self.name_to_sequences[bs] = [
-                utils.encode_protein_as_one_hot_vector(s) for s in sequences
-            ]
+            # TODO: keep separate dicts for Nth order labels
+            for labelstring, sequence in zip(labels, sequences):
+                # parse labels
+                labelset = utils.parse_labels(labelstring)
+                labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
+                labelset = [lab[0] for lab in labelset]
+                for label in labelset:
+                    self.name_to_sequences[label].append(
+                        utils.encode_protein_as_one_hot_vector(sequence)
+                    )
 
-        for logo in self.logo_files:
-            bs = os.path.basename(logo)
-            bs = bs.split(".0.5")[0]
-            if bs in fasta_set:
-                self.name_to_logo[bs] = utils.logo_from_file(logo)
+        # now construct the name-to-logo by
+        # iterating over the pfam accession IDs in name to sequences
+
+        for accession_id in self.name_to_sequences.keys():
+            logo_name = acc_id_to_name[accession_id]
+            logo_file = os.path.join(self.logo_path, f"{logo_name}.0.5-train.hmm.logo")
+            if not os.path.isfile(logo_file):
+                raise ValueError(f"No logo file found at {logo_file}")
+            else:
+                self.name_to_logo[accession_id] = utils.logo_from_file(logo_file)
 
         self.names = list(self.name_to_logo.keys())
 
-        for i, name in enumerate(self.names):
-            self.name_to_class_code[name] = i
         self.len = sum(list(map(len, list(self.name_to_sequences.values()))))
 
     def __len__(self):
         return self.len
 
     def __getitem__(self, idx):
+        # stochastic
         name_idx = int(np.random.rand() * len(self.names))
         name = self.names[name_idx]
         pos_seqs, pos_logo = self.name_to_sequences[name], self.name_to_logo[name]
         seq_idx = int(np.random.rand() * len(pos_seqs))
         pos_seq = pos_seqs[seq_idx]
-        # pad w/ zeros
-        if pos_seq.shape[-1] > pos_logo.shape[-1]:
-            _pos_logo = np.zeros_like(pos_seq)
-            _pos_logo[:, : pos_logo.shape[-1]] = pos_logo
-            pos_logo = _pos_logo
-        elif pos_logo.shape[-1] > pos_seq.shape[-1]:
-            _pos_seq = np.zeros_like(pos_logo)
-            _pos_seq[:, : pos_seq.shape[-1]] = pos_seq
-            pos_seq = _pos_seq
 
-        # if I want a final size of bsz, n_views, ...
-        # i am going to return a tensor of size n_viewsx...
-        return np.concatenate(
-            (pos_seq[np.newaxis, :], pos_logo[np.newaxis, :]), axis=0
-        ), [self.name_to_class_code[name]]
+        return pos_seq, pos_logo, self.name_to_class_code[name]
 
 
 if __name__ == "__main__":
@@ -315,15 +320,17 @@ if __name__ == "__main__":
     # psd = ProteinSequenceDataset(
     #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
     # )
-    psd = SequenceIterator(
-        fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
+    psd = ContrastiveGenerator(
+        fasta_files=fs,
+        logo_path="/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/",
+        name_to_class_code=name_to_class_code,
     )
 
     psd = torch.utils.data.DataLoader(
         psd,
-        batch_size=1,
-        collate_fn=utils.pad_features_in_batch,
+        batch_size=32,
+        collate_fn=utils.pad_view_batches,
     )
 
     for x, y, z in psd:
-        print(torch.sum(z[z != 0]), z.shape)
+        print(x.shape, y.shape, z.shape)

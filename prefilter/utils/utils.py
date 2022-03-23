@@ -199,7 +199,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     return labels
 
 
-def create_class_code_mapping(fasta_files):
+def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
     """
     TODO: CONVERT TO RUST.
     in order to create the mapping on the fly we have to load every sequence in our dataset!
@@ -214,7 +214,7 @@ def create_class_code_mapping(fasta_files):
 
     class_code = 0
     for fasta_file in fasta_files:
-        print(f"loading {fasta_file}")
+        print(f"loading {fasta_file}", len(name_to_class_code))
         labels, sequences = fasta_from_file(fasta_file)
         for label, sequence in zip(labels, sequences):
 
@@ -229,6 +229,10 @@ def create_class_code_mapping(fasta_files):
                 for name in labelset:
                     # if we have an accession id plus two coordinates;
                     # grab only the name
+                    if len(name) == 4:
+                        if float(name[-1]) > 1e-5:
+                            break
+
                     if isinstance(name, list):
                         name = name[0]
                     # otherwise, don't mess with it.
@@ -328,18 +332,13 @@ def pad_view_batches(batch, n_views=2):
     :rtype: torch.tensor
     """
 
-    features = [b[0] for b in batch]
-    labels = [b[1] for b in batch]
-    mxlen = np.max([s.shape[-1] for s in features])
-    padded_batch = np.zeros((len(features) * n_views, LEN_PROTEIN_ALPHABET, mxlen))
-    # feat is n_views x len
-    for i, feat in enumerate(features):
-        padded_batch[i : i + 2, :, : feat.shape[-1]] = feat
-    _labels = []
-    for l in labels:
-        _labels.extend(l)
-    labels = _labels
-    return torch.tensor(padded_batch), torch.as_tensor(labels)
+    seqs = [b[0] for b in batch]
+    logos = [b[1] for b in batch]
+    data = seqs + logos
+    labels = [b[2] for b in batch]
+    seqs, seqs_mask = _pad_sequences(data)
+
+    return torch.as_tensor(seqs), torch.as_tensor(seqs_mask), torch.as_tensor(labels)
 
 
 def pad_labels_and_features_in_batch(batch):

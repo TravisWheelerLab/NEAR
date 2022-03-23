@@ -15,36 +15,21 @@ from shopty import ShoptyConfig
 from glob import glob
 from argparse import ArgumentParser
 
-from prefilter.models import Prot2Vec
+from prefilter.models import Prot2Vec, ResNet1d
 from prefilter.utils import PROT_ALPHABET, create_class_code_mapping
 
 
 def main(args):
-    if args.schedule_lr and (
-        args.step_lr_step_size is None or args.step_lr_decay_factor is None
-    ):
-        raise ValueError(
-            "--schedule_lr requires --step_lr_step_size and --step_lr_decay_factor"
-        )
-
-    # shopty-specific config
-    if args.shoptimize:
-        shopty_config = ShoptyConfig()
-        result_file = shopty_config.results_path
-        experiment_dir = shopty_config.experiment_directory
-        checkpoint_dir = shopty_config.checkpoint_directory
-        checkpoint_file = shopty_config.checkpoint_file
-        max_iter = shopty_config.max_iter
-        min_unit = 1
-    else:
-        max_iter = args.epochs
-
+    max_iter = args.epochs
     data_path = args.data_path
 
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
     train_files = glob(os.path.join(data_path, "*train.fa"))
+    if args.debug:
+        train_files = train_files[:3]
+
     if args.decoy_path is not None:
         decoy_files = glob(os.path.join(args.decoy_path, "*train.fa"))
         if not len(decoy_files):
@@ -55,19 +40,9 @@ def main(args):
 
     shuffle(train_files)
 
-    val_files = []
-    # then get their corresponding validation files (we don't want to validate on a set of files that don't have a
-    # relationship to the train files)
-    for f in train_files:
-        valid = f.replace("-train", "-valid")
-        if os.path.isfile(valid):
-            val_files.append(valid)
-
-    if not (len(val_files)):
-        raise ValueError("no valid files")
-
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences
+
     if args.emission_sequence_path is not None:
         emission_files = []
         for emission_sequence_path in args.emission_sequence_path:
@@ -79,6 +54,8 @@ def main(args):
             if not len(emission_files):
                 raise ValueError(f"no emission files found at {emission_sequence_path}")
 
+    val_files = []
+
     if args.emission_sequence_path is not None:
         name_to_class_code = create_class_code_mapping(
             train_files + val_files + emission_files
@@ -86,75 +63,26 @@ def main(args):
     else:
         name_to_class_code = create_class_code_mapping(train_files + val_files)
 
-    model = Prot2Vec(
-        res_block_n_filters=args.res_block_n_filters,
-        vocab_size=len(PROT_ALPHABET),
-        res_block_kernel_size=args.res_block_kernel_size,
-        n_res_blocks=args.n_res_blocks,
-        res_bottleneck_factor=args.res_bottleneck_factor,
-        dilation_rate=args.dilation_rate,
-        pos_weight=args.pos_weight,
-        learning_rate=args.learning_rate,
-        train_files=train_files,
-        emission_files=emission_files
-        if args.emission_sequence_path is not None
-        else None,
-        val_files=val_files,
-        schedule_lr=args.schedule_lr,
-        step_lr_step_size=args.step_lr_step_size,
-        step_lr_decay_factor=args.step_lr_decay_factor,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+    #
+    model = ResNet1d(
+        fasta_files=train_files,
+        logo_path=args.logo_path,
         name_to_class_code=name_to_class_code,
-        n_emission_sequences=args.n_emission_sequences,
-        distill=args.distill,
-        subsample_neg_labels=args.subsample_neg_labels,
-        xent=args.xent,
-        decoy_files=decoy_files if args.decoy_path is not None else None,
+        learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
     )
 
-    # create the checkpoint callbacks (shopty requires the one named "checkpoint callback")
-    early_stopping_callback = None
-    if args.shoptimize:
-        checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            dirpath=checkpoint_dir, save_last=True, save_top_k=0, verbose=True
-        )
-        best_loss_ckpt = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/loss",
-            filename="{epoch}-{val/loss:.5f}-{val/acc:.5f}",
-            save_top_k=1,
-        )
-    else:
-        checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-            monitor="val/loss",
-            mode="min",
-            filename="epoch_{epoch}-val_loss_{val/loss:.5f}_val_f1_{val/f1:.5f}",
-            auto_insert_metric_name=False,
-            save_top_k=500,
-        )
-        early_stopping_callback = pl.callbacks.EarlyStopping(
-            monitor="val/f1",
-            mode="max",
-            min_delta=0.0024,
-            patience=300,
-        )
+    checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        monitor="train_loss",
+        mode="min",
+        filename="epoch_{epoch}_{train_loss}",
+        auto_insert_metric_name=False,
+        save_top_k=-1,
+    )
 
-    last_epoch = 0
-    # if we're optimizing, check for a checkpoint and load it if it exists.
-    if args.shoptimize:
-        if os.path.isfile(checkpoint_file):
-            checkpoint = torch.load(checkpoint_file)
-            last_epoch = checkpoint["epoch"]
-            model = model.load_from_checkpoint(
-                checkpoint_file,
-                map_location=torch.device("cuda")
-                if torch.cuda.is_available()
-                else torch.device("cpu"),
-            )
-
-    # callback to monitor learning rate in tensorboard
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
     gpus = args.gpus
+
     if args.specify_gpus:
         if not isinstance(gpus, list):
             gpus = [gpus]
@@ -168,32 +96,16 @@ def main(args):
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": [0],
+        "gpus": gpus,
         "num_nodes": args.num_nodes,
-        "max_epochs": last_epoch + (max_iter * min_unit)
-        if args.shoptimize
-        else args.epochs,
+        "max_epochs": args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
-        "callbacks": [checkpoint_callback, log_lr, best_loss_ckpt]
-        if args.shoptimize
-        else [checkpoint_callback, log_lr, early_stopping_callback],
-        "strategy": None,
+        "callbacks": [checkpoint_callback, log_lr],
         "precision": 16 if args.gpus else 32,
-        "logger": pl.loggers.TensorBoardLogger(experiment_dir, name="", version="")
-        if args.shoptimize
-        else pl.loggers.TensorBoardLogger(args.log_dir),
+        "logger": pl.loggers.TensorBoardLogger(args.log_dir),
+        "strategy": "ddp",
     }
 
     trainer = pl.Trainer(**trainer_kwargs)
 
-    ckpt_path = None
-    if args.shoptimize:
-        ckpt_path = checkpoint_file if os.path.isfile(checkpoint_file) else None
-
-    # finally, train the model
-    trainer.fit(model, ckpt_path=ckpt_path)
-
-    if args.shoptimize:
-        results = trainer.validate(model)[0]
-        with open(result_file, "w") as dst:
-            dst.write(f"test_acc:{results['val/loss']}")
+    trainer.fit(model)
