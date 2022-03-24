@@ -6,10 +6,50 @@ from argparse import ArgumentParser
 
 __version__ = "0.0.1"
 
+import yaml
+
 name_to_accession_id = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "resources/name_to_pfam_accession_id.yaml",
 )
+
+
+class PfamNameToAccessionID:
+
+    name_to_accession_id = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "resources/name_to_pfam_accession_id.yaml",
+    )
+    init = False
+
+    def __getitem__(self, item):
+        if self.init:
+            return self.mapping[item]
+        else:
+            with open(self.name_to_accession_id, "r") as src:
+                self.mapping = yaml.safe_load(src)
+            self.init = True
+            return self.mapping[item]
+
+
+class AccessionIDToPfamName:
+
+    name_to_accession_id = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "resources/name_to_pfam_accession_id.yaml",
+    )
+    init = False
+
+    def __getitem__(self, item):
+        if self.init:
+            return self.mapping[item]
+        else:
+            with open(self.name_to_accession_id, "r") as src:
+                self.mapping = yaml.safe_load(src)
+            self.mapping = {v: k for k, v in self.mapping.items()}
+            self.init = True
+            return self.mapping[item]
+
 
 MASK_FLAG = -1
 DECOY_FLAG = "DECOY"

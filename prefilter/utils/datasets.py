@@ -224,19 +224,42 @@ class DecoyIterator(SequenceDataset):
 
 
 class RankingIterator(SequenceDataset):
-    def __init__(self, fasta_files, name_to_class_code, max_labels_per_seq):
+    def __init__(
+        self, fasta_files, name_to_class_code, max_labels_per_seq, evalue_threshold
+    ):
         super().__init__(fasta_files, name_to_class_code)
 
-        self._build_dataset(max_labels_per_seq)
+        self._build_dataset(max_labels_per_seq, evalue_threshold)
 
-    def _build_dataset(self, max_labels_per_seq):
+    def _build_dataset(self, max_labels_per_seq, evalue_threshold):
         self.labels_and_sequences = utils.load_sequences_and_labels(
-            self.fasta_files, max_labels_per_seq
+            self.fasta_files, max_labels_per_seq, evalue_threshold
         )
 
     def __getitem__(self, idx):
         labelset, sequence = self.labels_and_sequences[idx]
         return self._encoding_func(sequence), self._make_multi_hot(labelset), labelset
+
+    def __len__(self):
+        return len(self.labels_and_sequences)
+
+
+class SequenceIterator(SequenceDataset):
+    def __init__(
+        self, fasta_files, name_to_class_code, max_labels_per_seq, evalue_threshold
+    ):
+        super().__init__(fasta_files, name_to_class_code)
+
+        self._build_dataset(max_labels_per_seq, evalue_threshold)
+
+    def _build_dataset(self, max_labels_per_seq, evalue_threshold):
+        self.labels_and_sequences = utils.load_sequences_and_labels(
+            self.fasta_files, max_labels_per_seq, evalue_threshold
+        )
+
+    def __getitem__(self, idx):
+        labelset, sequence = self.labels_and_sequences[idx]
+        return self._encoding_func(sequence), labelset
 
     def __len__(self):
         return len(self.labels_and_sequences)

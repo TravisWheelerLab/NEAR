@@ -70,9 +70,13 @@ def encode_msa(msa_seqs: List[List[str]]):
 
 
 def load_sequences_and_labels(
-    fasta_files: List[str], max_labels_per_seq: int = None
+    fasta_files: List[str],
+    max_labels_per_seq: int = None,
+    evalue_threshold: float = None,
 ) -> List[Tuple[List[str], str]]:
     """
+    :param evalue_threshold:
+    :type evalue_threshold:
     :param max_labels_per_seq:
     :type max_labels_per_seq:
     :param fasta_files:
@@ -86,6 +90,10 @@ def load_sequences_and_labels(
         # parse labels, get
         for labelstring, sequence in zip(labelset, sequences):
             labels = parse_labels(labelstring)
+            if evalue_threshold is not None:
+                labels = list(
+                    filter(lambda x: float(x[-1]) <= evalue_threshold, labels)
+                )
             if max_labels_per_seq is not None:
                 labels = labels[:max_labels_per_seq]
             if labels is None:
@@ -214,7 +222,7 @@ def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
 
     class_code = 0
     for fasta_file in fasta_files:
-        print(f"loading {fasta_file}", len(name_to_class_code))
+        print(f"loading {fasta_file}, {len(name_to_class_code)} unique names so far")
         labels, sequences = fasta_from_file(fasta_file)
         for label, sequence in zip(labels, sequences):
 
@@ -230,7 +238,7 @@ def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
                     # if we have an accession id plus two coordinates;
                     # grab only the name
                     if len(name) == 4:
-                        if float(name[-1]) > 1e-5:
+                        if float(name[-1]) > evalue_threshold:
                             break
 
                     if isinstance(name, list):
@@ -317,7 +325,7 @@ def pad_features_in_batch(batch):
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
-    return features, features_mask, torch.stack(labels)
+    return features, features_mask, labels
 
 
 def pad_view_batches(batch, n_views=2):
