@@ -106,9 +106,7 @@ def main():
     train_parser.add_argument("--logo_path", type=str, required=True)
     train_parser.add_argument("--decoy_path", type=str, default=None)
     train_parser.add_argument("--debug", action="store_true")
-    train_parser.add_argument(
-        "--emission_sequence_path", nargs="+", type=str, default=None
-    )
+    train_parser.add_argument("--emission_path", nargs="+", type=str, default=None)
     train_parser.add_argument("--specify_gpus", action="store_true")
 
     # evaluation parser .----------------------------------------------------

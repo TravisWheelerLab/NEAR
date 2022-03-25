@@ -21,14 +21,22 @@ from prefilter import AccessionIDToPfamName
 
 
 @torch.no_grad()
-def embed_logos(model, logo_path, accession_ids, device, embed_dim):
+def embed_logos(
+    model, logo_path, accession_ids, device, embed_dim, add_all_logos=False
+):
     mapping = AccessionIDToPfamName()
+    logo_files = list(logo_path.glob("*.logo"))
+    shuffle(logo_files)
     logos = np.zeros((len(accession_ids), embed_dim))
-    for i, accession_id in enumerate(accession_ids):
+    print(logos.shape)
+    in_already = set()
+    i = 0
+    for accession_id in accession_ids:
         name = mapping[accession_id]
         logo_file = logo_path / f"{name}.0.5-train.hmm.logo"
         if not logo_file.exists():
             raise ValueError(f"couldn't find {logo_file}")
+        in_already.add(logo_file)
         embed = model(
             torch.as_tensor(utils.logo_from_file(logo_file))
             .to(device)
@@ -36,6 +44,32 @@ def embed_logos(model, logo_path, accession_ids, device, embed_dim):
             .float()
         )
         logos[i] = embed.detach().cpu().numpy()
+        i += 1
+
+    if add_all_logos:
+        print("adding in all logo files.")
+        for f in logo_files:
+            if f in in_already:
+                logo_files.remove(f)
+
+        decoy_logos = np.zeros((len(logo_files), embed_dim))
+        i = 0
+        for f in logo_files:
+            print(f"adding in logo file {f}")
+            if f not in in_already:
+                embed = model(
+                    torch.as_tensor(utils.logo_from_file(f))
+                    .to(device)
+                    .unsqueeze(0)
+                    .float()
+                )
+                decoy_logos[i] = embed.detach().cpu().numpy()
+                i += 1
+            else:
+                in_already.add(f)
+
+        logos = np.concatenate((logos, decoy_logos), axis=0)
+
     return logos
 
 
@@ -44,7 +78,7 @@ if __name__ == "__main__":
     fasta_files = glob("/home/tc229954/max_hmmsearch/200_file_subset/*valid.fa")
     logo_path = Path("/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/")
     hparams_path = "models/contrastive/exps_mar23/default/version_0/hparams.yaml"
-    model_path = "models/contrastive/exps_mar23/default/version_0/checkpoints/ckpt-4838-0.35327672958374023.ckpt"
+    model_path = "models/contrastive/exps_mar23/default/version_0/checkpoints/ckpt-99999-0.24896955490112305.ckpt"
     embed_dim = 128
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -64,7 +98,9 @@ if __name__ == "__main__":
     valid_files = [f.replace("-train.fa", "-valid.fa") for f in hparams["fasta_files"]]
     valid_files = list(filter(lambda x: os.path.isfile(x), valid_files))
 
-    name_to_class_code = utils.create_class_code_mapping(hparams["fasta_files"])
+    name_to_class_code = utils.create_class_code_mapping(
+        hparams["fasta_files"] + valid_files
+    )
     accession_ids = list(name_to_class_code.keys())
 
     logo_embed = (
@@ -82,7 +118,7 @@ if __name__ == "__main__":
     )
 
     dataset = utils.SequenceIterator(
-        hparams["fasta_files"],
+        valid_files,
         name_to_class_code=name_to_class_code,
         max_labels_per_seq=100,
         evalue_threshold=1e-5,
@@ -95,17 +131,15 @@ if __name__ == "__main__":
     threshold_to_recall = defaultdict(int)
     threshold_to_neighborhood_recall = defaultdict(int)
     threshold_to_primary_recall = defaultdict(int)
-    shuffle(accession_ids)
 
     total_labelcount = 0
     primary_labelcount = 0
     neighborhood_labelcount = 0
-    for features, features_mask, labels in dataloader:
+    for kk, (features, features_mask, labels) in enumerate(dataloader):
+        print(f"{kk/len(dataloader):.3f}")
         predicted_embedding = model(torch.as_tensor(features).to(dev).float())
 
         nearest_neighbors = torch.matmul(logo_embed, predicted_embedding.T).squeeze()
-        print(nearest_neighbors)
-        exit()
 
         nearest_neighbors_idx = torch.argsort(nearest_neighbors, dim=0).cpu().numpy()
         # iterate over indices backwards
@@ -129,7 +163,6 @@ if __name__ == "__main__":
                         threshold_to_neighborhood_recall[j] += inn
 
                     threshold_to_recall[j] += inn
-                break
 
     topn = np.array(list(threshold_to_recall.keys()))
     recall = np.array(list(threshold_to_recall.values())) / total_labelcount
@@ -145,13 +178,19 @@ if __name__ == "__main__":
         / neighborhood_labelcount
     )
     fig, ax = plt.subplots(figsize=(10, 8))
-
     ax.plot(topn, recall, "ro", label="total recall")
     ax.plot(neighborhood_topn, neighborhood_recall, "bo", label="neighborhood recall")
     ax.plot(primary_topn, primary_recall, "ko", label="primary recall")
     ax.set_xlabel("number passed threshold")
     ax.set_ylabel("% of labels recovererd")
     ax.invert_xaxis()
+    ax.set_title(
+        f"top1: {recall[1]:.3f}, {primary_recall[1]:.3f}, {neighborhood_recall[1]:.3f}\n"
+        f"top5: {recall[5]:.3f}, {primary_recall[5]:.3f}, {neighborhood_recall[5]:.3f}\n"
+        f"tp100: {recall[100]:.3f}, {primary_recall[100]:.3f}, {neighborhood_recall[100]:.3f}\n"
+        f"total, primary, neighborhood"
+    )
+
     plt.legend()
-    plt.savefig("random.png", bbox_inches="tight")
+    plt.savefig("test_with_all_hmm_logos.png", bbox_inches="tight")
     plt.close()

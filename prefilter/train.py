@@ -20,7 +20,7 @@ from prefilter.utils import PROT_ALPHABET, create_class_code_mapping
 
 
 def main(args):
-    max_iter = args.epochs
+
     data_path = args.data_path
 
     if "$HOME" in data_path:
@@ -43,9 +43,9 @@ def main(args):
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences
 
-    if args.emission_sequence_path is not None:
+    if args.emission_path is not None:
         emission_files = []
-        for emission_sequence_path in args.emission_sequence_path:
+        for emission_sequence_path in args.emission_path:
             if "$HOME" in emission_sequence_path:
                 emission_sequence_path = emission_sequence_path.replace(
                     "$HOME", os.environ["HOME"]
@@ -53,10 +53,13 @@ def main(args):
             emission_files.extend(glob(os.path.join(emission_sequence_path, "*fa")))
             if not len(emission_files):
                 raise ValueError(f"no emission files found at {emission_sequence_path}")
+            if args.debug:
+                emission_files = emission_files[:2]
+                break
 
     val_files = []
 
-    if args.emission_sequence_path is not None:
+    if args.emission_path is not None:
         name_to_class_code = create_class_code_mapping(
             train_files + val_files + emission_files
         )
@@ -70,6 +73,7 @@ def main(args):
         name_to_class_code=name_to_class_code,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
+        emission_files=emission_files,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
@@ -96,7 +100,7 @@ def main(args):
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": gpus,
+        "gpus": [1, 3],
         "num_nodes": args.num_nodes,
         "max_epochs": args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,

@@ -298,16 +298,15 @@ class ContrastiveGenerator(SequenceDataset):
             for labelstring, sequence in zip(labels, sequences):
                 # parse labels
                 labelset = utils.parse_labels(labelstring)
-                labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
-                labelset = [lab[0] for lab in labelset]
+                if "emission" not in os.path.basename(fasta_file):
+                    labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
+                    labelset = [lab[0] for lab in labelset]
                 for label in labelset:
                     self.name_to_sequences[label].append(
                         utils.encode_protein_as_one_hot_vector(sequence)
                     )
-
         # now construct the name-to-logo by
         # iterating over the pfam accession IDs in name to sequences
-
         for accession_id in self.name_to_sequences.keys():
             logo_name = acc_id_to_name[accession_id]
             logo_file = os.path.join(self.logo_path, f"{logo_name}.0.5-train.hmm.logo")
@@ -330,7 +329,6 @@ class ContrastiveGenerator(SequenceDataset):
         pos_seqs, pos_logo = self.name_to_sequences[name], self.name_to_logo[name]
         seq_idx = int(np.random.rand() * len(pos_seqs))
         pos_seq = pos_seqs[seq_idx]
-
         return pos_seq, pos_logo, self.name_to_class_code[name]
 
 

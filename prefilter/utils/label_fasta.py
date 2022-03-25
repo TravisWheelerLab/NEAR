@@ -432,14 +432,17 @@ def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, 
 def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb, overwrite=True):
 
     domtblout_path = os.path.splitext(fasta_file)[0] + ".domtblout"
+    print("domtblout")
 
     if overwrite:
+        print("overwriting")
         subprocess.call(
-            f"hmmsearch -o /dev/null --max --incE 100 --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
+            f"hmmsearch -o /dev/null --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
         )
 
     domtblout = parse_domtblout(domtblout_path)
 
+    print("creating labels...")
     labels_from_file(fasta_file, fasta_outfile, domtblout)
 
 
@@ -697,7 +700,9 @@ if __name__ == "__main__":
             os.path.basename(program_args.fasta_file),
         )
         os.makedirs(program_args.fasta_output_directory, exist_ok=True)
+        print("HELLO")
         label_with_hmmdb(program_args.fasta_file, fasta_outf, program_args.hmmdb)
+        print("DONE")
     elif program_args.command == "hdb":
         extract_ali_and_create_hmm(
             program_args.fasta_file, program_args.alidb, program_args.overwrite
