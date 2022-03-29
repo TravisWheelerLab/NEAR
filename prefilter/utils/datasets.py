@@ -266,7 +266,14 @@ class SequenceIterator(SequenceDataset):
 
 
 class ContrastiveGenerator(SequenceDataset):
-    def __init__(self, fasta_files, logo_path, name_to_class_code):
+    def __init__(
+        self,
+        fasta_files,
+        logo_path,
+        name_to_class_code,
+        oversample_neighborhood_labels,
+        oversample_freq=5,
+    ):
 
         if not len(fasta_files):
             raise ValueError("No fasta files found")
@@ -275,8 +282,14 @@ class ContrastiveGenerator(SequenceDataset):
         self.logo_path = logo_path
         self.name_to_sequences = defaultdict(list)
         self.name_to_class_code = name_to_class_code
+        self.oversample_freq = oversample_freq
         self.name_to_logo = {}
         self.names = None
+        self.oversample_neighborhood_labels = oversample_neighborhood_labels
+        if self.oversample_neighborhood_labels:
+            self.neighborhood_name_to_sequences = defaultdict(list)
+            self.neighborhood_names = None
+            self.step_count = 0
 
         if not isinstance(self.fasta_files, list):
             self.fasta_files = [self.fasta_files]
@@ -294,20 +307,37 @@ class ContrastiveGenerator(SequenceDataset):
         for fasta_file in self.fasta_files:
             print(f"loading sequences from {fasta_file}")
             labels, sequences = utils.fasta_from_file(fasta_file)
-            # TODO: keep separate dicts for Nth order labels
             for labelstring, sequence in zip(labels, sequences):
                 # parse labels
                 labelset = utils.parse_labels(labelstring)
                 if "emission" not in os.path.basename(fasta_file):
                     labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
                     labelset = [lab[0] for lab in labelset]
-                for label in labelset:
-                    self.name_to_sequences[label].append(
-                        utils.encode_protein_as_one_hot_vector(sequence)
-                    )
+                for k, label in enumerate(labelset):
+                    if self.oversample_neighborhood_labels:
+                        if k == 0:
+                            self.name_to_sequences[label].append(
+                                utils.encode_protein_as_one_hot_vector(sequence)
+                            )
+                        else:
+                            self.neighborhood_name_to_sequences[label].append(
+                                utils.encode_protein_as_one_hot_vector(sequence)
+                            )
+                    else:
+                        self.name_to_sequences[label].append(
+                            utils.encode_protein_as_one_hot_vector(sequence)
+                        )
         # now construct the name-to-logo by
         # iterating over the pfam accession IDs in name to sequences
-        for accession_id in self.name_to_sequences.keys():
+        if self.oversample_neighborhood_labels:
+            accession_ids = set(
+                list(self.name_to_sequences.keys())
+                + list(self.neighborhood_name_to_sequences.keys())
+            )
+        else:
+            accession_ids = list(self.name_to_sequences.keys())
+
+        for accession_id in accession_ids:
             logo_name = acc_id_to_name[accession_id]
             logo_file = os.path.join(self.logo_path, f"{logo_name}.0.5-train.hmm.logo")
             if not os.path.isfile(logo_file):
@@ -315,21 +345,50 @@ class ContrastiveGenerator(SequenceDataset):
             else:
                 self.name_to_logo[accession_id] = utils.logo_from_file(logo_file)
 
-        self.names = list(self.name_to_logo.keys())
+        if self.oversample_neighborhood_labels:
+            self.names = list(self.name_to_sequences.keys())
+            self.neighborhood_names = list(self.neighborhood_name_to_sequences.keys())
+        else:
+            self.names = list(self.name_to_sequences.keys())
 
         self.len = sum(list(map(len, list(self.name_to_sequences.values()))))
 
     def __len__(self):
         return self.len
 
-    def __getitem__(self, idx):
-        # stochastic
-        name_idx = int(np.random.rand() * len(self.names))
-        name = self.names[name_idx]
-        pos_seqs, pos_logo = self.name_to_sequences[name], self.name_to_logo[name]
+    def _sample(self, name_to_sequences, names):
+        """
+        Helper function to sample from a dict mapping pfam accession id to a list of sequences
+        :param dct:
+        :type dct:
+        :return:
+        :rtype:
+        """
+        name_idx = int(np.random.rand() * len(names))
+        name = names[name_idx]
+        pos_seqs, pos_logo = name_to_sequences[name], self.name_to_logo[name]
         seq_idx = int(np.random.rand() * len(pos_seqs))
         pos_seq = pos_seqs[seq_idx]
         return pos_seq, pos_logo, self.name_to_class_code[name]
+
+    def __getitem__(self, idx):
+        # stochastic
+        if self.oversample_neighborhood_labels:
+            if self.step_count % self.oversample_freq == 0:
+                pos_seq, pos_logo, class_code = self._sample(
+                    self.name_to_sequences, self.names
+                )
+            else:
+                pos_seq, pos_logo, class_code = self._sample(
+                    self.neighborhood_name_to_sequences, self.neighborhood_names
+                )
+            self.step_count += 1
+        else:
+            pos_seq, pos_logo, class_code = self._sample(
+                self.name_to_sequences, self.names
+            )
+
+        return pos_seq, pos_logo, class_code
 
 
 if __name__ == "__main__":
@@ -338,19 +397,18 @@ if __name__ == "__main__":
     fpath = "/home/tc229954/max_hmmsearch/200_file_subset/*fa"
     fs = glob(fpath)[:10]
     name_to_class_code = utils.create_class_code_mapping(fs)
-    # psd = ProteinSequenceDataset(
-    #     fasta_files=fs, name_to_class_code=name_to_class_code, distillation_labels=False
-    # )
+
     psd = ContrastiveGenerator(
         fasta_files=fs,
         logo_path="/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/",
         name_to_class_code=name_to_class_code,
+        oversample_neighborhood_labels=True,
     )
 
     psd = torch.utils.data.DataLoader(
         psd,
-        batch_size=32,
-        collate_fn=utils.pad_view_batches,
+        batch_size=33,
+        collate_fn=utils.pad_contrastive_batches,
     )
 
     for x, y, z in psd:

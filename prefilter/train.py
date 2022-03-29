@@ -73,7 +73,9 @@ def main(args):
         name_to_class_code=name_to_class_code,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
-        emission_files=emission_files,
+        emission_files=emission_files if args.emission_path is not None else None,
+        oversample_neighborhood_labels=False,
+        num_workers=args.num_workers,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
@@ -100,14 +102,15 @@ def main(args):
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": [1, 3],
+        "gpus": gpus,
         "num_nodes": args.num_nodes,
         "max_epochs": args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,
         "callbacks": [checkpoint_callback, log_lr],
         "precision": 16 if args.gpus else 32,
         "logger": pl.loggers.TensorBoardLogger(args.log_dir),
-        "strategy": "ddp",
+        "accelerator": "ddp",
+        "plugins": DDPPlugin(find_unused_parameters=False),
     }
 
     trainer = pl.Trainer(**trainer_kwargs)

@@ -75,11 +75,13 @@ def embed_logos(
 
 if __name__ == "__main__":
 
-    fasta_files = glob("/home/tc229954/max_hmmsearch/200_file_subset/*valid.fa")
     logo_path = Path("/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/")
     hparams_path = "models/contrastive/exps_mar23/default/version_0/hparams.yaml"
-    model_path = "models/contrastive/exps_mar23/default/version_0/checkpoints/ckpt-99999-0.24896955490112305.ckpt"
+    model_path = "models/contrastive/exps_mar23/default/version_5/checkpoints/ckpt-1055136-0.19485770165920258.ckpt"
+    figure_path = "train_with_emission_all_logos.png"
     embed_dim = 128
+    batch_size = 32
+    add_all_logos = True
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -94,12 +96,23 @@ if __name__ == "__main__":
     success = model.load_state_dict(state_dict)
     print(f"{success} for model {model_path}")
     model.eval()
+    emission_files = glob(
+        os.path.join(
+            "/home/tc229954/data/prefilter/pfam/seed/training_data/emission/0.55_rel_ent"
+            "/200_file_subset",
+            "*fa",
+        )
+    )
 
-    valid_files = [f.replace("-train.fa", "-valid.fa") for f in hparams["fasta_files"]]
+    valid_files = [
+        f.replace("-train.fa", "-valid.fa")
+        for f in hparams["fasta_files"]
+        if "emission" not in f
+    ]
     valid_files = list(filter(lambda x: os.path.isfile(x), valid_files))
 
     name_to_class_code = utils.create_class_code_mapping(
-        hparams["fasta_files"] + valid_files
+        hparams["fasta_files"] + valid_files + emission_files
     )
     accession_ids = list(name_to_class_code.keys())
 
@@ -111,6 +124,7 @@ if __name__ == "__main__":
                 accession_ids=accession_ids,
                 device=dev,
                 embed_dim=embed_dim,
+                add_all_logos=add_all_logos,
             )
         )
         .to(dev)
@@ -124,7 +138,6 @@ if __name__ == "__main__":
         evalue_threshold=1e-5,
     )
 
-    batch_size = 2
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=batch_size, collate_fn=utils.pad_features_in_batch
     )
@@ -192,5 +205,5 @@ if __name__ == "__main__":
     )
 
     plt.legend()
-    plt.savefig("test_with_all_hmm_logos.png", bbox_inches="tight")
+    plt.savefig(figure_path, bbox_inches="tight")
     plt.close()

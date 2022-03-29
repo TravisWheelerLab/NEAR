@@ -7,7 +7,7 @@ from sklearn.neighbors import BallTree
 import yaml
 
 from prefilter.models import ResNet1d, SupConLoss
-from prefilter.utils import ContrastiveGenerator, pad_view_batches
+from prefilter.utils import ContrastiveGenerator, pad_contrastive_batches
 
 logo_path = "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/"
 fasta_path = "/home/tc229954/data/prefilter/pfam/seed/model_comparison/training_data_no_evalue_threshold/200_file_subset"
@@ -19,7 +19,7 @@ dataset = ContrastiveGenerator(fasta_files, logo_files, name_to_class_code=None)
 
 batch_size = 256
 dataloader = torch.utils.data.DataLoader(
-    dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_view_batches
+    dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_contrastive_batches
 )
 
 device = "cuda"

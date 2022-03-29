@@ -30,7 +30,7 @@ __all__ = [
     "create_class_code_mapping",
     "msa_from_file",
     "encode_msa",
-    "pad_view_batches",
+    "pad_contrastive_batches",
     "logo_from_file",
 ]
 
@@ -328,12 +328,9 @@ def pad_features_in_batch(batch):
     return features, features_mask, labels
 
 
-def pad_view_batches(batch, n_views=2):
+def pad_contrastive_batches(batch):
     """
-    Pad batches with views as a dim.
-    Input: [n_viewsx...]
-    :param n_views:  num views to allow
-    :type n_views: int
+    Pad batches that consist of a 3-tuple: seq, logo, and label
     :param batch: list of np.ndarrays encoding protein sequences/logos
     :type batch: List[np.ndarray]
     :return: torch.tensor

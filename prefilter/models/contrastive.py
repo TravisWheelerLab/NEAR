@@ -20,6 +20,7 @@ class ResNet1d(pl.LightningModule, ABC):
         name_to_class_code,
         learning_rate,
         batch_size,
+        oversample_neighborhood_labels,
         num_workers=32,
         training=True,
         emission_files=None,
@@ -33,6 +34,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
         self.decoy_files = decoy_files
         self.num_workers = num_workers
@@ -135,6 +137,7 @@ class ResNet1d(pl.LightningModule, ABC):
             self.fasta_files,
             self.logo_path,
             self.name_to_class_code,
+            self.oversample_neighborhood_labels,
         )
         # how do i benchmark? Just loss, I guess.
         # hmmm. look at code to do this in published repos...
@@ -156,10 +159,10 @@ class ResNet1d(pl.LightningModule, ABC):
         loss = torch.mean(torch.stack(train_loss))
         self.log("train_loss", loss)
         self.log("learning_rate", self.learning_rate)
-        self.trainer.save_checkpoint(
-            Path(self.trainer.checkpoint_callback.dirpath)
-            / f"ckpt-{self.global_step}-{loss.item()}.ckpt"
-        )
+        # self.trainer.save_checkpoint(
+        #     Path(self.trainer.checkpoint_callback.dirpath)
+        #     / f"ckpt-{self.global_step}-{loss.item()}.ckpt"
+        # )
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
@@ -171,7 +174,7 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def train_dataloader(self):
 
-        collate_fn = utils.pad_view_batches
+        collate_fn = utils.pad_contrastive_batches
 
         train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
