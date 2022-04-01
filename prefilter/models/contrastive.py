@@ -16,6 +16,7 @@ class ResNet1d(pl.LightningModule, ABC):
     def __init__(
         self,
         fasta_files,
+        valid_files,
         logo_path,
         name_to_class_code,
         learning_rate,
@@ -30,6 +31,7 @@ class ResNet1d(pl.LightningModule, ABC):
         super(ResNet1d, self).__init__()
 
         self.fasta_files = fasta_files
+        self.valid_files = valid_files
         self.logo_path = logo_path
         self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
@@ -139,6 +141,13 @@ class ResNet1d(pl.LightningModule, ABC):
             self.name_to_class_code,
             self.oversample_neighborhood_labels,
         )
+
+        self.valid_dataset = utils.ContrastiveGenerator(
+            self.valid_files,
+            self.logo_path,
+            self.name_to_class_code,
+            oversample_neighborhood_labels=False,
+        )
         # how do i benchmark? Just loss, I guess.
         # hmmm. look at code to do this in published repos...
         self.n_classes = len(self.name_to_class_code)
@@ -159,10 +168,6 @@ class ResNet1d(pl.LightningModule, ABC):
         loss = torch.mean(torch.stack(train_loss))
         self.log("train_loss", loss)
         self.log("learning_rate", self.learning_rate)
-        # self.trainer.save_checkpoint(
-        #     Path(self.trainer.checkpoint_callback.dirpath)
-        #     / f"ckpt-{self.global_step}-{loss.item()}.ckpt"
-        # )
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
@@ -186,6 +191,19 @@ class ResNet1d(pl.LightningModule, ABC):
         )
 
         return train_loader
+
+    def val_dataloader(self):
+        collate_fn = utils.pad_contrastive_batches
+        valid_loader = torch.utils.data.DataLoader(
+            self.valid_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=collate_fn,
+            drop_last=True,
+        )
+
+        return valid_loader
 
 
 if __name__ == "__main__":

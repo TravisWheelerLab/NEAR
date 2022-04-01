@@ -3,8 +3,8 @@ import os
 from pytorch_lightning import seed_everything
 from time import time
 
-seed = 16394
-seed_everything(seed)
+# seed_everything(20943)
+
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
@@ -57,41 +57,47 @@ def main(args):
                 emission_files = emission_files[:2]
                 break
 
-    val_files = []
+    valid_files = [
+        f.replace("-train.fa", "-valid.fa") for f in train_files if "emission" not in f
+    ]
+    valid_files = list(filter(lambda x: os.path.isfile(x), valid_files))
 
     if args.emission_path is not None:
         name_to_class_code = create_class_code_mapping(
-            train_files + val_files + emission_files
+            emission_files + train_files + valid_files
         )
     else:
-        name_to_class_code = create_class_code_mapping(train_files + val_files)
+        name_to_class_code = create_class_code_mapping(train_files + valid_files)
 
     #
     model = ResNet1d(
         fasta_files=train_files,
+        valid_files=valid_files,
+        emission_files=emission_files if args.emission_path is not None else None,
         logo_path=args.logo_path,
         name_to_class_code=name_to_class_code,
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
-        emission_files=emission_files if args.emission_path is not None else None,
         oversample_neighborhood_labels=False,
         num_workers=args.num_workers,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
-        monitor="train_loss",
+        monitor="val_loss",
         mode="min",
-        filename="epoch_{epoch}_{train_loss}",
+        filename="epoch_{epoch}_{val_loss:.6f}",
         auto_insert_metric_name=False,
-        save_top_k=-1,
+        save_top_k=500,
     )
 
     log_lr = pl.callbacks.lr_monitor.LearningRateMonitor(logging_interval="step")
     gpus = args.gpus
+    num_gpus = None
 
     if args.specify_gpus:
         if not isinstance(gpus, list):
             gpus = [gpus]
+            num_gpus = len(gpus)
     else:
         if len(gpus) != 1:
             raise ValueError(
@@ -99,6 +105,7 @@ def main(args):
             )
         else:
             gpus = gpus[0]
+            num_gpus = 1 if gpus == 1 else gpus
 
     # create the arguments for the trainer
     trainer_kwargs = {
@@ -109,8 +116,7 @@ def main(args):
         "callbacks": [checkpoint_callback, log_lr],
         "precision": 16 if args.gpus else 32,
         "logger": pl.loggers.TensorBoardLogger(args.log_dir),
-        "accelerator": "ddp",
-        "plugins": DDPPlugin(find_unused_parameters=False),
+        "strategy": DDPPlugin(find_unused_parameters=False) if num_gpus > 1 else None,
     }
 
     trainer = pl.Trainer(**trainer_kwargs)

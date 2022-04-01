@@ -101,7 +101,7 @@ def main():
     train_parser.add_argument("--learning_rate", type=float, required=True)
     train_parser.add_argument("--batch_size", type=int, required=True)
     train_parser.add_argument("--num_workers", type=int, required=True)
-    train_parser.add_argument("--check_val_every_n_epoch", default=10)
+    train_parser.add_argument("--check_val_every_n_epoch", default=2, type=int)
     train_parser.add_argument("--data_path", type=str, required=True)
     train_parser.add_argument("--logo_path", type=str, required=True)
     train_parser.add_argument("--decoy_path", type=str, default=None)

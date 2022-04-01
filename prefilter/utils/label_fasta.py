@@ -205,12 +205,12 @@ def parse_domtblout(domtbl):
         usecols=DOMTBLOUT_COLS,
         names=DOMTBLOUT_COL_NAMES,
         skipfooter=10,
+        engine="python",
     )
 
     df = df.dropna()
-
     # "-" is the empty label
-    df["target_name"].loc[df["description"] != "-"] = (
+    df.loc[df["description"] != "-", "target_name"] = (
         df["target_name"] + " " + df["description"]
     )
 
@@ -429,20 +429,22 @@ def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, 
         pfunc(f"already created {output_template.format(pid, 'train')}")
 
 
-def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb, overwrite=True):
+def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb, overwrite=False):
 
     domtblout_path = os.path.splitext(fasta_file)[0] + ".domtblout"
-    print("domtblout")
+    print(f"domtblout {domtblout_path}")
 
-    if overwrite:
-        print("overwriting")
+    if overwrite or not os.path.isfile(domtblout_path):
+        print(
+            f"running hmmsearch with {hmmdb}, {fasta_file}, dumping to {domtblout_path}"
+        )
         subprocess.call(
             f"hmmsearch -o /dev/null --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
         )
 
     domtblout = parse_domtblout(domtblout_path)
 
-    print("creating labels...")
+    print(f"creating labels. saving to {fasta_outfile}")
     labels_from_file(fasta_file, fasta_outfile, domtblout)
 
 
@@ -700,9 +702,7 @@ if __name__ == "__main__":
             os.path.basename(program_args.fasta_file),
         )
         os.makedirs(program_args.fasta_output_directory, exist_ok=True)
-        print("HELLO")
         label_with_hmmdb(program_args.fasta_file, fasta_outf, program_args.hmmdb)
-        print("DONE")
     elif program_args.command == "hdb":
         extract_ali_and_create_hmm(
             program_args.fasta_file, program_args.alidb, program_args.overwrite

@@ -310,9 +310,9 @@ class ContrastiveGenerator(SequenceDataset):
             for labelstring, sequence in zip(labels, sequences):
                 # parse labels
                 labelset = utils.parse_labels(labelstring)
-                if "emission" not in os.path.basename(fasta_file):
-                    labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
-                    labelset = [lab[0] for lab in labelset]
+                labelset = list(filter(lambda x: float(x[-1]) < 1e-5, labelset))
+                labelset = [lab[0] for lab in labelset]
+
                 for k, label in enumerate(labelset):
                     if self.oversample_neighborhood_labels:
                         if k == 0:
