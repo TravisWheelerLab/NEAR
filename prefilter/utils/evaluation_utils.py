@@ -22,60 +22,65 @@ import prefilter.utils as utils
 import prefilter.models as models
 from prefilter import AccessionIDToPfamName
 
+__all__ = ["embed_logos", "create_logo_index"]
+
 
 @torch.no_grad()
 def embed_logos(
-    model, logo_path, accession_ids, device, embed_dim, add_all_logos=False
+    model,
+    logo_path,
+    accession_ids,
+    device,
+    embed_dim,
+    add_all_logos=False,
+    batch_size=32,
 ):
     mapping = AccessionIDToPfamName()
     logo_files = list(logo_path.glob("*.logo"))
     shuffle(logo_files)
     logos = np.zeros((len(accession_ids), embed_dim))
     in_already = set()
-    i = 0
-
     # wait. since there isn't an hmm for those families, they will never be in accession ids
     # so it's fine. But annoying.
+    sorted_logo_files = []
     for accession_id in sorted(accession_ids):
         name = mapping[accession_id]
         logo_file = logo_path / f"{name}.0.5-train.hmm.logo"
         if not logo_file.exists():
             raise ValueError(f"couldn't find {logo_file}")
         in_already.add(logo_file)
-        embed = model(
-            torch.as_tensor(utils.logo_from_file(logo_file))
-            .to(device)
-            .unsqueeze(0)
-            .float()
-        )
-        logos[i] = embed.detach().cpu().numpy()
-        i += 1
+        sorted_logo_files.append(logo_file)
 
     if add_all_logos:
-        print("adding in all logo files.")
         for f in logo_files:
             if f in in_already:
                 logo_files.remove(f)
 
-        decoy_logos = np.zeros((len(logo_files), embed_dim))
-        i = 0
         for f in logo_files:
-            print(f"adding in logo file {f}")
             if f not in in_already:
-                embed = model(
-                    torch.as_tensor(utils.logo_from_file(f))
-                    .to(device)
-                    .unsqueeze(0)
-                    .float()
-                )
-                decoy_logos[i] = embed.detach().cpu().numpy()
-                i += 1
+                sorted_logo_files.append(f)
             else:
                 in_already.add(f)
 
-        logos = np.concatenate((logos, decoy_logos), axis=0)
+    batcher = utils.LogoBatcher(sorted_logo_files, {})
+    batcher = torch.utils.data.DataLoader(
+        batcher,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=utils.pad_features_in_batch,
+    )
 
-    return logos
+    logo_embeddings = torch.zeros((len(sorted_logo_files), embed_dim), device=device)
+    i = 0
+    with torch.no_grad():
+        for features, features_mask, _ in batcher:
+            predicted_embeddings = model(features.to(device), features_mask.to(device))
+            logo_embeddings[i : i + batch_size] = predicted_embeddings
+            i += batch_size
+
+    # print("Num logos:", len(logo_embeddings))
+
+    return logo_embeddings.float()
 
 
 def create_logo_index(logos, embed_dim, device="cpu"):
@@ -83,66 +88,37 @@ def create_logo_index(logos, embed_dim, device="cpu"):
     if device == "cuda":
         res = faiss.StandardGpuResources()
         index = faiss.index_cpu_to_gpu(res, 0, index)
-
     index.add(logos)
     return index
 
 
-if __name__ == "__main__":
+def main(
+    model,
+    fasta_files,
+    logo_path,
+    logo_accession_ids,
+    device,
+    add_all_logos,
+    embedding_dimension,
+    benchmarking,
+    n_top,
+    figure_path,
+):
 
-    logo_path = Path("/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/")
-    hparams_path = (
-        "models/contrastive/exps_mar31/with_emission/default/version_0/hparams.yaml"
-    )
-    model_path = "models/contrastive/exps_mar31/with_emission/default/version_0/checkpoints/epoch_2_3.546224.ckpt"
-    figure_path = "1000_files_with_emission_sequences.png"
-    embed_dim = 128
-    batch_size = 32
-    n_top = 1500
-    add_all_logos = False
-    analyze_train = True
-
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-
-    with open(hparams_path, "r") as src:
-        hparams = yaml.safe_load(src)
-
-    checkpoint = torch.load(model_path, map_location=torch.device(dev))
-    state_dict = checkpoint["state_dict"]
-    hparams["training"] = False
-    hparams["oversample_neighborhood_labels"] = False
-    hparams["valid_files"] = []
-
-    model = models.ResNet1d(**hparams).to(dev)
-
-    success = model.load_state_dict(state_dict)
-    print(f"{success} for model {model_path}")
-
-    model.eval()
-
-    valid_files = glob(
-        "/home/tc229954/data/prefilter/pfam/seed/training_data/1000_file_subset/*valid.fa"
-    )
-    print(len(valid_files))
-    valid_files = list(filter(lambda x: os.path.isfile(x), valid_files))
-
-    name_to_class_code = utils.create_class_code_mapping(
-        valid_files + hparams["fasta_files"]
-    )
-
-    accession_ids = list(name_to_class_code.keys())
+    print("embedding logos.")
 
     logo_embed = embed_logos(
         model,
         logo_path,
-        accession_ids=accession_ids,
-        device=dev,
-        embed_dim=embed_dim,
+        accession_ids=logo_accession_ids,
+        device=device,
+        embed_dim=embedding_dimension,
         add_all_logos=add_all_logos,
-    ).astype("float32")
+    )
 
-    logo_idx = create_logo_index(logo_embed, embed_dim, device=dev)
+    logo_idx = create_logo_index(logo_embed, embedding_dimension, device=device)
     logo_embed = torch.as_tensor(logo_embed).to(dev)
+    logo_embed = logo_embed
 
     threshold_to_recall = defaultdict(int)
     threshold_to_neighborhood_recall = defaultdict(int)
@@ -153,37 +129,30 @@ if __name__ == "__main__":
     neighborhood_labelcount = 0
 
     start = time.time()
-    valid_files = [
-        "/home/tc229954/data/prefilter/pfam/seed/training_data/benchmark/1000/valid_1000.fa"
-    ]
+    dataset = utils.SequenceIterator(
+        fasta_files=fasta_files,
+        name_to_class_code=name_to_class_code,
+        max_labels_per_seq=100,
+        evalue_threshold=1e-5,
+    )
 
-    if analyze_train:
-        dataset = utils.SequenceIterator(
-            fasta_files=hparams["fasta_files"],
-            name_to_class_code=name_to_class_code,
-            max_labels_per_seq=100,
-            evalue_threshold=1e-5,
-        )
-    else:
-        dataset = utils.SequenceIterator(
-            fasta_files=valid_files,
-            name_to_class_code=name_to_class_code,
-            max_labels_per_seq=100,
-            evalue_threshold=1e-5,
-        )
     dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, collate_fn=utils.pad_features_in_batch
+        dataset,
+        batch_size=batch_size,
+        collate_fn=utils.pad_features_in_batch,
+        num_workers=0,
     )
     for kk, (features, features_mask, labels) in enumerate(dataloader):
         print(f"{kk / len(dataloader):.3f}")
-        predicted_embedding = model(torch.as_tensor(features).to(dev).float())
+        predicted_embedding = model(torch.as_tensor(features).to(device).float())
         # distance, indices
         distances, predicted_accession_ids = logo_idx.search(
-            predicted_embedding,
-            k=n_top if len(logo_embed) > n_top else logo_embed.shape[0],
+            predicted_embedding, k=n_top
         )
-        # dot_prods = torch.matmul(logo_embed, predicted_embedding.T)
-        # look @ overlap of sets?
+
+        if benchmarking:
+            continue
+
         for i, (labelset, nearest_neighbor_set) in enumerate(
             zip(labels, predicted_accession_ids)
         ):
@@ -209,44 +178,144 @@ if __name__ == "__main__":
                         threshold_to_neighborhood_recall[j] += inn
 
                     threshold_to_recall[j] += inn
+    if benchmarking:
+        end = time.time()
+        print(f"time taken to evaluate: {end-start}s")
+        exit()
+    else:
 
-    topn = np.array(list(threshold_to_recall.keys()))
-    recall = np.array(list(threshold_to_recall.values())) / total_labelcount
+        topn = np.array(list(threshold_to_recall.keys()))
+        recall = np.array(list(threshold_to_recall.values())) / total_labelcount
 
-    primary_topn = np.array(list(threshold_to_primary_recall.keys()))
-    primary_recall = (
-        np.array(list(threshold_to_primary_recall.values())) / primary_labelcount
+        primary_topn = np.array(list(threshold_to_primary_recall.keys()))
+        primary_recall = (
+            np.array(list(threshold_to_primary_recall.values())) / primary_labelcount
+        )
+
+        neighborhood_topn = np.array(list(threshold_to_neighborhood_recall.keys()))
+        neighborhood_recall = (
+            np.array(list(threshold_to_neighborhood_recall.values()))
+            / neighborhood_labelcount
+        )
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.plot(
+            (1 - (topn / logo_embed.shape[0])) * 100, recall, "ro", label="total recall"
+        )
+        ax.plot(
+            (1 - (neighborhood_topn / logo_embed.shape[0])) * 100,
+            neighborhood_recall,
+            "bo",
+            label="neighborhood recall",
+        )
+        ax.plot(
+            (1 - (primary_topn / logo_embed.shape[0])) * 100,
+            primary_recall,
+            "ko",
+            label="primary recall",
+        )
+        ax.set_xlabel("percent filtered")
+        ax.set_ylabel("% of labels recovererd")
+        ax.set_title(
+            f"top1: {recall[1]*100:.3f}, {primary_recall[1]*100:.3f}, {neighborhood_recall[1]*100:.3f}\n"
+            f"top5: {recall[5]*100:.3f}, {primary_recall[5]*100:.3f}, {neighborhood_recall[5]*100:.3f}\n"
+            f"tp100: {recall[100]*100:.3f}, {primary_recall[100]:.3f}, {neighborhood_recall[100]:.3f}\n"
+            f"total, primary, neighborhood"
+        )
+
+        plt.legend()
+        plt.savefig(utils.handle_figure_path(figure_path), bbox_inches="tight")
+        plt.close()
+
+
+def create_parser():
+    ap = ArgumentParser()
+    ap.add_argument("model_root_dir")
+    ap.add_argument("model_name")
+    ap.add_argument("figure_path")
+    ap.add_argument(
+        "--logo_path",
+        default=Path("/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/"),
+    )
+    ap.add_argument("-b", "--benchmark", action="store_true")
+    ap.add_argument(
+        "-a",
+        "--add_all_families",
+        action="store_true",
+        help="evaluate using all logos in" "--logo_path",
+    )
+    ap.add_argument("-e", "--embed_dim", type=int, default=128)
+    ap.add_argument("-bsz", "--batch_size", type=int, default=32)
+    ap.add_argument(
+        "-n", "--n_top", type=int, default=1000, help="num nearest neighbors to include"
+    )
+    ap.add_argument(
+        "-t",
+        "--analyze_train",
+        action="store_true",
+        help="run the analysis on the train set",
+    )
+    ap.add_argument(
+        "-i",
+        "--include_emission",
+        action="store_true",
+        help="include emission files when evaluating. Only valid when --analyze_train is set.",
     )
 
-    neighborhood_topn = np.array(list(threshold_to_neighborhood_recall.keys()))
-    neighborhood_recall = (
-        np.array(list(threshold_to_neighborhood_recall.values()))
-        / neighborhood_labelcount
-    )
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.plot((topn / logo_embed.shape[0]) * 100, recall, "ro", label="total recall")
-    ax.plot(
-        (neighborhood_topn / logo_embed.shape[0]) * 100,
-        neighborhood_recall,
-        "bo",
-        label="neighborhood recall",
-    )
-    ax.plot(
-        (primary_topn / logo_embed.shape[0]) * 100,
-        primary_recall,
-        "ko",
-        label="primary recall",
-    )
-    ax.set_xlabel("1 - percent filtered")
-    ax.set_ylabel("% of labels recovererd")
-    ax.invert_xaxis()
-    ax.set_title(
-        f"top1: {recall[1]:.3f}, {primary_recall[1]:.3f}, {neighborhood_recall[1]:.3f}\n"
-        f"top5: {recall[5]:.3f}, {primary_recall[5]:.3f}, {neighborhood_recall[5]:.3f}\n"
-        f"tp100: {recall[98]:.3f}, {primary_recall[98]:.3f}, {neighborhood_recall[98]:.3f}\n"
-        f"total, primary, neighborhood"
+    return ap
+
+
+if __name__ == "__main__":
+
+    args = create_parser().parse_args()
+
+    hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
+    model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
+    figure_path = args.figure_path
+    embed_dim = args.embed_dim
+    batch_size = args.batch_size
+    n_top = args.n_top
+    add_all_logos = args.add_all_families
+    benchmarking = args.benchmark
+
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    print(dev)
+
+    with open(hparams_path, "r") as src:
+        hparams = yaml.safe_load(src)
+
+    checkpoint = torch.load(model_path, map_location=torch.device(dev))
+    state_dict = checkpoint["state_dict"]
+    hparams["training"] = False
+
+    model = models.ResNet1d(**hparams).to(dev)
+
+    success = model.load_state_dict(state_dict)
+    print(f"{success} for model {model_path}")
+
+    model.eval()
+
+    if args.analyze_train:
+        fasta_files = hparams["fasta_files"]
+        if args.include_emission:
+            fasta_files += hparams["emission_files"]
+    else:
+        fasta_files = hparams["valid_files"]
+
+    name_to_class_code = utils.create_class_code_mapping(
+        set(fasta_files + hparams["fasta_files"])
     )
 
-    plt.legend()
-    plt.savefig(figure_path, bbox_inches="tight")
-    plt.close()
+    accession_ids = list(name_to_class_code.keys())
+
+    main(
+        model=model,
+        fasta_files=fasta_files,
+        logo_path=logo_path,
+        logo_accession_ids=accession_ids,
+        device=dev,
+        add_all_logos=add_all_logos,
+        embedding_dimension=embed_dim,
+        benchmarking=benchmarking,
+        n_top=n_top,
+        figure_path=figure_path,
+    )

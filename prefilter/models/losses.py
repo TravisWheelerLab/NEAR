@@ -11,7 +11,31 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss", "SupervisedContrastiveLoss"]
+__all__ = ["SupConLoss", "AllVsAllLoss"]
+
+
+class AllVsAllLoss:
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, anchors, logos, anchor_labels, logo_labels):
+        loss = 0
+        for i, pos_embed in enumerate(anchors):
+            for j, logo_embed in enumerate(logos):
+                if anchor_labels[i] == logo_labels[j]:
+                    all_dots = torch.matmul(pos_embed, logo_embed.T)
+                    # get CLOSE to the optimal
+                    # loss will only go down if the sum of all the dots is close to n*m
+                    loss += (
+                        torch.sqrt(len(pos_embed) * len(logo_embed))
+                        - torch.sum(torch.sum(all_dots))
+                    ) ** 2
+                else:
+                    # we should minimize this
+                    all_dots = torch.matmul(pos_embed, logo_embed.T)
+                    # if the dots are negative, then the loss should go down
+                    loss += torch.sum(torch.sum(all_dots))
+        return loss
 
 
 class SupConLoss(nn.Module):
@@ -102,26 +126,3 @@ class SupConLoss(nn.Module):
         loss = loss.view(anchor_count, batch_size).mean()
 
         return loss
-
-
-class SupervisedContrastiveLoss(nn.Module):
-    """
-    Credit: https://www.kaggle.com/debarshichanda/pytorch-supervised-contrastive-learning
-    """
-
-    def __init__(self, temperature=0.1):
-        super(SupervisedContrastiveLoss, self).__init__()
-        self.temperature = temperature
-
-    def forward(self, feature_vectors, labels):
-        # Normalize feature vectors
-        feature_vectors_normalized = F.normalize(feature_vectors, p=2, dim=1)
-        # Compute logits
-        logits = torch.div(
-            torch.matmul(
-                feature_vectors_normalized,
-                torch.transpose(feature_vectors_normalized, 0, 1),
-            ),
-            self.temperature,
-        )
-        return NTXentLoss(temperature=0.07)(logits, torch.squeeze(labels))

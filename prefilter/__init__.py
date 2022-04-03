@@ -108,6 +108,7 @@ def main():
     train_parser.add_argument("--debug", action="store_true")
     train_parser.add_argument("--emission_path", nargs="+", type=str, default=None)
     train_parser.add_argument("--specify_gpus", action="store_true")
+    train_parser.add_argument("--all_vs_all_loss", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

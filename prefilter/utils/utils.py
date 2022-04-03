@@ -222,7 +222,7 @@ def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
 
     class_code = 0
     for fasta_file in fasta_files:
-        print(f"loading {fasta_file}, {len(name_to_class_code)} unique names so far")
+        # print(f"loading {fasta_file}, {len(name_to_class_code)} unique names so far")
         labels, sequences = fasta_from_file(fasta_file)
         for label, sequence in zip(labels, sequences):
 

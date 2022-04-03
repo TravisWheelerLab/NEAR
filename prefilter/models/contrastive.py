@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 
 from prefilter.models import ResidualBlock
 import prefilter.utils as utils
-from .losses import SupConLoss
+from .losses import SupConLoss, AllVsAllLoss
 from pathlib import Path
 
 __all__ = ["ResNet1d"]
@@ -26,6 +26,7 @@ class ResNet1d(pl.LightningModule, ABC):
         training=True,
         emission_files=None,
         decoy_files=None,
+        all_vs_all_loss=False,
     ):
 
         super(ResNet1d, self).__init__()
@@ -48,7 +49,11 @@ class ResNet1d(pl.LightningModule, ABC):
         self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
 
-        self.loss_func = SupConLoss()
+        if all_vs_all_loss:
+            self.loss_func = AllVsAllLoss()
+            self.all_vs_all = True
+        else:
+            self.loss_func = SupConLoss()
 
         self._setup_layers()
 
@@ -97,21 +102,27 @@ class ResNet1d(pl.LightningModule, ABC):
         # TODO: replace denominator of mean with the correct
         # sequence length. Also add two learnable params:
         # a power on the denominator and numerator
-        return self.projection(x.mean(axis=-1))
+        if self.all_vs_all:
+            return x
+        else:
+            return self.projection(x.mean(axis=-1))
 
     def _forward(self, x):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        return self.projection(x.mean(axis=-1))
+        if self.all_vs_all:
+            return x
+        else:
+            return self.projection(x.mean(axis=-1))
 
     def forward(self, x, mask=None):
         if mask is None:
             embeddings = self._forward(x)
         else:
             embeddings = self._masked_forward(x, mask)
-
         # always normalize for contrastive learning
+        # always normalize across embedding dimension
         embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
         return embeddings
 
@@ -120,10 +131,14 @@ class ResNet1d(pl.LightningModule, ABC):
         features, masks, labels = batch
         embeddings = self.forward(features, masks)
 
+        # sequences, logos
         f1, f2 = torch.split(embeddings, self.batch_size, dim=0)
         embeddings = torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1)
 
-        loss = self.loss_func(embeddings, labels.float())
+        if self.all_vs_all:
+            loss = self.loss_func(f1, f2, labels, labels)
+        else:
+            loss = self.loss_func(embeddings, labels.float())
 
         return loss, embeddings, labels
 

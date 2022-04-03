@@ -25,6 +25,7 @@ __all__ = [
     "SequenceIterator",
     "RankingIterator",
     "ContrastiveGenerator",
+    "LogoBatcher",
 ]
 
 
@@ -307,6 +308,12 @@ class ContrastiveGenerator(SequenceDataset):
         for fasta_file in self.fasta_files:
             print(f"loading sequences from {fasta_file}")
             labels, sequences = utils.fasta_from_file(fasta_file)
+
+            if "emission" in os.path.basename(fasta_file):
+                print("truncating...", len(sequences))
+                labels = labels[:20]
+                sequences = sequences[:20]
+
             for labelstring, sequence in zip(labels, sequences):
                 # parse labels
                 labelset = utils.parse_labels(labelstring)
@@ -389,6 +396,25 @@ class ContrastiveGenerator(SequenceDataset):
             )
 
         return pos_seq, pos_logo, class_code
+
+
+class LogoBatcher(SequenceDataset):
+    def __init__(self, fasta_files, name_to_class_code):
+        super().__init__(fasta_files, name_to_class_code)
+        self.logo_files = fasta_files
+        self.logos = []
+
+        self._build_dataset()
+
+    def _build_dataset(self):
+        for logo_file in self.logo_files:
+            self.logos.append(utils.logo_from_file(logo_file))
+
+    def __len__(self):
+        return len(self.logo_files)
+
+    def __getitem__(self, idx):
+        return self.logos[idx], 0
 
 
 if __name__ == "__main__":

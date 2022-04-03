@@ -69,7 +69,6 @@ def main(args):
     else:
         name_to_class_code = create_class_code_mapping(train_files + valid_files)
 
-    #
     model = ResNet1d(
         fasta_files=train_files,
         valid_files=valid_files,
@@ -80,6 +79,7 @@ def main(args):
         batch_size=args.batch_size,
         oversample_neighborhood_labels=False,
         num_workers=args.num_workers,
+        all_vs_all_loss=args.all_vs_all_loss,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
