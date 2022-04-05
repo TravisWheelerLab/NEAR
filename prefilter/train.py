@@ -116,7 +116,7 @@ def main(args):
         "callbacks": [checkpoint_callback, log_lr],
         "precision": 16 if args.gpus else 32,
         "logger": pl.loggers.TensorBoardLogger(args.log_dir),
-        "strategy": DDPPlugin(find_unused_parameters=False) if num_gpus > 1 else None,
+        "strategy": "ddp",
     }
 
     trainer = pl.Trainer(**trainer_kwargs)

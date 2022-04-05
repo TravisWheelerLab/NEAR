@@ -38,7 +38,6 @@ def embed_logos(
     mapping = AccessionIDToPfamName()
     logo_files = list(logo_path.glob("*.logo"))
     shuffle(logo_files)
-    logos = np.zeros((len(accession_ids), embed_dim))
     in_already = set()
     # wait. since there isn't an hmm for those families, they will never be in accession ids
     # so it's fine. But annoying.
@@ -78,7 +77,7 @@ def embed_logos(
             logo_embeddings[i : i + batch_size] = predicted_embeddings
             i += batch_size
 
-    # print("Num logos:", len(logo_embeddings))
+    print("Num logos:", len(logo_embeddings))
 
     return logo_embeddings.float()
 
@@ -87,6 +86,7 @@ def create_logo_index(logos, embed_dim, device="cpu"):
     index = faiss.IndexFlatIP(embed_dim)
     if device == "cuda":
         res = faiss.StandardGpuResources()
+        # 0 is the index of the GPU. Since we're always using slurm
         index = faiss.index_cpu_to_gpu(res, 0, index)
     index.add(logos)
     return index
@@ -118,7 +118,7 @@ def main(
 
     logo_idx = create_logo_index(logo_embed, embedding_dimension, device=device)
     logo_embed = torch.as_tensor(logo_embed).to(dev)
-    logo_embed = logo_embed
+    print(logo_embed.shape)
 
     threshold_to_recall = defaultdict(int)
     threshold_to_neighborhood_recall = defaultdict(int)
@@ -183,8 +183,8 @@ def main(
         print(f"time taken to evaluate: {end-start}s")
         exit()
     else:
-
         topn = np.array(list(threshold_to_recall.keys()))
+
         recall = np.array(list(threshold_to_recall.values())) / total_labelcount
 
         primary_topn = np.array(list(threshold_to_primary_recall.keys()))
@@ -218,7 +218,8 @@ def main(
         ax.set_title(
             f"top1: {recall[1]*100:.3f}, {primary_recall[1]*100:.3f}, {neighborhood_recall[1]*100:.3f}\n"
             f"top5: {recall[5]*100:.3f}, {primary_recall[5]*100:.3f}, {neighborhood_recall[5]*100:.3f}\n"
-            f"tp100: {recall[100]*100:.3f}, {primary_recall[100]:.3f}, {neighborhood_recall[100]:.3f}\n"
+            f"tp100: {recall[100]*100:.3f}, {primary_recall[100]*100:.3f}, {neighborhood_recall[100]*100:.3f}\n"
+            f"tp{n_top}: {recall[n_top-1]*100:.3f}, {primary_recall[n_top-1]*100:.3f}, {neighborhood_recall[n_top-1]*100:.3f}\n"
             f"total, primary, neighborhood"
         )
 
@@ -246,6 +247,11 @@ def create_parser():
     ap.add_argument("-e", "--embed_dim", type=int, default=128)
     ap.add_argument("-bsz", "--batch_size", type=int, default=32)
     ap.add_argument(
+        "--debug",
+        action="store_true",
+        help="reduce the number of logo files" "for quick debugging.",
+    )
+    ap.add_argument(
         "-n", "--n_top", type=int, default=1000, help="num nearest neighbors to include"
     )
     ap.add_argument(
@@ -268,6 +274,7 @@ if __name__ == "__main__":
 
     args = create_parser().parse_args()
 
+    logo_path = args.logo_path
     hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
     model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
     figure_path = args.figure_path
@@ -287,10 +294,12 @@ if __name__ == "__main__":
     state_dict = checkpoint["state_dict"]
     hparams["training"] = False
 
+    stime = time.time()
     model = models.ResNet1d(**hparams).to(dev)
 
     success = model.load_state_dict(state_dict)
-    print(f"{success} for model {model_path}")
+    etime = time.time()
+    print(f"{success} for model {model_path}, took {etime-stime}")
 
     model.eval()
 
@@ -306,7 +315,8 @@ if __name__ == "__main__":
     )
 
     accession_ids = list(name_to_class_code.keys())
-
+    if args.debug:
+        accession_ids = accession_ids[:2]
     main(
         model=model,
         fasta_files=fasta_files,

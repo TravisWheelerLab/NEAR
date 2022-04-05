@@ -37,6 +37,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.all_vs_all = False
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
         self.decoy_files = decoy_files
@@ -136,7 +137,13 @@ class ResNet1d(pl.LightningModule, ABC):
         embeddings = torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1)
 
         if self.all_vs_all:
-            loss = self.loss_func(f1, f2, labels, labels)
+            m1, m2 = torch.split(masks, self.batch_size, dim=0)
+            if self.global_step % 100 == 0:
+                loss = self.loss_func(
+                    f1, f2, m1, m2, labels, labels, picture=self.global_step
+                )
+            else:
+                loss = self.loss_func(f1, f2, m1, m2, labels, labels)
         else:
             loss = self.loss_func(embeddings, labels.float())
 
@@ -144,28 +151,29 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        if self.emission_files is not None:
-            self.fasta_files = self.emission_files + self.fasta_files
+        if self.all_vs_all:
+            self.train_dataset = utils.AliPairGenerator()
+            self.valid_dataset = utils.AliPairGenerator()
+        else:
+            if self.emission_files is not None:
+                self.fasta_files = self.emission_files + self.fasta_files
 
-        if self.decoy_files is not None:
-            self.fasta_files = self.decoy_files + self.fasta_files
+            if self.decoy_files is not None:
+                self.fasta_files = self.decoy_files + self.fasta_files
 
-        self.train_dataset = utils.ContrastiveGenerator(
-            self.fasta_files,
-            self.logo_path,
-            self.name_to_class_code,
-            self.oversample_neighborhood_labels,
-        )
+            self.train_dataset = utils.ContrastiveGenerator(
+                self.fasta_files,
+                self.logo_path,
+                self.name_to_class_code,
+                self.oversample_neighborhood_labels,
+            )
 
-        self.valid_dataset = utils.ContrastiveGenerator(
-            self.valid_files,
-            self.logo_path,
-            self.name_to_class_code,
-            oversample_neighborhood_labels=False,
-        )
-        # how do i benchmark? Just loss, I guess.
-        # hmmm. look at code to do this in published repos...
-        self.n_classes = len(self.name_to_class_code)
+            self.valid_dataset = utils.ContrastiveGenerator(
+                self.valid_files,
+                self.logo_path,
+                self.name_to_class_code,
+                oversample_neighborhood_labels=False,
+            )
 
     def training_step(self, batch, batch_nb):
         loss, _, _ = self._shared_step(batch)

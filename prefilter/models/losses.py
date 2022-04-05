@@ -5,6 +5,7 @@ Date: May 07, 2020
 from __future__ import print_function
 
 import pdb
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -18,24 +19,53 @@ class AllVsAllLoss:
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, anchors, logos, anchor_labels, logo_labels):
+    def forward(
+        self,
+        anchors,
+        logos,
+        anchors_mask,
+        logos_mask,
+        anchor_labels,
+        logo_labels,
+        picture=None,
+    ):
         loss = 0
+        if picture is not None:
+            first_pos = True
+            first_neg = True
+
         for i, pos_embed in enumerate(anchors):
+            pos_len = torch.sum(~anchors_mask[i], dim=-1)
             for j, logo_embed in enumerate(logos):
+                logo_len = torch.sum(~logos_mask[j], dim=-1)
                 if anchor_labels[i] == logo_labels[j]:
-                    all_dots = torch.matmul(pos_embed, logo_embed.T)
+                    all_dots = torch.matmul(pos_embed.T, logo_embed)
+
+                    if picture is not None and first_pos:
+                        fig, ax = plt.subplots(figsize=(13, 10))
+                        ax.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
+                        plt.close()
+                        first_pos = False
+
+                    # with square matrices we can use np.diag
+                    all_dots = torch.diag(all_dots)
                     # get CLOSE to the optimal
                     # loss will only go down if the sum of all the dots is close to n*m
-                    loss += (
-                        torch.sqrt(len(pos_embed) * len(logo_embed))
-                        - torch.sum(torch.sum(all_dots))
-                    ) ** 2
+                    loss += (all_dots.shape[0] - torch.sum(all_dots)) ** 2
                 else:
                     # we should minimize this
-                    all_dots = torch.matmul(pos_embed, logo_embed.T)
+                    all_dots = torch.matmul(pos_embed.T, logo_embed)
+                    if picture is not None and first_neg:
+                        fig, ax = plt.subplots(figsize=(13, 10))
+                        ax.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
+                        plt.close()
+                        first_neg = False
                     # if the dots are negative, then the loss should go down
-                    loss += torch.sum(torch.sum(all_dots))
-        return loss
+                    loss += torch.sum(all_dots)
+
+        return loss / torch.tensor(anchors.shape[0] ** 2)
 
 
 class SupConLoss(nn.Module):

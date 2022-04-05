@@ -26,6 +26,7 @@ __all__ = [
     "RankingIterator",
     "ContrastiveGenerator",
     "LogoBatcher",
+    "AliPairGenerator",
 ]
 
 
@@ -417,25 +418,92 @@ class LogoBatcher(SequenceDataset):
         return self.logos[idx], 0
 
 
+class AliPairGenerator:
+    def __init__(self, steps_per_epoch=10000, len_generated_seqs=100, num_seeds=10):
+
+        self.steps_per_epoch = steps_per_epoch
+        self.len_generated = len_generated_seqs
+        self.alphabet = list(utils.PROT_ALPHABET.keys())
+        self.mapping = utils.PROT_ALPHABET
+        self.run_length = 10
+
+        self._build_dataset(num_seeds)
+
+    def _choose_aa(self):
+        return self.alphabet[int(np.random.rand() * len(self.alphabet))]
+
+    def _gen_normalized_pvec(self, conserved_aa, aa_prob):
+        random_probs = np.random.rand(len(self.alphabet))
+        random_probs[self.mapping[conserved_aa]] = 0
+        random_probs = random_probs / np.sum(random_probs)
+        random_probs *= 1 - aa_prob
+        random_probs[self.mapping[conserved_aa]] = aa_prob
+        return random_probs
+
+    def _build_dataset(self, num_seeds):
+        n_highly_conserved = int(self.len_generated * 0.2)
+        # i want some highly conserved AAs, others not really.
+        # let's say I want 20 highly conserved AAs.
+        # And 40 less-conserved AAs.
+        self.seed_list = []
+        probs = [0.6, 0.7, 0.8, 0.9, 0.95]
+        for _ in range(num_seeds):
+            # max here will be 0.5.
+            generated_template = np.zeros((self.len_generated, len(self.alphabet)))
+            i = 0
+            while i < self.len_generated:
+                # draw
+                draw = int(np.random.rand() * self.len_generated)
+                if draw <= n_highly_conserved:
+                    # regions of nicely conserved amino acids
+                    random_conserved_aa = self._choose_aa()
+                    prob_choice = probs[int(np.random.rand() * len(probs))]
+                    generated_template[i] = self._gen_normalized_pvec(
+                        random_conserved_aa, prob_choice
+                    )
+                    j = 0
+                    i += 1
+                    while j < self.run_length and i < self.len_generated:
+                        random_conserved_aa = self._choose_aa()
+                        prob_choice = probs[int(np.random.rand() * len(probs))]
+                        generated_template[i] = self._gen_normalized_pvec(
+                            random_conserved_aa, prob_choice
+                        )
+
+                        i += 1
+                        j += 1
+                else:
+                    # random density.
+                    rvec = np.random.rand(len(self.alphabet))
+                    generated_template[i] = rvec / np.sum(rvec)
+                    i += 1
+
+            self.seed_list.append(generated_template)
+
+    def _generate_seq(self, seq_template):
+        seq = []
+        for i in range(len(seq_template)):
+            seq.append(np.random.choice(self.alphabet, p=seq_template[i]))
+        return utils.encode_protein_as_one_hot_vector("".join(seq))
+
+    def __len__(self):
+        return self.steps_per_epoch
+
+    def __getitem__(self, idx):
+        return (
+            self._generate_seq(self.seed_list[idx % len(self.seed_list)]),
+            self._generate_seq(self.seed_list[idx % len(self.seed_list)]),
+            idx % len(self.seed_list),
+        )
+
+
 if __name__ == "__main__":
-    from glob import glob
+    gen = AliPairGenerator(len_generated_seqs=100)
 
-    fpath = "/home/tc229954/max_hmmsearch/200_file_subset/*fa"
-    fs = glob(fpath)[:10]
-    name_to_class_code = utils.create_class_code_mapping(fs)
-
-    psd = ContrastiveGenerator(
-        fasta_files=fs,
-        logo_path="/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/",
-        name_to_class_code=name_to_class_code,
-        oversample_neighborhood_labels=True,
-    )
-
-    psd = torch.utils.data.DataLoader(
-        psd,
-        batch_size=33,
-        collate_fn=utils.pad_contrastive_batches,
-    )
-
-    for x, y, z in psd:
-        print(x.shape, y.shape, z.shape)
+    for (
+        c1,
+        c2,
+        l,
+    ) in gen:
+        print(c1)
+        print(c2)
