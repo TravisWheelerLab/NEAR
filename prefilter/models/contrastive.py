@@ -1,12 +1,13 @@
+import pdb
 from abc import ABC
 
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResidualBlock
+from prefilter.models import ResidualBlock, SupConLoss, AllVsAllLoss
 import prefilter.utils as utils
-from .losses import SupConLoss, AllVsAllLoss
 from pathlib import Path
 
 __all__ = ["ResNet1d"]
@@ -27,6 +28,7 @@ class ResNet1d(pl.LightningModule, ABC):
         emission_files=None,
         decoy_files=None,
         all_vs_all_loss=False,
+        supcon_loss_per_aa=False,
     ):
 
         super(ResNet1d, self).__init__()
@@ -38,6 +40,9 @@ class ResNet1d(pl.LightningModule, ABC):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.all_vs_all = False
+        self.supcon = supcon_loss_per_aa
+        if self.all_vs_all and self.supcon:
+            raise ValueError("Can't choose supcon and all-vs-all.")
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
         self.decoy_files = decoy_files
@@ -103,7 +108,7 @@ class ResNet1d(pl.LightningModule, ABC):
         # TODO: replace denominator of mean with the correct
         # sequence length. Also add two learnable params:
         # a power on the denominator and numerator
-        if self.all_vs_all:
+        if self.all_vs_all or self.supcon:
             return x
         else:
             return self.projection(x.mean(axis=-1))
@@ -112,7 +117,7 @@ class ResNet1d(pl.LightningModule, ABC):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        if self.all_vs_all:
+        if self.all_vs_all or self.supcon:
             return x
         else:
             return self.projection(x.mean(axis=-1))
@@ -122,9 +127,12 @@ class ResNet1d(pl.LightningModule, ABC):
             embeddings = self._forward(x)
         else:
             embeddings = self._masked_forward(x, mask)
-        # always normalize for contrastive learning
-        # always normalize across embedding dimension
-        embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
+        if self.supcon or self.all_vs_all:
+            # always normalize across embedding dimension
+            embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
+        else:
+            # always normalize for contrastive learning
+            embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
         return embeddings
 
     def _shared_step(self, batch):
@@ -144,6 +152,39 @@ class ResNet1d(pl.LightningModule, ABC):
                 )
             else:
                 loss = self.loss_func(f1, f2, m1, m2, labels, labels)
+        elif self.supcon:
+            # concatenate all unmasked embeddings
+            #
+            features = []
+            # since I'm debugging I don't need to mask.
+            # i could do a for loop... which I'll do now.
+            loss = 0
+            embeddings = embeddings.transpose(-1, -2)
+            picture = False
+            if self.global_step % 100 == 0:
+                picture = True
+            for item in embeddings:
+                item = item.transpose(0, 1)
+                # this is 100x2x256
+                if picture:
+                    f1, f2 = torch.unbind(item, 1)
+                    matmul = torch.matmul(f1, f2.T)
+                    plt.imshow(matmul.detach().cpu().numpy())
+                    plt.colorbar()
+                    plt.savefig(f"supcon{self.global_step}", bbox_inches="tight")
+                    plt.close()
+                    _, f2 = torch.unbind(embeddings[1].transpose(0, 1), 1)
+                    matmul = torch.matmul(f1, f2.T)
+                    plt.imshow(matmul.detach().cpu().numpy())
+                    plt.colorbar()
+                    plt.savefig(f"supcon_neg{self.global_step}", bbox_inches="tight")
+                    plt.close()
+                    picture = False
+
+                labels = torch.arange(item.shape[0])
+                loss += self.loss_func(item, labels.float())
+            loss /= self.batch_size
+
         else:
             loss = self.loss_func(embeddings, labels.float())
 
@@ -151,7 +192,7 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        if self.all_vs_all:
+        if self.all_vs_all or self.supcon:
             self.train_dataset = utils.AliPairGenerator()
             self.valid_dataset = utils.AliPairGenerator()
         else:

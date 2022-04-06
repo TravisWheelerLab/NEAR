@@ -42,8 +42,8 @@ class AllVsAllLoss:
                     all_dots = torch.matmul(pos_embed.T, logo_embed)
 
                     if picture is not None and first_pos:
-                        fig, ax = plt.subplots(figsize=(13, 10))
-                        ax.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.colorbar()
                         plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
                         plt.close()
                         first_pos = False
@@ -57,8 +57,8 @@ class AllVsAllLoss:
                     # we should minimize this
                     all_dots = torch.matmul(pos_embed.T, logo_embed)
                     if picture is not None and first_neg:
-                        fig, ax = plt.subplots(figsize=(13, 10))
-                        ax.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
+                        plt.colorbar()
                         plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
                         plt.close()
                         first_neg = False
@@ -146,9 +146,19 @@ class SupConLoss(nn.Module):
 
         # compute log_prob
         exp_logits = torch.exp(logits) * logits_mask
+        # sum over ALL of the examples (not including the self)
+        # the normalization is over the entire set... positives and negatives
+        # A(i) = all indices without i (without the anchor...?)
+        # ok. in order to contribute nothing to the loss I can't modify
+        # the denominator or the numerator.
+        # so. logits in the masked positions
+        #
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-
         # compute mean of log-likelihood over positive
+        # the positions that I want to mask out I'll mask out here.
+        # I also need to remove those positions from the mask
+        # this is the numerator; it's the cosine sims. of the positive examples.
+        # let's look at
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
 
         # loss

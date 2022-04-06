@@ -22,7 +22,7 @@ import prefilter.utils as utils
 import prefilter.models as models
 from prefilter import AccessionIDToPfamName
 
-__all__ = ["embed_logos", "create_logo_index"]
+__all__ = ["embed_logos", "create_logo_index", "load_model", "create_parser"]
 
 
 @torch.no_grad()
@@ -270,6 +270,20 @@ def create_parser():
     return ap
 
 
+def load_model(model_path, hyperparams, device):
+    stime = time.time()
+    checkpoint = torch.load(model_path, map_location=torch.device(device))
+    state_dict = checkpoint["state_dict"]
+    hyperparams["training"] = False
+    model = models.ResNet1d(**hyperparams).to(device)
+    success = model.load_state_dict(state_dict)
+    etime = time.time()
+    print(f"{success} for model {model_path}, took {etime-stime}")
+
+    model.eval()
+    return model
+
+
 if __name__ == "__main__":
 
     args = create_parser().parse_args()
@@ -290,18 +304,7 @@ if __name__ == "__main__":
     with open(hparams_path, "r") as src:
         hparams = yaml.safe_load(src)
 
-    checkpoint = torch.load(model_path, map_location=torch.device(dev))
-    state_dict = checkpoint["state_dict"]
-    hparams["training"] = False
-
-    stime = time.time()
-    model = models.ResNet1d(**hparams).to(dev)
-
-    success = model.load_state_dict(state_dict)
-    etime = time.time()
-    print(f"{success} for model {model_path}, took {etime-stime}")
-
-    model.eval()
+    model = load_model(model_path, hparams, dev)
 
     if args.analyze_train:
         fasta_files = hparams["fasta_files"]
@@ -317,6 +320,7 @@ if __name__ == "__main__":
     accession_ids = list(name_to_class_code.keys())
     if args.debug:
         accession_ids = accession_ids[:2]
+
     main(
         model=model,
         fasta_files=fasta_files,

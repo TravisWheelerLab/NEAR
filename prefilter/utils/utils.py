@@ -23,6 +23,7 @@ __all__ = [
     "pad_labels_and_features_in_batch",
     "stack_batch",
     "PROT_ALPHABET",
+    "inverse",
     "pad_batch_with_labels",
     "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
@@ -56,6 +57,7 @@ PROT_ALPHABET = {
     "V": 18,
     "W": 19,
 }
+inverse = {v: k for k, v in PROT_ALPHABET.items()}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 

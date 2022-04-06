@@ -80,6 +80,7 @@ def main(args):
         oversample_neighborhood_labels=False,
         num_workers=args.num_workers,
         all_vs_all_loss=args.all_vs_all_loss,
+        supcon_loss_per_aa=args.supcon,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

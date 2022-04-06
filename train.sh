@@ -17,12 +17,12 @@ time $py_cmd -m prefilter train\
     --gpus 1 \
     --num_nodes 1 \
     --num_workers 0 \
-    --log_dir models/all_vs_all/exps_apr5/ \
+    --log_dir models/all_vs_all/exps_apr5/supcon \
     --data_path /home/tc229954/data/prefilter/pfam/seed/training_data/1000_file_subset/ \
     --logo_path /home/tc229954/data/prefilter/pfam/seed/clustered/0.5/\
     --batch_size 48 \
     --epochs 10000 \
-    --learning_rate 1e-7 \
-    --check_val_every_n_epoch 10\
-    --all_vs_all \
+    --learning_rate 1e-3 \
+    --check_val_every_n_epoch 3 \
+    --supcon \
     --debug
