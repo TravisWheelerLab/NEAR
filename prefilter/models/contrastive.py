@@ -29,6 +29,7 @@ class ResNet1d(pl.LightningModule, ABC):
         decoy_files=None,
         all_vs_all_loss=False,
         supcon_loss_per_aa=False,
+        padding="valid",
     ):
 
         super(ResNet1d, self).__init__()
@@ -41,6 +42,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self.batch_size = batch_size
         self.all_vs_all = False
         self.supcon = supcon_loss_per_aa
+        self.padding = padding
         if self.all_vs_all and self.supcon:
             raise ValueError("Can't choose supcon and all-vs-all.")
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
@@ -74,7 +76,7 @@ class ResNet1d(pl.LightningModule, ABC):
             in_channels=self.vocab_size,
             out_channels=self.res_block_n_filters,
             kernel_size=self.res_block_kernel_size,
-            padding="same",
+            padding=self.padding,
         )
 
         self.embedding_trunk = torch.nn.ModuleList()
@@ -86,31 +88,36 @@ class ResNet1d(pl.LightningModule, ABC):
                     self.res_block_n_filters,
                     self.res_bottleneck_factor,
                     self.res_block_kernel_size,
-                    layer_index,
-                    1,
-                    dilation_rate=None,
+                    layer_index=layer_index,
+                    padding=self.padding,
                 )
             )
 
     def _masked_forward(self, x, mask):
         """
-        Before each convolution or batch normalization operation, we zero-out
-        the features in any location is padded in the input
-        sequence
+        Before each convolution or batch normalization operation, zero-out
+        the features in any location that is padded in the input sequence
         """
         x = self.initial_conv(x)
 
-        for layer in self.embedding_trunk:
-            x = layer(x, mask)
-        # re-zero regions
+        if self.padding == "valid":
+            mask = mask[
+                :,
+                :,
+                self.res_block_kernel_size // 2 : -(self.res_block_kernel_size // 2),
+            ]
+
         x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
-        # and do an aggregation operation
-        # TODO: replace denominator of mean with the correct
-        # sequence length. Also add two learnable params:
-        # a power on the denominator and numerator
+
+        for layer in self.embedding_trunk:
+            x, mask = layer(x, mask)
+
         if self.all_vs_all or self.supcon:
             return x
         else:
+            # TODO: replace denominator of mean with the correct
+            # sequence length. Also add two learnable params:
+            # a power on the denominator and numerator
             return self.projection(x.mean(axis=-1))
 
     def _forward(self, x):
@@ -158,11 +165,25 @@ class ResNet1d(pl.LightningModule, ABC):
             features = []
             # since I'm debugging I don't need to mask.
             # i could do a for loop... which I'll do now.
-            loss = 0
+            dot_loss = 0
+            supcon_loss = 0
             embeddings = embeddings.transpose(-1, -2)
+            # grab the two views
+            f1, f2 = torch.unbind(embeddings, 1)
+            rev_label = torch.flip(labels, [0])
+            # reverse along batch dim
+            f2 = torch.flip(f2, [0])
+            # dot entry i against entry i in f1, f2
+            # and remove the places where the labels are the same
+            dots = torch.bmm(f1, f2.transpose(-1, -2))[
+                torch.not_equal(labels, rev_label)
+            ]
+            # now add in the sum.
+            dot_loss += torch.sum(dots.ravel())
             picture = False
-            if self.global_step % 100 == 0:
+            if self.global_step % 250 == 0:
                 picture = True
+
             for item in embeddings:
                 item = item.transpose(0, 1)
                 # this is 100x2x256
@@ -182,9 +203,10 @@ class ResNet1d(pl.LightningModule, ABC):
                     picture = False
 
                 labels = torch.arange(item.shape[0])
-                loss += self.loss_func(item, labels.float())
-            loss /= self.batch_size
-
+                supcon_loss += self.loss_func(item, labels.float())
+            # add in a summed difference
+            # embeddings.shape: bszxviewxLxembed_dim
+            loss = 0.2 * dot_loss + supcon_loss
         else:
             loss = self.loss_func(embeddings, labels.float())
 

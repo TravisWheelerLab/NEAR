@@ -419,11 +419,9 @@ class LogoBatcher(SequenceDataset):
 
 
 class AliPairGenerator:
-    def __init__(self, steps_per_epoch=10000, len_generated_seqs=100, num_seeds=10):
+    def __init__(self, steps_per_epoch=100000, len_generated_seqs=100, num_seeds=1000):
 
-        print("i have changed 10000.")
-
-        np.random.seed(0)
+        np.random.seed(10)
 
         self.steps_per_epoch = steps_per_epoch
         self.len_generated = len_generated_seqs

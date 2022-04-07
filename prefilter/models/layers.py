@@ -80,58 +80,41 @@ class ResidualBlock(nn.Module):
         resnet_bottleneck_factor,
         kernel_size,
         layer_index,
-        first_dilated_layer,
-        dilation_rate,
-        stride=1,
-        typ="1d",
+        first_dilated_layer=1,
+        padding="valid",
+        dilation_rate=None,
     ):
 
         super(ResidualBlock, self).__init__()
 
         self.filters = filters
+        self.kernel_size = kernel_size
+        self.padding = padding
 
         shifted_layer_index = layer_index - first_dilated_layer + 1
         if dilation_rate is not None:
             dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
         else:
             dilation_rate = 1
+
         self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
-        if typ == "1d":
-            self.bn1 = torch.nn.BatchNorm1d(self.filters)
-            # need to pad 'same', so output has the same size as input
-            # project down to a smaller number of self.filters with a larger kernel size
-            self.conv1 = torch.nn.Conv1d(
-                self.filters,
-                self.num_bottleneck_units,
-                kernel_size=kernel_size,
-                dilation=dilation_rate,
-                padding="same",
-            )
+        self.bn1 = torch.nn.BatchNorm1d(self.filters)
+        # need to pad 'same', so output has the same size as input
+        # project down to a smaller number of self.filters with a larger kernel size
+        self.conv1 = torch.nn.Conv1d(
+            self.filters,
+            self.num_bottleneck_units,
+            kernel_size=kernel_size,
+            dilation=dilation_rate,
+            padding=padding,
+        )
 
-            self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
-            # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
-            # linear transformation) No padding needed sin
-            self.conv2 = torch.nn.Conv1d(
-                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
-            )
-        else:
-            self.bn1 = torch.nn.BatchNorm2d(self.filters)
-            # need to pad 'same', so output has the same size as input
-            # project down to a smaller number of self.filters with a larger kernel size
-            self.conv1 = torch.nn.Conv2d(
-                self.filters,
-                self.num_bottleneck_units,
-                kernel_size=kernel_size,
-                dilation=dilation_rate,
-                padding="same",
-            )
-
-            self.bn2 = torch.nn.BatchNorm2d(self.num_bottleneck_units)
-            # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
-            # linear transformation) No padding needed sin
-            self.conv2 = torch.nn.Conv2d(
-                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
-            )
+        self.bn2 = torch.nn.BatchNorm1d(self.num_bottleneck_units)
+        # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
+        # linear transformation) No padding needed b/c it's a kernel size of 1
+        self.conv2 = torch.nn.Conv1d(
+            self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1
+        )
 
     def _forward(self, x):
         features = self.bn1(x)
@@ -143,15 +126,30 @@ class ResidualBlock(nn.Module):
         return features + x
 
     def _masked_forward(self, x, mask):
+        # masking gets hard with residual convolutions.
+        # do I pad? or what? not sure.
+        # I think I'll just clip the sequence.
+        # the alternative is to pad the convolutions.
         features = self.bn1(x)
         features = torch.nn.functional.relu(features)
         features = self.conv1(features)
+        if self.padding == "valid":
+            # chop off the beginning and end of the conv. maps
+            # This is exactly what U-Net does when concatenating
+            # feature maps from the downsampling and upsampling paths, so I think
+            # it's justified.
+            x = x[:, :, self.kernel_size // 2 : -(self.kernel_size // 2)]
+            mask = mask[:, :, self.kernel_size // 2 : -(self.kernel_size // 2)]
+
         features[mask.expand(-1, self.num_bottleneck_units, -1)] = 0
         features = self.bn2(features)
         features = torch.nn.functional.relu(features)
         features = self.conv2(features)
         features[mask.expand(-1, self.filters, -1)] = 0
-        return features + x
+        if self.padding == "valid":
+            return features + x, mask
+        else:
+            return features + x
 
     def forward(self, x, mask=None):
         if mask is None:

@@ -42,7 +42,6 @@ def main(args):
 
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences
-
     if args.emission_path is not None:
         emission_files = []
         for emission_sequence_path in args.emission_path:
