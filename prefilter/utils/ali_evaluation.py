@@ -16,7 +16,7 @@ import prefilter.utils as utils
 
 
 def mutate_seq(sequence, n_inserts=10, n_deletions=10):
-    string_aa = [utils.inverse[i] for i in np.argmax(sequence, axis=0)]
+    string_aa = [utils.INVERSE_PROT_MAPPING[i] for i in np.argmax(sequence, axis=0)]
     for _ in range(n_inserts):
         # insertion step
         pos = np.random.randint(0, len(string_aa))
@@ -55,6 +55,7 @@ labels = []
 for seed_num in range(dataset.num_seeds):
     seq, _, _ = dataset[seed_num]
     seq = torch.as_tensor(seq).unsqueeze(0).to(dev).float()
+    print(seq)
     embedding = model(seq)
     embeddings.append(embedding.squeeze())
     labels.extend([seed_num] * embedding.shape[-1])
@@ -69,21 +70,28 @@ n_seq = 10000
 from collections import defaultdict
 
 correct = defaultdict(int)
+total_unique_labels = defaultdict(int)
+
 for i in range(n_seq):
     seq, _, label = dataset[i]
     correct_idx = set(np.where(labels == label)[0])
     seq = mutate_seq(sequence=seq)
     seq = torch.as_tensor(seq).to(dev).unsqueeze(0).float()
     embedding = model(seq).squeeze().T.contiguous()
-    D, topn = index.search(embedding, k=1)
-    D = D.squeeze()
-    topn = topn.squeeze()
-
+    D, topn = index.search(embedding, k=5)
+    D = D.squeeze().ravel()
+    topn = topn.squeeze().ravel()
     topn = topn[torch.argsort(D, descending=True)].cpu().numpy()
+
     predicted_classes = [labels[j] for j in topn]
-    # print(f"real label: {label}. top{n} predicted labels: {predicted_classes[:n]}, "
-    #        f"{label in predicted_classes[:n]}")
-    for n in [1, 10, 20]:
+    for n in [1, 10, 20, 100]:
         correct[n] += label in predicted_classes[:n]
+        x = len(set(predicted_classes[:n]))
+        print(x)
+        total_unique_labels[n] += x
+
 print(correct)
-print(np.asarray(list(correct.values()) / n_seq))
+print(np.asarray(list(correct.values())) / n_seq)
+zz = np.asarray(list(total_unique_labels.values())) / n_seq
+# avg unique labels
+print(zz)

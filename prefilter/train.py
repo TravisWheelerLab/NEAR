@@ -80,6 +80,7 @@ def main(args):
         num_workers=args.num_workers,
         all_vs_all_loss=args.all_vs_all_loss,
         supcon_loss_per_aa=args.supcon,
+        non_diag_alignment=args.non_diag_alignment,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
@@ -109,7 +110,7 @@ def main(args):
 
     # create the arguments for the trainer
     trainer_kwargs = {
-        "gpus": gpus,
+        "gpus": num_gpus,
         "num_nodes": args.num_nodes,
         "max_epochs": args.epochs,
         "check_val_every_n_epoch": args.check_val_every_n_epoch,

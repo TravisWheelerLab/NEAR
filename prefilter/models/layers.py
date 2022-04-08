@@ -120,6 +120,8 @@ class ResidualBlock(nn.Module):
         features = self.bn1(x)
         features = torch.nn.functional.relu(features)
         features = self.conv1(features)
+        if self.padding == "valid":
+            x = x[:, :, self.kernel_size // 2 : -(self.kernel_size // 2)]
         features = self.bn2(features)
         features = torch.nn.functional.relu(features)
         features = self.conv2(features)

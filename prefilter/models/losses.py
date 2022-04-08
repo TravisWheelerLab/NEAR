@@ -12,7 +12,104 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss", "AllVsAllLoss"]
+__all__ = ["SupConLoss", "AllVsAllLoss", "CustomLoss"]
+
+
+class CustomLoss(nn.Module):
+    def __init__(self, n_conv_layers=None, device="cuda"):
+        super(CustomLoss, self).__init__()
+        if n_conv_layers is not None:
+            # if it's none, assume we're using valid padding:
+            # and a kernel size of three
+            self.n_chop = n_conv_layers
+        else:
+            self.n_chop = 0
+        self.supcon = SupConLoss()
+        self.device = device
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, embeddings, embeddings_mask, labelvecs, picture=None):
+        """
+        Need to reshape the paired embeddings into one large matrix.
+        """
+
+        first_pos = False
+        first_neg = False
+        if picture is not None:
+            first_pos = True
+            first_neg = True
+
+        # split the labels into two lists
+        labelvecs0 = labelvecs[: embeddings.shape[0]]
+        labelvecs1 = labelvecs[embeddings.shape[0] :]
+        supcon_loss = 0
+
+        for embed, embed_mask, labelvec0, labelvec1 in zip(
+            embeddings, embeddings_mask, labelvecs0, labelvecs1
+        ):
+            # this is a pair.
+            # we chop off 1 pixel on each end on each convolutional layer
+            # (of which there are N).
+            # So if the input is M, then output is M-2*N.
+            # In our resnet, we have 18 residual layers + 1 initial conv.
+            # The output is always M - 38.
+            # Say our input is 126. Then our output is 88.
+            # We chop off 19 pixels from each side. However, the input sequence is not always
+            # the entire length of the batch. We always chop off 19 AAs from the left side,
+            # and sometimes less from the right!
+            # the issue is when we have sequences that are close to the length of the batch.
+            # in that case, if the label vector is bigger than the embedding, we've chopped amino acids
+            # off the right hand side.
+            # Since we know there can only be one place the label vector is chopped, we can just
+            # match the sizes after the left hand side chop.
+            embed_0 = embed[0][~embed_mask[0].expand(256, -1)].view(256, -1)
+            embed_1 = embed[1][~embed_mask[1].expand(256, -1)].view(256, -1)
+
+            l0 = labelvec0[self.n_chop :]
+            l1 = labelvec1[self.n_chop :]
+
+            if l0.shape[0] > embed_0.shape[-1]:
+                l0 = l0[: embed_0.shape[-1]]
+            if l1.shape[0] > embed_1.shape[-1]:
+                l1 = l1[: embed_1.shape[-1]]
+
+            # Now I need to set up the pairwise matrix.
+            # Nx2xK
+            # where N is the number of amino acids, 2 is the pair, and K is the embedding dimension.
+            # what about unaligned amino acids? I'll just not look at them for now.
+            # if two AAs have the same label they're aligned. They won't be aligned in
+            # the label vector, though.
+            embed_0 = embed_0.transpose(0, 1)
+            embed_1 = embed_1.transpose(0, 1)
+            if first_pos:
+                all_dots = torch.matmul(embed[0].T, embed[1])
+                plt.imshow(all_dots.cpu().detach().numpy())
+                plt.colorbar()
+                plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
+                plt.close()
+                first_pos = False
+            if first_neg:
+                all_dots = torch.matmul(embed[0].T, embeddings[-1][1])
+                plt.imshow(all_dots.cpu().detach().numpy())
+                plt.colorbar()
+                plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
+                plt.close()
+                first_neg = False
+
+            mask = torch.eq(l0.unsqueeze(0), l1.unsqueeze(0).T)
+            pos_batch = torch.zeros((torch.sum(mask), 2, 256)).to(self.device)
+
+            for k, (i, j) in enumerate(zip(*torch.where(mask))):
+                pos_batch[k][0] = embed_0[j]
+                pos_batch[k][1] = embed_1[i]
+            # need to _mask_ embeddings.
+            supcon_loss += self.supcon(
+                pos_batch, labels=torch.arange(pos_batch.shape[0])
+            )
+
+        return supcon_loss
 
 
 class AllVsAllLoss:

@@ -23,7 +23,7 @@ __all__ = [
     "pad_labels_and_features_in_batch",
     "stack_batch",
     "PROT_ALPHABET",
-    "inverse",
+    "INVERSE_PROT_MAPPING",
     "pad_batch_with_labels",
     "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
@@ -32,6 +32,7 @@ __all__ = [
     "msa_from_file",
     "encode_msa",
     "pad_contrastive_batches",
+    "pad_contrastive_batches_with_labelvecs",
     "logo_from_file",
 ]
 
@@ -57,7 +58,7 @@ PROT_ALPHABET = {
     "V": 18,
     "W": 19,
 }
-inverse = {v: k for k, v in PROT_ALPHABET.items()}
+INVERSE_PROT_MAPPING = {v: k for k, v in PROT_ALPHABET.items()}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
@@ -328,6 +329,32 @@ def pad_features_in_batch(batch):
     labels = [b[1] for b in batch]
     features, features_mask = _pad_sequences(features)
     return features, features_mask, labels
+
+
+def pad_contrastive_batches_with_labelvecs(batch):
+    """
+    Pad batches that consist of a 3-tuple: seq, logo, and label
+    :param batch: list of np.ndarrays encoding protein sequences/logos
+    :type batch: List[np.ndarray]
+    :return: torch.tensor
+    :rtype: torch.tensor
+    """
+
+    seqs = [b[0] for b in batch]
+    logos = [b[1] for b in batch]
+    lvec1 = [b[2] for b in batch]
+    lvec2 = [b[3] for b in batch]
+    data = seqs + logos
+    labelvecs = lvec1 + lvec2
+    labels = [b[4] for b in batch]
+    seqs, seqs_mask = _pad_sequences(data)
+
+    return (
+        torch.as_tensor(seqs),
+        torch.as_tensor(seqs_mask),
+        [torch.as_tensor(vec) for vec in labelvecs],
+        torch.as_tensor(labels),
+    )
 
 
 def pad_contrastive_batches(batch):

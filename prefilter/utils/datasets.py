@@ -27,6 +27,7 @@ __all__ = [
     "ContrastiveGenerator",
     "LogoBatcher",
     "AliPairGenerator",
+    "NonDiagonalAliPairGenerator",
 ]
 
 
@@ -500,13 +501,72 @@ class AliPairGenerator:
         )
 
 
-if __name__ == "__main__":
-    gen = AliPairGenerator(len_generated_seqs=100)
+class NonDiagonalAliPairGenerator(AliPairGenerator):
+    def __init__(self, steps_per_epoch=100000, len_generated_seqs=100, num_seeds=1000):
+        super().__init__(steps_per_epoch, len_generated_seqs, num_seeds)
+        # Do I care about not mutating highly conserved AAs?
+        # probably... or else the classifier will freak out
+        self.num_inserts_or_deletions = [5, 6, 7, 8, 9]
+        self.insert_or_del_run_length = [4, 5, 6, 7, 8]
 
-    for (
-        c1,
-        c2,
-        l,
-    ) in gen:
-        print(c1)
-        print(c2)
+    def _choose(self, arr):
+        """
+        Grab a random element from an array (not using np.random.choice!)
+        """
+        return arr[np.random.randint(0, len(arr))]
+
+    def mutate(self, sequence, lvec, lvec_start):
+        for _ in range(self._choose(self.num_inserts_or_deletions)):
+            pos = np.random.randint(0, len(sequence))
+            run_length = self._choose(self.insert_or_del_run_length)
+            # insertion step
+            for j in range(pos, min(pos + run_length, len(sequence))):
+                random_aa = self.alphabet[np.random.randint(0, len(self.alphabet))]
+                sequence.insert(pos + j, random_aa)
+                # add unique label
+                lvec.insert(pos + j, lvec_start)
+                lvec_start += 1
+
+        for _ in range(self._choose(self.num_inserts_or_deletions)):
+            # del step
+            pos = np.random.randint(0, len(sequence))
+            run_length = self._choose(self.insert_or_del_run_length)
+            # insertion step
+            for j in range(pos, min(pos + run_length, len(sequence))):
+                sequence.pop(pos)
+                lvec.pop(pos)
+
+        return sequence, lvec
+
+    def _generate_seq(self, seq_template):
+        seq = []
+        for i in range(len(seq_template)):
+            seq.append(np.random.choice(self.alphabet, p=seq_template[i]))
+        return seq
+
+    def __getitem__(self, idx):
+        s1 = self._generate_seq(self.seed_list[idx % len(self.seed_list)])
+        # lists for easy insertion
+        lvec1 = list(range(len(s1)))
+        s1, lvec1 = self.mutate(s1, lvec1, len(lvec1) + 1)
+        s2 = self._generate_seq(self.seed_list[idx % len(self.seed_list)])
+        lvec2 = list(range(len(s2)))
+        s2, lvec2 = self.mutate(s2, lvec2, np.max(lvec1) + 1)
+        s1 = utils.encode_protein_as_one_hot_vector("".join(s1))
+        s2 = utils.encode_protein_as_one_hot_vector("".join(s2))
+        return s1, s2, np.asarray(lvec1), np.asarray(lvec2), idx % len(self.seed_list)
+
+
+if __name__ == "__main__":
+
+    gen = NonDiagonalAliPairGenerator(len_generated_seqs=100)
+    import matplotlib.pyplot as plt
+
+    for c1, c2, l1, l2 in gen:
+        l1 = l1[:, np.newaxis]
+        l2 = l2[:, np.newaxis]
+        plt.imshow(np.equal(l1, l2.T))
+        plt.colorbar()
+        plt.savefig("off_diag.png", bbox_inches="tight")
+        plt.close()
+        break
