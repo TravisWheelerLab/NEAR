@@ -81,6 +81,7 @@ def main(args):
         all_vs_all_loss=args.all_vs_all_loss,
         supcon_loss_per_aa=args.supcon,
         non_diag_alignment=args.non_diag_alignment,
+        softmaxify=args.softmaxify,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

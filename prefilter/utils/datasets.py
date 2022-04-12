@@ -516,6 +516,10 @@ class NonDiagonalAliPairGenerator(AliPairGenerator):
         return arr[np.random.randint(0, len(arr))]
 
     def mutate(self, sequence, lvec, lvec_start):
+        """
+        Randomly insert or delete AAs from a sequence in runs.
+        Random start positions are chosen N times for both insertions and deletions.
+        """
         for _ in range(self._choose(self.num_inserts_or_deletions)):
             pos = np.random.randint(0, len(sequence))
             run_length = self._choose(self.insert_or_del_run_length)

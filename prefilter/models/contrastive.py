@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResidualBlock, SupConLoss, AllVsAllLoss, CustomLoss
+from prefilter.models import ResidualBlock, SupConLoss, CustomLoss
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -30,6 +30,7 @@ class ResNet1d(pl.LightningModule, ABC):
         all_vs_all_loss=False,
         supcon_loss_per_aa=False,
         non_diag_alignment=False,
+        softmaxify=False,
         padding="valid",
     ):
 
@@ -44,10 +45,11 @@ class ResNet1d(pl.LightningModule, ABC):
         self.all_vs_all = False
         self.non_diag = non_diag_alignment
         self.supcon = supcon_loss_per_aa
+        self.softmaxify = softmaxify
         self.padding = padding
 
-        if sum([self.all_vs_all, self.non_diag, self.supcon]) > 1:
-            raise ValueError("Choose one of <non_diag, all_vs_all, supcon>")
+        if sum([self.all_vs_all, self.supcon, self.softmaxify]) > 1:
+            raise ValueError("Choose one of <all_vs_all, supcon, sofmaxify>")
 
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
@@ -61,14 +63,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
 
-        if self.non_diag:
-            # number of residual convs plus an initial conv.
-            self.loss_func = CustomLoss(n_conv_layers=self.n_res_blocks + 1)
-        elif all_vs_all_loss:
-            self.loss_func = AllVsAllLoss()
-            self.all_vs_all = True
-        else:
-            self.loss_func = SupConLoss()
+        self.loss_func = CustomLoss()
 
         self._setup_layers()
 
@@ -119,7 +114,7 @@ class ResNet1d(pl.LightningModule, ABC):
         for layer in self.embedding_trunk:
             x, mask = layer(x, mask)
 
-        if self.all_vs_all or self.supcon or self.non_diag:
+        if self.all_vs_all or self.supcon or self.non_diag or self.softmaxify:
             return x, mask
         else:
             return self.projection(x.mean(axis=-1))
@@ -128,7 +123,7 @@ class ResNet1d(pl.LightningModule, ABC):
         x = self.initial_conv(x)
         for layer in self.embedding_trunk:
             x = layer(x)
-        if self.all_vs_all or self.supcon or self.non_diag:
+        if self.all_vs_all or self.supcon or self.non_diag or self.softmaxify:
             return x
         else:
             return self.projection(x.mean(axis=-1))
@@ -138,10 +133,15 @@ class ResNet1d(pl.LightningModule, ABC):
             embeddings = self._forward(x)
         else:
             embeddings, mask = self._masked_forward(x, mask)
-        if self.supcon or self.all_vs_all or self.non_diag:
+        if (
+            self.supcon or self.all_vs_all or self.non_diag or self.softmaxify
+        ) and mask is not None:
             # always normalize across embedding dimension
             embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
             return embeddings, mask
+        elif self.supcon or self.all_vs_all or self.non_diag or self.softmaxify:
+            embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
+            return embeddings
         else:
             # always normalize for contrastive learning
             embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
@@ -149,88 +149,23 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _shared_step(self, batch):
 
-        if self.non_diag:
-            # have to propagate labelvecs thru
-            features, masks, labelvecs, labels = batch
-            embeddings, masks = self.forward(features, masks)
-        else:
-            features, masks, labels = batch
-            embeddings = self.forward(features, masks)
+        features, masks, labelvecs, labels = batch
+        embeddings, masks = self.forward(features, masks)
+        # What do I want to do?
+        # Go through each feature vector and associated label.
 
         # sequences, pairs
-        f1, f2 = torch.split(embeddings, self.batch_size, dim=0)
-        m1, m2 = torch.split(masks, self.batch_size, dim=0)
-        embeddings = torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1)
-        masks = torch.cat((m1.unsqueeze(1), m2.unsqueeze(1)), dim=1)
-
-        if self.all_vs_all:
-            m1, m2 = torch.split(masks, self.batch_size, dim=0)
-            if self.global_step % 100 == 0:
-                loss = self.loss_func(
-                    f1, f2, m1, m2, labels, labels, picture=self.global_step
-                )
-            else:
-                loss = self.loss_func(f1, f2, m1, m2, labels, labels)
-        elif self.supcon:
-            dot_loss = 0
-            supcon_loss = 0
-            embeddings = embeddings.transpose(-1, -2)
-            # grab the two views
-            f1, f2 = torch.unbind(embeddings, 1)
-            rev_label = torch.flip(labels, [0])
-            # reverse along batch dim
-            f2 = torch.flip(f2, [0])
-            # dot entry i against entry i in f1, f2
-            # and remove the places where the labels are the same
-            dots = torch.bmm(f1, f2.transpose(-1, -2))[
-                torch.not_equal(labels, rev_label)
-            ]
-            # now add in the sum.
-            dot_loss += torch.sum(dots.ravel())
-            picture = False
-            if self.global_step % 250 == 0:
-                picture = True
-
-            for item in embeddings:
-                item = item.transpose(0, 1)
-                # this is 100x2x256
-                if picture:
-                    f1, f2 = torch.unbind(item, 1)
-                    matmul = torch.matmul(f1, f2.T)
-                    plt.imshow(matmul.detach().cpu().numpy())
-                    plt.colorbar()
-                    plt.savefig(f"supcon{self.global_step}", bbox_inches="tight")
-                    plt.close()
-                    _, f2 = torch.unbind(embeddings[1].transpose(0, 1), 1)
-                    matmul = torch.matmul(f1, f2.T)
-                    plt.imshow(matmul.detach().cpu().numpy())
-                    plt.colorbar()
-                    plt.savefig(f"supcon_neg{self.global_step}", bbox_inches="tight")
-                    plt.close()
-                    picture = False
-
-                labels = torch.arange(item.shape[0])
-                supcon_loss += self.loss_func(item, labels.float())
-
-            loss = (0.1 * dot_loss) + supcon_loss
-        elif self.non_diag:
-            if self.global_step % 100 == 0:
-                loss = self.loss_func(
-                    embeddings, masks, labelvecs, picture=self.global_step
-                )
-            else:
-                loss = self.loss_func(embeddings, masks, labelvecs)
+        if self.global_step % 250 == 0:
+            loss = self.loss_func(
+                embeddings, masks, labelvecs, self.batch_size, picture=self.global_step
+            )
         else:
-            loss = self.loss_func(embeddings, labels.float())
-
+            loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
         return loss, embeddings, labels
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        if self.all_vs_all or self.supcon:
-            self.train_dataset = utils.AliPairGenerator()
-            self.valid_dataset = utils.AliPairGenerator()
-        elif self.non_diag:
+        if self.supcon:
             self.train_dataset = utils.NonDiagonalAliPairGenerator()
             self.valid_dataset = utils.NonDiagonalAliPairGenerator()
         else:
@@ -281,10 +216,7 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def train_dataloader(self):
 
-        if self.non_diag:
-            collate_fn = utils.pad_contrastive_batches_with_labelvecs
-        else:
-            collate_fn = utils.pad_contrastive_batches
+        collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
@@ -298,10 +230,7 @@ class ResNet1d(pl.LightningModule, ABC):
         return train_loader
 
     def val_dataloader(self):
-        if self.non_diag:
-            collate_fn = utils.pad_contrastive_batches_with_labelvecs
-        else:
-            collate_fn = utils.pad_contrastive_batches
+        collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         valid_loader = torch.utils.data.DataLoader(
             self.valid_dataset,

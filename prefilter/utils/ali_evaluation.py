@@ -11,6 +11,7 @@ from prefilter.utils import (
     create_logo_index,
     create_parser,
     AliPairGenerator,
+    NonDiagonalAliPairGenerator,
 )
 import prefilter.utils as utils
 
@@ -30,7 +31,11 @@ def mutate_seq(sequence, n_inserts=10, n_deletions=10):
     return seq
 
 
-args = create_parser().parse_args()
+parser = create_parser()
+parser.add_argument("--mutate", action="store_true")
+parser.add_argument("--diag", action="store_true")
+
+args = parser.parse_args()
 
 logo_path = args.logo_path
 hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
@@ -41,6 +46,7 @@ batch_size = args.batch_size
 n_top = args.n_top
 add_all_logos = args.add_all_families
 benchmarking = args.benchmark
+mutate = args.mutate
 
 dev = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -48,14 +54,18 @@ with open(hparams_path, "r") as src:
     hparams = yaml.safe_load(src)
 
 model = load_model(model_path, hparams, dev)
-dataset = AliPairGenerator()
+if args.diag:
+    dataset = AliPairGenerator()
+else:
+    dataset = NonDiagonalAliPairGenerator()
+
 embeddings = []
 labels = []
 
 for seed_num in range(dataset.num_seeds):
-    seq, _, _ = dataset[seed_num]
+    seq = dataset[seed_num]
+    seq = seq[0]
     seq = torch.as_tensor(seq).unsqueeze(0).to(dev).float()
-    print(seq)
     embedding = model(seq)
     embeddings.append(embedding.squeeze())
     labels.extend([seed_num] * embedding.shape[-1])
@@ -73,21 +83,22 @@ correct = defaultdict(int)
 total_unique_labels = defaultdict(int)
 
 for i in range(n_seq):
-    seq, _, label = dataset[i]
+    seq = dataset[i]
+    label = seq[-1]
+    seq = seq[0]
     correct_idx = set(np.where(labels == label)[0])
-    seq = mutate_seq(sequence=seq)
+    if mutate:
+        seq = mutate_seq(sequence=seq)
     seq = torch.as_tensor(seq).to(dev).unsqueeze(0).float()
     embedding = model(seq).squeeze().T.contiguous()
-    D, topn = index.search(embedding, k=5)
+    D, topn = index.search(embedding, k=20)
     D = D.squeeze().ravel()
     topn = topn.squeeze().ravel()
     topn = topn[torch.argsort(D, descending=True)].cpu().numpy()
-
     predicted_classes = [labels[j] for j in topn]
-    for n in [1, 10, 20, 100]:
+    for n in [1, 10, 20, 100, 200, 250]:
         correct[n] += label in predicted_classes[:n]
         x = len(set(predicted_classes[:n]))
-        print(x)
         total_unique_labels[n] += x
 
 print(correct)

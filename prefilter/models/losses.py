@@ -6,13 +6,21 @@ from __future__ import print_function
 
 import pdb
 import matplotlib.pyplot as plt
+import matplotlib
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss", "AllVsAllLoss", "CustomLoss"]
+__all__ = ["SupConLoss", "CustomLoss"]
+
+
+def calc_unique(x, dim=-1):
+    unique, inverse = torch.unique(x, return_inverse=True, dim=dim)
+    perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
+    inverse, perm = inverse.flip([dim]), perm.flip([dim])
+    return unique, inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm)
 
 
 class CustomLoss(nn.Module):
@@ -30,139 +38,89 @@ class CustomLoss(nn.Module):
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, embeddings, embeddings_mask, labelvecs, picture=None):
+    def forward(self, embeddings, masks, labelvecs, batch_size, picture=None):
         """
         Need to reshape the paired embeddings into one large matrix.
         """
 
         first_pos = False
         first_neg = False
+
         if picture is not None:
             first_pos = True
             first_neg = True
 
         # split the labels into two lists
-        labelvecs0 = labelvecs[: embeddings.shape[0]]
-        labelvecs1 = labelvecs[embeddings.shape[0] :]
-        supcon_loss = 0
+        f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        m1, m2 = torch.split(masks, batch_size, dim=0)
+        mx = 0
+        loss = 0
 
-        for embed, embed_mask, labelvec0, labelvec1 in zip(
-            embeddings, embeddings_mask, labelvecs0, labelvecs1
+        for e1, e2, m1, m2, labelvec1, labelvec2 in zip(
+            f1, f2, m1, m2, labelvecs[: f1.shape[0]], labelvecs[f1.shape[0] :]
         ):
-            # this is a pair.
-            # we chop off 1 pixel on each end on each convolutional layer
-            # (of which there are N).
-            # So if the input is M, then output is M-2*N.
-            # In our resnet, we have 18 residual layers + 1 initial conv.
-            # The output is always M - 38.
-            # Say our input is 126. Then our output is 88.
-            # We chop off 19 pixels from each side. However, the input sequence is not always
-            # the entire length of the batch. We always chop off 19 AAs from the left side,
-            # and sometimes less from the right!
-            # the issue is when we have sequences that are close to the length of the batch.
-            # in that case, if the label vector is bigger than the embedding, we've chopped amino acids
-            # off the right hand side.
-            # Since we know there can only be one place the label vector is chopped, we can just
-            # match the sizes after the left hand side chop.
-            embed_0 = embed[0][~embed_mask[0].expand(256, -1)].view(256, -1)
-            embed_1 = embed[1][~embed_mask[1].expand(256, -1)].view(256, -1)
-
-            l0 = labelvec0[self.n_chop :]
-            l1 = labelvec1[self.n_chop :]
-
-            if l0.shape[0] > embed_0.shape[-1]:
-                l0 = l0[: embed_0.shape[-1]]
-            if l1.shape[0] > embed_1.shape[-1]:
-                l1 = l1[: embed_1.shape[-1]]
-
-            # Now I need to set up the pairwise matrix.
-            # Nx2xK
-            # where N is the number of amino acids, 2 is the pair, and K is the embedding dimension.
-            # what about unaligned amino acids? I'll just not look at them for now.
-            # if two AAs have the same label they're aligned. They won't be aligned in
-            # the label vector, though.
-            embed_0 = embed_0.transpose(0, 1)
-            embed_1 = embed_1.transpose(0, 1)
+            # create a _new_ embedding matrix of shape
+            # Nx2xembed_dim.
+            # If there are unique AAs (an insertion/deletion in one sequence), _duplicate_ their embedding
+            # and place the copies in the _new_ embedding matrix.
+            # first, get the valid characters for each AA by cutting down the labelvectors.
+            e1 = e1[~m1.expand(256, -1)].view(256, -1)
+            e2 = e2[~m2.expand(256, -1)].view(256, -1)
+            # 256x10
             if first_pos:
-                all_dots = torch.matmul(embed[0].T, embed[1])
-                plt.imshow(all_dots.cpu().detach().numpy())
+                x = torch.matmul(embeddings[0].T, embeddings[-1]).detach().cpu()
+                plt.imshow(x)
+                plt.clim(-1, 1)
                 plt.colorbar()
                 plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
-                plt.close()
                 first_pos = False
+                plt.close()
             if first_neg:
-                all_dots = torch.matmul(embed[0].T, embeddings[-1][1])
-                plt.imshow(all_dots.cpu().detach().numpy())
+                x = torch.matmul(embeddings[2].T, embeddings[-1]).detach().cpu()
+                plt.imshow(x)
+                plt.clim(-1, 1)
                 plt.colorbar()
                 plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
-                plt.close()
                 first_neg = False
+                plt.close()
 
-            mask = torch.eq(l0.unsqueeze(0), l1.unsqueeze(0).T)
-            pos_batch = torch.zeros((torch.sum(mask), 2, 256)).to(self.device)
-
-            for k, (i, j) in enumerate(zip(*torch.where(mask))):
-                pos_batch[k][0] = embed_0[j]
-                pos_batch[k][1] = embed_1[i]
-            # need to _mask_ embeddings.
-            supcon_loss += self.supcon(
-                pos_batch, labels=torch.arange(pos_batch.shape[0])
+            if labelvec1.shape[0] > e1.shape[-1]:
+                labelvec1 = labelvec1[: e2.shape[-1]]
+            if labelvec2.shape[0] > e2.shape[-1]:
+                labelvec2 = labelvec2[: e2.shape[-1]]
+            # paired positions
+            paired_pos = torch.where(
+                torch.eq(labelvec1.unsqueeze(1), labelvec2.unsqueeze(0))
             )
+            # grab the positions and shove them in to a new matrix
+            pos_pairs = torch.cat(
+                (
+                    e1[:, paired_pos[0]].T.unsqueeze(1),
+                    e2[:, paired_pos[1]].T.unsqueeze(1),
+                ),
+                dim=1,
+            )
+            # unpaired labels are unique
+            unique_labels, counts = torch.unique(
+                torch.cat((labelvec1, labelvec2)), return_counts=True
+            )
+            unique, indices = calc_unique(torch.cat((labelvec1, labelvec2)))
+            indices = indices[counts == 1]
+            # now apply the indices to the concatenated embeddings
+            neg_pairs = torch.cat((e1.T, e2.T))[indices]
+            # and create dummy pairs (with unique labels).
+            neg_pairs = torch.cat(
+                (neg_pairs.unsqueeze(1), neg_pairs.unsqueeze(1)), dim=1
+            )
+            pos_labelvec = torch.arange(mx, mx + len(pos_pairs))
+            mx = torch.max(pos_labelvec)
+            neg_labelvec = torch.arange(mx, mx + len(neg_pairs))
+            mx = torch.max(neg_labelvec)
+            xx = torch.cat((pos_pairs, neg_pairs))
+            yy = torch.cat((pos_labelvec, neg_labelvec))
+            loss += self.supcon(xx, yy)
 
-        return supcon_loss
-
-
-class AllVsAllLoss:
-    def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
-
-    def forward(
-        self,
-        anchors,
-        logos,
-        anchors_mask,
-        logos_mask,
-        anchor_labels,
-        logo_labels,
-        picture=None,
-    ):
-        loss = 0
-        if picture is not None:
-            first_pos = True
-            first_neg = True
-
-        for i, pos_embed in enumerate(anchors):
-            pos_len = torch.sum(~anchors_mask[i], dim=-1)
-            for j, logo_embed in enumerate(logos):
-                logo_len = torch.sum(~logos_mask[j], dim=-1)
-                if anchor_labels[i] == logo_labels[j]:
-                    all_dots = torch.matmul(pos_embed.T, logo_embed)
-
-                    if picture is not None and first_pos:
-                        plt.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
-                        plt.colorbar()
-                        plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
-                        plt.close()
-                        first_pos = False
-
-                    # with square matrices we can use np.diag
-                    all_dots = torch.diag(all_dots)
-                    # get CLOSE to the optimal
-                    # loss will only go down if the sum of all the dots is close to n*m
-                    loss += (all_dots.shape[0] - torch.sum(all_dots)) ** 2
-                else:
-                    # we should minimize this
-                    all_dots = torch.matmul(pos_embed.T, logo_embed)
-                    if picture is not None and first_neg:
-                        plt.imshow(all_dots.cpu().detach().numpy()[:pos_len, :logo_len])
-                        plt.colorbar()
-                        plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
-                        plt.close()
-                        first_neg = False
-                    # if the dots are negative, then the loss should go down
-                    loss += torch.sum(all_dots)
-
-        return loss / torch.tensor(anchors.shape[0] ** 2)
+        return loss
 
 
 class SupConLoss(nn.Module):

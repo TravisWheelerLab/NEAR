@@ -331,7 +331,7 @@ def pad_features_in_batch(batch):
     return features, features_mask, labels
 
 
-def pad_contrastive_batches_with_labelvecs(batch):
+def pad_contrastive_batches_with_labelvecs(batch, n_conv_layers=19):
     """
     Pad batches that consist of a 3-tuple: seq, logo, and label
     :param batch: list of np.ndarrays encoding protein sequences/logos
@@ -342,8 +342,8 @@ def pad_contrastive_batches_with_labelvecs(batch):
 
     seqs = [b[0] for b in batch]
     logos = [b[1] for b in batch]
-    lvec1 = [b[2] for b in batch]
-    lvec2 = [b[3] for b in batch]
+    lvec1 = [b[2][n_conv_layers:] for b in batch]
+    lvec2 = [b[3][n_conv_layers:] for b in batch]
     data = seqs + logos
     labelvecs = lvec1 + lvec2
     labels = [b[4] for b in batch]
