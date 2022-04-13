@@ -78,10 +78,7 @@ def main(args):
         batch_size=args.batch_size,
         oversample_neighborhood_labels=False,
         num_workers=args.num_workers,
-        all_vs_all_loss=args.all_vs_all_loss,
-        supcon_loss_per_aa=args.supcon,
-        non_diag_alignment=args.non_diag_alignment,
-        softmaxify=args.softmaxify,
+        max_pool=args.max_pool,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

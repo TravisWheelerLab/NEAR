@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResidualBlock, SupConLoss, CustomLoss
+from prefilter.models import ResidualBlock, SupConLoss, SupConPerAA, SupConWithPooling
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -27,11 +27,8 @@ class ResNet1d(pl.LightningModule, ABC):
         training=True,
         emission_files=None,
         decoy_files=None,
-        all_vs_all_loss=False,
-        supcon_loss_per_aa=False,
-        non_diag_alignment=False,
-        softmaxify=False,
         padding="valid",
+        max_pool=True,
     ):
 
         super(ResNet1d, self).__init__()
@@ -42,14 +39,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
         self.batch_size = batch_size
-        self.all_vs_all = False
-        self.non_diag = non_diag_alignment
-        self.supcon = supcon_loss_per_aa
-        self.softmaxify = softmaxify
         self.padding = padding
-
-        if sum([self.all_vs_all, self.supcon, self.softmaxify]) > 1:
-            raise ValueError("Choose one of <all_vs_all, supcon, sofmaxify>")
 
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
@@ -62,8 +52,14 @@ class ResNet1d(pl.LightningModule, ABC):
         self.res_block_kernel_size = 3
         self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
+        self.max_pool = max_pool
 
-        self.loss_func = CustomLoss()
+        if self.max_pool:
+            self.loss_func = SupConWithPooling()
+            self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
+        else:
+            self.loss_func = SupConPerAA()
+            self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
 
@@ -111,83 +107,78 @@ class ResNet1d(pl.LightningModule, ABC):
 
         x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
 
-        for layer in self.embedding_trunk:
+        for i, layer in enumerate(self.embedding_trunk):
+            if self.max_pool and (i + 1) % 9 == 0:
+                x = torch.nn.functional.max_pool1d(x, 2)
+                # is this what I want?
+                # masked positions are 1s in the mask.
+                # so the positive masks will be propagated inwards.
+                # if effect chopping off bits of the end of the sequence.
+                mask = torch.nn.functional.max_pool1d(mask.float(), 2).bool()
             x, mask = layer(x, mask)
 
-        if self.all_vs_all or self.supcon or self.non_diag or self.softmaxify:
-            return x, mask
-        else:
-            return self.projection(x.mean(axis=-1))
+        return x, mask
 
     def _forward(self, x):
         x = self.initial_conv(x)
-        for layer in self.embedding_trunk:
+        for i, layer in enumerate(self.embedding_trunk):
+            if self.max_pool and (i + 1) % 9 == 0:
+                x = torch.nn.functional.max_pool1d(x, 2)
             x = layer(x)
-        if self.all_vs_all or self.supcon or self.non_diag or self.softmaxify:
-            return x
-        else:
-            return self.projection(x.mean(axis=-1))
+        return x
 
     def forward(self, x, mask=None):
         if mask is None:
             embeddings = self._forward(x)
         else:
             embeddings, mask = self._masked_forward(x, mask)
-        if (
-            self.supcon or self.all_vs_all or self.non_diag or self.softmaxify
-        ) and mask is not None:
+
+        embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
+
+        if mask is not None:
             # always normalize across embedding dimension
-            embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
             return embeddings, mask
-        elif self.supcon or self.all_vs_all or self.non_diag or self.softmaxify:
-            embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
-            return embeddings
         else:
-            # always normalize for contrastive learning
-            embeddings = torch.nn.functional.normalize(embeddings, dim=-1, p=2)
             return embeddings
 
     def _shared_step(self, batch):
-
-        features, masks, labelvecs, labels = batch
-        embeddings, masks = self.forward(features, masks)
-        # What do I want to do?
-        # Go through each feature vector and associated label.
-
-        # sequences, pairs
-        if self.global_step % 250 == 0:
-            loss = self.loss_func(
-                embeddings, masks, labelvecs, self.batch_size, picture=self.global_step
-            )
+        if len(batch) == 4:
+            features, masks, labelvecs, labels = batch
         else:
-            loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
+            features, masks, labels = batch
+
+        embeddings, masks = self.forward(features, masks)
+
+        if self.max_pool:
+            if self.global_step % 250 == 0:
+                loss = self.loss_func(
+                    embeddings, self.batch_size, picture=self.global_step
+                )
+            else:
+                loss = self.loss_func(embeddings, self.batch_size)
+        else:
+            # per-AA loss.
+            if self.global_step % 250 == 0:
+                loss = self.loss_func(
+                    embeddings,
+                    masks,
+                    labelvecs,
+                    self.batch_size,
+                    picture=self.global_step,
+                )
+            else:
+                loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
+
         return loss, embeddings, labels
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
-        if self.supcon:
-            self.train_dataset = utils.NonDiagonalAliPairGenerator()
-            self.valid_dataset = utils.NonDiagonalAliPairGenerator()
+        if self.max_pool:
+            self.train_dataset = utils.RealisticAliPairGenerator()
+            self.valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)
         else:
-            if self.emission_files is not None:
-                self.fasta_files = self.emission_files + self.fasta_files
-
-            if self.decoy_files is not None:
-                self.fasta_files = self.decoy_files + self.fasta_files
-
-            self.train_dataset = utils.ContrastiveGenerator(
-                self.fasta_files,
-                self.logo_path,
-                self.name_to_class_code,
-                self.oversample_neighborhood_labels,
-            )
-
-            self.valid_dataset = utils.ContrastiveGenerator(
-                self.valid_files,
-                self.logo_path,
-                self.name_to_class_code,
-                oversample_neighborhood_labels=False,
-            )
+            self.train_dataset = utils.NonDiagonalAliPairGenerator()
+            self.valid_dataset = utils.NonDiagonalAliPairGenerator(steps_per_epoch=1000)
 
     def training_step(self, batch, batch_nb):
         loss, _, _ = self._shared_step(batch)
@@ -216,28 +207,25 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def train_dataloader(self):
 
-        collate_fn = utils.pad_contrastive_batches_with_labelvecs
-
         train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            collate_fn=collate_fn,
+            collate_fn=self.collate_fn,
             drop_last=True,
         )
 
         return train_loader
 
     def val_dataloader(self):
-        collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         valid_loader = torch.utils.data.DataLoader(
             self.valid_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=collate_fn,
+            collate_fn=self.collate_fn,
             drop_last=True,
         )
 

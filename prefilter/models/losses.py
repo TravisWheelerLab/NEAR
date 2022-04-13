@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss", "CustomLoss"]
+__all__ = ["SupConWithPooling", "SupConLoss", "SupConPerAA"]
 
 
 def calc_unique(x, dim=-1):
@@ -23,9 +23,62 @@ def calc_unique(x, dim=-1):
     return unique, inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm)
 
 
-class CustomLoss(nn.Module):
+class SupConWithPooling(nn.Module):
     def __init__(self, n_conv_layers=None, device="cuda"):
-        super(CustomLoss, self).__init__()
+        super(SupConWithPooling, self).__init__()
+        if n_conv_layers is not None:
+            # if it's none, assume we're using valid padding:
+            # and a kernel size of three
+            self.n_chop = n_conv_layers
+        else:
+            self.n_chop = 0
+        self.supcon = SupConLoss()
+        self.device = device
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, embeddings, batch_size, picture=None):
+        """
+        Need to reshape the paired embeddings into one large matrix
+        """
+
+        first_pos = False
+        first_neg = False
+
+        if picture is not None:
+            first_pos = True
+            first_neg = True
+
+        # split the labels into two lists
+        f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        f1 = f1.transpose(-1, -2)
+        f2 = f2.transpose(-1, -2)
+        # if it's diagonal. Then we're good and can b lazy
+        if first_pos:
+            x = torch.matmul(f1[0], f2[0].T).detach().cpu()
+            plt.imshow(x.float())
+            plt.colorbar()
+            plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
+            plt.close()
+        if first_neg:
+            x = torch.matmul(f1[0], f2[-1].T).detach().cpu()
+            plt.imshow(x.float())
+            plt.colorbar()
+            plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
+            plt.close()
+
+        f1 = f1.reshape(f1.shape[0] * f1.shape[1], 256)
+        f2 = f2.reshape(f2.shape[0] * f2.shape[1], 256)
+
+        labels = torch.arange(f1.shape[0])
+        loss = self.supcon(torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1), labels)
+        return loss
+
+
+class SupConPerAA(nn.Module):
+    def __init__(self, n_conv_layers=None, device="cuda"):
+        super(SupConPerAA, self).__init__()
         if n_conv_layers is not None:
             # if it's none, assume we're using valid padding:
             # and a kernel size of three
@@ -55,7 +108,8 @@ class CustomLoss(nn.Module):
         m1, m2 = torch.split(masks, batch_size, dim=0)
         mx = 0
         loss = 0
-
+        pairs = []
+        labels = []
         for e1, e2, m1, m2, labelvec1, labelvec2 in zip(
             f1, f2, m1, m2, labelvecs[: f1.shape[0]], labelvecs[f1.shape[0] :]
         ):
@@ -70,22 +124,20 @@ class CustomLoss(nn.Module):
             if first_pos:
                 x = torch.matmul(embeddings[0].T, embeddings[-1]).detach().cpu()
                 plt.imshow(x)
-                plt.clim(-1, 1)
                 plt.colorbar()
-                plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
+                plt.savefig(f"debug/pos_{picture}.png", bbox_inches="tight")
                 first_pos = False
                 plt.close()
             if first_neg:
                 x = torch.matmul(embeddings[2].T, embeddings[-1]).detach().cpu()
                 plt.imshow(x)
-                plt.clim(-1, 1)
                 plt.colorbar()
-                plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
+                plt.savefig(f"debug/neg_{picture}.png", bbox_inches="tight")
                 first_neg = False
                 plt.close()
 
             if labelvec1.shape[0] > e1.shape[-1]:
-                labelvec1 = labelvec1[: e2.shape[-1]]
+                labelvec1 = labelvec1[: e1.shape[-1]]
             if labelvec2.shape[0] > e2.shape[-1]:
                 labelvec2 = labelvec2[: e2.shape[-1]]
             # paired positions
@@ -112,13 +164,21 @@ class CustomLoss(nn.Module):
             neg_pairs = torch.cat(
                 (neg_pairs.unsqueeze(1), neg_pairs.unsqueeze(1)), dim=1
             )
+            if pos_pairs.numel() == 0:
+                print("pos pairs is 0..... theoretically possible but unlikely.")
+                continue
             pos_labelvec = torch.arange(mx, mx + len(pos_pairs))
             mx = torch.max(pos_labelvec)
             neg_labelvec = torch.arange(mx, mx + len(neg_pairs))
             mx = torch.max(neg_labelvec)
             xx = torch.cat((pos_pairs, neg_pairs))
             yy = torch.cat((pos_labelvec, neg_labelvec))
-            loss += self.supcon(xx, yy)
+            pairs.append(xx)
+            labels.append(yy)
+
+        pairs = torch.cat(pairs)
+        labels = torch.cat(labels)
+        loss += self.supcon(pairs, labels)
 
         return loss
 

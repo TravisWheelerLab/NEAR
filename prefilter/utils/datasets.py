@@ -22,6 +22,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 __all__ = [
     "SequenceDataset",
     "DecoyIterator",
+    "RealisticAliPairGenerator",
     "SequenceIterator",
     "RankingIterator",
     "ContrastiveGenerator",
@@ -420,7 +421,7 @@ class LogoBatcher(SequenceDataset):
 
 
 class AliPairGenerator:
-    def __init__(self, steps_per_epoch=100000, len_generated_seqs=100, num_seeds=1000):
+    def __init__(self, steps_per_epoch=10000, len_generated_seqs=100, num_seeds=1000):
 
         np.random.seed(10)
 
@@ -561,16 +562,48 @@ class NonDiagonalAliPairGenerator(AliPairGenerator):
         return s1, s2, np.asarray(lvec1), np.asarray(lvec2), idx % len(self.seed_list)
 
 
+class RealisticAliPairGenerator:
+    def __init__(self, steps_per_epoch=10000, n_families=1000, len_generated_seqs=100):
+        # 10% indel
+        self.n_families = n_families
+        self.steps_per_epoch = steps_per_epoch
+        self.len_generated_seqs = len_generated_seqs
+        self.family_templates = None
+        self.family_templates = utils.generate_sequences(
+            self.n_families, self.len_generated_seqs, utils.amino_distribution
+        )
+        self.sub_dists = utils.generate_sub_distributions()
+
+    def __len__(self):
+        return self.steps_per_epoch
+
+    def __getitem__(self, idx):
+        seq_template = self.family_templates[idx % len(self.family_templates)]
+        # generate 10% indel rate, 30% sub rate
+        s1 = seq_template
+        s2 = utils.mutate_sequence(
+            seq_template,
+            int(0.3 * self.len_generated_seqs),
+            int(0.1 * self.len_generated_seqs),
+            self.sub_dists,
+            utils.amino_distribution,
+        )
+
+        s1 = "".join([utils.char_to_index[c.item()] for c in s1])
+        s2 = "".join([utils.char_to_index[c.item()] for c in s2])
+        return (
+            utils.encode_protein_as_one_hot_vector(s1),
+            utils.encode_protein_as_one_hot_vector(s2),
+            np.arange(len(s1)),
+            np.arange(len(s2)),
+            idx % len(self.family_templates),
+        )
+
+
 if __name__ == "__main__":
-
-    gen = NonDiagonalAliPairGenerator(len_generated_seqs=100)
-    import matplotlib.pyplot as plt
-
-    for c1, c2, l1, l2 in gen:
-        l1 = l1[:, np.newaxis]
-        l2 = l2[:, np.newaxis]
-        plt.imshow(np.equal(l1, l2.T))
-        plt.colorbar()
-        plt.savefig("off_diag.png", bbox_inches="tight")
-        plt.close()
+    gen = RealisticAliPairGenerator()
+    for i in range(10):
+        s1, s2 = gen[i]
+        print(s1)
+        print(s2)
         break
