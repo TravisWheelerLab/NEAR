@@ -152,7 +152,10 @@ class ResNet1d(pl.LightningModule, ABC):
         if self.max_pool:
             if self.global_step % 250 == 0:
                 loss = self.loss_func(
-                    embeddings, self.batch_size, picture=self.global_step
+                    embeddings,
+                    self.batch_size,
+                    picture_path=self.logger.log_dir,
+                    step=self.global_step,
                 )
             else:
                 loss = self.loss_func(embeddings, self.batch_size)
@@ -164,7 +167,8 @@ class ResNet1d(pl.LightningModule, ABC):
                     masks,
                     labelvecs,
                     self.batch_size,
-                    picture=self.global_step,
+                    picture_path=self.logger.log_dir,
+                    step=self.global_step,
                 )
             else:
                 loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)

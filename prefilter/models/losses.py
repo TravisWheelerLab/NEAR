@@ -4,6 +4,7 @@ Date: May 07, 2020
 """
 from __future__ import print_function
 
+import os.path
 import pdb
 import matplotlib.pyplot as plt
 import matplotlib
@@ -38,7 +39,7 @@ class SupConWithPooling(nn.Module):
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, embeddings, batch_size, picture=None):
+    def forward(self, embeddings, batch_size, picture_path=None, step=None):
         """
         Need to reshape the paired embeddings into one large matrix
         """
@@ -46,28 +47,33 @@ class SupConWithPooling(nn.Module):
         first_pos = False
         first_neg = False
 
-        if picture is not None:
+        if picture_path is not None:
             first_pos = True
             first_neg = True
 
         # split the labels into two lists
         f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        # reshape them so that AA index is the second index
+        # and embedding dim is third
         f1 = f1.transpose(-1, -2)
         f2 = f2.transpose(-1, -2)
         # if it's diagonal. Then we're good and can b lazy
-        if first_pos:
+        if first_pos and os.path.isdir(picture_path):
+            print(f"saving images to {picture_path}/pos_{step}.png")
             x = torch.matmul(f1[0], f2[0].T).detach().cpu()
             plt.imshow(x.float())
             plt.colorbar()
-            plt.savefig(f"pos_{picture}.png", bbox_inches="tight")
+            plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
             plt.close()
-        if first_neg:
+        if first_neg and os.path.isdir(picture_path):
             x = torch.matmul(f1[0], f2[-1].T).detach().cpu()
             plt.imshow(x.float())
             plt.colorbar()
-            plt.savefig(f"neg_{picture}.png", bbox_inches="tight")
+            plt.savefig(f"{picture_path}/neg_{step}.png", bbox_inches="tight")
             plt.close()
 
+        # reshape so that we have N examples where N is the length
+        # of each sequence
         f1 = f1.reshape(f1.shape[0] * f1.shape[1], 256)
         f2 = f2.reshape(f2.shape[0] * f2.shape[1], 256)
 
@@ -91,7 +97,9 @@ class SupConPerAA(nn.Module):
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, embeddings, masks, labelvecs, batch_size, picture=None):
+    def forward(
+        self, embeddings, masks, labelvecs, batch_size, picture_path=None, step=None
+    ):
         """
         Need to reshape the paired embeddings into one large matrix.
         """
@@ -99,7 +107,7 @@ class SupConPerAA(nn.Module):
         first_pos = False
         first_neg = False
 
-        if picture is not None:
+        if picture_path is not None:
             first_pos = True
             first_neg = True
 
@@ -121,18 +129,18 @@ class SupConPerAA(nn.Module):
             e1 = e1[~m1.expand(256, -1)].view(256, -1)
             e2 = e2[~m2.expand(256, -1)].view(256, -1)
             # 256x10
-            if first_pos:
+            if first_pos and os.path.isdir(picture_path):
                 x = torch.matmul(embeddings[0].T, embeddings[-1]).detach().cpu()
                 plt.imshow(x)
                 plt.colorbar()
-                plt.savefig(f"debug/pos_{picture}.png", bbox_inches="tight")
+                plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
                 first_pos = False
                 plt.close()
-            if first_neg:
+            if first_neg and os.path.isdir(picture_path):
                 x = torch.matmul(embeddings[2].T, embeddings[-1]).detach().cpu()
                 plt.imshow(x)
                 plt.colorbar()
-                plt.savefig(f"debug/neg_{picture}.png", bbox_inches="tight")
+                plt.savefig(f"{picture_path}/neg_{step}.png", bbox_inches="tight")
                 first_neg = False
                 plt.close()
 
@@ -173,12 +181,13 @@ class SupConPerAA(nn.Module):
             mx = torch.max(neg_labelvec)
             xx = torch.cat((pos_pairs, neg_pairs))
             yy = torch.cat((pos_labelvec, neg_labelvec))
-            pairs.append(xx)
-            labels.append(yy)
+            loss += self.supcon(xx, yy)
+            # pairs.append(xx)
+            # labels.append(yy)
 
-        pairs = torch.cat(pairs)
-        labels = torch.cat(labels)
-        loss += self.supcon(pairs, labels)
+        # pairs = torch.cat(pairs)
+        # labels = torch.cat(labels)
+        # loss += self.supcon(pairs, labels)
 
         return loss
 

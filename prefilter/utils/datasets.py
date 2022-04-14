@@ -3,6 +3,8 @@ import os
 import pdb
 import json
 import time
+from abc import ABC
+
 import torch
 import numpy as np
 
@@ -267,6 +269,37 @@ class SequenceIterator(SequenceDataset):
 
     def __len__(self):
         return len(self.labels_and_sequences)
+
+
+class ConstrastiveAliGenerator:
+    def __init__(
+        self,
+        afa_files,
+    ):
+        self.afa_files = afa_files
+
+        self._build_dataset()
+
+    def _build_dataset(self):
+        self.alidb = []
+        for afa in self.afa_files:
+            seqs = utils.afa_from_file(afa)
+            self.alidb.append(seqs)
+        self.len = sum(list(map(len, self.alidb)))
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        ali = self.alidb[idx]
+        i = np.random.randint(0, len(ali))
+        s1 = ali[i]
+        j = np.random.randint(0, len(ali))
+        while j == i:
+            j = np.random.randint(0, len(ali))
+        s2 = ali[j]
+        lvec1 = np.arange(len(s1))
+        lvec2 = np.arange(len(s2))
 
 
 class ContrastiveGenerator(SequenceDataset):
@@ -578,9 +611,18 @@ class RealisticAliPairGenerator:
         return self.steps_per_epoch
 
     def __getitem__(self, idx):
-        seq_template = self.family_templates[idx % len(self.family_templates)]
+        seq_template = utils.generate_sequences(
+            1, self.len_generated_seqs, utils.amino_distribution
+        ).squeeze()
+        # seq_template = self.family_templates[idx % len(self.family_templates)]
         # generate 10% indel rate, 30% sub rate
-        s1 = seq_template
+        s1 = utils.mutate_sequence(
+            seq_template,
+            int(0.3 * self.len_generated_seqs),
+            int(0.1 * self.len_generated_seqs),
+            self.sub_dists,
+            utils.amino_distribution,
+        )
         s2 = utils.mutate_sequence(
             seq_template,
             int(0.3 * self.len_generated_seqs),
@@ -601,9 +643,11 @@ class RealisticAliPairGenerator:
 
 
 if __name__ == "__main__":
-    gen = RealisticAliPairGenerator()
-    for i in range(10):
-        s1, s2 = gen[i]
-        print(s1)
-        print(s2)
-        break
+    from glob import glob
+
+    train = glob(
+        "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
+    )[:3]
+    gen = ConstrastiveAliGenerator(train)
+    print(len(gen))
+    x = gen[0]

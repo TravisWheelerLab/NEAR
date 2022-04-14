@@ -34,6 +34,7 @@ __all__ = [
     "pad_contrastive_batches",
     "pad_contrastive_batches_with_labelvecs",
     "logo_from_file",
+    "afa_from_file",
 ]
 
 PROT_ALPHABET = {
@@ -252,6 +253,21 @@ def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
                         class_code += 1
 
     return name_to_class_code
+
+
+def afa_from_file(afa_file: str):
+    """
+    Parse a .afa file.
+    :param afa_file:
+    :type afa_file:
+    :return:
+    :rtype:
+    """
+    if os.path.splitext(afa_file)[-1] != ".afa":
+        raise ValueError(f"must pass a .afa file, got {afa_file}")
+
+    labels, seqs = fasta_from_file(afa_file)
+    return seqs
 
 
 def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
