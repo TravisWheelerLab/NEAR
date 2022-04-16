@@ -1,5 +1,7 @@
 # pylint: disable=no-member
 import os
+import random
+
 from pytorch_lightning import seed_everything
 from time import time
 
@@ -9,7 +11,7 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.plugins import DDPPlugin
 from pytorch_lightning.loggers import WandbLogger
-from random import shuffle
+from random import shuffle, seed
 from shopty import ShoptyConfig
 
 from glob import glob
@@ -26,7 +28,7 @@ def main(args):
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
-    train_files = glob(os.path.join(data_path, "*train.fa"))
+    train_files = glob(os.path.join(data_path, "*-train.sto.afa"))
     if args.debug:
         train_files = train_files[:3]
 
@@ -38,7 +40,9 @@ def main(args):
     if not (len(train_files)):
         raise ValueError("no train files")
 
+    seed(0)
     shuffle(train_files)
+    train_files = train_files[:1000]
 
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences
@@ -56,29 +60,20 @@ def main(args):
                 emission_files = emission_files[:2]
                 break
 
-    valid_files = [
-        f.replace("-train.fa", "-valid.fa") for f in train_files if "emission" not in f
-    ]
-    valid_files = list(filter(lambda x: os.path.isfile(x), valid_files))
-
-    if args.emission_path is not None:
-        name_to_class_code = create_class_code_mapping(
-            emission_files + train_files + valid_files
-        )
-    else:
-        name_to_class_code = create_class_code_mapping(train_files + valid_files)
+    valid_files = train_files[:100]
 
     model = ResNet1d(
-        fasta_files=train_files,
-        valid_files=valid_files,
+        train_afa_files=train_files,
+        valid_afa_files=valid_files,
         emission_files=emission_files if args.emission_path is not None else None,
         logo_path=args.logo_path,
-        name_to_class_code=name_to_class_code,
+        name_to_class_code={},
         learning_rate=args.learning_rate,
         batch_size=args.batch_size,
         oversample_neighborhood_labels=False,
         num_workers=args.num_workers,
         max_pool=args.max_pool,
+        real_data=args.real_data,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

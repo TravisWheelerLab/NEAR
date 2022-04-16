@@ -14,14 +14,15 @@ cd /home/tc229954/share/prefilter
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 
 time $py_cmd -m prefilter train\
-    --gpus 4 \
+    --gpus 3 \
     --num_nodes 1 \
     --num_workers 0 \
-    --log_dir models/contrastive/exps_apr14/all_aas/per_pair_both_mutated \
-    --data_path /home/tc229954/data/prefilter/pfam/seed/training_data/1000_file_subset/ \
+    --log_dir models/contrastive/exps_apr15/per_batch_loss_with_negs \
+    --data_path /home/tc229954/data/prefilter/pfam/seed/clustered/0.5 \
     --logo_path /home/tc229954/data/prefilter/pfam/seed/clustered/0.5/\
-    --batch_size 48 \
+    --batch_size 12 \
     --epochs 200 \
-    --learning_rate 1e-2 \
-    --check_val_every_n_epoch 5 \
-    --debug
+    --learning_rate 1e-3 \
+    --check_val_every_n_epoch 1 \
+    --max_pool \
+    --real_data \

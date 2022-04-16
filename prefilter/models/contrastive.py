@@ -16,8 +16,6 @@ __all__ = ["ResNet1d"]
 class ResNet1d(pl.LightningModule, ABC):
     def __init__(
         self,
-        fasta_files,
-        valid_files,
         logo_path,
         name_to_class_code,
         learning_rate,
@@ -29,17 +27,21 @@ class ResNet1d(pl.LightningModule, ABC):
         decoy_files=None,
         padding="valid",
         max_pool=True,
+        real_data=False,
+        train_afa_files=None,
+        valid_afa_files=None,
     ):
 
         super(ResNet1d, self).__init__()
 
-        self.fasta_files = fasta_files
-        self.valid_files = valid_files
+        self.train_afa_files = train_afa_files
+        self.valid_afa_files = valid_afa_files
         self.logo_path = logo_path
         self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.padding = padding
+        self.real_data = real_data
 
         self.oversample_neighborhood_labels = oversample_neighborhood_labels
         self.emission_files = emission_files
@@ -97,7 +99,6 @@ class ResNet1d(pl.LightningModule, ABC):
         the features in any location that is padded in the input sequence
         """
         x = self.initial_conv(x)
-
         if self.padding == "valid":
             mask = mask[
                 :,
@@ -150,18 +151,20 @@ class ResNet1d(pl.LightningModule, ABC):
         embeddings, masks = self.forward(features, masks)
 
         if self.max_pool:
-            if self.global_step % 250 == 0:
+            if self.global_step % 1000 == 0:
                 loss = self.loss_func(
                     embeddings,
+                    masks,
+                    labelvecs,
                     self.batch_size,
                     picture_path=self.logger.log_dir,
                     step=self.global_step,
                 )
             else:
-                loss = self.loss_func(embeddings, self.batch_size)
+                loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
         else:
             # per-AA loss.
-            if self.global_step % 250 == 0:
+            if self.global_step % 1000 == 0:
                 loss = self.loss_func(
                     embeddings,
                     masks,
@@ -177,6 +180,10 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _create_datasets(self):
         # This will be shared between every model that I train.
+        if self.real_data:
+            self.train_dataset = utils.ConstrastiveAliGenerator(self.train_afa_files)
+            self.valid_dataset = utils.ConstrastiveAliGenerator(self.valid_afa_files)
+            return
         if self.max_pool:
             self.train_dataset = utils.RealisticAliPairGenerator()
             self.valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)
@@ -193,7 +200,7 @@ class ResNet1d(pl.LightningModule, ABC):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
+        return torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])

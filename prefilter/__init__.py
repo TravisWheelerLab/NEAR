@@ -109,6 +109,7 @@ def main():
     train_parser.add_argument("--emission_path", nargs="+", type=str, default=None)
     train_parser.add_argument("--specify_gpus", action="store_true")
     train_parser.add_argument("--max_pool", action="store_true")
+    train_parser.add_argument("--real_data", action="store_true")
 
     # evaluation parser .----------------------------------------------------
     eval_parser = subparsers.add_parser("eval", help="evaluate a model")

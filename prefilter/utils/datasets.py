@@ -1,5 +1,6 @@
 # pylint: disable=no-member
 import os
+import matplotlib.pyplot as plt
 import pdb
 import json
 import time
@@ -28,6 +29,7 @@ __all__ = [
     "SequenceIterator",
     "RankingIterator",
     "ContrastiveGenerator",
+    "ConstrastiveAliGenerator",
     "LogoBatcher",
     "AliPairGenerator",
     "NonDiagonalAliPairGenerator",
@@ -271,6 +273,16 @@ class SequenceIterator(SequenceDataset):
         return len(self.labels_and_sequences)
 
 
+def _remove_gaps(seq, label):
+    _seq = []
+    _label = []
+    for s, l in zip(seq, label):
+        if s not in ("-", "."):
+            _seq.append(s)
+            _label.append(l)
+    return _seq, _label
+
+
 class ConstrastiveAliGenerator:
     def __init__(
         self,
@@ -284,22 +296,28 @@ class ConstrastiveAliGenerator:
         self.alidb = []
         for afa in self.afa_files:
             seqs = utils.afa_from_file(afa)
-            self.alidb.append(seqs)
+            if len(seqs) > 3:
+                self.alidb.append(seqs)
         self.len = sum(list(map(len, self.alidb)))
 
     def __len__(self):
         return self.len
 
     def __getitem__(self, idx):
-        ali = self.alidb[idx]
-        i = np.random.randint(0, len(ali))
-        s1 = ali[i]
-        j = np.random.randint(0, len(ali))
+        ali = self.alidb[idx % len(self.alidb)]
+        i = np.random.randint(1, len(ali))
+        j = np.random.randint(1, len(ali))
         while j == i:
-            j = np.random.randint(0, len(ali))
-        s2 = ali[j]
-        lvec1 = np.arange(len(s1))
-        lvec2 = np.arange(len(s2))
+            j = np.random.randint(1, len(ali))
+        s1 = [x for x in ali[i]]
+        s2 = [x for x in ali[j]]
+        lvec1 = list(range(len(s1)))
+        lvec2 = list(range(len(s2)))
+        s1, lvec1 = _remove_gaps(s1, lvec1)
+        s2, lvec2 = _remove_gaps(s2, lvec2)
+        s1 = utils.encode_protein_as_one_hot_vector("".join(s1))
+        s2 = utils.encode_protein_as_one_hot_vector("".join(s2))
+        return s1, s2, np.asarray(lvec1), np.asarray(lvec2), idx % len(self.alidb)
 
 
 class ContrastiveGenerator(SequenceDataset):
@@ -647,7 +665,14 @@ if __name__ == "__main__":
 
     train = glob(
         "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
-    )[:3]
+    )[:1000]
     gen = ConstrastiveAliGenerator(train)
     print(len(gen))
-    x = gen[0]
+    exit()
+    for s1, s2, l1, l2, l in gen:
+        print(s1)
+        print(s2)
+        print(l1)
+        print(l2)
+        print("====")
+        break

@@ -39,7 +39,9 @@ class SupConWithPooling(nn.Module):
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, embeddings, batch_size, picture_path=None, step=None):
+    def forward(
+        self, embeddings, masks, labelvecs, batch_size, picture_path=None, step=None
+    ):
         """
         Need to reshape the paired embeddings into one large matrix
         """
@@ -53,32 +55,75 @@ class SupConWithPooling(nn.Module):
 
         # split the labels into two lists
         f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        m1, m2 = torch.split(masks, batch_size, dim=0)
+        l1, l2 = torch.split(labelvecs, batch_size, dim=0)
         # reshape them so that AA index is the second index
         # and embedding dim is third
+        loss = 0
         f1 = f1.transpose(-1, -2)
         f2 = f2.transpose(-1, -2)
-        # if it's diagonal. Then we're good and can b lazy
+        pairs = []
+        for p1, p2, mask1, mask2, label1, label2 in zip(f1, f2, m1, m2, l1, l2):
+            # cut off 10 from the left and right
+            labelmat = torch.eq(label1.unsqueeze(1), label2.unsqueeze(0)).float()
+            # 10 conv. layers before the first max pool
+            labelmat = labelmat[9:-9, 9:-9]
+            labelmat = torch.nn.functional.max_pool2d(
+                labelmat.unsqueeze(0), (2, 2)
+            ).squeeze()
+            labelmat = labelmat[9:-9, 9:-9]
+            labelmat = labelmat[: torch.sum(~mask1), : torch.sum(~mask2)]
+            p1 = p1[: torch.sum(~mask1)]
+            p2 = p2[: torch.sum(~mask2)]
+            # another 9 conv layers after the max pool
+            # apply max pooling
+            paired_pos = torch.where(labelmat)
+            # grab the positions and shove them in to a new matrix
+            # still need to grab the negative positions
+            pos_pairs = torch.cat(
+                (
+                    p1[paired_pos[0]].unsqueeze(1),
+                    p2[paired_pos[1]].unsqueeze(1),
+                ),
+                dim=1,
+            )
+            # negative positions are ones that have a max-pooled representation in one sequence
+            # but don't have a max-pooled representation in the other sequence.
+            # This is quite rare, especially since the sequences we train on are closely aligned and max-pooled.
+            # negative pairs occur
+            if pos_pairs.shape[0]:
+                negs = torch.cat(
+                    (
+                        p2[torch.sum(labelmat, dim=0) == 0],
+                        p1[torch.sum(labelmat, dim=1) == 0],
+                    )
+                )
+                if negs.shape[0]:
+                    neg_pairs = torch.cat((negs.unsqueeze(1), negs.unsqueeze(1)), dim=1)
+                    pos_pairs = torch.cat((pos_pairs, neg_pairs))
+                pairs.append(pos_pairs)
+
+        z = torch.cat(pairs)
+        loss += self.supcon(z, torch.arange(len(z)))
+
         if first_pos and os.path.isdir(picture_path):
             print(f"saving images to {picture_path}/pos_{step}.png")
-            x = torch.matmul(f1[0], f2[0].T).detach().cpu()
-            plt.imshow(x.float())
+            n_f1_valid = torch.sum(~m1[0])
+            n_f2_valid = torch.sum(~m2[0])
+            x = torch.matmul(f1[0], f2[0].T).detach().cpu().float()
+            plt.imshow(x[:n_f1_valid, :n_f2_valid])
             plt.colorbar()
             plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
             plt.close()
         if first_neg and os.path.isdir(picture_path):
-            x = torch.matmul(f1[0], f2[-1].T).detach().cpu()
-            plt.imshow(x.float())
+            n_f1_valid = torch.sum(~m1[0])
+            n_f2_valid = torch.sum(~m2[-1])
+            x = torch.matmul(f1[0], f2[-1].T).detach().cpu().float()
+            plt.imshow(x[:n_f1_valid, :n_f2_valid])
             plt.colorbar()
             plt.savefig(f"{picture_path}/neg_{step}.png", bbox_inches="tight")
             plt.close()
 
-        # reshape so that we have N examples where N is the length
-        # of each sequence
-        f1 = f1.reshape(f1.shape[0] * f1.shape[1], 256)
-        f2 = f2.reshape(f2.shape[0] * f2.shape[1], 256)
-
-        labels = torch.arange(f1.shape[0])
-        loss = self.supcon(torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1), labels)
         return loss
 
 

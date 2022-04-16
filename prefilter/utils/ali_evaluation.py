@@ -1,4 +1,5 @@
 import pdb
+from glob import glob
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -46,16 +47,24 @@ embeddings = []
 labels = []
 seed_sequences = []
 
+afa_files = glob(
+    "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
+)
+from random import shuffle, seed
+
+seed(0)
+shuffle(afa_files)
+afa_files = afa_files[:1000]
+dataset = utils.ConstrastiveAliGenerator(afa_files)
+
 with torch.no_grad():
-    for seed_num in range(num_families):
+    for seed_num in range(len(dataset.alidb)):
         # generate a new sequence
-        seq = utils.generate_sequences(
-            1, len_generated_seqs, utils.amino_distribution
-        ).squeeze()
+        seq = dataset.alidb[seed_num][0]
+        seq = "".join([s for s in seq if "-" not in s])
+        if len(seq) < 100:
+            seq = seq + "A" * (100 - len(seq))
         # add the raw form to the seed sequence (mutated later for evaluation)
-        seed_sequences.append(seq)
-        # transform into an encoding recognizable to the model
-        seq = "".join([utils.char_to_index[c.item()] for c in seq])
         embedding = model(
             torch.as_tensor(utils.encode_protein_as_one_hot_vector(seq))
             .unsqueeze(0)
@@ -84,29 +93,27 @@ subsitution_dists = utils.generate_sub_distributions()
 n_seq = 0
 
 with torch.no_grad():
-    for i in range(num_families):
+    for i in range(len(dataset.alidb)):
         # iterate over families
-        seq = seed_sequences[i]
         # label is the index of the family
         label = i
-        for n in range(n_mutations_per_sequence):
+        for seq in dataset.alidb[i]:
             n_seq += 1
-            # mutate the sequence
-            mutated_seq = utils.mutate_sequence(
-                seq,
-                int(sub_rate * len_generated_seqs),
-                int(indel_rate * len_generated_seqs),
-                sub_distributions=subsitution_dists,
-                aa_dist=utils.amino_distribution,
-            )
-
-            mutated_seq = "".join([utils.char_to_index[c.item()] for c in mutated_seq])
-            # encode it and feed it into the model
-            mutated_seq = utils.encode_protein_as_one_hot_vector(mutated_seq)
-            mutated_seq = torch.as_tensor(mutated_seq).to(dev).unsqueeze(0).float()
-
             #  comes out as 1xembed_dimxlen_embedding, so transpose it
-            embedding = model(mutated_seq).squeeze().T.contiguous()
+            seq = "".join([s for s in seq if "-" not in s])
+            if len(seq) < 100:
+                seq = seq + "A" * (100 - len(seq))
+            # add the raw form to the seed sequence (mutated later for evaluation)
+            embedding = (
+                model(
+                    torch.as_tensor(utils.encode_protein_as_one_hot_vector(seq))
+                    .unsqueeze(0)
+                    .float()
+                    .to(dev)
+                )
+                .squeeze()
+                .T.contiguous()
+            )
             # search it against the index, get distances between amino acids
             # and the indices of the nearest neighbors for each query embedding
             D, topn = index.search(embedding, k=20)
@@ -130,7 +137,7 @@ with torch.no_grad():
 print(f"{sub_rate}, {indel_rate}")
 print(correct)
 print("Percent correct @ different thresholds:")
-print(",".join([str(s) for s in np.asarray(list(correct.values())) / n_seq]))
+print(",".join([f"{s:.3f}" for s in np.asarray(list(correct.values())) / n_seq]))
 print("Average number of unique matches at threshold")
 zz = np.asarray(list(total_unique_labels.values())) / n_seq
 print(zz)
