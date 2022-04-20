@@ -32,6 +32,7 @@ __all__ = [
     "msa_from_file",
     "encode_msa",
     "pad_contrastive_batches",
+    "pad_contrastive_batches_with_labelmats",
     "pad_contrastive_batches_with_labelvecs",
     "logo_from_file",
     "afa_from_file",
@@ -143,6 +144,7 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     # a one-hot vector
 
     protein = protein.upper().replace("\n", "")
+    protein = protein.replace("-", "")
 
     if maxlen is not None:
         one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, maxlen))
@@ -305,10 +307,10 @@ def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
     return sequence_labels, sequence_strs
 
 
-def _pad_sequences(sequences, minlen=60):
+def _pad_sequences(sequences, minlen=None):
     mxlen = np.max([s.shape[-1] for s in sequences])
-    if mxlen < minlen:
-        mxlen = minlen
+    if minlen is not None:
+        mxlen = minlen if minlen > mxlen else mxlen
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
     for i, s in enumerate(sequences):
@@ -352,6 +354,29 @@ def _pad_labelvecs(vecs):
     return padded_batch
 
 
+def pad_contrastive_batches_with_labelmats(batch):
+    """
+    Pad batches that consist of a 3-tuple: seq, logo, and label
+    :param batch: list of np.ndarrays encoding protein sequences/logos
+    :type batch: List[np.ndarray]
+    :return: torch.tensor
+    :rtype: torch.tensor
+    """
+
+    seqs = [b[0] for b in batch]
+    logos = [b[1] for b in batch]
+    lmats = [b[2] for b in batch]
+    data = seqs + logos
+    labels = [b[3] for b in batch]
+    seqs, seqs_mask = _pad_sequences(data)
+    return (
+        torch.as_tensor(seqs),
+        torch.as_tensor(seqs_mask),
+        [torch.as_tensor(lmat) for lmat in lmats],
+        torch.as_tensor(labels),
+    )
+
+
 def pad_contrastive_batches_with_labelvecs(batch):
     """
     Pad batches that consist of a 3-tuple: seq, logo, and label
@@ -368,7 +393,7 @@ def pad_contrastive_batches_with_labelvecs(batch):
     data = seqs + logos
     labelvecs = _pad_labelvecs(lvec1 + lvec2)
     labels = [b[4] for b in batch]
-    seqs, seqs_mask = _pad_sequences(data)
+    seqs, seqs_mask = _pad_sequences(data, minlen=120)
     return (
         torch.as_tensor(seqs),
         torch.as_tensor(seqs_mask),
@@ -424,9 +449,8 @@ def pad_batch_with_labels(batch):
     """
     features = [b[0] for b in batch]
     labels = [b[1] for b in batch]
-    string_labels = [b[2] for b in batch]
-    features, features_mask = _pad_sequences(features)
-    return features, features_mask, torch.stack(labels), string_labels
+    features, features_mask = _pad_sequences(features, 120)
+    return features, features_mask, labels
 
 
 def stack_batch(batch):

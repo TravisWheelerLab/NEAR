@@ -28,7 +28,8 @@ def main(args):
     if "$HOME" in data_path:
         data_path = data_path.replace("$HOME", os.environ["HOME"])
 
-    train_files = glob(os.path.join(data_path, "*-train.sto.afa"))
+    train_files = glob(os.path.join(data_path, "*train.fa"))
+
     if args.debug:
         train_files = train_files[:3]
 
@@ -42,7 +43,10 @@ def main(args):
 
     seed(0)
     shuffle(train_files)
-    train_files = train_files[:1000]
+    if args.debug:
+        train_files = train_files[:10]
+    else:
+        train_files = train_files
 
     # check if the user specified an emission sequence path, and grab the emission sequences generated from the same HMM
     # as our train sequences

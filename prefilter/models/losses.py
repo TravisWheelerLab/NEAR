@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConWithPooling", "SupConLoss", "SupConPerAA"]
+__all__ = ["SupConNoMasking", "SupConWithPooling", "SupConLoss", "SupConPerAA"]
 
 
 def calc_unique(x, dim=-1):
@@ -22,6 +22,77 @@ def calc_unique(x, dim=-1):
     perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return unique, inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm)
+
+
+def max_pool_labels(label1, label2):
+    pass
+
+
+class SupConNoMasking(nn.Module):
+    def __init__(self, n_conv_layers=None, device="cuda"):
+        super(SupConNoMasking, self).__init__()
+        if n_conv_layers is not None:
+            # if it's none, assume we're using valid padding:
+            # and a kernel size of three
+            self.n_chop = n_conv_layers
+        else:
+            self.n_chop = 0
+        self.supcon = SupConLoss()
+        self.device = device
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(
+        self, embeddings, masks, labelvecs, batch_size, picture_path=None, step=None
+    ):
+        """
+        Need to reshape the paired embeddings into one large matrix
+        """
+
+        first_pos = False
+        first_neg = False
+
+        if picture_path is not None:
+            first_pos = True
+            first_neg = True
+
+        # split the labels into two lists
+        f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        f1 = f1.transpose(-1, -2)
+        f2 = f2.transpose(-1, -2)
+
+        if first_pos:
+            x = (
+                torch.matmul(embeddings[0].T, embeddings[embeddings.shape[0] // 2])
+                .detach()
+                .cpu()
+            )
+            n_f1_valid = torch.sum(~masks[0])
+            n_f2_valid = torch.sum(~masks[masks.shape[0] // 2])
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            plt.clim(-1, 1)
+            plt.colorbar()
+            os.makedirs(picture_path, exist_ok=True)
+            print(f"saving to {picture_path}")
+            plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
+            plt.close()
+        if first_neg:
+            x = torch.matmul(embeddings[0].T, embeddings[-1]).detach().cpu()
+            n_f1_valid = torch.sum(~masks[0])
+            n_f2_valid = torch.sum(~masks[-1])
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            plt.clim(-1, 1)
+            plt.colorbar()
+            plt.savefig(f"{picture_path}/neg_{step}.png", bbox_inches="tight")
+            plt.close()
+
+        f1 = f1.reshape(f1.shape[0] * f1.shape[1], 256)
+        f2 = f2.reshape(f2.shape[0] * f2.shape[1], 256)
+
+        labels = torch.arange(f1.shape[0])
+        loss = self.supcon(torch.cat((f1.unsqueeze(1), f2.unsqueeze(1)), dim=1), labels)
+        return loss
 
 
 class SupConWithPooling(nn.Module):
@@ -53,73 +124,43 @@ class SupConWithPooling(nn.Module):
             first_pos = True
             first_neg = True
 
-        # split the labels into two lists
+        # split the embeddings, masks, and labels into two lists of pairs
         f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        e1, e2 = torch.split(embeddings, batch_size, dim=0)
         m1, m2 = torch.split(masks, batch_size, dim=0)
-        l1, l2 = torch.split(labelvecs, batch_size, dim=0)
-        # reshape them so that AA index is the second index
-        # and embedding dim is third
-        loss = 0
+
+        m1 = m1.squeeze()
+        m2 = m2.squeeze()
+        f1 = ~m1[:, None, :] * f1
+        f2 = ~m2[:, None, :] * f2
         f1 = f1.transpose(-1, -2)
         f2 = f2.transpose(-1, -2)
-        pairs = []
-        for p1, p2, mask1, mask2, label1, label2 in zip(f1, f2, m1, m2, l1, l2):
-            # cut off 10 from the left and right
-            labelmat = torch.eq(label1.unsqueeze(1), label2.unsqueeze(0)).float()
-            # 10 conv. layers before the first max pool
-            labelmat = labelmat[9:-9, 9:-9]
-            labelmat = torch.nn.functional.max_pool2d(
-                labelmat.unsqueeze(0), (2, 2)
-            ).squeeze()
-            labelmat = labelmat[9:-9, 9:-9]
-            labelmat = labelmat[: torch.sum(~mask1), : torch.sum(~mask2)]
-            p1 = p1[: torch.sum(~mask1)]
-            p2 = p2[: torch.sum(~mask2)]
-            # another 9 conv layers after the max pool
-            # apply max pooling
-            paired_pos = torch.where(labelmat)
-            # grab the positions and shove them in to a new matrix
-            # still need to grab the negative positions
-            pos_pairs = torch.cat(
-                (
-                    p1[paired_pos[0]].unsqueeze(1),
-                    p2[paired_pos[1]].unsqueeze(1),
-                ),
-                dim=1,
+        f1 = torch.cat(torch.unbind(f1), dim=0).unsqueeze(1)
+        f2 = torch.cat(torch.unbind(f2), dim=0).unsqueeze(1)
+        loss = self.supcon(torch.cat((f1, f2), dim=1))
+        # now figure out the max pooled label thing.
+        # if it's diagonal. Then we're good and can b lazy
+        if first_pos:
+            x = (
+                torch.matmul(embeddings[0].T, embeddings[embeddings.shape[0] // 2])
+                .detach()
+                .cpu()
             )
-            # negative positions are ones that have a max-pooled representation in one sequence
-            # but don't have a max-pooled representation in the other sequence.
-            # This is quite rare, especially since the sequences we train on are closely aligned and max-pooled.
-            # negative pairs occur
-            if pos_pairs.shape[0]:
-                negs = torch.cat(
-                    (
-                        p2[torch.sum(labelmat, dim=0) == 0],
-                        p1[torch.sum(labelmat, dim=1) == 0],
-                    )
-                )
-                if negs.shape[0]:
-                    neg_pairs = torch.cat((negs.unsqueeze(1), negs.unsqueeze(1)), dim=1)
-                    pos_pairs = torch.cat((pos_pairs, neg_pairs))
-                pairs.append(pos_pairs)
-
-        z = torch.cat(pairs)
-        loss += self.supcon(z, torch.arange(len(z)))
-
-        if first_pos and os.path.isdir(picture_path):
-            print(f"saving images to {picture_path}/pos_{step}.png")
             n_f1_valid = torch.sum(~m1[0])
             n_f2_valid = torch.sum(~m2[0])
-            x = torch.matmul(f1[0], f2[0].T).detach().cpu().float()
-            plt.imshow(x[:n_f1_valid, :n_f2_valid])
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            plt.clim(-1, 1)
             plt.colorbar()
+            os.makedirs(picture_path, exist_ok=True)
+            print(f"saving to {picture_path}")
             plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
             plt.close()
-        if first_neg and os.path.isdir(picture_path):
-            n_f1_valid = torch.sum(~m1[0])
-            n_f2_valid = torch.sum(~m2[-1])
-            x = torch.matmul(f1[0], f2[-1].T).detach().cpu().float()
-            plt.imshow(x[:n_f1_valid, :n_f2_valid])
+        if first_neg:
+            x = torch.matmul(embeddings[0].T, embeddings[-1]).detach().cpu()
+            n_f1_valid = torch.sum(~masks[0])
+            n_f2_valid = torch.sum(~masks[-1])
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            plt.clim(-1, 1)
             plt.colorbar()
             plt.savefig(f"{picture_path}/neg_{step}.png", bbox_inches="tight")
             plt.close()

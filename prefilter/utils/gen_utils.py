@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 __all__ = [
     "generate_sequences",
@@ -31,9 +32,8 @@ blsm_str = """4 -1 -2 -2 0 -1 -1 0 -2 -1 -1 -1 -1 -2 -1 1 0 -3 -2 0
 -2 -2 -2 -3 -2 -1 -2 -3 2 -1 -1 -2 -1 3 -3 -2 -2 2 7 -1
 0 -3 -3 -3 -1 -2 -2 -3 -3 3 1 -2 1 -1 -2 -2 0 -3 -1 4"""
 
-
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYV"]
-char_to_index = {c: i for c, i in enumerate(amino_alphabet)}
+char_to_index = {c: i for i, c in enumerate(amino_alphabet)}
 
 amino_frequencies = torch.tensor(
     [
@@ -86,7 +86,6 @@ def blossum_mat():
 
 
 def generate_sub_distributions():
-
     blsm_mat, sub_mat = blossum_mat()
 
     sub_distributions = []
@@ -102,7 +101,9 @@ def generate_sequences(num_sequences, length, aa_dist):
     return aa_dist.sample((num_sequences, length))
 
 
-def mutate_sequence(sequence, substitutions, indels, sub_distributions, aa_dist):
+def mutate_sequence(
+    sequence, labelvec, substitutions, indels, sub_distributions, aa_dist
+):
     # we can probably go into fourier space for computing indels efficiently
     # but that sounds like a lot of work
     # and it might not even work
@@ -127,11 +128,13 @@ def mutate_sequence(sequence, substitutions, indels, sub_distributions, aa_dist)
 
     for i in range(indels):
         seq.pop(deletion_indices[i])
+        labelvec.pop(deletion_indices[i])
         seq.insert(insertion_indices[i], insertion_aminos[i])
+        labelvec.insert(insertion_indices[i], np.max(labelvec) + 1)
 
     seq = torch.tensor(seq)
 
-    return seq
+    return seq, labelvec
 
 
 def mutate_sequences(sequences, substitutions, indels):
@@ -142,6 +145,5 @@ def mutate_sequences(sequences, substitutions, indels):
 
 
 if __name__ == "__main__":
-
     x = generate_sequences(10, 10, amino_distribution)
     print(x.shape)

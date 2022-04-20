@@ -1,6 +1,7 @@
 import pdb
 from glob import glob
 from collections import defaultdict
+from sys import stdout
 
 import matplotlib.pyplot as plt
 import torch
@@ -30,7 +31,6 @@ with open(hparams_path, "r") as src:
 # Set up model and dataset
 model = utils.load_model(model_path, hparams, dev)
 # RealisticPairGenerator is a wrapper around Daniel's code
-dataset = utils.RealisticAliPairGenerator()
 # How many "consensus" sequences to generate?
 num_families = 1000
 # self-explanatory
@@ -47,43 +47,64 @@ embeddings = []
 labels = []
 seed_sequences = []
 
+# afa_files = glob(
+#     "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
+# )
 afa_files = glob(
-    "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
+    "/home/tc229954/data/prefilter/pfam/seed/training_data/1000_file_subset/*-train.fa"
 )
+# afa_files = glob("/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.fa")
+
 from random import shuffle, seed
 
 seed(0)
 shuffle(afa_files)
-afa_files = afa_files[:1000]
-dataset = utils.ConstrastiveAliGenerator(afa_files)
 
+dataset = utils.AliEvaluator(afa_files, length_of_seq=None, pad=False)
+dataloader = torch.utils.data.DataLoader(
+    dataset, batch_size=32, collate_fn=utils.pad_batch_with_labels
+)
+
+labels = []
+num_unique = set()
 with torch.no_grad():
-    for seed_num in range(len(dataset.alidb)):
+    for label, ali in enumerate(dataset.alidb):
+        target_seq = ali[0]
+        num_unique.add(label)
         # generate a new sequence
-        seq = dataset.alidb[seed_num][0]
-        seq = "".join([s for s in seq if "-" not in s])
-        if len(seq) < 100:
-            seq = seq + "A" * (100 - len(seq))
         # add the raw form to the seed sequence (mutated later for evaluation)
-        embedding = model(
-            torch.as_tensor(utils.encode_protein_as_one_hot_vector(seq))
-            .unsqueeze(0)
-            .float()
+        if len(target_seq) < 100:
+            pad_len = 100 - len(target_seq)
+            random_seq = utils.generate_sequences(1, pad_len, utils.amino_distribution)
+            if pad_len != 1:
+                random_seq = random_seq.squeeze()
+            target_seq = target_seq + "".join(
+                [utils.amino_alphabet[c.item()] for c in random_seq]
+            )
+
+        feat = (
+            torch.tensor(utils.encode_protein_as_one_hot_vector("".join(target_seq)))
             .to(dev)
+            .float()
+            .unsqueeze(0)
         )
-        # add our embedding to a database (a list in this case)
-        embeddings.append(embedding.squeeze())
+        embedding = model(feat)
+        labels.extend([label] * embedding.shape[-1])
         # add len(embeddings) of the same labels to our label database, since each consensus sequence has
         # n embeddings that represent it
-        labels.extend([seed_num] * embedding.shape[-1])
+        embeddings.append(embedding.squeeze().T.contiguous())
 
 # concatenate embeddings and transpose contiguously
 # so faiss can accept them
-embeddings = torch.cat(embeddings, dim=-1).T.contiguous()
+num_families = len(num_unique)
+
+embeddings = torch.cat(embeddings, dim=0).contiguous()
 # create an index for easy searching
 index = utils.create_logo_index(embeddings, embed_dim, dev)
 # make labels into an array for easy np ops
 labels = np.asarray(labels)
+# eval.
+dataloader.dataset.seed_seqs = False
 
 # set up data structures to record data
 correct = defaultdict(int)
@@ -92,56 +113,54 @@ subsitution_dists = utils.generate_sub_distributions()
 
 n_seq = 0
 
+j = 0
 with torch.no_grad():
-    for i in range(len(dataset.alidb)):
-        # iterate over families
-        # label is the index of the family
-        label = i
-        for seq in dataset.alidb[i]:
+    for features, features_mask, label in dataloader:
+        stdout.write(f"{j/len(dataloader)*100:.3f}\r")
+        j += 1
+        embedding, mask = model(features.float().to(dev), features_mask.to(dev))
+        embedding = ~mask.squeeze()[:, None, :] * embedding
+        embedding = embedding.transpose(-1, -2)
+        embedding = torch.cat(torch.unbind(embedding), dim=0)
+        # D is then len_embeddingxk
+        curr_char = 0
+        n_chars = torch.sum(~mask.squeeze(), dim=1)
+        D, topn = index.search(embedding, k=100)
+        for i in range(len(label) - 1):
+            # n_char is 0... means that there are no masked characters
+            # in the sequence, so I just need to grab the
+            n_char = n_chars[i]
+            if n_char == 0:
+                continue
+
             n_seq += 1
-            #  comes out as 1xembed_dimxlen_embedding, so transpose it
-            seq = "".join([s for s in seq if "-" not in s])
-            if len(seq) < 100:
-                seq = seq + "A" * (100 - len(seq))
-            # add the raw form to the seed sequence (mutated later for evaluation)
-            embedding = (
-                model(
-                    torch.as_tensor(utils.encode_protein_as_one_hot_vector(seq))
-                    .unsqueeze(0)
-                    .float()
-                    .to(dev)
-                )
-                .squeeze()
-                .T.contiguous()
-            )
-            # search it against the index, get distances between amino acids
-            # and the indices of the nearest neighbors for each query embedding
-            D, topn = index.search(embedding, k=20)
-            # D is then len_embeddingxk
-            # remove extra dims and ravel
-            D = D.squeeze().ravel()
-            topn = topn.squeeze().ravel()
-            # sort the indices of top matches in the index by (descending) distance
-            topn = topn[torch.argsort(D, descending=True)].cpu().numpy()
+            sequence_embeddings = embedding[curr_char : curr_char + n_char]
+            curr_char += n_char
+            D_sub = D[curr_char : curr_char + n_char]
+            topn_sub = topn[curr_char : curr_char + n_char]
+            D_sub = D_sub.squeeze().ravel()
+            topn_sub = topn_sub.squeeze().ravel()
+            topn_sub = topn_sub[torch.argsort(D_sub, descending=True)].cpu().numpy()
             # get the predicted classes by matching them to the vector of labels
-            predicted_classes = [labels[j] for j in topn]
-            for n in [1, 10, 20, 100, 200, 250]:
+            predicted_classes = [labels[j] for j in topn_sub]
+            lab = label[i]
+            for n in [1, 10, 20, 100, 200, 250, 400]:
                 # now, for topN in the list above, get whether or not the correct label
                 # is in the predicted classes at that threshold
-                correct[n] += label in predicted_classes[:n]
+                correct[n] += lab in predicted_classes[:n]
                 # also get the number of unique classes predicted at that threshold
                 # (so we can see our false-positive rate)
                 x = len(set(predicted_classes[:n]))
                 total_unique_labels[n] += x
 
-print(f"{sub_rate}, {indel_rate}")
-print(correct)
+print()
+print(f"Num correct @ thresholds: (total seq {n_seq}, total families: {num_families})")
+print(",".join([f"{s}" for s in np.asarray(list(correct.values()))]))
 print("Percent correct @ different thresholds:")
 print(",".join([f"{s:.3f}" for s in np.asarray(list(correct.values())) / n_seq]))
 print("Average number of unique matches at threshold")
 zz = np.asarray(list(total_unique_labels.values())) / n_seq
-print(zz)
+print(",".join([f"{z:.3f}" for z in zz]))
 print("Average % filtration @ thresholds")
-zz = (np.asarray(list(total_unique_labels.values())) / n_seq) / num_families
-print(zz)
-print("=========")
+zz = 1 - ((np.asarray(list(total_unique_labels.values())) / n_seq) / num_families)
+print(",".join([f"{z:.3f}" for z in zz]))

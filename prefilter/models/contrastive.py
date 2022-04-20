@@ -6,7 +6,13 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResidualBlock, SupConLoss, SupConPerAA, SupConWithPooling
+from prefilter.models import (
+    ResidualBlock,
+    SupConLoss,
+    SupConPerAA,
+    SupConWithPooling,
+    SupConNoMasking,
+)
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -98,6 +104,7 @@ class ResNet1d(pl.LightningModule, ABC):
         Before each convolution or batch normalization operation, zero-out
         the features in any location that is padded in the input sequence
         """
+        n_mpools = 0
         x = self.initial_conv(x)
         if self.padding == "valid":
             mask = mask[
@@ -109,22 +116,24 @@ class ResNet1d(pl.LightningModule, ABC):
         x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
 
         for i, layer in enumerate(self.embedding_trunk):
-            if self.max_pool and (i + 1) % 9 == 0:
-                x = torch.nn.functional.max_pool1d(x, 2)
-                # is this what I want?
-                # masked positions are 1s in the mask.
-                # so the positive masks will be propagated inwards.
-                # if effect chopping off bits of the end of the sequence.
-                mask = torch.nn.functional.max_pool1d(mask.float(), 2).bool()
+            if self.max_pool and (i + 1) % 6 == 0:
+                if n_mpools < 2:
+                    x = torch.nn.functional.max_pool1d(x, 2)
+                    mask = torch.nn.functional.max_pool1d(mask.float(), 2).bool()
+                    n_mpools += 1
             x, mask = layer(x, mask)
 
+        x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
         return x, mask
 
     def _forward(self, x):
         x = self.initial_conv(x)
+        n_mpools = 0
         for i, layer in enumerate(self.embedding_trunk):
-            if self.max_pool and (i + 1) % 9 == 0:
-                x = torch.nn.functional.max_pool1d(x, 2)
+            if self.max_pool and (i + 1) % 6 == 0:
+                if n_mpools < 2:
+                    x = torch.nn.functional.max_pool1d(x, 2)
+                    n_mpools += 1
             x = layer(x)
         return x
 
@@ -151,7 +160,7 @@ class ResNet1d(pl.LightningModule, ABC):
         embeddings, masks = self.forward(features, masks)
 
         if self.max_pool:
-            if self.global_step % 1000 == 0:
+            if self.global_step % 100 == 0:
                 loss = self.loss_func(
                     embeddings,
                     masks,
@@ -164,7 +173,7 @@ class ResNet1d(pl.LightningModule, ABC):
                 loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
         else:
             # per-AA loss.
-            if self.global_step % 1000 == 0:
+            if self.global_step % 100 == 0:
                 loss = self.loss_func(
                     embeddings,
                     masks,
@@ -181,9 +190,14 @@ class ResNet1d(pl.LightningModule, ABC):
     def _create_datasets(self):
         # This will be shared between every model that I train.
         if self.real_data:
-            self.train_dataset = utils.ConstrastiveAliGenerator(self.train_afa_files)
-            self.valid_dataset = utils.ConstrastiveAliGenerator(self.valid_afa_files)
+            self.train_dataset = utils.ConstrastiveAliGenerator(
+                self.train_afa_files, length_of_seq=90, pad=True
+            )
+            self.valid_dataset = utils.ConstrastiveAliGenerator(
+                self.valid_afa_files, length_of_seq=90, pad=True
+            )
             return
+
         if self.max_pool:
             self.train_dataset = utils.RealisticAliPairGenerator()
             self.valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)

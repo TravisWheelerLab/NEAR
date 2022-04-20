@@ -32,6 +32,7 @@ __all__ = [
     "ConstrastiveAliGenerator",
     "LogoBatcher",
     "AliPairGenerator",
+    "AliEvaluator",
     "NonDiagonalAliPairGenerator",
 ]
 
@@ -284,11 +285,12 @@ def _remove_gaps(seq, label):
 
 
 class ConstrastiveAliGenerator:
-    def __init__(
-        self,
-        afa_files,
-    ):
+    def __init__(self, afa_files, pad=True, length_of_seq=None):
+
         self.afa_files = afa_files
+        self.length_of_seq = length_of_seq
+        self.sub_dists = utils.generate_sub_distributions()
+        self.pad = pad
 
         self._build_dataset()
 
@@ -296,6 +298,10 @@ class ConstrastiveAliGenerator:
         self.alidb = []
         for afa in self.afa_files:
             seqs = utils.afa_from_file(afa)
+            # if self.length_of_seq is not None and not self.pad:
+            #     seqs = [s[:self.length_of_seq] for s in seqs if len(s) > self.length_of_seq]
+            # elif self.length_of_seq is not None and self.pad:
+            #     seqs = [s[:self.length_of_seq] for s in seqs]
             if len(seqs) > 3:
                 self.alidb.append(seqs)
         self.len = sum(list(map(len, self.alidb)))
@@ -303,21 +309,90 @@ class ConstrastiveAliGenerator:
     def __len__(self):
         return self.len
 
-    def __getitem__(self, idx):
+    def _sample(self, idx):
         ali = self.alidb[idx % len(self.alidb)]
-        i = np.random.randint(1, len(ali))
-        j = np.random.randint(1, len(ali))
-        while j == i:
-            j = np.random.randint(1, len(ali))
-        s1 = [x for x in ali[i]]
-        s2 = [x for x in ali[j]]
+        i = np.random.randint(0, len(ali))
+
+        s1 = [x.upper() for x in ali[i] if x not in ("X", "B", "U")]
+
         lvec1 = list(range(len(s1)))
-        lvec2 = list(range(len(s2)))
-        s1, lvec1 = _remove_gaps(s1, lvec1)
-        s2, lvec2 = _remove_gaps(s2, lvec2)
+        s1, _ = _remove_gaps(s1, lvec1)
+        if len(s1) < self.length_of_seq and self.pad:
+            pad_len = self.length_of_seq - len(s1)
+            if pad_len == 1:
+                random_seq = utils.generate_sequences(
+                    1, pad_len, utils.amino_distribution
+                )
+            else:
+                random_seq = utils.generate_sequences(
+                    1, pad_len, utils.amino_distribution
+                ).squeeze()
+            s1 = s1 + [utils.amino_alphabet[c.item()] for c in random_seq]
+
+        lvec1 = list(range(len(s1)))
+        seq_template = torch.tensor([utils.char_to_index[c] for c in s1])
+        s2, lvec2 = utils.mutate_sequence(
+            seq_template,
+            lvec1,
+            int(0.3 * len(s1)),
+            int(0.25 * len(s1)),
+            self.sub_dists,
+            utils.amino_distribution,
+        )
+
+        s2 = utils.encode_protein_as_one_hot_vector(
+            "".join([utils.amino_alphabet[c.item()] for c in s2])
+        )
         s1 = utils.encode_protein_as_one_hot_vector("".join(s1))
-        s2 = utils.encode_protein_as_one_hot_vector("".join(s2))
-        return s1, s2, np.asarray(lvec1), np.asarray(lvec2), idx % len(self.alidb)
+
+        return s1, s2, lvec1, lvec2, idx % len(self.alidb)
+
+    def __getitem__(self, idx):
+        return self._sample(idx)
+
+
+class AliEvaluator(ConstrastiveAliGenerator):
+    def __init__(self, afa_files, length_of_seq=None, pad=True):
+        super().__init__(afa_files, length_of_seq=length_of_seq, pad=pad)
+        self.seed_seqs = True
+        self.len = sum([len(l[1:]) for l in self.alidb])
+        self.flattened = []
+        for i, ali in enumerate(self.alidb):
+            for seq in ali[1:]:
+                self.flattened.append([i, seq])
+
+    def __len__(self):
+        if self.seed_seqs:
+            return len(self.alidb)
+        else:
+            return self.len
+
+    def __getitem__(self, idx):
+        if self.seed_seqs:
+            seq = "".join(self.alidb[idx][0])
+            if len(seq) < 120 and self.pad:
+                random_seq = utils.generate_sequences(
+                    1, 120 - len(seq), utils.amino_distribution
+                ).squeeze()
+                seq = seq + [utils.amino_alphabet[c.item()] for c in random_seq]
+            return utils.encode_protein_as_one_hot_vector(seq), idx
+        else:
+            label, seq = self.flattened[idx]
+            seq = [s.upper() for s in seq]
+            if self.length_of_seq is not None:
+                if len(seq) < self.length_of_seq and self.pad:
+                    pad_len = self.length_of_seq - len(seq)
+                    if pad_len == 1:
+                        random_seq = utils.generate_sequences(
+                            1, pad_len, utils.amino_distribution
+                        )
+                    else:
+                        random_seq = utils.generate_sequences(
+                            1, pad_len, utils.amino_distribution
+                        ).squeeze()
+                    seq = seq + [utils.amino_alphabet[c.item()] for c in random_seq]
+            seq = "".join(seq)
+            return utils.encode_protein_as_one_hot_vector(seq), label
 
 
 class ContrastiveGenerator(SequenceDataset):
@@ -614,7 +689,7 @@ class NonDiagonalAliPairGenerator(AliPairGenerator):
 
 
 class RealisticAliPairGenerator:
-    def __init__(self, steps_per_epoch=10000, n_families=1000, len_generated_seqs=100):
+    def __init__(self, steps_per_epoch=10000, n_families=1000, len_generated_seqs=256):
         # 10% indel
         self.n_families = n_families
         self.steps_per_epoch = steps_per_epoch
@@ -632,30 +707,36 @@ class RealisticAliPairGenerator:
         seq_template = utils.generate_sequences(
             1, self.len_generated_seqs, utils.amino_distribution
         ).squeeze()
-        # seq_template = self.family_templates[idx % len(self.family_templates)]
+        # overfit on the _first_ sequence.
+        # without any mutations.
+        idx = 0
         # generate 10% indel rate, 30% sub rate
-        s1 = utils.mutate_sequence(
+        labelvec1 = list(range(len(seq_template)))
+        labelvec2 = list(range(len(seq_template)))
+        s1, labelvec1 = utils.mutate_sequence(
             seq_template,
+            labelvec1,
             int(0.3 * self.len_generated_seqs),
             int(0.1 * self.len_generated_seqs),
             self.sub_dists,
             utils.amino_distribution,
         )
-        s2 = utils.mutate_sequence(
+        s2, labelvec2 = utils.mutate_sequence(
             seq_template,
+            labelvec2,
             int(0.3 * self.len_generated_seqs),
             int(0.1 * self.len_generated_seqs),
             self.sub_dists,
             utils.amino_distribution,
         )
 
-        s1 = "".join([utils.char_to_index[c.item()] for c in s1])
-        s2 = "".join([utils.char_to_index[c.item()] for c in s2])
+        s1 = "".join([utils.amino_alphabet[c.item()] for c in s1])
+        s2 = "".join([utils.amino_alphabet[c.item()] for c in s2])
         return (
             utils.encode_protein_as_one_hot_vector(s1),
             utils.encode_protein_as_one_hot_vector(s2),
-            np.arange(len(s1)),
-            np.arange(len(s2)),
+            labelvec1,
+            labelvec2,
             idx % len(self.family_templates),
         )
 
@@ -665,14 +746,8 @@ if __name__ == "__main__":
 
     train = glob(
         "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
-    )[:1000]
-    gen = ConstrastiveAliGenerator(train)
-    print(len(gen))
-    exit()
-    for s1, s2, l1, l2, l in gen:
-        print(s1)
-        print(s2)
-        print(l1)
-        print(l2)
-        print("====")
-        break
+    )[:10]
+    gen = ConstrastiveAliGenerator(afa_files=train)
+
+    for s1, s2, l1, l2, l, m in gen:
+        pdb.set_trace()
