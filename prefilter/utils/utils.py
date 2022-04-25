@@ -16,26 +16,15 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
-    "load_sequences_and_labels",
     "encode_protein_as_one_hot_vector",
     "parse_labels",
-    "pad_features_in_batch",
-    "pad_labels_and_features_in_batch",
-    "stack_batch",
     "PROT_ALPHABET",
     "INVERSE_PROT_MAPPING",
-    "pad_batch_with_labels",
     "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
     "fasta_from_file",
-    "create_class_code_mapping",
-    "msa_from_file",
-    "encode_msa",
-    "pad_contrastive_batches",
-    "pad_contrastive_batches_with_labelmats",
     "pad_contrastive_batches_with_labelvecs",
-    "logo_from_file",
-    "afa_from_file",
+    "mask_mask",
 ]
 
 PROT_ALPHABET = {
@@ -59,72 +48,11 @@ PROT_ALPHABET = {
     "T": 17,
     "V": 18,
     "W": 19,
+    "Y": 20,
 }
 INVERSE_PROT_MAPPING = {v: k for k, v in PROT_ALPHABET.items()}
 
 LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
-
-
-def encode_msa(msa_seqs: List[List[str]]):
-    # CxHxW
-    out = np.zeros((len(PROT_ALPHABET), len(msa_seqs), len(msa_seqs[0])))
-    for i, seq in enumerate(msa_seqs):
-        single_encoding = encode_protein_as_one_hot_vector(seq)
-        out[:, i, :] = single_encoding
-    return out
-
-
-def load_sequences_and_labels(
-    fasta_files: List[str],
-    max_labels_per_seq: int = None,
-    evalue_threshold: float = None,
-) -> List[Tuple[List[str], str]]:
-    """
-    :param evalue_threshold:
-    :type evalue_threshold:
-    :param max_labels_per_seq:
-    :type max_labels_per_seq:
-    :param fasta_files:
-    :type fasta_files:
-    :return: List of [labels, sequence].
-    :rtype:
-    """
-    labels_to_sequence = []
-    for fasta in fasta_files:
-        labelset, sequences = fasta_from_file(fasta)
-        # parse labels, get
-        for labelstring, sequence in zip(labelset, sequences):
-            labels = parse_labels(labelstring)
-            if evalue_threshold is not None:
-                labels = list(
-                    filter(lambda x: float(x[-1]) <= evalue_threshold, labels)
-                )
-            if max_labels_per_seq is not None:
-                labels = labels[:max_labels_per_seq]
-            if labels is None:
-                print(labelstring)
-                continue
-            else:
-                labels_to_sequence.append([labels, sequence])
-
-    return labels_to_sequence
-
-
-def msa_from_file(msa_filepath: str):
-    msa_ext = os.path.splitext(msa_filepath)[1]
-    if msa_ext != ".afa":
-        raise ValueError(f"Ext must be .afa, got {msa_ext}")
-
-    labels, sequences = fasta_from_file(msa_filepath)
-    return labels, sequences
-
-
-def logo_from_file(logo_filepath: str):
-    logo_ext = os.path.splitext(logo_filepath)[1]
-    if logo_ext != ".logo":
-        raise ValueError(f"Ext must be .logo, got {logo_ext}")
-    logo = np.genfromtxt(logo_filepath, skip_header=2)[:, 1:-2]
-    return logo.T
 
 
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
@@ -137,7 +65,7 @@ def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
     return figure_path
 
 
-def encode_protein_as_one_hot_vector(protein, maxlen=None):
+def encode_protein_as_one_hot_vector(protein):
     # input: raw protein string of arbitrary length
     # output: np.array() of size (1, maxlen, length_protein_alphabet)
     # Each row in the array is a separate character, encoded as
@@ -146,19 +74,10 @@ def encode_protein_as_one_hot_vector(protein, maxlen=None):
     protein = protein.upper().replace("\n", "")
     protein = protein.replace("-", "")
 
-    if maxlen is not None:
-        one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, maxlen))
-        protein = protein[:maxlen]
-    else:
-        one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, len(protein)))
+    one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, len(protein)))
 
     for i, residue in enumerate(protein):
-        try:
-            one_hot_encoding[PROT_ALPHABET[residue], i] = 1
-        except KeyError:
-            # AA doesn't exist or is unknown
-            pass
-            # one_hot_encoding[PROT_ALPHABET["X"], i] = 1  # X is "any amino acid"
+        one_hot_encoding[PROT_ALPHABET[residue], i] = 1
 
     return one_hot_encoding
 
@@ -213,50 +132,6 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
     return labels
 
 
-def create_class_code_mapping(fasta_files, evalue_threshold=1e-5):
-    """
-    TODO: CONVERT TO RUST.
-    in order to create the mapping on the fly we have to load every sequence in our dataset!
-    This can take a long time. Is there a faster way to do it?
-    :param fasta_files:
-    :type fasta_files:
-    :return:
-    :rtype:
-    """
-
-    name_to_class_code = {}
-
-    class_code = 0
-    for fasta_file in fasta_files:
-        # print(f"loading {fasta_file}, {len(name_to_class_code)} unique names so far")
-        labels, sequences = fasta_from_file(fasta_file)
-        for label, sequence in zip(labels, sequences):
-
-            labelset = parse_labels(label)
-
-            if labelset is None or len(labelset) == 0:
-                raise ValueError(
-                    f"Line in {fasta_file} does not contain any labels. Please fix."
-                )
-            else:
-
-                for name in labelset:
-                    # if we have an accession id plus two coordinates;
-                    # grab only the name
-                    if len(name) == 4:
-                        if float(name[-1]) > evalue_threshold:
-                            break
-
-                    if isinstance(name, list):
-                        name = name[0]
-                    # otherwise, don't mess with it.
-                    if name not in name_to_class_code:
-                        name_to_class_code[name] = class_code
-                        class_code += 1
-
-    return name_to_class_code
-
-
 def afa_from_file(afa_file: str):
     """
     Parse a .afa file.
@@ -307,10 +182,8 @@ def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
     return sequence_labels, sequence_strs
 
 
-def _pad_sequences(sequences, minlen=None):
+def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
-    if minlen is not None:
-        mxlen = minlen if minlen > mxlen else mxlen
     padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
     masks = []
     for i, s in enumerate(sequences):
@@ -323,58 +196,11 @@ def _pad_sequences(sequences, minlen=None):
     return torch.tensor(padded_batch).float(), torch.tensor(masks).bool()
 
 
-def _pad_labels(labels):
-    mxlen = np.max([l.shape[-1] for l in labels])
-    padded_batch = np.ones((len(labels), labels[0].shape[0], mxlen)) * MASK_FLAG
-    for i, s in enumerate(labels):
-        padded_batch[i, :, : s.shape[-1]] = s
-    return torch.tensor(padded_batch).float()
-
-
-def pad_features_in_batch(batch):
-    """
-    Only pad the features in the batch.
-    Return the padded features and the corresponding mask plus stacked labels.
-    :param batch:
-    :type batch:
-    :return:
-    :rtype:
-    """
-    features = [b[0] for b in batch]
-    labels = [b[1] for b in batch]
-    features, features_mask = _pad_sequences(features)
-    return features, features_mask, labels
-
-
-def _pad_labelvecs(vecs):
-    mxlen = np.max([len(v) for v in vecs])
-    padded_batch = np.ones((len(vecs), mxlen)) * MASK_FLAG
-    for i, vec in enumerate(vecs):
-        padded_batch[i, : len(vec)] = vec
-    return padded_batch
-
-
-def pad_contrastive_batches_with_labelmats(batch):
-    """
-    Pad batches that consist of a 3-tuple: seq, logo, and label
-    :param batch: list of np.ndarrays encoding protein sequences/logos
-    :type batch: List[np.ndarray]
-    :return: torch.tensor
-    :rtype: torch.tensor
-    """
-
-    seqs = [b[0] for b in batch]
-    logos = [b[1] for b in batch]
-    lmats = [b[2] for b in batch]
-    data = seqs + logos
-    labels = [b[3] for b in batch]
-    seqs, seqs_mask = _pad_sequences(data)
-    return (
-        torch.as_tensor(seqs),
-        torch.as_tensor(seqs_mask),
-        [torch.as_tensor(lmat) for lmat in lmats],
-        torch.as_tensor(labels),
-    )
+def mask_mask(mask):
+    idxs = torch.sum(~mask, axis=-1).squeeze().detach()
+    for i, idx in enumerate(idxs):
+        mask[i, :, (idx - 1) :] = True
+    return mask
 
 
 def pad_contrastive_batches_with_labelvecs(batch):
@@ -391,69 +217,11 @@ def pad_contrastive_batches_with_labelvecs(batch):
     lvec1 = [b[2] for b in batch]
     lvec2 = [b[3] for b in batch]
     data = seqs + logos
-    labelvecs = _pad_labelvecs(lvec1 + lvec2)
+    labelvecs = lvec1 + lvec2
     labels = [b[4] for b in batch]
-    seqs, seqs_mask = _pad_sequences(data, minlen=120)
     return (
-        torch.as_tensor(seqs),
-        torch.as_tensor(seqs_mask),
-        torch.as_tensor(labelvecs),
+        torch.stack(data),
+        None,
+        labelvecs,
         torch.as_tensor(labels),
     )
-
-
-def pad_contrastive_batches(batch):
-    """
-    Pad batches that consist of a 3-tuple: seq, logo, and label
-    :param batch: list of np.ndarrays encoding protein sequences/logos
-    :type batch: List[np.ndarray]
-    :return: torch.tensor
-    :rtype: torch.tensor
-    """
-
-    seqs = [b[0] for b in batch]
-    logos = [b[1] for b in batch]
-    data = seqs + logos
-    labels = [b[2] for b in batch]
-    seqs, seqs_mask = _pad_sequences(data)
-
-    return torch.as_tensor(seqs), torch.as_tensor(seqs_mask), torch.as_tensor(labels)
-
-
-def pad_labels_and_features_in_batch(batch):
-    """
-    Pad both the labels and sequence to the max length in the batch.
-    Useful for training FCNNs on sequence data.
-    :param batch: Batch to pad.
-    :type batch:
-    :return:
-    :rtype:
-    """
-    features = [b[0] for b in batch]
-    labels = [b[1] for b in batch]
-    features, features_mask = _pad_sequences(features)
-    labels = _pad_labels(labels)
-    return features, features_mask, labels
-
-
-def pad_batch_with_labels(batch):
-    """
-    Pad the features in the batch to the max sequence length in the batch.
-    Returns a mask for non-data features.
-    Labels should be vectors of uniform size (not fcnn labels).
-    Also returns the string labels.
-    :param batch: Batch to pad.
-    :type batch: List[Tuple[np.ndarray, np.ndarray, List[str]]
-    :return: features, mask for features, labels, and string labels
-    :rtype: Tuple[torch.tensor, torch.tensor, torch.tensor, List[str]]
-    """
-    features = [b[0] for b in batch]
-    labels = [b[1] for b in batch]
-    features, features_mask = _pad_sequences(features, 120)
-    return features, features_mask, labels
-
-
-def stack_batch(batch):
-    features = [b[0] for b in batch]
-    labels = [b[1] for b in batch]
-    return torch.stack(features), torch.stack(labels)

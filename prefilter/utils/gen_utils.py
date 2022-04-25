@@ -98,6 +98,17 @@ def generate_sub_distributions():
 
 
 def generate_sequences(num_sequences, length, aa_dist):
+    """
+
+    :param num_sequences:
+    :type num_sequences:
+    :param length:
+    :type length:
+    :param aa_dist:
+    :type aa_dist:
+    :return:
+    :rtype:  torch.tensor()
+    """
     return aa_dist.sample((num_sequences, length))
 
 
@@ -115,6 +126,7 @@ def mutate_sequence(
     # but instead we slow it down here
 
     seq = sequence.clone()
+    lvec = labelvec.copy()
     sub_indices = torch.randperm(len(seq))[:substitutions]
 
     for i in range(len(sub_indices)):
@@ -128,9 +140,9 @@ def mutate_sequence(
 
     for i in range(indels):
         seq.pop(deletion_indices[i])
-        labelvec.pop(deletion_indices[i])
+        lvec.pop(deletion_indices[i])
         seq.insert(insertion_indices[i], insertion_aminos[i])
-        labelvec.insert(insertion_indices[i], np.max(labelvec) + 1)
+        lvec.insert(insertion_indices[i], np.max(lvec) + 1)
 
     seq = torch.tensor(seq)
 

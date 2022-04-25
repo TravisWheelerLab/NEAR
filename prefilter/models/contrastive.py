@@ -7,7 +7,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 
 from prefilter.models import (
-    ResidualBlock,
+    ResNet,
     SupConLoss,
     SupConPerAA,
     SupConWithPooling,
@@ -22,119 +22,82 @@ __all__ = ["ResNet1d"]
 class ResNet1d(pl.LightningModule, ABC):
     def __init__(
         self,
-        logo_path,
-        name_to_class_code,
         learning_rate,
-        batch_size,
-        oversample_neighborhood_labels,
-        num_workers=32,
-        training=True,
-        emission_files=None,
-        decoy_files=None,
-        padding="valid",
-        max_pool=True,
-        real_data=False,
-        train_afa_files=None,
-        valid_afa_files=None,
     ):
 
         super(ResNet1d, self).__init__()
 
-        self.train_afa_files = train_afa_files
-        self.valid_afa_files = valid_afa_files
-        self.logo_path = logo_path
-        self.name_to_class_code = name_to_class_code
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
-        self.padding = padding
-        self.real_data = real_data
-
-        self.oversample_neighborhood_labels = oversample_neighborhood_labels
-        self.emission_files = emission_files
-        self.decoy_files = decoy_files
-        self.num_workers = num_workers
 
         self.vocab_size = len(utils.PROT_ALPHABET)
         self.res_block_n_filters = 256
         self.feat_dim = 128
         self.res_block_kernel_size = 3
-        self.n_res_blocks = 18
+        self.n_res_blocks = 1
         self.res_bottleneck_factor = 1
-        self.max_pool = max_pool
+        self.padding = "valid"
 
-        if self.max_pool:
-            self.loss_func = SupConWithPooling()
-            self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
-        else:
-            self.loss_func = SupConPerAA()
-            self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
+        self.log_interval = 2000
+
+        self.loss_func = SupConNoMasking()
+        self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
-
-        if training:
-            self._create_datasets()
 
         self.save_hyperparameters()
 
     def _setup_layers(self):
 
-        self.initial_conv = nn.Conv1d(
-            in_channels=self.vocab_size,
-            out_channels=self.res_block_n_filters,
-            kernel_size=self.res_block_kernel_size,
-            padding=self.padding,
-        )
+        self.embed = nn.Embedding(21, self.res_block_n_filters)
 
-        self.embedding_trunk = torch.nn.ModuleList()
-        self.projection = nn.Linear(self.res_block_n_filters, self.feat_dim)
-
-        for layer_index in range(self.n_res_blocks):
-            self.embedding_trunk.append(
-                ResidualBlock(
-                    self.res_block_n_filters,
-                    self.res_bottleneck_factor,
-                    self.res_block_kernel_size,
-                    layer_index=layer_index,
+        _list = []
+        for _ in range(3):
+            _list.append(
+                nn.Conv1d(
+                    in_channels=self.res_block_n_filters,
+                    out_channels=self.res_block_n_filters,
+                    kernel_size=self.res_block_kernel_size,
                     padding=self.padding,
                 )
             )
+            _list.append(nn.GELU())
+        _list.append(nn.MaxPool1d(2))
+        for _ in range(2):
+            _list.append(
+                nn.Conv1d(
+                    in_channels=self.res_block_n_filters,
+                    out_channels=self.res_block_n_filters,
+                    kernel_size=self.res_block_kernel_size,
+                    padding=self.padding,
+                )
+            )
+            _list.append(nn.GELU())
+
+        _list.append(
+            nn.Conv1d(
+                in_channels=self.res_block_n_filters,
+                out_channels=self.res_block_n_filters,
+                kernel_size=self.res_block_kernel_size,
+                padding=self.padding,
+            )
+        )
+
+        self.embedding_trunk = torch.nn.Sequential(*_list)
 
     def _masked_forward(self, x, mask):
         """
         Before each convolution or batch normalization operation, zero-out
         the features in any location that is padded in the input sequence
         """
-        n_mpools = 0
+        x = self.embed(x)
         x = self.initial_conv(x)
-        if self.padding == "valid":
-            mask = mask[
-                :,
-                :,
-                self.res_block_kernel_size // 2 : -(self.res_block_kernel_size // 2),
-            ]
-
-        x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
-
-        for i, layer in enumerate(self.embedding_trunk):
-            if self.max_pool and (i + 1) % 6 == 0:
-                if n_mpools < 2:
-                    x = torch.nn.functional.max_pool1d(x, 2)
-                    mask = torch.nn.functional.max_pool1d(mask.float(), 2).bool()
-                    n_mpools += 1
-            x, mask = layer(x, mask)
-
-        x[mask.expand(-1, self.res_block_n_filters, -1)] = 0
+        mask = mask[:, :, 1:-1]
+        mask = utils.mask_mask(mask)
         return x, mask
 
     def _forward(self, x):
-        x = self.initial_conv(x)
-        n_mpools = 0
-        for i, layer in enumerate(self.embedding_trunk):
-            if self.max_pool and (i + 1) % 6 == 0:
-                if n_mpools < 2:
-                    x = torch.nn.functional.max_pool1d(x, 2)
-                    n_mpools += 1
-            x = layer(x)
+        x = self.embed(x)
+        x = self.embedding_trunk(x.transpose(-1, -2))
         return x
 
     def forward(self, x, mask=None):
@@ -143,10 +106,7 @@ class ResNet1d(pl.LightningModule, ABC):
         else:
             embeddings, mask = self._masked_forward(x, mask)
 
-        embeddings = torch.nn.functional.normalize(embeddings, dim=1, p=2)
-
         if mask is not None:
-            # always normalize across embedding dimension
             return embeddings, mask
         else:
             return embeddings
@@ -157,53 +117,23 @@ class ResNet1d(pl.LightningModule, ABC):
         else:
             features, masks, labels = batch
 
-        embeddings, masks = self.forward(features, masks)
-
-        if self.max_pool:
-            if self.global_step % 100 == 0:
-                loss = self.loss_func(
-                    embeddings,
-                    masks,
-                    labelvecs,
-                    self.batch_size,
-                    picture_path=self.logger.log_dir,
-                    step=self.global_step,
-                )
-            else:
-                loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
+        if masks is not None:
+            embeddings, masks = self.forward(features, masks)
         else:
-            # per-AA loss.
-            if self.global_step % 100 == 0:
-                loss = self.loss_func(
-                    embeddings,
-                    masks,
-                    labelvecs,
-                    self.batch_size,
-                    picture_path=self.logger.log_dir,
-                    step=self.global_step,
-                )
-            else:
-                loss = self.loss_func(embeddings, masks, labelvecs, self.batch_size)
+            embeddings = self.forward(features)
+
+        if self.global_step % self.log_interval == 0:
+            loss = self.loss_func(
+                embeddings,
+                masks,
+                labelvecs,
+                picture_path=self.logger.log_dir,
+                step=self.global_step,
+            )
+        else:
+            loss = self.loss_func(embeddings, masks, labelvecs)
 
         return loss, embeddings, labels
-
-    def _create_datasets(self):
-        # This will be shared between every model that I train.
-        if self.real_data:
-            self.train_dataset = utils.ConstrastiveAliGenerator(
-                self.train_afa_files, length_of_seq=90, pad=True
-            )
-            self.valid_dataset = utils.ConstrastiveAliGenerator(
-                self.valid_afa_files, length_of_seq=90, pad=True
-            )
-            return
-
-        if self.max_pool:
-            self.train_dataset = utils.RealisticAliPairGenerator()
-            self.valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)
-        else:
-            self.train_dataset = utils.NonDiagonalAliPairGenerator()
-            self.valid_dataset = utils.NonDiagonalAliPairGenerator(steps_per_epoch=1000)
 
     def training_step(self, batch, batch_nb):
         loss, _, _ = self._shared_step(batch)
@@ -214,7 +144,7 @@ class ResNet1d(pl.LightningModule, ABC):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])
@@ -229,38 +159,3 @@ class ResNet1d(pl.LightningModule, ABC):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
         self.log("val_loss", val_loss)
-
-    def train_dataloader(self):
-
-        train_loader = torch.utils.data.DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
-            collate_fn=self.collate_fn,
-            drop_last=True,
-        )
-
-        return train_loader
-
-    def val_dataloader(self):
-
-        valid_loader = torch.utils.data.DataLoader(
-            self.valid_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            collate_fn=self.collate_fn,
-            drop_last=True,
-        )
-
-        return valid_loader
-
-
-if __name__ == "__main__":
-    # tests
-    convnet_1d = ResNet1d()
-
-    data_1d = torch.rand((32, len(PROT_ALPHABET), 105))
-
-    print(convnet_1d(data_1d).shape)
