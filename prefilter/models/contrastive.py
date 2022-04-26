@@ -6,13 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import (
-    ResNet,
-    SupConLoss,
-    SupConPerAA,
-    SupConWithPooling,
-    SupConNoMasking,
-)
+from prefilter.models import ResNet, SupConLoss, SupConNoMasking
 import prefilter.utils as utils
 from pathlib import Path
 

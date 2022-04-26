@@ -9,7 +9,9 @@ from typing import Union, List, Tuple
 
 import numpy as np
 import torch
+import faiss
 from prefilter import MASK_FLAG, DECOY_FLAG
+import prefilter.models as models
 
 log = logging.getLogger(__name__)
 
@@ -19,13 +21,39 @@ __all__ = [
     "encode_protein_as_one_hot_vector",
     "parse_labels",
     "PROT_ALPHABET",
+    "create_faiss_index",
     "INVERSE_PROT_MAPPING",
     "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
     "fasta_from_file",
     "pad_contrastive_batches_with_labelvecs",
     "mask_mask",
+    "load_model",
 ]
+
+
+def load_model(model_path, hyperparams, device):
+    checkpoint = torch.load(model_path, map_location=torch.device(device))
+    state_dict = checkpoint["state_dict"]
+    model = models.ResNet1d(**hyperparams).to(device)
+    success = model.load_state_dict(state_dict)
+    model.eval()
+    return model, success
+
+
+def create_faiss_index(embeddings, embed_dim, device="cpu"):
+    index = faiss.IndexFlatIP(embed_dim)
+    if device == "cuda":
+        res = faiss.StandardGpuResources()
+        # 0 is the index of the GPU.
+        index = faiss.index_cpu_to_gpu(res, 0, index)
+    else:
+        if not isinstance(embeddings, np.ndarray):
+            embeddings = embeddings.numpy()
+
+    index.add(embeddings)
+    return index
+
 
 PROT_ALPHABET = {
     "A": 0,

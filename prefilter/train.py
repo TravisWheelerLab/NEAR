@@ -9,8 +9,6 @@ from time import time
 
 import torch
 import pytorch_lightning as pl
-from pytorch_lightning.plugins import DDPPlugin
-from pytorch_lightning.loggers import WandbLogger
 from random import shuffle, seed
 from shopty import ShoptyConfig
 

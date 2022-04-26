@@ -34,6 +34,8 @@ blsm_str = """4 -1 -2 -2 0 -1 -1 0 -2 -1 -1 -1 -1 -2 -1 1 0 -3 -2 0
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYV"]
 char_to_index = {c: i for i, c in enumerate(amino_alphabet)}
+char_to_index["a"] = 0
+char_to_index["l"] = 0
 
 amino_frequencies = torch.tensor(
     [

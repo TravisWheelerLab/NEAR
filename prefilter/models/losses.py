@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConNoMasking", "SupConWithPooling", "SupConLoss", "SupConPerAA"]
+__all__ = ["SupConNoMasking", "SupConLoss"]
 
 
 def calc_unique(x, dim=-1):

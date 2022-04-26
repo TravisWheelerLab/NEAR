@@ -22,10 +22,7 @@ import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = [
-    "RealisticAliPairGenerator",
-    "SwissProtGenerator",
-]
+__all__ = ["RealisticAliPairGenerator", "SwissProtGenerator", "ClusterIterator"]
 
 
 def _remove_gaps(seq, label):
@@ -152,8 +149,101 @@ class UniRefGenerator:
         # /home/tc229954/data/prefilter/uniprot
 
 
+class ClusterIterator:
+    """
+    I'm going to add in alignments here so we can easily look
+    at them without grepping or anything.
+    """
+
+    def __init__(self, afa_files, min_seq_len, representative_index):
+
+        self.afa_files = afa_files
+        self.min_seq_len = min_seq_len
+        self.representative_index = representative_index
+
+        self.seed_sequences = []
+        self.seed_labels = []
+        self.seed_gapped_sequences = []
+
+        self.query_sequences = []
+        self.query_labels = []
+        self.query_gapped_sequences = []
+
+        # I'm going to keep a record of the original alignments.
+        # They will be in two lists:
+        # The first will be the cluster representative alignments.
+        # the second will be a list with the same sequence order as the unaligned list.
+
+        label_index = 0
+        for fasta in afa_files:
+            headers, seqs = utils.fasta_from_file(fasta)
+            seqs = [s for s in seqs if len(s.replace("-", "")) >= min_seq_len]
+            ungapped_seqs = [s.replace("-", "") for s in seqs]
+            ungapped_seqs = [s[:min_seq_len] for s in ungapped_seqs]
+
+            if len(ungapped_seqs) > 1:
+                self.seed_sequences.append(ungapped_seqs[representative_index])
+                self.seed_gapped_sequences.append(seqs[representative_index])
+                self.seed_labels.append(label_index)
+
+                self.query_sequences.extend(ungapped_seqs[representative_index + 1 :])
+                self.query_gapped_sequences.extend(seqs[representative_index + 1 :])
+                self.query_labels.extend(
+                    [
+                        label_index
+                        for _ in range(len(ungapped_seqs[representative_index + 1 :]))
+                    ]
+                )
+
+                label_index += 1
+
+        self.seed_sequences = [s[:min_seq_len] for s in self.seed_sequences]
+
+    def get_cluster_representatives(self):
+        seeds = []
+        for seed in self.seed_sequences:
+            replacement = []
+            for i, c in enumerate(seed):
+                if c in ("X", "B", "U", "O", "Z"):
+                    replacement.append(
+                        utils.amino_alphabet[
+                            np.random.randint(0, len(utils.amino_alphabet))
+                        ]
+                    )
+                else:
+                    replacement.append(c)
+            seeds.append(
+                torch.as_tensor([utils.char_to_index[s.upper()] for s in replacement])
+            )
+
+        return seeds, self.seed_labels
+
+    def __len__(self):
+        return len(self.query_sequences)
+
+    def __getitem__(self, idx):
+
+        qseq = self.query_sequences[idx][: self.min_seq_len]
+        label = self.query_labels[idx]
+        replacement = []
+        for i, c in enumerate(qseq):
+            if c in ("X", "B", "U", "O", "Z"):
+                replacement.append(
+                    utils.amino_alphabet[
+                        np.random.randint(0, len(utils.amino_alphabet))
+                    ]
+                )
+            else:
+                replacement.append(c)
+
+        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in replacement])
+
+        return seq, label, self.query_gapped_sequences[idx]
+
+
 if __name__ == "__main__":
-    f = "/home/tc229954/data/prefilter/uniprot/uniref50_subset.fasta"
+
+    f = "/home/tc229954/data/prefilter/uniprot/uniref50_subset.fasta"[:2000]
 
     gen = UniRefGenerator(f)
     print("hello")
