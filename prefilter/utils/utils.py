@@ -10,6 +10,7 @@ from typing import Union, List, Tuple
 import numpy as np
 import torch
 import faiss
+import faiss.contrib.torch_utils
 from prefilter import MASK_FLAG, DECOY_FLAG
 import prefilter.models as models
 
@@ -18,15 +19,12 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
-    "encode_protein_as_one_hot_vector",
     "parse_labels",
-    "PROT_ALPHABET",
     "create_faiss_index",
-    "INVERSE_PROT_MAPPING",
-    "LEN_PROTEIN_ALPHABET",
     "handle_figure_path",
     "fasta_from_file",
     "pad_contrastive_batches_with_labelvecs",
+    "pad_contrastive_batches",
     "mask_mask",
     "load_model",
 ]
@@ -50,37 +48,8 @@ def create_faiss_index(embeddings, embed_dim, device="cpu"):
     else:
         if not isinstance(embeddings, np.ndarray):
             embeddings = embeddings.numpy()
-
     index.add(embeddings)
     return index
-
-
-PROT_ALPHABET = {
-    "A": 0,
-    "B": 1,
-    "C": 2,
-    "D": 3,
-    "E": 4,
-    "F": 5,
-    "G": 6,
-    "H": 7,
-    "I": 8,
-    "K": 9,
-    "L": 10,
-    "M": 11,
-    "N": 12,
-    "P": 13,
-    "Q": 14,
-    "R": 15,
-    "S": 16,
-    "T": 17,
-    "V": 18,
-    "W": 19,
-    "Y": 20,
-}
-INVERSE_PROT_MAPPING = {v: k for k, v in PROT_ALPHABET.items()}
-
-LEN_PROTEIN_ALPHABET = len(PROT_ALPHABET)
 
 
 def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
@@ -91,23 +60,6 @@ def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
         figure_path = figure_path + ext
 
     return figure_path
-
-
-def encode_protein_as_one_hot_vector(protein):
-    # input: raw protein string of arbitrary length
-    # output: np.array() of size (1, maxlen, length_protein_alphabet)
-    # Each row in the array is a separate character, encoded as
-    # a one-hot vector
-
-    protein = protein.upper().replace("\n", "")
-    protein = protein.replace("-", "")
-
-    one_hot_encoding = np.zeros((LEN_PROTEIN_ALPHABET, len(protein)))
-
-    for i, residue in enumerate(protein):
-        one_hot_encoding[PROT_ALPHABET[residue], i] = 1
-
-    return one_hot_encoding
 
 
 def parse_labels(labelstring: str) -> Union[List[str], None]:
@@ -229,6 +181,18 @@ def mask_mask(mask):
     for i, idx in enumerate(idxs):
         mask[i, :, (idx - 1) :] = True
     return mask
+
+
+def pad_contrastive_batches(batch):
+    member1 = [b[0] for b in batch]
+    member2 = [b[1] for b in batch]
+    labels = [b[2] for b in batch]
+    data = member1 + member2
+    return (
+        torch.stack(data),
+        None,
+        torch.as_tensor(labels),
+    )
 
 
 def pad_contrastive_batches_with_labelvecs(batch):

@@ -35,19 +35,44 @@ def _remove_gaps(seq, label):
     return _seq, _label
 
 
+def _sanitize_sequence(sequence):
+    """
+    Remove bad characters from sequences.
+    :param sequence:
+    :type sequence:
+    :return:
+    :rtype:
+    """
+    sanitized = []
+    for char in sequence:
+        char = char.upper()
+        if char not in ("X", "B", "U", "O", "Z"):
+            sanitized.append(char)
+        else:
+            sampled_char = utils.amino_alphabet[
+                utils.amino_distribution.sample().item()
+            ]
+            sanitized.append(sampled_char)
+
+    return sanitized
+
+
 class SwissProtGenerator:
-    def __init__(self, fa_file, minlen=256, training=True):
+    def __init__(self, fa_file, apply_indels, minlen=256, training=True):
 
         self.fa_file = fa_file
+        self.apply_indels = apply_indels
         labels, seqs = utils.fasta_from_file(fa_file)
         self.seqs = [s[:minlen] for s in seqs if minlen < len(s)]
         self.training = training
-        self.sub_dists = utils.generate_sub_distributions()
+        self.sub_dists = utils.generate_correct_substitution_distributions()
+        self.sub_probs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+        self.indel_probs = [0.01, 0.05, 0.1, 0.15]
         shuffle(self.seqs)
 
     def __len__(self):
         if self.training:
-            return len(self.seqs)
+            return len(self.seqs) // 100
         else:
             return 1000
 
@@ -58,36 +83,29 @@ class SwissProtGenerator:
         if not self.training:
             idx = np.random.randint(0, len(self.seqs))
 
-        s1 = self.seqs[idx]
-        _s1 = []
-        for x in s1:
-            x = x.upper()
-            if x not in ("X", "B", "U", "O", "Z"):
-                _s1.append(x)
-            else:
-                _s1.append(
-                    utils.amino_alphabet[
-                        np.random.randint(0, len(utils.amino_alphabet))
-                    ]
-                )
+        s1 = _sanitize_sequence(self.seqs[idx])
 
-        s1 = _s1
-
-        lvec1 = list(range(len(s1)))
-        s1, _ = _remove_gaps(s1, lvec1)
-        lvec1 = list(range(len(s1)))
-        seq_template = torch.tensor([utils.char_to_index[c] for c in s1])
-        s2, lvec2 = utils.mutate_sequence(
-            seq_template,
-            lvec1,
-            int(0.3 * len(s1)),
-            int(0.2 * len(s1)),
-            self.sub_dists,
-            utils.amino_distribution,
+        s1 = torch.tensor([utils.char_to_index[c] for c in s1])
+        n_subs = int(
+            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
-        s1 = seq_template
-        return s1, s2, lvec1, lvec2, idx % len(self.seqs)
+        if self.apply_indels:
+            n_indels = int(
+                len(s1) * self.indel_probs[np.random.randint(0, len(self.indel_probs))]
+            )
+        else:
+            n_indels = None
+
+        s2 = utils.mutate_sequence_correct_probabilities(
+            sequence=s1,
+            indels=n_indels,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+            aa_dist=utils.amino_distribution,
+        )
+
+        return s1, s2, idx % len(self.seqs)
 
 
 class RealisticAliPairGenerator:
@@ -139,14 +157,6 @@ class RealisticAliPairGenerator:
             labelvec2,
             idx % len(self.family_templates),
         )
-
-
-class UniRefGenerator:
-    def __init__(self, uniref_file):
-        labels, seqs = utils.fasta_from_file(uniref_file)
-        pdb.set_trace()
-        labels = [label.split()[0] for label in labels]
-        # /home/tc229954/data/prefilter/uniprot
 
 
 class ClusterIterator:
@@ -202,18 +212,9 @@ class ClusterIterator:
     def get_cluster_representatives(self):
         seeds = []
         for seed in self.seed_sequences:
-            replacement = []
-            for i, c in enumerate(seed):
-                if c in ("X", "B", "U", "O", "Z"):
-                    replacement.append(
-                        utils.amino_alphabet[
-                            np.random.randint(0, len(utils.amino_alphabet))
-                        ]
-                    )
-                else:
-                    replacement.append(c)
+            santitized = _sanitize_sequence(seed)
             seeds.append(
-                torch.as_tensor([utils.char_to_index[s.upper()] for s in replacement])
+                torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
             )
 
         return seeds, self.seed_labels
@@ -225,25 +226,22 @@ class ClusterIterator:
 
         qseq = self.query_sequences[idx][: self.min_seq_len]
         label = self.query_labels[idx]
-        replacement = []
-        for i, c in enumerate(qseq):
-            if c in ("X", "B", "U", "O", "Z"):
-                replacement.append(
-                    utils.amino_alphabet[
-                        np.random.randint(0, len(utils.amino_alphabet))
-                    ]
-                )
-            else:
-                replacement.append(c)
-
-        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in replacement])
+        sanitized = _sanitize_sequence(qseq)
+        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
 
         return seq, label, self.query_gapped_sequences[idx]
 
 
 if __name__ == "__main__":
 
-    f = "/home/tc229954/data/prefilter/uniprot/uniref50_subset.fasta"[:2000]
-
-    gen = UniRefGenerator(f)
-    print("hello")
+    f = "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta"
+    gen = SwissProtGenerator(f, apply_indels=True)
+    i = 0
+    for s1, s2, label in gen:
+        print(len(s1), len(s2))
+        # print("".join([utils.amino_alphabet[i] for i in s1]))
+        # print("".join([utils.amino_alphabet[i] for i in s2]))
+        # print("===")
+        if i == 10:
+            break
+        i += 1

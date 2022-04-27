@@ -58,7 +58,6 @@ class SupConNoMasking(nn.Module):
 
         # split the embeddings, masks, and labels into two lists of pairs
         f1, f2 = torch.split(embeddings, batch_size, dim=0)
-        e1, e2 = torch.split(embeddings, batch_size, dim=0)
 
         f1 = f1.transpose(-1, -2)
         f2 = f2.transpose(-1, -2)

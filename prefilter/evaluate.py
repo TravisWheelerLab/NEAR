@@ -53,7 +53,7 @@ def save_string_sequences(filename, rep_seq, query_seq):
 
 
 def compute_cluster_representative_embeddings(
-    representative_sequences, representative_labels, trained_model
+    representative_sequences, representative_labels, trained_model, device
 ):
     """
     :param representative_sequences: Cluster reps.
@@ -65,7 +65,7 @@ def compute_cluster_representative_embeddings(
     :return: embeddings, labels
     :rtype:
     """
-    representative_tensor = torch.stack(representative_sequences)
+    representative_tensor = torch.stack(representative_sequences).to(device)
     representative_embeddings = (
         trained_model(representative_tensor).transpose(-1, -2).contiguous()
     )
@@ -103,8 +103,7 @@ def most_common_matches(
     distances, match_indices = search_index_device_aware(
         faiss_index, normalized_query_embedding, device, n_neighbors=neighbors
     )
-
-    matches = cluster_representative_labels[match_indices.ravel()]
+    matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
     predicted_labels, counts = np.unique(matches, return_counts=True)
 
     return predicted_labels, counts
@@ -221,7 +220,7 @@ def visualize_prediction_patterns(
             ax[0].imshow(count_mat)
             ax[0].set_title(f"n hits to sequence: {n_hits}")
 
-            sim_ax = ax[1].imshow(similarities, vmin=-1, vmax=1, cmap="PiYG")
+            sim_ax = ax[1].imshow(similarities.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
             ax[1].set_title("dot products")
             # set up colorbar
             fig.subplots_adjust(right=0.85)
@@ -276,13 +275,6 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
         hparams = yaml.safe_load(src)
 
     # Set up model and dataset
-    del hparams["batch_size"]
-    del hparams["decoy_files"]
-    del hparams["emission_files"]
-    del hparams["logo_path"]
-
-    hparams = {"learning_rate": 0.01}
-
     model, _ = utils.load_model(model_path, hparams, dev)
     iterator = utils.ClusterIterator(fasta_files, min_seq_len, representative_index=0)
 
@@ -290,7 +282,7 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
     rep_gapped_seqs = iterator.seed_gapped_sequences
     # stack the seed sequences.
     rep_embeddings, rep_labels = compute_cluster_representative_embeddings(
-        rep_seqs, rep_labels, model
+        rep_seqs, rep_labels, model, device=dev
     )
     # create an index
     index = utils.create_faiss_index(rep_embeddings, embed_dim, device=dev)
@@ -324,5 +316,5 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
 if __name__ == "__main__":
     pfam_files = glob(
         "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
-    )[:200]
+    )
     main(pfam_files)

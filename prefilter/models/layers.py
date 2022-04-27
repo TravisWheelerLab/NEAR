@@ -1,20 +1,32 @@
+import pdb
+
 import torch
 import math
 import torch.nn as nn
 import prefilter.utils as utils
 
-__all__ = ["ResNet"]
-
-
-class ResNet(torch.nn.Module):
-    def __init__(self, module):
-        super().__init__()
-        self.module = module
-
-    def forward(self, inputs):
-        return self.module(inputs) + inputs
+__all__ = ["ResConv"]
 
 
 class ResConv(torch.nn.Module):
-    def __init__(self):
-        pass
+    def __init__(self, filters, kernel_size, padding):
+        super(ResConv, self).__init__()
+
+        self.padding = padding
+        self.kernel_size = kernel_size
+        self.conv1 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
+        self.act = torch.nn.GELU()
+        self.conv2 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
+
+    def forward(self, features):
+        x = self.conv1(features)
+        x = self.act(x)
+        x = self.conv2(x)
+        x = self.act(x)
+        if self.padding == "valid":
+            # two convolutions; so multiply half the kernel width by 2.
+            # clearer than just self.kernel_size.
+            features = features[
+                :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2)
+            ]
+        return x + features

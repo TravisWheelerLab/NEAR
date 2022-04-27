@@ -53,6 +53,8 @@ def main():
     train_parser.add_argument("--num_workers", type=int, required=True)
     train_parser.add_argument("--check_val_every_n_epoch", default=2, type=int)
     train_parser.add_argument("--real_data", action="store_true")
+    train_parser.add_argument("--max_pool", action="store_true")
+    train_parser.add_argument("--apply_indels", action="store_true")
     train_parser.add_argument("--uniprot_file", type=str, required=True)
 
     args = ap.parse_args()

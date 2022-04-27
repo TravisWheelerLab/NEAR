@@ -21,8 +21,12 @@ import prefilter.utils as utils
 
 def main(args):
     if args.real_data:
-        train_dataset = utils.SwissProtGenerator(args.uniprot_file)
-        valid_dataset = utils.SwissProtGenerator(args.uniprot_file, training=False)
+        train_dataset = utils.SwissProtGenerator(
+            args.uniprot_file, apply_indels=args.apply_indels
+        )
+        valid_dataset = utils.SwissProtGenerator(
+            args.uniprot_file, apply_indels=args.apply_indels, training=False
+        )
     else:
         train_dataset = utils.RealisticAliPairGenerator()
         valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)
@@ -32,7 +36,7 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
+        collate_fn=utils.pad_contrastive_batches,
         drop_last=True,
     )
 
@@ -41,11 +45,11 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
+        collate_fn=utils.pad_contrastive_batches,
         drop_last=True,
     )
 
-    model = ResNet1d(learning_rate=args.learning_rate)
+    model = ResNet1d(learning_rate=args.learning_rate, apply_maxpool=args.max_pool)
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor="val_loss",
