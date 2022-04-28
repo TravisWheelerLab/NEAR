@@ -17,10 +17,12 @@ def create_parser():
     ap = ArgumentParser()
     ap.add_argument("model_root_dir")
     ap.add_argument("model_name")
+    ap.add_argument("--clustered_split", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--embed_dim", type=int, default=256)
 
     ap.add_argument("--visualize", action="store_true")
+    ap.add_argument("--n_seq_per_target_family", type=int)
     ap.add_argument("--image_path", type=str, default="debug")
     ap.add_argument("--n_neighbors", type=int, default=10)
     ap.add_argument("--n_images", type=int, default=10)
@@ -103,7 +105,10 @@ def most_common_matches(
     distances, match_indices = search_index_device_aware(
         faiss_index, normalized_query_embedding, device, n_neighbors=neighbors
     )
-    matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
+    if device == "cuda":
+        matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
+    else:
+        matches = cluster_representative_labels[match_indices.ravel()]
     predicted_labels, counts = np.unique(matches, return_counts=True)
 
     return predicted_labels, counts
@@ -118,7 +123,7 @@ def compute_accuracy(
     device="cuda",
 ):
     total_sequences = 0
-    thresholds = [1, 2, 3, 5, 10, 20]
+    thresholds = [1, 2, 3, 5, 10, 20, 100, 200]
     topn = defaultdict(int)
 
     for j, (features, labels, _) in enumerate(query_dataset):
@@ -150,6 +155,7 @@ def compute_accuracy(
         f"{percent_correct}\n"
         f"percent of sequences where the correct family was the nth most common match. "
         f"Total families searched: {len(total_families)}",
+        f"Total sequences: {total_sequences}",
     )
 
 
@@ -158,7 +164,6 @@ def visualize_prediction_patterns(
     cluster_rep_index,
     cluster_rep_labels,
     cluster_rep_embeddings,
-    cluster_rep_seqs,
     cluster_rep_gapped_seqs,
     trained_model,
     n_neighbors,
@@ -182,23 +187,35 @@ def visualize_prediction_patterns(
             # alignments will be a simple _grep_.
             # grab the most common label (isn't always correct).
             predicted_label = predicted_labels[-1]
+            true_label = label
             n_hits = sorted(counts)[-1]
             # grab the representative embedding
             representative_embedding = cluster_rep_embeddings[
                 cluster_rep_labels == predicted_label
             ]
+            true_rep_embedding = cluster_rep_embeddings[
+                cluster_rep_labels == true_label.item()
+            ]
             # we index it at label because we constructed the representative
             # matrix in a for loop, so each sequences label is its position in the list.
             representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
+            true_gapped_seq = cluster_rep_gapped_seqs[true_label]
 
             representative_embedding_start_point = np.where(
                 cluster_rep_labels == predicted_label
             )[0][0]
 
+            true_representative_embedding_start_point = np.where(
+                cluster_rep_labels == true_label.item()
+            )[0][0]
+
             query_gapped_seq = gapped_sequences[feat_idx]
 
             similarities = torch.matmul(sequence, representative_embedding.T)
+            true_similarities = torch.matmul(sequence, true_rep_embedding.T)
+
             count_mat = np.zeros((sequence.shape[0], representative_embedding.shape[0]))
+            true_count_mat = np.zeros((sequence.shape[0], true_rep_embedding.shape[0]))
 
             for i, amino_acid in enumerate(sequence):
                 distances, match_indices = search_index_device_aware(
@@ -215,10 +232,31 @@ def visualize_prediction_patterns(
                         )
                         count_mat[i, offset_index] += 1
 
+            for i, amino_acid in enumerate(sequence):
+                distances, match_indices = search_index_device_aware(
+                    cluster_rep_index,
+                    amino_acid.unsqueeze(0),
+                    device,
+                    n_neighbors=n_neighbors,
+                )
+                # if there's a match to the predicted label
+                for match_index in match_indices[0]:
+                    if cluster_rep_labels[match_index] == true_label:
+                        offset_index = (
+                            match_index - true_representative_embedding_start_point
+                        )
+                        true_count_mat[i, offset_index] += 1
+
             # extrememly verbose plotting code :(
-            fig, ax = plt.subplots(ncols=2)
+            fig, ax = plt.subplots(ncols=4, figsize=(13, 10))
             ax[0].imshow(count_mat)
             ax[0].set_title(f"n hits to sequence: {n_hits}")
+
+            ax[2].imshow(true_count_mat)
+            ax[2].set_title(f"true n hits to sequence: {np.sum(true_count_mat)}")
+
+            ax[3].imshow(true_similarities.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+            ax[3].set_title("true sim.")
 
             sim_ax = ax[1].imshow(similarities.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
             ax[1].set_title("dot products")
@@ -243,6 +281,11 @@ def visualize_prediction_patterns(
                 plt.suptitle("false match")
                 plt.savefig(
                     f"{image_path}/false_{unique_name}.png", bbox_inches="tight"
+                )
+                save_string_sequences(
+                    f"{image_path}/fp_true_{unique_name}.fa",
+                    true_gapped_seq,
+                    query_gapped_seq,
                 )
                 # save the representative sequence.
                 # and the query sequence.
@@ -275,8 +318,17 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
         hparams = yaml.safe_load(src)
 
     # Set up model and dataset
+    if not os.path.isfile(model_path):
+        raise ValueError(f"No model found at {model_path}")
+
     model, _ = utils.load_model(model_path, hparams, dev)
-    iterator = utils.ClusterIterator(fasta_files, min_seq_len, representative_index=0)
+    iterator = utils.ClusterIterator(
+        fasta_files,
+        min_seq_len,
+        representative_index=0,
+        evaluate_on_clustered_split=args.clustered_split,
+        n_seq_per_target_family=args.n_seq_per_target_family,
+    )
 
     rep_seqs, rep_labels = iterator.get_cluster_representatives()
     rep_gapped_seqs = iterator.seed_gapped_sequences
@@ -301,7 +353,6 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
             index,
             rep_labels,
             rep_embeddings,
-            rep_seqs,
             rep_gapped_seqs,
             model,
             args.n_neighbors,
@@ -314,7 +365,13 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
 
 
 if __name__ == "__main__":
-    pfam_files = glob(
-        "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.sto.afa"
-    )
-    main(pfam_files)
+    pids = [0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.9]
+    pids = [0.8]
+    for pid in sorted(pids):
+        pfam_files = glob(
+            f"/home/tc229954/data/prefilter/pfam/seed/clustered/{pid}/*-train.fa"
+        )
+        if len(pfam_files):
+            print(f"pid: {1 - pid}")
+            main(pfam_files)
+            print("=")

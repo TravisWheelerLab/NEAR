@@ -165,11 +165,24 @@ class ClusterIterator:
     at them without grepping or anything.
     """
 
-    def __init__(self, afa_files, min_seq_len, representative_index):
+    def __init__(
+        self,
+        afa_files,
+        min_seq_len,
+        representative_index,
+        evaluate_on_clustered_split,
+        n_seq_per_target_family,
+    ):
 
-        self.afa_files = afa_files
+        if n_seq_per_target_family is not None and not evaluate_on_clustered_split:
+            raise ValueError(
+                "Can't have more than a single rep. sequence if evaluating on non-clustered data."
+            )
+
+        self.train_afa_files = afa_files
         self.min_seq_len = min_seq_len
         self.representative_index = representative_index
+        self.n_seq_per_target_family = n_seq_per_target_family
 
         self.seed_sequences = []
         self.seed_labels = []
@@ -179,35 +192,126 @@ class ClusterIterator:
         self.query_labels = []
         self.query_gapped_sequences = []
 
+        if evaluate_on_clustered_split:
+            print("gathering validation files.")
+            self.valid_files = []
+
+            for file in self.train_afa_files:
+                valid_file = file.replace("-train.fa", "-valid.fa")
+                if os.path.isfile(valid_file):
+                    self.valid_files.append(valid_file)
+
+            self._build_clustered_dataset()
+
+        else:
+            self._build_dataset()
+
         # I'm going to keep a record of the original alignments.
         # They will be in two lists:
         # The first will be the cluster representative alignments.
         # the second will be a list with the same sequence order as the unaligned list.
 
+    def _build_clustered_dataset(self):
+
         label_index = 0
-        for fasta in afa_files:
+
+        for valid_file in self.valid_files:
+
+            valid_headers, valid_seqs = utils.fasta_from_file(valid_file)
+            valid_seqs = [
+                s for s in valid_seqs if len(s.replace("-", "")) >= self.min_seq_len
+            ]
+            valid_ungapped_seqs = [s.replace("-", "") for s in valid_seqs]
+            valid_ungapped_seqs = [s[: self.min_seq_len] for s in valid_ungapped_seqs]
+
+            if len(valid_ungapped_seqs) > 1:
+                # grab the train file
+                # and process it to sequences that are > len(256).
+                train_file = valid_file.replace("-valid.fa", "-train.fa")
+                train_headers, train_seqs = utils.fasta_from_file(train_file)
+                train_seqs = [
+                    s for s in train_seqs if len(s.replace("-", "")) >= self.min_seq_len
+                ]
+                train_ungapped_seqs = [s.replace("-", "") for s in train_seqs]
+                train_ungapped_seqs = [
+                    s[: self.min_seq_len] for s in train_ungapped_seqs
+                ]
+
+                if len(train_ungapped_seqs) > 1:
+                    if self.n_seq_per_target_family is None:
+                        self.seed_sequences.append(
+                            train_ungapped_seqs[self.representative_index]
+                        )
+                        self.seed_gapped_sequences.append(
+                            train_seqs[self.representative_index]
+                        )
+                        self.seed_labels.append(label_index)
+                    else:
+
+                        # print(f"Using {len(train_ungapped_seqs[:self.n_seq_per_target_family])} sequences in target DB for label {label_index}, "
+                        #      f"corresponding to {os.path.basename(train_file)}")
+
+                        self.seed_sequences.extend(
+                            train_ungapped_seqs[: self.n_seq_per_target_family]
+                        )
+                        self.seed_gapped_sequences.extend(
+                            train_seqs[: self.n_seq_per_target_family]
+                        )
+                        self.seed_labels.extend(
+                            [label_index]
+                            * len(train_ungapped_seqs[: self.n_seq_per_target_family])
+                        )
+
+                    self.query_sequences.extend(valid_ungapped_seqs)
+                    self.query_gapped_sequences.extend(valid_seqs)
+
+                    self.query_labels.extend(
+                        [label_index for _ in range(len(valid_ungapped_seqs))]
+                    )
+
+                    label_index += 1
+
+        if len(self.seed_sequences) == 0 or len(self.query_sequences) == 0:
+            print(
+                f"No seed or query seqs over {self.min_seq_len}. Lengths of seed and query sequences: {len(self.seed_sequences)}, "
+                f"{len(self.query_sequences)}"
+            )
+            exit()
+
+        self.seed_sequences = [s[: self.min_seq_len] for s in self.seed_sequences]
+
+    def _build_dataset(self):
+
+        label_index = 0
+        for fasta in self.train_afa_files:
             headers, seqs = utils.fasta_from_file(fasta)
-            seqs = [s for s in seqs if len(s.replace("-", "")) >= min_seq_len]
+            seqs = [s for s in seqs if len(s.replace("-", "")) >= self.min_seq_len]
             ungapped_seqs = [s.replace("-", "") for s in seqs]
-            ungapped_seqs = [s[:min_seq_len] for s in ungapped_seqs]
+            ungapped_seqs = [s[: self.min_seq_len] for s in ungapped_seqs]
 
             if len(ungapped_seqs) > 1:
-                self.seed_sequences.append(ungapped_seqs[representative_index])
-                self.seed_gapped_sequences.append(seqs[representative_index])
+                self.seed_sequences.append(ungapped_seqs[self.representative_index])
+                self.seed_gapped_sequences.append(seqs[self.representative_index])
                 self.seed_labels.append(label_index)
 
-                self.query_sequences.extend(ungapped_seqs[representative_index + 1 :])
-                self.query_gapped_sequences.extend(seqs[representative_index + 1 :])
+                self.query_sequences.extend(
+                    ungapped_seqs[self.representative_index + 1 :]
+                )
+                self.query_gapped_sequences.extend(
+                    seqs[self.representative_index + 1 :]
+                )
                 self.query_labels.extend(
                     [
                         label_index
-                        for _ in range(len(ungapped_seqs[representative_index + 1 :]))
+                        for _ in range(
+                            len(ungapped_seqs[self.representative_index + 1 :])
+                        )
                     ]
                 )
 
                 label_index += 1
 
-        self.seed_sequences = [s[:min_seq_len] for s in self.seed_sequences]
+        self.seed_sequences = [s[: self.min_seq_len] for s in self.seed_sequences]
 
     def get_cluster_representatives(self):
         seeds = []
@@ -234,14 +338,9 @@ class ClusterIterator:
 
 if __name__ == "__main__":
 
-    f = "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta"
-    gen = SwissProtGenerator(f, apply_indels=True)
-    i = 0
-    for s1, s2, label in gen:
-        print(len(s1), len(s2))
-        # print("".join([utils.amino_alphabet[i] for i in s1]))
-        # print("".join([utils.amino_alphabet[i] for i in s2]))
-        # print("===")
-        if i == 10:
-            break
-        i += 1
+    from glob import glob
+
+    pfam_files = glob(
+        "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.fa"
+    )
+    gen = ClusterIterator(pfam_files, 256, 0, evaluate_on_clustered_split=True)

@@ -54,8 +54,10 @@ class ResNet1d(pl.LightningModule, ABC):
         # single max pool.
 
         if self.apply_maxpool:
-            print("applying max pool to network.")
+            print("applying conv pool to network.")
             _list.append(nn.MaxPool1d(2))
+            # _list.append(nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters,
+            #                       kernel_size=2, stride=2, padding=self.padding))
 
         for _ in range(2):
             _list.append(

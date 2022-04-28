@@ -13,11 +13,14 @@ time $py_cmd -m prefilter train\
     --gpus 1 \
     --num_nodes 1 \
     --num_workers 0 \
-    --log_dir models/contrastive/exps_apr27/better_sub_dists/no_max_pool_no_indels \
+    --log_dir models/contrastive/exps_apr28/conv_pool_with_indels \
     --uniprot_file /home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta \
     --batch_size 32 \
-    --epochs 1000 \
+    --epochs 100 \
     --learning_rate 1e-4 \
     --check_val_every_n_epoch 1 \
     --real_data \
+    --max_pool \
+    --apply_indels
+
 
