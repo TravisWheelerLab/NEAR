@@ -22,22 +22,12 @@ import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = ["RealisticAliPairGenerator", "SwissProtGenerator", "ClusterIterator"]
-
-
-def _remove_gaps(seq, label):
-    _seq = []
-    _label = []
-    for s, l in zip(seq, label):
-        if s not in ("-", "."):
-            _seq.append(s)
-            _label.append(l)
-    return _seq, _label
+__all__ = ["AlignmentGenerator", "SwissProtGenerator", "ClusterIterator"]
 
 
 def _sanitize_sequence(sequence):
     """
-    Remove bad characters from sequences.
+    Remove bad/unknown/ambiguous characters from sequences.
     :param sequence:
     :type sequence:
     :return:
@@ -46,18 +36,139 @@ def _sanitize_sequence(sequence):
     sanitized = []
     for char in sequence:
         char = char.upper()
-        if char not in ("X", "B", "U", "O", "Z"):
-            sanitized.append(char)
-        else:
+        if char in ("X", "U", "O"):
             sampled_char = utils.amino_alphabet[
                 utils.amino_distribution.sample().item()
             ]
             sanitized.append(sampled_char)
+        elif char == "B":
+            if int(2 * np.random.rand()) == 1:
+                sanitized.append("D")
+            else:
+                sanitized.append("N")
+        elif char == "Z":
+            if int(2 * np.random.rand()) == 1:
+                sanitized.append("E")
+            else:
+                sanitized.append("Q")
+        else:
+            sanitized.append(char)
 
     return sanitized
 
 
+class AlignmentGenerator:
+    """
+    Grab two sequences from a set of aligned sequences (in an .afa)
+    and return them, plus locations where they are not aligned (i.e.
+    have gaps).
+    """
+
+    def __init__(self, afa_files, minlen=256, training=True):
+        self.afa_files = afa_files
+        self.name_to_alignment = {}
+        self.training = training
+        self.min_seq_len = minlen
+
+        # store as strings for now.
+        for afa in self.afa_files:
+            _, seqs = utils.fasta_from_file(afa)
+
+            if minlen is not None:
+                # remove gaps then calculate length
+                seqs = [s for s in seqs if minlen < len(s.replace("-", ""))]
+
+            if len(seqs) > 1:
+                self.name_to_alignment[os.path.basename(afa)] = seqs
+
+        self.length = sum([len(v) for v in self.name_to_alignment.values()])
+        self.names = list(self.name_to_alignment.keys())
+
+    def __len__(self):
+        if self.training:
+            return self.length
+        else:
+            return 10000
+
+    def __getitem__(self, idx):
+        # grab family at idx % len(self.name_to_alignment)
+        sampled_ali = self.name_to_alignment[
+            self.names[idx % len(self.name_to_alignment)]
+        ]
+        # grab two random families
+        i = np.random.randint(0, len(sampled_ali))
+        j = np.random.randint(0, len(sampled_ali))
+
+        # ensure we didn't sample the same amino acid
+        while i == j:
+            j = np.random.randint(0, len(sampled_ali))
+
+        # remove ambiguous/unknown characters
+        gapped_sequence_1 = _sanitize_sequence(sampled_ali[i])
+        gapped_sequence_2 = _sanitize_sequence(sampled_ali[j])
+
+        # now, get the aligned amino acids by iterating over the sequences as assigning labels to each character
+        # remember, we're going to mask unaligned characters out of the loss, so
+        # each position in the labelvector that isn't aligned (a gap in either sequence)
+        # will have to be some special mask flag.
+
+        labelvec1 = np.arange(len(gapped_sequence_1))
+        labelvec2 = np.arange(len(gapped_sequence_2))
+
+        for i, (c1, c2) in enumerate(zip(gapped_sequence_1, gapped_sequence_2)):
+            if c1 == "-" and c2 != "-":
+                # amino acid at position i exists in sequence 2
+                labelvec2[i] = prefilter.MASK_FLAG
+                # but does not exist in sequence 2
+                labelvec1[i] = prefilter.DROP_FLAG
+            elif c1 != "-" and c2 == "-":
+                # amino acid at position i exists in sequence 1
+                # we want to keep it since it's valid but mask it out eventually
+                labelvec1[i] = prefilter.MASK_FLAG
+                # but does not exist in sequence 2
+                labelvec2[i] = prefilter.DROP_FLAG
+            elif c1 == "-" and c2 == "-":
+                # neither exist; going to drop them.
+                labelvec1[i] = prefilter.DROP_FLAG
+                labelvec2[i] = prefilter.DROP_FLAG
+            else:
+                # both are aligned, continue on.
+                continue
+        # now, we have to remove the gaps from the sequences to ingest them into the ML algorithm;
+        ungapped_sequence_1, labelvec1 = _remove_gaps(gapped_sequence_1, labelvec1)
+        ungapped_sequence_2, labelvec2 = _remove_gaps(gapped_sequence_2, labelvec2)
+        ungapped_sequence_1 = torch.as_tensor(
+            [utils.char_to_index[i] for i in ungapped_sequence_1]
+        )
+        ungapped_sequence_2 = torch.as_tensor(
+            [utils.char_to_index[i] for i in ungapped_sequence_2]
+        )
+
+        return (
+            ungapped_sequence_1[: self.min_seq_len],
+            ungapped_sequence_2[: self.min_seq_len],
+            torch.as_tensor(labelvec1)[: self.min_seq_len],
+            torch.as_tensor(labelvec2)[: self.min_seq_len],
+        )
+
+
+def _remove_gaps(sequence, labelvec):
+    new_sequence = []
+    new_labelvec = []
+    assert len(sequence) == len(labelvec)
+    for s, l in zip(sequence, labelvec):
+        if l != prefilter.DROP_FLAG:
+            new_labelvec.append(l)
+            new_sequence.append(s)
+    return new_sequence, new_labelvec
+
+
 class SwissProtGenerator:
+    """
+    Grab a sequence from swiss-prot, mutate it, then
+    feed it to the model as a contrastive pair.
+    """
+
     def __init__(self, fa_file, apply_indels, minlen=256, training=True):
 
         self.fa_file = fa_file
@@ -314,7 +425,8 @@ class ClusterIterator:
 if __name__ == "__main__":
     from glob import glob
 
-    pfam_files = glob(
-        "/home/tc229954/data/prefilter/pfam/seed/clustered/0.5/*-train.fa"
-    )
-    gen = ClusterIterator(pfam_files, 256, 0, evaluate_on_clustered_split=True)
+    panthr = glob("/home/tc229954/data/prefilter/panthr/afa/*.afa")
+    gen = AlignmentGenerator(afa_files=panthr)
+
+    for a, b, c, d in gen:
+        print(a.shape, b.shape, c.shape, d.shape)

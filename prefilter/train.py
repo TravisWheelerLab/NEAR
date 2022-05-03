@@ -20,23 +20,20 @@ import prefilter.utils as utils
 
 
 def main(args):
-    if args.real_data:
-        train_dataset = utils.SwissProtGenerator(
-            args.uniprot_file, apply_indels=args.apply_indels
-        )
-        valid_dataset = utils.SwissProtGenerator(
-            args.uniprot_file, apply_indels=args.apply_indels, training=False
-        )
-    else:
-        train_dataset = utils.RealisticAliPairGenerator()
-        valid_dataset = utils.RealisticAliPairGenerator(steps_per_epoch=1000)
+
+    train_dataset = utils.AlignmentGenerator(
+        afa_files=glob(os.path.join(args.afa_path, "*.afa"))
+    )
+    valid_dataset = utils.AlignmentGenerator(
+        afa_files=glob(os.path.join(args.afa_path, "*.afa")), training=False
+    )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches,
+        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
         drop_last=True,
     )
 
@@ -45,7 +42,7 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches,
+        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
         drop_last=True,
     )
 

@@ -204,16 +204,14 @@ def pad_contrastive_batches_with_labelvecs(batch):
     :rtype: torch.tensor
     """
 
-    seqs = [b[0] for b in batch]
-    logos = [b[1] for b in batch]
+    pair1 = [b[0] for b in batch]
+    pair2 = [b[1] for b in batch]
     lvec1 = [b[2] for b in batch]
     lvec2 = [b[3] for b in batch]
-    data = seqs + logos
+    data = pair1 + pair2
     labelvecs = lvec1 + lvec2
-    labels = [b[4] for b in batch]
     return (
         torch.stack(data),
         None,
         labelvecs,
-        torch.as_tensor(labels),
     )

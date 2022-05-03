@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 __version__ = "0.0.1"
 
 MASK_FLAG = -1
+DROP_FLAG = -2
 DECOY_FLAG = "DECOY"
 
 array_job_template = """#!/usr/bin/env bash
@@ -51,12 +52,10 @@ def main():
     train_parser.add_argument("--learning_rate", type=float, required=True)
     train_parser.add_argument("--batch_size", type=int, required=True)
     train_parser.add_argument("--num_workers", type=int, required=True)
-    train_parser.add_argument("--check_val_every_n_epoch", default=2, type=int)
-    train_parser.add_argument("--real_data", action="store_true")
+    train_parser.add_argument("--afa_path", type=str, required=True)
+    train_parser.add_argument("--check_val_every_n_epoch", default=1, type=int)
     train_parser.add_argument("--max_pool", action="store_true")
     train_parser.add_argument("--apply_mlp", action="store_true")
-    train_parser.add_argument("--apply_indels", action="store_true")
-    train_parser.add_argument("--uniprot_file", type=str, required=True)
 
     args = ap.parse_args()
     if args.subcmd == "train":

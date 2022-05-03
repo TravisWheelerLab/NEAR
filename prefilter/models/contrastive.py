@@ -98,8 +98,7 @@ class ResNet1d(pl.LightningModule, ABC):
         if len(batch) == 4:
             features, masks, labelvecs, labels = batch
         else:
-            features, masks, labels = batch
-            labelvecs = None
+            features, masks, labelvecs = batch
 
         if masks is not None:
             embeddings, masks = self.forward(features, masks)
@@ -117,14 +116,14 @@ class ResNet1d(pl.LightningModule, ABC):
         else:
             loss = self.loss_func(embeddings, masks, labelvecs)
 
-        return loss, embeddings, labels
+        return loss
 
     def training_step(self, batch, batch_nb):
-        loss, _, _ = self._shared_step(batch)
+        loss = self._shared_step(batch)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_nb):
-        loss, _, _ = self._shared_step(batch)
+        loss = self._shared_step(batch)
         return {"val_loss": loss}
 
     def configure_optimizers(self):
