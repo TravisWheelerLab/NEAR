@@ -10,11 +10,11 @@ cd /home/tc229954/share/prefilter
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 
 time $py_cmd -m prefilter train\
-    --gpus 1 \
+    --gpus 2 \
     --num_nodes 1 \
-    --num_workers 32 \
+    --num_workers 0 \
     --afa_path /home/tc229954/data/prefilter/panthr/afa/ \
-    --log_dir /tmp/ \
+    --log_dir models/contrastive/exps_may3/alignment_aware \
     --batch_size 16 \
     --epochs 100 \
     --learning_rate 1e-3 \

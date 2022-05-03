@@ -14,7 +14,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConNoMasking", "SupConLoss"]
+__all__ = ["SupConAlignmentAware", "SupConNoMasking", "SupConLoss"]
+
+import prefilter
 
 
 def calc_unique(x, dim=-1):
@@ -22,10 +24,6 @@ def calc_unique(x, dim=-1):
     perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return unique, inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm)
-
-
-def max_pool_labels(label1, label2):
-    pass
 
 
 class SupConNoMasking(nn.Module):
@@ -71,6 +69,91 @@ class SupConNoMasking(nn.Module):
 
         if first_pos:
             x = torch.matmul(f1, f2.T).detach().cpu()
+            n_f1_valid = -1
+            n_f2_valid = -1
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            plt.clim(-1, 1)
+            plt.colorbar()
+            os.makedirs(picture_path, exist_ok=True)
+            print(f"saving to {picture_path}")
+            plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
+            plt.close()
+
+        return loss
+
+
+class SupConAlignmentAware(nn.Module):
+    def __init__(self, n_conv_layers=None, device="cuda"):
+        super(SupConAlignmentAware, self).__init__()
+        if n_conv_layers is not None:
+            # if it's none, assume we're using valid padding:
+            # and a kernel size of three
+            self.n_chop = n_conv_layers
+        else:
+            self.n_chop = 0
+        self.supcon = SupConLoss()
+        self.device = device
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, embeddings, masks, labelvecs, picture_path=None, step=None):
+        """
+        Need to reshape the paired embeddings into one large matrix
+        """
+        first_pos = False
+
+        if picture_path is not None:
+            first_pos = True
+
+        batch_size = embeddings.shape[0] // 2
+
+        # split the embeddings, masks, and labels into two lists of pairs
+        f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        # first I need to get rid of bits on each side that aren't padded.
+        # uhm. could do this vectorized or not.
+        # Let's try not first (lol).
+        f1 = f1.transpose(-1, -2)
+        f2 = f2.transpose(-1, -2)
+        new_f1 = []
+        new_f2 = []
+
+        for embed1, embed2, label1, label2 in zip(
+            f1, f2, labelvecs[:batch_size], labelvecs[batch_size:]
+        ):
+            # drop masked characters from each.
+            # first, cut n labels off each side.
+            n_to_cut = 256 - embed1.shape[0]
+            label1 = label1[n_to_cut // 2 : -n_to_cut // 2]
+            label2 = label2[n_to_cut // 2 : -n_to_cut // 2]
+            masked = (label1 == prefilter.MASK_FLAG) | (label2 == prefilter.MASK_FLAG)
+            masked_embed1 = embed1[~masked]
+            masked_embed2 = embed2[~masked]
+            masked_label1 = label1[~masked]
+            masked_label2 = label2[~masked]
+            # now, get the locations where the labels match:
+            matches = torch.eq(masked_label1.unsqueeze(1), masked_label2.unsqueeze(0))
+
+            match_1, match_2 = torch.where(matches)
+            # could be offset, so index the original tensor at those
+            # locations
+            e1 = masked_embed1[match_1]
+            e2 = masked_embed2[match_2]
+
+            new_f1.append(e1)
+            new_f2.append(e2)
+
+        new_f1 = torch.cat(new_f1)
+        new_f2 = torch.cat(new_f2)
+
+        new_f1 = torch.nn.functional.normalize(new_f1, dim=-1)
+        new_f2 = torch.nn.functional.normalize(new_f2, dim=-1)
+
+        x = torch.cat((new_f1.unsqueeze(1), new_f2.unsqueeze(1)), dim=1)
+        loss = self.supcon(x)
+
+        if first_pos:
+            x = torch.matmul(new_f1, new_f2.T).detach().cpu()
             n_f1_valid = -1
             n_f2_valid = -1
             plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")

@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResConv, SupConLoss, SupConNoMasking
+from prefilter.models import ResConv, SupConNoMasking, SupConAlignmentAware
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -29,9 +29,9 @@ class ResNet1d(pl.LightningModule, ABC):
         self.res_bottleneck_factor = 1
         self.padding = "valid"
 
-        self.log_interval = 2000
+        self.log_interval = 100
 
-        self.loss_func = SupConNoMasking()
+        self.loss_func = SupConAlignmentAware()
         self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
@@ -87,6 +87,7 @@ class ResNet1d(pl.LightningModule, ABC):
         x = self.embed(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
         if self.apply_mlp:
+            return x
             x = self.mlp(x)
         return x
 
