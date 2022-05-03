@@ -22,6 +22,7 @@ def create_parser():
     ap.add_argument("--embed_dim", type=int, default=256)
 
     ap.add_argument("--visualize", action="store_true")
+    ap.add_argument("--include_emission", action="store_true")
     ap.add_argument("--n_seq_per_target_family", type=int)
     ap.add_argument("--image_path", type=str, default="debug")
     ap.add_argument("--n_neighbors", type=int, default=10)
@@ -152,11 +153,54 @@ def compute_accuracy(
 
     print(
         f"{thresholds}\n",
-        f"{percent_correct}\n"
-        f"percent of sequences where the correct family was the nth most common match. "
-        f"Total families searched: {len(total_families)}",
+        f"{percent_correct}\n" f"Total families searched: {len(total_families)}",
         f"Total sequences: {total_sequences}",
     )
+
+
+def _compute_count_mat_and_similarities(
+    label_to_analyze,
+    query_sequence,
+    representative_embeddings,
+    representative_labels,
+    representative_index,
+    device,
+    n_neighbors,
+):
+    """
+    Gets matrices of dot prods and counts. Label_to_analyze is used to look
+    up the embedding of the sequence that our query sequence matched to.
+    This function grabs the embedding associated with the label to analyze
+    and gets its dots. And it grabs the number of times the label to analyze showed
+    up in each cell of the dots b/t the LtA sequence and the query sequence (count_mat).
+    """
+    if isinstance(label_to_analyze, torch.Tensor):
+        label_to_analyze = label_to_analyze.item()
+
+    representative_embedding = representative_embeddings[
+        representative_labels == label_to_analyze
+    ]
+    representative_embedding_start_point = np.where(
+        representative_labels == label_to_analyze
+    )[0][0]
+
+    similarities = torch.matmul(query_sequence, representative_embedding.T)
+    count_mat = np.zeros((query_sequence.shape[0], representative_embedding.shape[0]))
+
+    for i, amino_acid in enumerate(query_sequence):
+        distances, match_indices = search_index_device_aware(
+            representative_index,
+            amino_acid.unsqueeze(0),
+            device,
+            n_neighbors=n_neighbors,
+        )
+        # if there's a match to the predicted label
+        for match_index in match_indices[0]:
+            if representative_labels[match_index] == label_to_analyze:
+                offset_index = match_index - representative_embedding_start_point
+                count_mat[i, offset_index] += 1
+
+    return count_mat, similarities
 
 
 def visualize_prediction_patterns(
@@ -182,122 +226,117 @@ def visualize_prediction_patterns(
             )
 
             predicted_labels = predicted_labels[np.argsort(counts)]
-            # random sampling. I'll write the sequences into
-            # a file with the same name as the image. Then looking up their
-            # alignments will be a simple _grep_.
-            # grab the most common label (isn't always correct).
             predicted_label = predicted_labels[-1]
-            true_label = label
-            n_hits = sorted(counts)[-1]
-            # grab the representative embedding
-            representative_embedding = cluster_rep_embeddings[
-                cluster_rep_labels == predicted_label
-            ]
-            true_rep_embedding = cluster_rep_embeddings[
-                cluster_rep_labels == true_label.item()
-            ]
-            # we index it at label because we constructed the representative
-            # matrix in a for loop, so each sequences label is its position in the list.
+            second_label = predicted_labels[-2]
+
             representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
-            true_gapped_seq = cluster_rep_gapped_seqs[true_label]
+            query_gapped_seq = "".join(
+                utils.amino_alphabet[i.item()] for i in features[feat_idx]
+            )
 
-            representative_embedding_start_point = np.where(
-                cluster_rep_labels == predicted_label
-            )[0][0]
+            first_cmat, first_sim = _compute_count_mat_and_similarities(
+                predicted_label,
+                sequence,
+                cluster_rep_embeddings,
+                cluster_rep_labels,
+                cluster_rep_index,
+                device,
+                n_neighbors,
+            )
 
-            true_representative_embedding_start_point = np.where(
-                cluster_rep_labels == true_label.item()
-            )[0][0]
-
-            query_gapped_seq = gapped_sequences[feat_idx]
-
-            similarities = torch.matmul(sequence, representative_embedding.T)
-            true_similarities = torch.matmul(sequence, true_rep_embedding.T)
-
-            count_mat = np.zeros((sequence.shape[0], representative_embedding.shape[0]))
-            true_count_mat = np.zeros((sequence.shape[0], true_rep_embedding.shape[0]))
-
-            for i, amino_acid in enumerate(sequence):
-                distances, match_indices = search_index_device_aware(
-                    cluster_rep_index,
-                    amino_acid.unsqueeze(0),
-                    device,
-                    n_neighbors=n_neighbors,
-                )
-                # if there's a match to the predicted label
-                for match_index in match_indices[0]:
-                    if cluster_rep_labels[match_index] == predicted_label:
-                        offset_index = (
-                            match_index - representative_embedding_start_point
-                        )
-                        count_mat[i, offset_index] += 1
-
-            for i, amino_acid in enumerate(sequence):
-                distances, match_indices = search_index_device_aware(
-                    cluster_rep_index,
-                    amino_acid.unsqueeze(0),
-                    device,
-                    n_neighbors=n_neighbors,
-                )
-                # if there's a match to the predicted label
-                for match_index in match_indices[0]:
-                    if cluster_rep_labels[match_index] == true_label:
-                        offset_index = (
-                            match_index - true_representative_embedding_start_point
-                        )
-                        true_count_mat[i, offset_index] += 1
-
-            # extrememly verbose plotting code :(
-            fig, ax = plt.subplots(ncols=4, figsize=(13, 10))
-            ax[0].imshow(count_mat)
-            ax[0].set_title(f"n hits to sequence: {n_hits}")
-
-            ax[2].imshow(true_count_mat)
-            ax[2].set_title(f"true n hits to sequence: {np.sum(true_count_mat)}")
-
-            ax[3].imshow(true_similarities.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
-            ax[3].set_title("true sim.")
-
-            sim_ax = ax[1].imshow(similarities.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
-            ax[1].set_title("dot products")
-            # set up colorbar
-            fig.subplots_adjust(right=0.85)
-            cbar_ax = fig.add_axes([0.88, 0.15, 0.04, 0.7])
-            fig.colorbar(sim_ax, cax=cbar_ax)
+            second_cmat, second_sim = _compute_count_mat_and_similarities(
+                second_label,
+                sequence,
+                cluster_rep_embeddings,
+                cluster_rep_labels,
+                cluster_rep_index,
+                device,
+                n_neighbors,
+            )
 
             unique_name = f"{n_neighbors}_neigh_{image_idx}"
-
             if predicted_label == label:
-                print("saving true")
-                plt.suptitle("true match")
+
+                fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(13, 10))
+                ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                ax[0, 0].set_title("dots")
+
+                ax[0, 1].set_title(
+                    f"true hit. n hits to sequence: {np.sum(first_cmat):.3f}"
+                )
+                ax[0, 1].imshow(first_cmat)
+
+                ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                ax[1, 0].set_title("dots")
+
+                ax[1, 1].set_title(
+                    f"second hit. n hits to sequence: {np.sum(second_cmat):.3f}"
+                )
+                ax[1, 1].imshow(second_cmat)
+
                 plt.savefig(f"{image_path}/true_{unique_name}.png", bbox_inches="tight")
                 save_string_sequences(
                     f"{image_path}/true_{unique_name}.fa",
                     representative_gapped_seq,
                     query_gapped_seq,
                 )
+                # two different imshows - first and second matches.
             else:
-                print("saving false")
-                plt.suptitle("false match")
+                # three different imshows
+                # first, compare to the true label (then to the first and second
+                # matches
+                fig, ax = plt.subplots(ncols=2, nrows=3, figsize=(13, 10))
+                ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                ax[0, 0].set_title("dots")
+
+                ax[0, 1].set_title(
+                    f"false hit, rank1. n hits to sequence: {np.sum(first_cmat):.3f}"
+                )
+                ax[0, 1].imshow(first_cmat)
+
+                ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                ax[1, 0].set_title("dots")
+
+                if second_label != label:
+                    ax[1, 1].set_title(
+                        f"false hit, rank2. n hits to sequence: {np.sum(second_cmat):.3f}"
+                    )
+                else:
+                    ax[1, 1].set_title(
+                        f"true hit, rank2. n hits to sequence: {np.sum(second_cmat):.3f}"
+                    )
+
+                ax[1, 1].imshow(second_cmat)
+
+                true_cmat, true_sim = _compute_count_mat_and_similarities(
+                    label,
+                    sequence,
+                    cluster_rep_embeddings,
+                    cluster_rep_labels,
+                    cluster_rep_index,
+                    device,
+                    n_neighbors,
+                )
+
+                ax[2, 0].imshow(true_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                ax[2, 0].set_title("dots")
+                ax[2, 1].set_title(
+                    f"hit on true match. n hits to sequence: {np.sum(true_cmat):.3f}"
+                )
+                ax[2, 1].imshow(true_cmat)
                 plt.savefig(
                     f"{image_path}/false_{unique_name}.png", bbox_inches="tight"
                 )
+
                 save_string_sequences(
-                    f"{image_path}/fp_true_{unique_name}.fa",
-                    true_gapped_seq,
-                    query_gapped_seq,
-                )
-                # save the representative sequence.
-                # and the query sequence.
-                save_string_sequences(
-                    f"{image_path}/false_{unique_name}.fa",
+                    f"{image_path}/true_{unique_name}.fa",
                     representative_gapped_seq,
                     query_gapped_seq,
                 )
 
+            image_idx += 1
             plt.close()
 
-            image_idx += 1
             if (image_idx + 1) == n_images:
                 exit()
 
@@ -365,13 +404,14 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
 
 
 if __name__ == "__main__":
-    pids = [0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.9]
+    # pids = [0.15, 0.2, 0.3, 0.4, 0.5, 0.65, 0.7, 0.75, 0.8, 0.9]
     pids = [0.8]
+
     for pid in sorted(pids):
         pfam_files = glob(
             f"/home/tc229954/data/prefilter/pfam/seed/clustered/{pid}/*-train.fa"
         )
         if len(pfam_files):
-            print(f"pid: {1 - pid}")
+            print(f"pid: {1 - pid:.3f}")
             main(pfam_files)
             print("=")

@@ -15,13 +15,17 @@ class ResConv(torch.nn.Module):
         self.padding = padding
         self.kernel_size = kernel_size
         self.conv1 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
-        self.act = torch.nn.GELU()
+        self.bn1 = torch.nn.BatchNorm1d(filters)
+        self.act = torch.nn.ReLU()
         self.conv2 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
+        self.bn2 = torch.nn.BatchNorm1d(filters)
 
     def forward(self, features):
         x = self.conv1(features)
+        x = self.bn1(x)
         x = self.act(x)
         x = self.conv2(x)
+        x = self.bn2(x)
         x = self.act(x)
         if self.padding == "valid":
             # two convolutions; so multiply half the kernel width by 2.

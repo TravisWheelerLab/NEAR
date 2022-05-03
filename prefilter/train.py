@@ -49,7 +49,11 @@ def main(args):
         drop_last=True,
     )
 
-    model = ResNet1d(learning_rate=args.learning_rate, apply_maxpool=args.max_pool)
+    model = ResNet1d(
+        learning_rate=args.learning_rate,
+        apply_maxpool=args.max_pool,
+        apply_mlp=args.apply_mlp,
+    )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor="val_loss",

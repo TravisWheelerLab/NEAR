@@ -72,15 +72,19 @@ class SwissProtGenerator:
 
     def __len__(self):
         if self.training:
-            return len(self.seqs) // 100
+            return len(self.seqs)
         else:
-            return 1000
+            return 10000
 
     def shuffle(self):
         shuffle(self.seqs)
 
     def __getitem__(self, idx):
         if not self.training:
+            if idx == 0:
+                print("shuffling.")
+                self.shuffle()
+
             idx = np.random.randint(0, len(self.seqs))
 
         s1 = _sanitize_sequence(self.seqs[idx])
@@ -172,6 +176,7 @@ class ClusterIterator:
         representative_index,
         evaluate_on_clustered_split,
         n_seq_per_target_family,
+        use_test=True,
     ):
 
         if n_seq_per_target_family is not None and not evaluate_on_clustered_split:
@@ -183,6 +188,7 @@ class ClusterIterator:
         self.min_seq_len = min_seq_len
         self.representative_index = representative_index
         self.n_seq_per_target_family = n_seq_per_target_family
+        self.use_test = use_test
 
         self.seed_sequences = []
         self.seed_labels = []
@@ -191,25 +197,23 @@ class ClusterIterator:
         self.query_sequences = []
         self.query_labels = []
         self.query_gapped_sequences = []
+        # dictionary to map validation files to test files.
+        self.valid_to_test = {}
 
         if evaluate_on_clustered_split:
-            print("gathering validation files.")
             self.valid_files = []
-
             for file in self.train_afa_files:
                 valid_file = file.replace("-train.fa", "-valid.fa")
+                test_file = file.replace("-train.fa", "-test.fa")
                 if os.path.isfile(valid_file):
                     self.valid_files.append(valid_file)
+                if os.path.isfile(test_file):
+                    self.valid_to_test[valid_file] = test_file
 
             self._build_clustered_dataset()
 
         else:
             self._build_dataset()
-
-        # I'm going to keep a record of the original alignments.
-        # They will be in two lists:
-        # The first will be the cluster representative alignments.
-        # the second will be a list with the same sequence order as the unaligned list.
 
     def _build_clustered_dataset(self):
 
@@ -224,6 +228,18 @@ class ClusterIterator:
             valid_ungapped_seqs = [s.replace("-", "") for s in valid_seqs]
             valid_ungapped_seqs = [s[: self.min_seq_len] for s in valid_ungapped_seqs]
 
+            if valid_file in self.valid_to_test and self.use_test:
+                test_file = self.valid_to_test[valid_file]
+                test_headers, test_seqs = utils.fasta_from_file(test_file)
+                test_seqs = [
+                    s for s in test_seqs if len(s.replace("-", "")) >= self.min_seq_len
+                ]
+                test_ungapped_seqs = [s.replace("-", "") for s in test_seqs]
+                test_ungapped_seqs = [s[: self.min_seq_len] for s in test_ungapped_seqs]
+
+                valid_ungapped_seqs = valid_ungapped_seqs + test_ungapped_seqs
+                valid_seqs = valid_seqs + test_seqs
+
             if len(valid_ungapped_seqs) > 1:
                 # grab the train file
                 # and process it to sequences that are > len(256).
@@ -237,6 +253,16 @@ class ClusterIterator:
                     s[: self.min_seq_len] for s in train_ungapped_seqs
                 ]
 
+                # grab a random sample from the train set.
+                shuf_idx = np.random.choice(
+                    np.arange(len(train_ungapped_seqs)),
+                    size=len(train_ungapped_seqs),
+                    replace=False,
+                )
+
+                train_ungapped_seqs = [train_ungapped_seqs[i] for i in shuf_idx]
+                train_seqs = [train_seqs[i] for i in shuf_idx]
+
                 if len(train_ungapped_seqs) > 1:
                     if self.n_seq_per_target_family is None:
                         self.seed_sequences.append(
@@ -248,8 +274,8 @@ class ClusterIterator:
                         self.seed_labels.append(label_index)
                     else:
 
-                        # print(f"Using {len(train_ungapped_seqs[:self.n_seq_per_target_family])} sequences in target DB for label {label_index}, "
-                        #      f"corresponding to {os.path.basename(train_file)}")
+                        # print(f"Using {len(train_ungapped_seqs[:self.n_seq_per_target_family])} sequences in target
+                        # DB for label {label_index} corresponding to {train_file}, {len(train_ungapped_seqs)}")
 
                         self.seed_sequences.extend(
                             train_ungapped_seqs[: self.n_seq_per_target_family]
@@ -337,7 +363,6 @@ class ClusterIterator:
 
 
 if __name__ == "__main__":
-
     from glob import glob
 
     pfam_files = glob(

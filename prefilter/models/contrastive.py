@@ -14,12 +14,13 @@ __all__ = ["ResNet1d"]
 
 
 class ResNet1d(pl.LightningModule, ABC):
-    def __init__(self, learning_rate, apply_maxpool):
+    def __init__(self, learning_rate, apply_maxpool, apply_mlp):
 
         super(ResNet1d, self).__init__()
 
         self.learning_rate = learning_rate
         self.apply_maxpool = apply_maxpool
+        self.apply_mlp = apply_mlp
 
         self.res_block_n_filters = 256
         self.feat_dim = 128
@@ -40,10 +41,8 @@ class ResNet1d(pl.LightningModule, ABC):
     def _setup_layers(self):
 
         self.embed = nn.Embedding(21, self.res_block_n_filters)
-        # activations are taken care of in the ResConv
-        # they're GELUs/
         _list = []
-        for _ in range(3):
+        for _ in range(5):
             _list.append(
                 ResConv(
                     self.res_block_n_filters,
@@ -56,10 +55,8 @@ class ResNet1d(pl.LightningModule, ABC):
         if self.apply_maxpool:
             print("applying conv pool to network.")
             _list.append(nn.MaxPool1d(2))
-            # _list.append(nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters,
-            #                       kernel_size=2, stride=2, padding=self.padding))
 
-        for _ in range(2):
+        for _ in range(5):
             _list.append(
                 ResConv(
                     self.res_block_n_filters,
@@ -78,10 +75,19 @@ class ResNet1d(pl.LightningModule, ABC):
         )
 
         self.embedding_trunk = torch.nn.Sequential(*_list)
+        if self.apply_mlp:
+            mlp_list = [
+                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+                torch.nn.ReLU(),
+                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+            ]
+            self.mlp = torch.nn.Sequential(*mlp_list)
 
     def _forward(self, x):
         x = self.embed(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
+        if self.apply_mlp:
+            x = self.mlp(x)
         return x
 
     def forward(self, x):
