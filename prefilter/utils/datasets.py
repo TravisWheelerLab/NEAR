@@ -112,57 +112,6 @@ class SwissProtGenerator:
         return s1, s2, idx % len(self.seqs)
 
 
-class RealisticAliPairGenerator:
-    def __init__(self, steps_per_epoch=10000, n_families=1000, len_generated_seqs=128):
-        # 10% indel
-        self.n_families = n_families
-        self.steps_per_epoch = steps_per_epoch
-        self.len_generated_seqs = len_generated_seqs
-        self.family_templates = None
-        self.family_templates = utils.generate_sequences(
-            self.n_families, self.len_generated_seqs, utils.amino_distribution
-        )
-        self.sub_dists = utils.generate_sub_distributions()
-
-    def __len__(self):
-        return self.steps_per_epoch
-
-    def __getitem__(self, idx):
-        seq_template = utils.generate_sequences(
-            1, self.len_generated_seqs, utils.amino_distribution
-        ).squeeze()
-        # overfit on the _first_ sequence.
-        # without any mutations.
-        idx = 0
-        # generate 10% indel rate, 30% sub rate
-        labelvec1 = list(range(len(seq_template)))
-        labelvec2 = list(range(len(seq_template)))
-        s1, labelvec1 = utils.mutate_sequence(
-            seq_template,
-            labelvec1,
-            int(0.3 * self.len_generated_seqs),
-            int(0.1 * self.len_generated_seqs),
-            self.sub_dists,
-            utils.amino_distribution,
-        )
-        s2, labelvec2 = utils.mutate_sequence(
-            seq_template,
-            labelvec2,
-            int(0.3 * self.len_generated_seqs),
-            int(0.1 * self.len_generated_seqs),
-            self.sub_dists,
-            utils.amino_distribution,
-        )
-
-        return (
-            s1.int(),
-            s2.int(),
-            labelvec1,
-            labelvec2,
-            idx % len(self.family_templates),
-        )
-
-
 class ClusterIterator:
     """
     I'm going to add in alignments here so we can easily look
