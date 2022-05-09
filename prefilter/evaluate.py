@@ -12,6 +12,9 @@ from argparse import ArgumentParser
 from typing import List
 import prefilter.utils as utils
 
+from pytorch_lightning import seed_everything
+
+seed_everything(20943)
 
 def create_parser():
     ap = ArgumentParser()
@@ -22,6 +25,7 @@ def create_parser():
     ap.add_argument("--embed_dim", type=int, default=256)
 
     ap.add_argument("--visualize", action="store_true")
+    ap.add_argument("--save_self_examples", action="store_true")
     ap.add_argument("--include_emission", action="store_true")
     ap.add_argument("--n_seq_per_target_family", type=int)
     ap.add_argument("--image_path", type=str, default="debug")
@@ -213,10 +217,13 @@ def visualize_prediction_patterns(
     n_neighbors,
     n_images,
     image_path,
+    save_self_examples,
     device="cuda",
 ):
     image_idx = 0
     for features, labels, gapped_sequences in query_dataset:
+        # going to _duplicate_ embeddings, see what happens.
+        features = torch.cat((features, features), dim=-1)
         embeddings = trained_model(features.to(device)).transpose(-1, -2)
         for feat_idx, (label, sequence) in enumerate(zip(labels, embeddings)):
             sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
@@ -253,8 +260,37 @@ def visualize_prediction_patterns(
                 device,
                 n_neighbors,
             )
-
             unique_name = f"{n_neighbors}_neigh_{image_idx}"
+
+            if save_self_examples:
+                self_sim = torch.matmul(sequence, sequence.T)
+                # I want to prove that the amino representation is highly localized.
+                # I mean, it is. There is a _super_ strong diagonal, we barely see anything > 0.2 on the off-diagonals.
+                #
+                jj = 0
+                for i in self_sim:
+                    lower = jj - 10
+                    if lower < 0:
+                        lower = 0
+                    fig, ax = plt.subplots(nrows=3)
+                    ax[0].hist([j.item() for j in i[lower:jj+10]], histtype="step", bins=jj+100-lower)
+                    lower = jj - 100
+                    if lower < 0:
+                        lower = 0
+                    ax[1].hist([j.item() for j in i[lower:jj+100]], histtype="step", bins=jj+100-lower)
+                    ax[2].hist([j.item() for j in i], histtype="step", bins=len(i))
+                    plt.suptitle(f"row{jj}.png")
+                    print(jj)
+                    plt.savefig(f"no_mlp_row{jj:03d}.png", bbox_inches="tight")
+                    plt.close()
+                    jj += 1
+                plt.imshow(self_sim.to("cpu"), vmin=-1, vmax=1)
+                plt.title("self-similarity")
+                plt.colorbar()
+                plt.savefig(f"{image_path}/no_mlp_self_{unique_name}.png", bbox_inches="tight")
+                plt.close()
+                exit()
+
             if predicted_label == label:
 
                 fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(13, 10))
@@ -329,7 +365,7 @@ def visualize_prediction_patterns(
                 )
 
                 save_string_sequences(
-                    f"{image_path}/true_{unique_name}.fa",
+                    f"{image_path}/false_{unique_name}.fa",
                     representative_gapped_seq,
                     query_gapped_seq,
                 )
@@ -397,6 +433,7 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
             args.n_neighbors,
             args.n_images,
             args.image_path,
+            args.save_self_examples,
             dev,
         )
     else:

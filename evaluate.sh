@@ -2,9 +2,10 @@
 
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 set -e
-model_root="models/contrastive/exps_may3/alignment_aware/default/version_11"
-model_name="epoch_11_0.909499.ckpt"
-echo "post-mlp, no max pool, no indels, long train"
+model_root="models/contrastive/may6/adam_large_resnet_long_train/default/version_0"
+model_name="epoch_28_0.982748.ckpt"
+echo $model_root $model_name
+# $py_cmd prefilter/evaluate.py "$model_root" "$model_name" --visualize --clustered_split --save_self_examples --n_images 5
+$py_cmd prefilter/evaluate.py "$model_root" "$model_name" --compute_accuracy --clustered_split --n_seq_per_target_family 8
 
-#$py_cmd prefilter/evaluate.py "$model_root" "$model_name" --visualize --image_path 20pid --clustered_split
-$py_cmd prefilter/evaluate.py "$model_root" "$model_name" --compute_accuracy --clustered_split --n_seq_per_target_family 9
+

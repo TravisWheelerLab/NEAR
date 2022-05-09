@@ -64,11 +64,20 @@ class AlignmentGenerator:
     have gaps).
     """
 
-    def __init__(self, afa_files, minlen=256, training=True):
+    def __init__(self, afa_files,
+                 apply_substitutions,
+                 embed_real_within_generated,
+                 minlen=256,
+                 training=True):
+
         self.afa_files = afa_files
         self.name_to_alignment = {}
         self.training = training
         self.min_seq_len = minlen
+        self.apply_substitutions = apply_substitutions
+        self.embed_real_within_generated = embed_real_within_generated
+        self.sub_dists = utils.generate_correct_substitution_distributions()
+        self.sub_probs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
         # store as strings for now.
         for afa in self.afa_files:
@@ -90,8 +99,76 @@ class AlignmentGenerator:
         else:
             return 10000
 
+    def _sample(self, idx):
+
+        sampled_ali = self.name_to_alignment[
+            self.names[idx % len(self.name_to_alignment)]
+        ]
+        # grab two random families
+        i = np.random.randint(0, len(sampled_ali))
+
+        s1 = _sanitize_sequence(sampled_ali[i])[: self.min_seq_len]
+
+        s1 = torch.tensor([utils.char_to_index[c] for c in s1])
+
+        n_subs = int(
+            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        )
+
+        s2 = utils.mutate_sequence_correct_probabilities(
+            sequence=s1,
+            indels=None,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+            aa_dist=utils.amino_distribution,
+        )
+
+        return s1, s2, np.arange(len(s1)), np.arange(len(s2))
+
+    def _embed_real_sequence_within_generated(self, idx):
+        sampled_ali = self.name_to_alignment[
+            self.names[idx % len(self.name_to_alignment)]
+        ]
+        # grab a random sequence
+        i = np.random.randint(0, len(sampled_ali))
+        # chop out a length 100 bit of the sequence:
+        s1 = [c for c in _sanitize_sequence(sampled_ali[i]) if c != '-']
+        start = np.random.randint(0, self.min_seq_len - 100)
+        s1 = torch.tensor([utils.char_to_index[c] for c in s1[start:start+100]])
+        # mutate it a little bit (or a lot!)
+        n_subs = int(
+            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        )
+        s2 = utils.mutate_sequence_correct_probabilities(
+            sequence=s1,
+            indels=None,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+            aa_dist=utils.amino_distribution,
+        )
+        # surround it with generated sequence.
+        # i need to fix the loss function for this to work.
+        gen_s1, gen_s2 = utils.generate_sequences(2, self.min_seq_len, utils.amino_distribution)
+        gen_s1[start:start+100] = s1
+        gen_s2[start:start+100] = s2
+        labelvec = np.arange(len(gen_s1))
+        labelvec[:start] = prefilter.MASK_FLAG
+        labelvec[start+100:] = prefilter.MASK_FLAG
+        return gen_s1, gen_s2, labelvec, labelvec
+
     def __getitem__(self, idx):
-        # grab family at idx % len(self.name_to_alignment)
+        s1, s2, labelvec1, labelvec2 = self._embed_real_sequence_within_generated(idx)
+        return s1, s2, torch.as_tensor(labelvec1), torch.as_tensor(labelvec2)
+
+        if idx % 2 == 0 and self.apply_substitutions:
+            s1, s2, labelvec1, labelvec2 = self._sample(idx)
+            return s1, s2, torch.as_tensor(labelvec1), torch.as_tensor(labelvec2)
+
+        if idx % 5 == 0 and self.embed_real_within_generated:
+            # print("embedding real within generated...")
+            s1, s2, labelvec1, labelvec2 = self._embed_real_sequence_within_generated(idx)
+            return s1, s2, torch.as_tensor(labelvec1), torch.as_tensor(labelvec2)
+
         sampled_ali = self.name_to_alignment[
             self.names[idx % len(self.name_to_alignment)]
         ]
@@ -177,20 +254,20 @@ class SwissProtGenerator:
         self.seqs = [s[:minlen] for s in seqs if minlen < len(s)]
         self.training = training
         self.sub_dists = utils.generate_correct_substitution_distributions()
-        self.sub_probs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+        self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
         self.indel_probs = [0.01, 0.05, 0.1, 0.15]
         shuffle(self.seqs)
 
     def __len__(self):
         if self.training:
-            return len(self.seqs)
+            return len(self.seqs) // 2
         else:
             return 10000
 
     def shuffle(self):
         shuffle(self.seqs)
 
-    def __getitem__(self, idx):
+    def _sample(self, idx):
         if not self.training:
             if idx == 0:
                 print("shuffling.")
@@ -221,6 +298,10 @@ class SwissProtGenerator:
         )
 
         return s1, s2, idx % len(self.seqs)
+
+    def __getitem__(self, idx):
+        s1, s2, label = self._sample(idx)
+        return s1, s2, label
 
 
 class ClusterIterator:

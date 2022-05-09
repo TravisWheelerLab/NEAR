@@ -21,19 +21,29 @@ import prefilter.utils as utils
 
 def main(args):
 
-    train_dataset = utils.AlignmentGenerator(
-        afa_files=glob(os.path.join(args.afa_path, "*.afa"))
-    )
-    valid_dataset = utils.AlignmentGenerator(
-        afa_files=glob(os.path.join(args.afa_path, "*.afa")), training=False
-    )
+    train_dataset = utils.SwissProtGenerator(fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+                                             apply_indels=False)
+    valid_dataset = utils.SwissProtGenerator(fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+                                             training=False,
+                                             apply_indels=False)
+    # train_dataset = utils.AlignmentGenerator(
+    #     afa_files=glob(os.path.join(args.afa_path, "*.afa")),
+    #     apply_substitutions=args.apply_substitutions,
+    #     embed_real_within_generated=args.embed_real_within_generated
+    # )
+    # valid_dataset = utils.AlignmentGenerator(
+    #     afa_files=glob(os.path.join(args.afa_path, "*.afa")),
+    #     training=False,
+    #     apply_substitutions=False,
+    #     embed_real_within_generated=False
+    # )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
+        collate_fn=utils.pad_contrastive_batches,
         drop_last=True,
     )
 
@@ -42,7 +52,7 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches_with_labelvecs,
+        collate_fn=utils.pad_contrastive_batches,
         drop_last=True,
     )
 

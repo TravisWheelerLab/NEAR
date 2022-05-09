@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResConv, SupConNoMasking, SupConAlignmentAware
+from prefilter.models import ResConv, SupConNoMasking, WeightedNTXent, SupConLoss
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -25,13 +25,13 @@ class ResNet1d(pl.LightningModule, ABC):
         self.res_block_n_filters = 256
         self.feat_dim = 128
         self.res_block_kernel_size = 3
-        self.n_res_blocks = 1
+        self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
         self.padding = "valid"
 
         self.log_interval = 100
 
-        self.loss_func = SupConAlignmentAware()
+        self.loss_func = SupConNoMasking()
         self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
@@ -42,7 +42,7 @@ class ResNet1d(pl.LightningModule, ABC):
 
         self.embed = nn.Embedding(21, self.res_block_n_filters)
         _list = []
-        for _ in range(5):
+        for _ in range(self.n_res_blocks):
             _list.append(
                 ResConv(
                     self.res_block_n_filters,
@@ -53,17 +53,8 @@ class ResNet1d(pl.LightningModule, ABC):
         # single max pool.
 
         if self.apply_maxpool:
-            print("applying conv pool to network.")
+            print("applying max pool to network.")
             _list.append(nn.MaxPool1d(2))
-
-        for _ in range(5):
-            _list.append(
-                ResConv(
-                    self.res_block_n_filters,
-                    kernel_size=self.res_block_kernel_size,
-                    padding=self.padding,
-                )
-            )
         # final
         _list.append(
             nn.Conv1d(
@@ -75,6 +66,7 @@ class ResNet1d(pl.LightningModule, ABC):
         )
 
         self.embedding_trunk = torch.nn.Sequential(*_list)
+
         if self.apply_mlp:
             mlp_list = [
                 torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
@@ -87,7 +79,6 @@ class ResNet1d(pl.LightningModule, ABC):
         x = self.embed(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
         if self.apply_mlp:
-            return x
             x = self.mlp(x)
         return x
 
@@ -128,7 +119,9 @@ class ResNet1d(pl.LightningModule, ABC):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
+        return [optim], [lr_schedule]
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])
