@@ -64,11 +64,14 @@ class AlignmentGenerator:
     have gaps).
     """
 
-    def __init__(self, afa_files,
-                 apply_substitutions,
-                 embed_real_within_generated,
-                 minlen=256,
-                 training=True):
+    def __init__(
+        self,
+        afa_files,
+        apply_substitutions,
+        embed_real_within_generated,
+        minlen=256,
+        training=True,
+    ):
 
         self.afa_files = afa_files
         self.name_to_alignment = {}
@@ -132,9 +135,9 @@ class AlignmentGenerator:
         # grab a random sequence
         i = np.random.randint(0, len(sampled_ali))
         # chop out a length 100 bit of the sequence:
-        s1 = [c for c in _sanitize_sequence(sampled_ali[i]) if c != '-']
+        s1 = [c for c in _sanitize_sequence(sampled_ali[i]) if c != "-"]
         start = np.random.randint(0, self.min_seq_len - 100)
-        s1 = torch.tensor([utils.char_to_index[c] for c in s1[start:start+100]])
+        s1 = torch.tensor([utils.char_to_index[c] for c in s1[start : start + 100]])
         # mutate it a little bit (or a lot!)
         n_subs = int(
             len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
@@ -148,12 +151,14 @@ class AlignmentGenerator:
         )
         # surround it with generated sequence.
         # i need to fix the loss function for this to work.
-        gen_s1, gen_s2 = utils.generate_sequences(2, self.min_seq_len, utils.amino_distribution)
-        gen_s1[start:start+100] = s1
-        gen_s2[start:start+100] = s2
+        gen_s1, gen_s2 = utils.generate_sequences(
+            2, self.min_seq_len, utils.amino_distribution
+        )
+        gen_s1[start : start + 100] = s1
+        gen_s2[start : start + 100] = s2
         labelvec = np.arange(len(gen_s1))
         labelvec[:start] = prefilter.MASK_FLAG
-        labelvec[start+100:] = prefilter.MASK_FLAG
+        labelvec[start + 100 :] = prefilter.MASK_FLAG
         return gen_s1, gen_s2, labelvec, labelvec
 
     def __getitem__(self, idx):
@@ -166,7 +171,9 @@ class AlignmentGenerator:
 
         if idx % 5 == 0 and self.embed_real_within_generated:
             # print("embedding real within generated...")
-            s1, s2, labelvec1, labelvec2 = self._embed_real_sequence_within_generated(idx)
+            s1, s2, labelvec1, labelvec2 = self._embed_real_sequence_within_generated(
+                idx
+            )
             return s1, s2, torch.as_tensor(labelvec1), torch.as_tensor(labelvec2)
 
         sampled_ali = self.name_to_alignment[
@@ -260,7 +267,7 @@ class SwissProtGenerator:
 
     def __len__(self):
         if self.training:
-            return len(self.seqs) // 2
+            return len(self.seqs) // 50
         else:
             return 10000
 

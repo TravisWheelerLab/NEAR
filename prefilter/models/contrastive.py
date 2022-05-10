@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from prefilter.models import ResConv, SupConNoMasking, WeightedNTXent, SupConLoss
+import prefilter.models as model_utils
 import prefilter.utils as utils
 from pathlib import Path
 
@@ -31,7 +31,7 @@ class ResNet1d(pl.LightningModule, ABC):
 
         self.log_interval = 100
 
-        self.loss_func = SupConNoMasking()
+        self.loss_func = model_utils.SigmoidLoss(device="cuda")
         self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
@@ -44,7 +44,7 @@ class ResNet1d(pl.LightningModule, ABC):
         _list = []
         for _ in range(self.n_res_blocks):
             _list.append(
-                ResConv(
+                model_utils.ResConv(
                     self.res_block_n_filters,
                     kernel_size=self.res_block_kernel_size,
                     padding=self.padding,

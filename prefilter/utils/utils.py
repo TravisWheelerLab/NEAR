@@ -39,8 +39,15 @@ def load_model(model_path, hyperparams, device):
     return model, success
 
 
-def create_faiss_index(embeddings, embed_dim, device="cpu"):
-    index = faiss.IndexFlatIP(embed_dim)
+def create_faiss_index(embeddings, embed_dim, device="cpu", distance_metric="cosine"):
+    print(f"using index with {distance_metric} metric.")
+
+    if distance_metric == "cosine":
+        index = faiss.IndexFlatIP(embed_dim)
+    else:
+        # transformer embeddings are _not_ normalized.
+        index = faiss.IndexFlatL2(embed_dim)
+
     if device == "cuda":
         res = faiss.StandardGpuResources()
         # 0 is the index of the GPU.
@@ -48,7 +55,9 @@ def create_faiss_index(embeddings, embed_dim, device="cpu"):
     else:
         if not isinstance(embeddings, np.ndarray):
             embeddings = embeddings.numpy()
+
     index.add(embeddings)
+
     return index
 
 

@@ -21,11 +21,15 @@ import prefilter.utils as utils
 
 def main(args):
 
-    train_dataset = utils.SwissProtGenerator(fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-                                             apply_indels=False)
-    valid_dataset = utils.SwissProtGenerator(fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-                                             training=False,
-                                             apply_indels=False)
+    train_dataset = utils.SwissProtGenerator(
+        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+        apply_indels=False,
+    )
+    valid_dataset = utils.SwissProtGenerator(
+        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+        training=False,
+        apply_indels=False,
+    )
     # train_dataset = utils.AlignmentGenerator(
     #     afa_files=glob(os.path.join(args.afa_path, "*.afa")),
     #     apply_substitutions=args.apply_substitutions,

@@ -3,18 +3,19 @@ from glob import glob
 from collections import defaultdict
 from sys import stdout
 
+import faiss
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import os
 import yaml
 from argparse import ArgumentParser
+import esm
 from typing import List
 import prefilter.utils as utils
 
 from pytorch_lightning import seed_everything
 
-seed_everything(20943)
 
 def create_parser():
     ap = ArgumentParser()
@@ -23,6 +24,7 @@ def create_parser():
     ap.add_argument("--clustered_split", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--embed_dim", type=int, default=256)
+    ap.add_argument("--pretrained_transformer", action="store_true")
 
     ap.add_argument("--visualize", action="store_true")
     ap.add_argument("--save_self_examples", action="store_true")
@@ -59,10 +61,17 @@ def save_string_sequences(filename, rep_seq, query_seq):
         dst.write(query_seq)
 
 
+@torch.no_grad()
 def compute_cluster_representative_embeddings(
-    representative_sequences, representative_labels, trained_model, device
+    representative_sequences,
+    representative_labels,
+    trained_model,
+    device,
+    pretrained_transformer,
 ):
     """
+    :param pretrained_transformer: bool
+    :type pretrained_transformer: bool
     :param representative_sequences: Cluster reps.
     :type representative_sequences: List of lists of integer encodings of sequences.
     :param representative_labels: List of cluster rep labels.
@@ -73,9 +82,45 @@ def compute_cluster_representative_embeddings(
     :rtype:
     """
     representative_tensor = torch.stack(representative_sequences).to(device)
-    representative_embeddings = (
-        trained_model(representative_tensor).transpose(-1, -2).contiguous()
-    )
+
+    if pretrained_transformer:
+        batch_size = 64
+        _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
+        trained_model = trained_model.to(device)
+        batch_converter = alphabet.get_batch_converter()
+        # batch_labels, batch_strs, batch_tokens = batch_converter(data)
+        data = []
+        for j, prot_seq in enumerate(representative_tensor):
+            data.append(
+                (
+                    f"prot_{j}",
+                    "".join([utils.amino_alphabet[i.item()] for i in prot_seq]),
+                )
+            )
+
+        batch_labels, batch_strs, batch_tokens = batch_converter(data)
+        representative_embeddings = []
+
+        for i in range(0, len(batch_tokens) - batch_size, batch_size):
+            stdout.write(f"{i / len(batch_tokens):.3f}\r")
+            embeddings = trained_model(
+                batch_tokens[i : i + batch_size].to(device),
+                repr_layers=[33],
+                return_contacts=False,
+            )
+            # send to cpu so we save on some GPU memory.
+            # large embedding dim
+            representative_embeddings.append(
+                embeddings["representations"][33][:, 1:-1].detach().to("cpu")
+            )
+        print()
+        representative_embeddings = torch.cat(representative_embeddings, dim=0)
+
+    else:
+        representative_embeddings = (
+            trained_model(representative_tensor).transpose(-1, -2).contiguous()
+        )
+
     # duplicate the labels the correct number of times
     _rep_labels = []
     for s, embed in zip(representative_labels, representative_embeddings):
@@ -84,10 +129,15 @@ def compute_cluster_representative_embeddings(
     representative_embeddings = torch.cat(
         torch.unbind(representative_embeddings, axis=0)
     )
+    if not pretrained_transformer:
+        representative_embeddings = torch.nn.functional.normalize(
+            representative_embeddings, dim=-1
+        )
+    print("normalizing.")
     representative_embeddings = torch.nn.functional.normalize(
         representative_embeddings, dim=-1
     )
-    assert representative_labels.shape[0] == representative_embeddings.shape[0]
+    # assert len(representative_labels) == len(representative_embeddings)
     return representative_embeddings, representative_labels
 
 
@@ -125,23 +175,49 @@ def compute_accuracy(
     cluster_rep_labels,
     trained_model,
     n_neighbors,
+    pretrained_transformer,
     device="cuda",
 ):
     total_sequences = 0
     thresholds = [1, 2, 3, 5, 10, 20, 100, 200]
     topn = defaultdict(int)
 
+    if pretrained_transformer:
+        _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
+        batch_converter = alphabet.get_batch_converter()
+
     for j, (features, labels, _) in enumerate(query_dataset):
-        embeddings = trained_model(features.to(device)).transpose(-1, -2)
+        if pretrained_transformer:
+            embeddings = _infer_with_transformer(
+                features, trained_model, batch_converter, device
+            )
+        else:
+            embeddings = trained_model(features.to(device)).transpose(-1, -2)
+
         stdout.write(f"{j / len(query_dataset):.3f}\r")
+
+        # searching each sequence separately against the index is probably slow.
         for label, sequence in zip(labels, embeddings):
 
             total_sequences += 1
-            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
 
-            predicted_labels, counts = most_common_matches(
-                cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, device
-            )
+            if not pretrained_transformer:
+                sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+                predicted_labels, counts = most_common_matches(
+                    cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, device
+                )
+            else:
+                sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+                # predicted_labels, counts = most_common_matches(
+                sequence = sequence.contiguous()
+                # sequence = sequence.to("cpu")
+                predicted_labels, counts = most_common_matches(
+                    cluster_rep_index,
+                    cluster_rep_labels,
+                    sequence,
+                    n_neighbors,
+                    device=device,
+                )
 
             top_preds = predicted_labels[np.argsort(counts)]
 
@@ -186,10 +262,16 @@ def _compute_count_mat_and_similarities(
     ]
     representative_embedding_start_point = np.where(
         representative_labels == label_to_analyze
-    )[0][0]
-
+    )
     similarities = torch.matmul(query_sequence, representative_embedding.T)
     count_mat = np.zeros((query_sequence.shape[0], representative_embedding.shape[0]))
+    if len(representative_embedding_start_point):
+        representative_embedding_start_point = representative_embedding_start_point[0][
+            0
+        ]
+    else:
+        pdb.set_trace()
+        return count_mat, similarities
 
     for i, amino_acid in enumerate(query_sequence):
         distances, match_indices = search_index_device_aware(
@@ -218,16 +300,29 @@ def visualize_prediction_patterns(
     n_images,
     image_path,
     save_self_examples,
+    pretrained_transformer,
     device="cuda",
 ):
+    if pretrained_transformer:
+        _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
+        batch_converter = alphabet.get_batch_converter()
+
     image_idx = 0
     for features, labels, gapped_sequences in query_dataset:
-        # going to _duplicate_ embeddings, see what happens.
-        features = torch.cat((features, features), dim=-1)
-        embeddings = trained_model(features.to(device)).transpose(-1, -2)
-        for feat_idx, (label, sequence) in enumerate(zip(labels, embeddings)):
-            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+        if pretrained_transformer:
+            embeddings = _infer_with_transformer(
+                features, trained_model, batch_converter, device
+            )
+        else:
+            embeddings = trained_model(features.to(device)).transpose(-1, -2)
 
+        for feat_idx, (label, sequence) in enumerate(zip(labels, embeddings)):
+            if pretrained_transformer:
+                sequence = sequence.contiguous().to("cpu")
+            else:
+                sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+
+            # searching the index takes a huge amount of time.
             predicted_labels, counts = most_common_matches(
                 cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, device
             )
@@ -264,45 +359,35 @@ def visualize_prediction_patterns(
 
             if save_self_examples:
                 self_sim = torch.matmul(sequence, sequence.T)
-                # I want to prove that the amino representation is highly localized.
-                # I mean, it is. There is a _super_ strong diagonal, we barely see anything > 0.2 on the off-diagonals.
-                #
-                jj = 0
-                for i in self_sim:
-                    lower = jj - 10
-                    if lower < 0:
-                        lower = 0
-                    fig, ax = plt.subplots(nrows=3)
-                    ax[0].hist([j.item() for j in i[lower:jj+10]], histtype="step", bins=jj+100-lower)
-                    lower = jj - 100
-                    if lower < 0:
-                        lower = 0
-                    ax[1].hist([j.item() for j in i[lower:jj+100]], histtype="step", bins=jj+100-lower)
-                    ax[2].hist([j.item() for j in i], histtype="step", bins=len(i))
-                    plt.suptitle(f"row{jj}.png")
-                    print(jj)
-                    plt.savefig(f"no_mlp_row{jj:03d}.png", bbox_inches="tight")
-                    plt.close()
-                    jj += 1
-                plt.imshow(self_sim.to("cpu"), vmin=-1, vmax=1)
+                if pretrained_transformer:
+                    plt.imshow(self_sim.to("cpu"), cmap="PiYG")
+                else:
+                    plt.imshow(self_sim.to("cpu"), vmin=-1, vmax=1)
                 plt.title("self-similarity")
                 plt.colorbar()
-                plt.savefig(f"{image_path}/no_mlp_self_{unique_name}.png", bbox_inches="tight")
+                plt.savefig(
+                    f"{image_path}/no_mlp_self_{unique_name}.png", bbox_inches="tight"
+                )
                 plt.close()
-                exit()
 
             if predicted_label == label:
 
                 fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(13, 10))
-                ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                if pretrained_transformer:
+                    print(first_sim.shape)
+                    ax[0, 0].imshow(first_sim.to("cpu"), cmap="PiYG")
+                else:
+                    ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
                 ax[0, 0].set_title("dots")
 
                 ax[0, 1].set_title(
                     f"true hit. n hits to sequence: {np.sum(first_cmat):.3f}"
                 )
                 ax[0, 1].imshow(first_cmat)
-
-                ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                if pretrained_transformer:
+                    ax[1, 0].imshow(second_sim.to("cpu"), cmap="PiYG")
+                else:
+                    ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
                 ax[1, 0].set_title("dots")
 
                 ax[1, 1].set_title(
@@ -322,7 +407,10 @@ def visualize_prediction_patterns(
                 # first, compare to the true label (then to the first and second
                 # matches
                 fig, ax = plt.subplots(ncols=2, nrows=3, figsize=(13, 10))
-                ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                if pretrained_transformer:
+                    ax[0, 0].imshow(first_sim.to("cpu"), cmap="PiYG")
+                else:
+                    ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
                 ax[0, 0].set_title("dots")
 
                 ax[0, 1].set_title(
@@ -330,7 +418,11 @@ def visualize_prediction_patterns(
                 )
                 ax[0, 1].imshow(first_cmat)
 
-                ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                if pretrained_transformer:
+                    ax[1, 0].imshow(second_sim.to("cpu"), cmap="PiYG")
+                else:
+                    ax[1, 0].imshow(second_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+
                 ax[1, 0].set_title("dots")
 
                 if second_label != label:
@@ -353,8 +445,10 @@ def visualize_prediction_patterns(
                     device,
                     n_neighbors,
                 )
-
-                ax[2, 0].imshow(true_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
+                if pretrained_transformer:
+                    ax[2, 0].imshow(true_sim.to("cpu"), cmap="PiYG")
+                else:
+                    ax[2, 0].imshow(true_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
                 ax[2, 0].set_title("dots")
                 ax[2, 1].set_title(
                     f"hit on true match. n hits to sequence: {np.sum(true_cmat):.3f}"
@@ -377,26 +471,49 @@ def visualize_prediction_patterns(
                 exit()
 
 
+def _infer_with_transformer(seq_batch, trained_model, batch_converter, device):
+    data = []
+
+    for j, prot_seq in enumerate(seq_batch):
+        data.append(
+            (f"prot_{j}", "".join([utils.amino_alphabet[i.item()] for i in prot_seq]))
+        )
+    _, _, batch_tokens = batch_converter(data)
+
+    embeddings = trained_model(
+        batch_tokens.to(device), repr_layers=[33], return_contacts=False
+    )["representations"][33][:, 1:-1]
+
+    return embeddings.to(device)
+
+
 @torch.no_grad()
 def main(fasta_files, min_seq_len=256, batch_size=32):
     parser = create_parser()
     args = parser.parse_args()
 
-    # get model files
-    hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
-    model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
     embed_dim = args.embed_dim
-
     dev = "cuda" if torch.cuda.is_available() else "cpu"
 
-    with open(hparams_path, "r") as src:
-        hparams = yaml.safe_load(src)
+    # get model files
+    if args.pretrained_transformer:
+        model, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
+        batch_converter = alphabet.get_batch_converter()
+        model.eval()  # disables dropout for deterministic results
+        embed_dim = 1280
+    else:
+        hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
+        model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
 
-    # Set up model and dataset
-    if not os.path.isfile(model_path):
-        raise ValueError(f"No model found at {model_path}")
+        with open(hparams_path, "r") as src:
+            hparams = yaml.safe_load(src)
 
-    model, _ = utils.load_model(model_path, hparams, dev)
+        # Set up model and dataset
+        if not os.path.isfile(model_path):
+            raise ValueError(f"No model found at {model_path}")
+
+        model, _ = utils.load_model(model_path, hparams, dev)
+
     iterator = utils.ClusterIterator(
         fasta_files,
         min_seq_len,
@@ -409,10 +526,19 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
     rep_gapped_seqs = iterator.seed_gapped_sequences
     # stack the seed sequences.
     rep_embeddings, rep_labels = compute_cluster_representative_embeddings(
-        rep_seqs, rep_labels, model, device=dev
+        rep_seqs,
+        rep_labels,
+        model,
+        device=dev,
+        pretrained_transformer=args.pretrained_transformer,
     )
     # create an index
-    index = utils.create_faiss_index(rep_embeddings, embed_dim, device=dev)
+    if args.pretrained_transformer:
+        index = utils.create_faiss_index(
+            rep_embeddings, embed_dim, device=dev, distance_metric="cosine"
+        )
+    else:
+        index = utils.create_faiss_index(rep_embeddings, embed_dim, device=dev)
 
     # and create a test iterator.
     query_dataset = torch.utils.data.DataLoader(
@@ -420,7 +546,16 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
     )
 
     if args.compute_accuracy:
-        compute_accuracy(query_dataset, index, rep_labels, model, 10, dev)
+        compute_accuracy(
+            query_dataset,
+            index,
+            rep_labels,
+            model,
+            n_neighbors=args.n_neighbors,
+            pretrained_transformer=args.pretrained_transformer,
+            device=dev,
+        )
+
     elif args.visualize:
         os.makedirs(args.image_path, exist_ok=True)
         visualize_prediction_patterns(
@@ -434,6 +569,7 @@ def main(fasta_files, min_seq_len=256, batch_size=32):
             args.n_images,
             args.image_path,
             args.save_self_examples,
+            args.pretrained_transformer,
             dev,
         )
     else:

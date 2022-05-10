@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["WeightedNTXent", "SupConNoMasking", "SupConLoss"]
+__all__ = ["SigmoidLoss", "WeightedNTXent", "SupConNoMasking", "SupConLoss"]
 
 import prefilter
 
@@ -32,6 +32,69 @@ def calc_unique(x, dim=-1):
     perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return unique, inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm)
+
+
+class SigmoidLoss(nn.Module):
+    def __init__(self, n_conv_layers=None, device="cuda"):
+        super(SigmoidLoss, self).__init__()
+        if n_conv_layers is not None:
+            # if it's none, assume we're using valid padding:
+            # and a kernel size of three
+            self.n_chop = n_conv_layers
+        else:
+            self.n_chop = 0
+        self.supcon = SupConLoss()
+        self.device = device
+        weight_mat = compute_weight_matrix(256, device=self.device, n_neighbors=20).to(
+            self.device
+        )
+        self.weight_mat = 1 - weight_mat
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, embeddings, masks, labelvecs, picture_path=None, step=None):
+        """
+        Need to reshape the paired embeddings into one large matrix
+        """
+        first_pos = False
+
+        if picture_path is not None:
+            first_pos = True
+
+        batch_size = embeddings.shape[0] // 2
+
+        # split the embeddings, masks, and labels into two lists of pairs
+        f1, f2 = torch.split(embeddings, batch_size, dim=0)
+        # targets;
+
+        f1 = f1.transpose(-1, -2)
+        f2 = f2.transpose(-1, -2)
+        f1 = torch.cat(torch.unbind(f1), dim=0)
+        f2 = torch.cat(torch.unbind(f2), dim=0)
+        # f1 = torch.nn.functional.normalize(f1, dim=-1)
+        # f2 = torch.nn.functional.normalize(f2, dim=-1)
+        loss = 0
+
+        for e1, e2 in zip(f1, f2):
+            dots = torch.matmul(e1.unsqueeze(1), e2.unsqueeze(0))
+            loss += torch.nn.functional.binary_cross_entropy_with_logits(
+                dots.ravel(), self.weight_mat.ravel()
+            )
+
+        if first_pos:
+            x = torch.matmul(f1, f2.T).detach().cpu()
+            n_f1_valid = 250
+            n_f2_valid = 250
+            plt.imshow(x.float()[:n_f1_valid, :n_f2_valid], cmap="PiYG")
+            # plt.clim(-1, 1)
+            plt.colorbar()
+            os.makedirs(picture_path, exist_ok=True)
+            print(f"saving to {picture_path}")
+            plt.savefig(f"{picture_path}/pos_{step}.png", bbox_inches="tight")
+            plt.close()
+
+        return loss
 
 
 class SupConNoMasking(nn.Module):
@@ -173,8 +236,9 @@ class SupConLoss(nn.Module):
         mask = mask * logits_mask
         # _save("mask_times_lmask.png", mask)
 
-        weight_mat = compute_weight_matrix(mask.shape[0], device=device,
-                                           n_neighbors=20).to(device)
+        weight_mat = compute_weight_matrix(
+            mask.shape[0], device=device, n_neighbors=20
+        ).to(device)
 
         # remove self-contrast with logits_mask.
         exp_logits = torch.exp(logits) * logits_mask * weight_mat
@@ -310,9 +374,7 @@ class SupConLossNeighborMask(nn.Module):
 
 
 class WeightedNTXent(nn.Module):
-
-    def __init__(self, n_neighbors=30,
-                 n_conv_layers=None, device="cuda"):
+    def __init__(self, n_neighbors=30, n_conv_layers=None, device="cuda"):
 
         super(WeightedNTXent, self).__init__()
         self.n_neighbors = n_neighbors
@@ -362,8 +424,9 @@ class WeightedNTXent(nn.Module):
         # take the exp;
         dots = torch.exp(dots / self.temperature).to(self.device)
         # now, weight the denominator.
-        weight_mat = compute_weight_matrix(dots.shape[0], device=self.device,
-                                           n_neighbors=self.n_neighbors).to(self.device)
+        weight_mat = compute_weight_matrix(
+            dots.shape[0], device=self.device, n_neighbors=self.n_neighbors
+        ).to(self.device)
         # 1s where we're far away, f(distance) otherwise.
         dots = dots * weight_mat.to(self.device)
         # now, we have a weighted matrix;
@@ -405,10 +468,10 @@ def weight_vector(len_dot_row, center_idxs, n_neigh, device="cpu"):
         # for the left, one for the right:
         if begin != center_idx:
             left_funcs = torch.arange(center_idx - begin, device=device)
-            func_values[begin:center_idx] = slope*torch.flip(left_funcs, [0])
+            func_values[begin:center_idx] = slope * torch.flip(left_funcs, [0])
         if end != center_idx:
             left_funcs = torch.arange(end - center_idx, device=device)
-            func_values[center_idx:end] = slope*left_funcs
+            func_values[center_idx:end] = slope * left_funcs
         if i == 0:
             func_values[center_idx] = 0
         else:
@@ -422,10 +485,7 @@ def compute_weight_matrix(side_length, device="cpu", n_neighbors=20):
 
     wmat = torch.zeros((side_length, side_length), device=device)
     for i in range(side_length):
-        if i >= (side_length//2):
-            x = weight_vector(side_length, [i, i-side_length//2], n_neighbors)
-        else:
-            x = weight_vector(side_length, [i, i+side_length//2], n_neighbors)
+        x = weight_vector(side_length, [i], n_neighbors)
         wmat[i] = x
     return wmat
 
@@ -433,6 +493,5 @@ def compute_weight_matrix(side_length, device="cpu", n_neighbors=20):
 if __name__ == "__main__":
 
     embed = torch.randn((32, 256, 22))
-    lfunc = WeightedNTXent(device="cpu", n_neighbors=100)
+    lfunc = SigmoidLoss(device="cpu")
     lfunc(embed, None, None)
-
