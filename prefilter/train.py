@@ -21,33 +21,35 @@ import prefilter.utils as utils
 
 def main(args):
 
-    train_dataset = utils.SwissProtGenerator(
-        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-        apply_indels=False,
-    )
-    valid_dataset = utils.SwissProtGenerator(
-        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-        training=False,
-        apply_indels=False,
-    )
-    # train_dataset = utils.AlignmentGenerator(
-    #     afa_files=glob(os.path.join(args.afa_path, "*.afa")),
-    #     apply_substitutions=args.apply_substitutions,
-    #     embed_real_within_generated=args.embed_real_within_generated
-    # )
-    # valid_dataset = utils.AlignmentGenerator(
-    #     afa_files=glob(os.path.join(args.afa_path, "*.afa")),
-    #     training=False,
-    #     apply_substitutions=False,
-    #     embed_real_within_generated=False
-    # )
+    if args.mlm_task:
+        train_dataset = utils.MLMSwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            apply_indels=False,
+        )
+        valid_dataset = utils.MLMSwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            training=False,
+            apply_indels=False
+        )
+        collate_fn = None
+    else:
+        train_dataset = utils.SwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            apply_indels=False,
+        )
+        valid_dataset = utils.SwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            training=False,
+            apply_indels=False,
+        )
+        collate_fn = utils.pad_contrastive_batches
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches,
+        collate_fn=collate_fn,
         drop_last=True,
     )
 
@@ -56,14 +58,14 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=utils.pad_contrastive_batches,
+        collate_fn=collate_fn,
         drop_last=True,
     )
 
     model = ResNet1d(
         learning_rate=args.learning_rate,
-        apply_maxpool=args.max_pool,
         apply_mlp=args.apply_mlp,
+        mlm_task=args.mlm_task
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

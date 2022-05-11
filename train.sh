@@ -14,11 +14,12 @@ time $py_cmd -m prefilter train\
     --num_nodes 1 \
     --num_workers 0 \
     --afa_path /home/tc229954/data/prefilter/panthr/afa/ \
-    --log_dir models/contrastive/may9/sigmoid_weighted \
+    --log_dir models/contrastive/may10/mlm_task \
     --batch_size 16 \
     --epochs 200 \
     --learning_rate 1e-3 \
     --apply_mlp \
+    --mlm_task
 
 
 

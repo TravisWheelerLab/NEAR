@@ -22,7 +22,8 @@ import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = ["AlignmentGenerator", "SwissProtGenerator", "ClusterIterator"]
+__all__ = ["AlignmentGenerator", "MLMSwissProtGenerator",
+           "SwissProtGenerator", "ClusterIterator"]
 
 
 def _sanitize_sequence(sequence):
@@ -246,7 +247,6 @@ def _remove_gaps(sequence, labelvec):
             new_sequence.append(s)
     return new_sequence, new_labelvec
 
-
 class SwissProtGenerator:
     """
     Grab a sequence from swiss-prot, mutate it, then
@@ -258,7 +258,7 @@ class SwissProtGenerator:
         self.fa_file = fa_file
         self.apply_indels = apply_indels
         labels, seqs = utils.fasta_from_file(fa_file)
-        self.seqs = [s[:minlen] for s in seqs if minlen < len(s)]
+        self.seqs = [s[1:minlen+1] for s in seqs if minlen < len(s)]
         self.training = training
         self.sub_dists = utils.generate_correct_substitution_distributions()
         self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
@@ -267,7 +267,8 @@ class SwissProtGenerator:
 
     def __len__(self):
         if self.training:
-            return len(self.seqs) // 50
+            print(len(self.seqs))
+            return len(self.seqs)
         else:
             return 10000
 
@@ -309,6 +310,47 @@ class SwissProtGenerator:
     def __getitem__(self, idx):
         s1, s2, label = self._sample(idx)
         return s1, s2, label
+
+class MLMSwissProtGenerator(SwissProtGenerator):
+
+    def __init__(self, fa_file, apply_indels, minlen=256, training=True):
+        super(MLMSwissProtGenerator, self).__init__(fa_file, apply_indels,
+                                                    minlen, training)
+
+    def __len__(self):
+        if self.training:
+            return len(self.seqs) // 50
+        else:
+            return 10000
+
+    def shuffle(self):
+        shuffle(self.seqs)
+
+    def _sample(self, idx):
+        if not self.training:
+            if idx == 0:
+                print("shuffling.")
+                self.shuffle()
+
+            idx = np.random.randint(0, len(self.seqs))
+
+        s1 = _sanitize_sequence(self.seqs[idx])
+        s1 = torch.tensor([utils.char_to_index[c] for c in s1])
+        labelvector = s1.clone()
+        # mask 15% of each character
+        n_mask = torch.randint(len(s1), size=(int(0.15*len(s1)),))
+        # n replace with mask
+        # grab 80% to replace with mask (character 21)
+        s1[n_mask[:int(0.8*len(n_mask))]] = 21
+        # replace 10% with a random amino acid:
+        start = int(0.8*len(n_mask))
+        end = int(0.9*len(n_mask))
+        s1[n_mask[start:end]] = utils.amino_distribution.sample((end-start,))
+        return s1, labelvector, idx
+
+    def __getitem__(self, idx):
+        s1, labelvector, label = self._sample(idx)
+        return s1, labelvector, label
 
 
 class ClusterIterator:

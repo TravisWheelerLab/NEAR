@@ -54,7 +54,7 @@ def main():
     train_parser.add_argument("--num_workers", type=int, required=True)
     train_parser.add_argument("--afa_path", type=str, required=True)
     train_parser.add_argument("--check_val_every_n_epoch", default=1, type=int)
-    train_parser.add_argument("--max_pool", action="store_true")
+    train_parser.add_argument("--mlm_task", action="store_true")
     train_parser.add_argument("--apply_mlp", action="store_true")
     train_parser.add_argument("--apply_substitutions", action="store_true")
     train_parser.add_argument("--embed_real_within_generated", action="store_true")

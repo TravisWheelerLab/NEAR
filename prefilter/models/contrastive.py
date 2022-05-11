@@ -14,24 +14,27 @@ __all__ = ["ResNet1d"]
 
 
 class ResNet1d(pl.LightningModule, ABC):
-    def __init__(self, learning_rate, apply_maxpool, apply_mlp):
+    def __init__(self, learning_rate,
+                 mlm_task,
+                 apply_mlp):
 
         super(ResNet1d, self).__init__()
 
         self.learning_rate = learning_rate
-        self.apply_maxpool = apply_maxpool
         self.apply_mlp = apply_mlp
+        self.mlm_task = mlm_task
 
-        self.res_block_n_filters = 256
+        self.res_block_n_filters = 1024
         self.feat_dim = 128
         self.res_block_kernel_size = 3
         self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
-        self.padding = "valid"
+        self.padding = "same"
 
         self.log_interval = 100
 
-        self.loss_func = model_utils.SigmoidLoss(device="cuda")
+        if self.mlm_task:
+            self.loss_func = torch.nn.CrossEntropyLoss()
         self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
 
         self._setup_layers()
@@ -40,7 +43,11 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _setup_layers(self):
 
-        self.embed = nn.Embedding(21, self.res_block_n_filters)
+        if self.mlm_task:
+            self.embed = nn.Embedding(22, self.res_block_n_filters)
+        else:
+            self.embed = nn.Embedding(21, self.res_block_n_filters)
+
         _list = []
         for _ in range(self.n_res_blocks):
             _list.append(
@@ -50,12 +57,6 @@ class ResNet1d(pl.LightningModule, ABC):
                     padding=self.padding,
                 )
             )
-        # single max pool.
-
-        if self.apply_maxpool:
-            print("applying max pool to network.")
-            _list.append(nn.MaxPool1d(2))
-        # final
         _list.append(
             nn.Conv1d(
                 in_channels=self.res_block_n_filters,
@@ -75,11 +76,19 @@ class ResNet1d(pl.LightningModule, ABC):
             ]
             self.mlp = torch.nn.Sequential(*mlp_list)
 
+        if self.mlm_task:
+            # 1x1 conv for classification.
+            self.classifier = torch.nn.Conv1d(self.res_block_n_filters, len(utils.amino_alphabet), 1)
+
     def _forward(self, x):
         x = self.embed(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
         if self.apply_mlp:
             x = self.mlp(x)
+        if self.mlm_task:
+            # final conv.
+            x = torch.nn.ReLU()(x)
+            x = self.classifier(x)
         return x
 
     def forward(self, x):
@@ -87,26 +96,33 @@ class ResNet1d(pl.LightningModule, ABC):
         return embeddings
 
     def _shared_step(self, batch):
-        if len(batch) == 4:
-            features, masks, labelvecs, labels = batch
+        if self.mlm_task:
+            features, labelvecs, _ = batch
+            masks = None
         else:
-            features, masks, labelvecs = batch
+            if len(batch) == 4:
+                features, masks, labelvecs, labels = batch
+            else:
+                features, masks, labelvecs = batch
 
         if masks is not None:
             embeddings, masks = self.forward(features, masks)
         else:
             embeddings = self.forward(features)
 
-        if self.global_step % self.log_interval == 0:
-            loss = self.loss_func(
-                embeddings,
-                masks,
-                labelvecs,
-                picture_path=self.logger.log_dir,
-                step=self.global_step,
-            )
+        if self.mlm_task:
+            loss = self.loss_func(embeddings, labelvecs)
         else:
-            loss = self.loss_func(embeddings, masks, labelvecs)
+            if self.global_step % self.log_interval == 0:
+                loss = self.loss_func(
+                    embeddings,
+                    masks,
+                    labelvecs,
+                    picture_path=self.logger.log_dir,
+                    step=self.global_step,
+                )
+            else:
+                loss = self.loss_func(embeddings, masks, labelvecs)
 
         return loss
 
@@ -120,8 +136,8 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
-        return [optim], [lr_schedule]
+        # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
+        return optim
 
     def training_epoch_end(self, outputs):
         train_loss = self.all_gather([x["loss"] for x in outputs])
