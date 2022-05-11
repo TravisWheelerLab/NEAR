@@ -9,6 +9,7 @@ from typing import Union, List, Tuple
 
 import numpy as np
 import torch
+import pandas as pd
 import faiss
 import faiss.contrib.torch_utils
 from prefilter import MASK_FLAG, DECOY_FLAG
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
+    "parse_tblout",
     "parse_labels",
     "create_faiss_index",
     "handle_figure_path",
@@ -29,11 +31,20 @@ __all__ = [
     "load_model",
 ]
 
+TBLOUT_COL_NAMES = [
+    "target_name",
+    "query_name",
+    "accession_id",
+    "e_value",
+    "description",
+]
+TBLOUT_COLS = [0, 2, 3, 4, 18]
+
 
 def load_model(model_path, hyperparams, device):
     checkpoint = torch.load(model_path, map_location=torch.device(device))
     state_dict = checkpoint["state_dict"]
-    model = models.ResNet1d(**hyperparams).to(device)
+    model = models.ResNet1d(**hyperparams, training=False).to(device)
     success = model.load_state_dict(state_dict)
     model.eval()
     return model, success
@@ -54,7 +65,7 @@ def create_faiss_index(embeddings, embed_dim, device="cpu", distance_metric="cos
         index = faiss.index_cpu_to_gpu(res, 0, index)
     else:
         if not isinstance(embeddings, np.ndarray):
-            embeddings = embeddings.numpy()
+            embeddings = embeddings.cpu().numpy()
 
     index.add(embeddings)
 
@@ -224,3 +235,36 @@ def pad_contrastive_batches_with_labelvecs(batch):
         None,
         labelvecs,
     )
+
+
+def parse_tblout(tbl):
+    """
+    Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
+    :param tbl: .domtblout filename.
+    :type tbl: str
+    :return: dataframe containing the rows of the .tblout.
+    :rtype: pd.DataFrame
+    """
+
+    if os.path.splitext(tbl)[1] != ".tblout":
+        raise ValueError(f"must pass a .tblout file, found {tbl}")
+
+    df = pd.read_csv(
+        tbl,
+        skiprows=3,
+        header=None,
+        delim_whitespace=True,
+        usecols=TBLOUT_COLS,
+        names=TBLOUT_COL_NAMES,
+        engine="python",
+        skipfooter=10,
+    )
+
+    df = df.dropna()
+
+    # "-" is the empty label
+    df["target_name"].loc[df["description"] != "-"] = (
+        df["target_name"] + " " + df["description"]
+    )
+
+    return df

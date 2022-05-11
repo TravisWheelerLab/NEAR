@@ -29,7 +29,7 @@ def main(args):
         valid_dataset = utils.MLMSwissProtGenerator(
             fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
             training=False,
-            apply_indels=False
+            apply_indels=False,
         )
         collate_fn = None
     else:
@@ -65,7 +65,7 @@ def main(args):
     model = ResNet1d(
         learning_rate=args.learning_rate,
         apply_mlp=args.apply_mlp,
-        mlm_task=args.mlm_task
+        mlm_task=args.mlm_task,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

@@ -16,15 +16,6 @@ from argparse import ArgumentParser
 from prefilter import array_job_template, single_job_template, name_to_accession_id
 import prefilter.utils as utils
 
-TBLOUT_COL_NAMES = [
-    "target_name",
-    "query_name",
-    "accession_id",
-    "e_value",
-    "description",
-]
-TBLOUT_COLS = [0, 2, 3, 4, 18]
-
 DOMTBLOUT_COLS = [0, 4, 11, 19, 20, 22]
 DOMTBLOUT_COL_NAMES = [
     "target_name",
@@ -151,38 +142,6 @@ def job_completed(slurm_jobid):
 
 def pfunc(str):
     print(str)
-
-
-def parse_tblout(tbl):
-    """
-    Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
-    :param tbl: .domtblout filename.
-    :type tbl: str
-    :return: dataframe containing the rows of the .tblout.
-    :rtype: pd.DataFrame
-    """
-
-    if os.path.splitext(tbl)[1] != ".tblout":
-        raise ValueError(f"must pass a .tblout file, found {tbl}")
-
-    df = pd.read_csv(
-        tbl,
-        skiprows=3,
-        header=None,
-        delim_whitespace=True,
-        usecols=TBLOUT_COLS,
-        names=TBLOUT_COL_NAMES,
-        skipfooter=10,
-    )
-
-    df = df.dropna()
-
-    # "-" is the empty label
-    df["target_name"].loc[df["description"] != "-"] = (
-        df["target_name"] + " " + df["description"]
-    )
-
-    return df
 
 
 def parse_domtblout(domtbl):

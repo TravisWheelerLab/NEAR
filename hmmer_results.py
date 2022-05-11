@@ -1,36 +1,45 @@
 import os
 import pdb
+import pandas as pd
 
 from glob import glob
+import prefilter.utils as utils
 
-true_valid = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_sequences/names/*hits")
-hit_valid = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_tblouts/names/*hits")
+true_valid = glob(
+    "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_sequences/*fa"
+)
+tblout_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_tblouts/"
+out_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/"
 
-
-# parse each file in the sets;
 n_seq = 0
 n_correct = 0
 
 for file in true_valid:
-    valid_file = file.replace("valid_sequences", "valid_tblouts")
-    valid_file = valid_file.replace("true", "tblout")
-    if not os.path.isfile(valid_file):
-        print(f"Couldn't find {valid_file}")
+    # grab the sequences in the split validation set
+    headers, seqs = utils.fasta_from_file(file)
+    tblout_file = os.path.join(tblout_path, os.path.basename(file) + ".tblout")
+    tblout_df = utils.parse_tblout(tblout_file)
+    # grab the filename;
+    correct_target = os.path.basename(file).replace(".afa.fa", "")
+    if "-2.afa" in os.path.basename(file):
+        correct_target = correct_target.replace("-2", "-1")
+    else:
+        correct_target = correct_target.replace("-1", "-2")
+    # now, remove entries from the df that don't contain the correct str
+    # the correct str is the matching split fasta; swap the 1 and 2 in the valid file.
+    # i need to change this in the rust code.
+    if not tblout_df.shape[0]:
+        print(f"no hits for {file}.")
         continue
-
-    with open(file, "r") as src:
-        true_names = src.readlines()
-        true_names = [t.replace("\n", "").replace(">", "") for t in true_names]
-
-    with open(valid_file, "r") as src:
-        valid_names = src.readlines()
-        valid_names = [t.replace("\n", "") for t in valid_names]
-    true_names = [t[:t.find(" ")] for t in true_names]
-    valid_names = [t[:t.find(" ")] for t in valid_names]
-
-    for name in true_names:
-        n_seq += 1
-        if name in valid_names:
-            n_correct += 1
-
-print(n_seq, n_correct, n_correct / n_seq)
+    tblout_df = tblout_df.loc[tblout_df["query_name"].str.contains(correct_target), :]
+    # now, grab the sequences from the validation file that are in the
+    # correctly classified set;
+    correctly_classified_names = set(tblout_df["target_name"])
+    if len(set(headers).intersection(correctly_classified_names)):
+        with open(os.path.join(out_path, os.path.basename(file)), "w") as dst:
+            for header, seq in zip(headers, seqs):
+                if header in correctly_classified_names:
+                    # write the sequence and the header to the file
+                    dst.write(f">{header}\n{seq}\n")
+    else:
+        print(f"No correct hits for {file}")

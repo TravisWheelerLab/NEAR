@@ -14,15 +14,14 @@ __all__ = ["ResNet1d"]
 
 
 class ResNet1d(pl.LightningModule, ABC):
-    def __init__(self, learning_rate,
-                 mlm_task,
-                 apply_mlp):
+    def __init__(self, learning_rate, mlm_task, apply_mlp, training=True):
 
         super(ResNet1d, self).__init__()
 
         self.learning_rate = learning_rate
         self.apply_mlp = apply_mlp
         self.mlm_task = mlm_task
+        self.training = training
 
         self.res_block_n_filters = 1024
         self.feat_dim = 128
@@ -78,14 +77,16 @@ class ResNet1d(pl.LightningModule, ABC):
 
         if self.mlm_task:
             # 1x1 conv for classification.
-            self.classifier = torch.nn.Conv1d(self.res_block_n_filters, len(utils.amino_alphabet), 1)
+            self.classifier = torch.nn.Conv1d(
+                self.res_block_n_filters, len(utils.amino_alphabet), 1
+            )
 
     def _forward(self, x):
         x = self.embed(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
         if self.apply_mlp:
             x = self.mlp(x)
-        if self.mlm_task:
+        if self.mlm_task and self.training:
             # final conv.
             x = torch.nn.ReLU()(x)
             x = self.classifier(x)
