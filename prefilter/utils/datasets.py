@@ -12,6 +12,8 @@ import numpy as np
 from collections import defaultdict
 from random import shuffle
 from typing import List, Union, Tuple, Optional, Dict
+from glob import glob
+from sys import stdout
 
 import yaml
 
@@ -27,6 +29,7 @@ __all__ = [
     "MLMSwissProtGenerator",
     "SwissProtGenerator",
     "ClusterIterator",
+    "ESMEmbeddingGenerator",
 ]
 
 
@@ -390,20 +393,23 @@ class ClusterIterator:
         train_files_to_remove = []
 
         for file in self.train_afa_files:
-            valid_file = file.replace("train", "valid")
-            if "-1" in valid_file:
-                valid_file = valid_file.replace("-1", "-2")
+            # get corresponding validation file;
+            valid_file = file.replace(
+                "train", "valid_set_subsampled_by_what_hmmer_gets_right"
+            )
+            if "-1" in os.path.basename(file):
+                valid_file = valid_file.replace("-1", "-2") + ".fa"
             else:
-                valid_file = valid_file.replace("-2", "-1")
+                valid_file = valid_file.replace("-2", "-1") + ".fa"
+
             if os.path.isfile(valid_file):
                 self.train_to_valid[file] = valid_file
             else:
-                print(f"Couldn't find valid file for {file}")
+                # print(f"Couldn't find valid file for {file}")
                 if not include_all_families:
                     train_files_to_remove.append(file)
 
         for file in train_files_to_remove:
-            print("removing")
             self.train_afa_files.remove(file)
 
         self._build_clustered_dataset()
@@ -423,9 +429,6 @@ class ClusterIterator:
             ]
 
             if not (len(train_seqs)):
-                # print(
-                #     f"No sequence with length > {self.min_seq_len} in {train_file}. Skipping."
-                # )
                 continue
 
             # shuffle train seqs...?
@@ -434,12 +437,11 @@ class ClusterIterator:
                 [label_index] * len(train_seqs[: self.n_seq_per_target_family])
             )
 
-            label_index += 1
-
             if train_file in self.train_to_valid:
                 # add them into the validation set;
                 valid_file = self.train_to_valid[train_file]
                 _, valid_seqs = utils.fasta_from_file(valid_file)
+
                 valid_seqs = [
                     s.replace(".", "")[: self.min_seq_len]
                     for s in valid_seqs
@@ -454,6 +456,8 @@ class ClusterIterator:
 
                 self.query_sequences.extend(valid_seqs)
                 self.query_labels.extend([label_index] * len(valid_seqs))
+
+            label_index += 1
 
         if len(self.seed_sequences) == 0 or len(self.query_sequences) == 0:
             print(
@@ -487,11 +491,71 @@ class ClusterIterator:
         return seq, label, self.query_sequences[idx]
 
 
+class ESMEmbeddingGenerator:
+    """
+    Generates pairs of (transformer embedding, sequence).
+    Pairs come from swiss-prot.
+    """
+
+    def __init__(
+        self,
+        esm_embedding_path,
+        fasta_path,
+        min_seq_len=256,
+        n_seqs=30000,
+        training=True,
+    ):
+
+        self.training = training
+
+        self.esm_embeddings = glob(os.path.join(esm_embedding_path, "*.pt"))
+        headers, seqs = utils.fasta_from_file(fasta_path)
+        # process sequences
+        headers_, seqs_ = [], []
+        self.esm_embeddings = []
+        print(f"Loading {n_seqs} sequences and embeddings.")
+        for i, (header, seq) in enumerate(zip(headers, seqs)):
+            stdout.write(f"{i/n_seqs:.3f}\r")
+            if i == n_seqs:
+                break
+            esm_file_path = os.path.join(esm_embedding_path, header + ".pt")
+            if os.path.isfile(esm_file_path):
+                if len(seq) > min_seq_len:
+                    headers_.append(header)
+                    seqs_.append(seq[:min_seq_len])
+                    embed = torch.load(esm_file_path)["representations"][33]
+                    self.esm_embeddings.append(embed[:min_seq_len])
+
+        self.seqs = np.asarray(seqs_)
+
+    def _shuf(self):
+        idx = np.random.randint(
+            0, len(self.esm_embeddings), size=len(self.esm_embeddings)
+        )
+        self.esm_embeddings = [self.esm_embeddings[i] for i in idx]
+        self.seqs = self.seqs[idx]
+
+    def __len__(self):
+        if self.training:
+            self._shuf()
+            return len(self.esm_embeddings)
+        else:
+            return len(self.esm_embeddings) // 20
+
+    def __getitem__(self, idx):
+        if idx % 1000 == 0:
+            self._shuf()
+        seq = _sanitize_sequence(self.seqs[idx])
+        seq = torch.tensor([utils.char_to_index[c] for c in seq])
+        embed = self.esm_embeddings[idx]
+        return seq, embed, idx
+
+
 if __name__ == "__main__":
     from glob import glob
 
-    panthr = glob("/home/tc229954/data/prefilter/panthr/afa/*.afa")
-    gen = AlignmentGenerator(afa_files=panthr)
-
-    for a, b, c, d in gen:
-        print(a.shape, b.shape, c.shape, d.shape)
+    esm = "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/"
+    uniprot = "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta"
+    gen = ESMEmbeddingGenerator(esm, uniprot, 256)
+    for ss, e, i in gen:
+        pdb.set_trace()

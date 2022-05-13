@@ -1,4 +1,5 @@
 import pdb
+import time
 from glob import glob
 from collections import defaultdict
 from sys import stdout
@@ -26,6 +27,7 @@ def create_parser():
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--min_seq_len", type=int, default=256)
     ap.add_argument("--embed_dim", type=int, default=256)
+    ap.add_argument("--index_device", type=str, default="cuda")
     ap.add_argument("--pretrained_transformer", action="store_true")
 
     ap.add_argument("--visualize", action="store_true")
@@ -133,10 +135,9 @@ def compute_cluster_representative_embeddings(
     representative_embeddings = torch.cat(
         torch.unbind(representative_embeddings, axis=0)
     )
-    print("not normalizing.")
-    # representative_embeddings = torch.nn.functional.normalize(
-    #     representative_embeddings, dim=-1
-    # )
+    representative_embeddings = torch.nn.functional.normalize(
+        representative_embeddings, dim=-1
+    )
     return representative_embeddings, representative_labels
 
 
@@ -158,13 +159,17 @@ def most_common_matches(
     neighbors,
     device,
 ):
+    begin = time.time()
     distances, match_indices = search_index_device_aware(
         faiss_index, normalized_query_embedding, device, n_neighbors=neighbors
     )
+    end = time.time()
+    print(end - begin)
     if device == "cuda":
         matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
     else:
         matches = cluster_representative_labels[match_indices.ravel()]
+
     predicted_labels, counts = np.unique(matches, return_counts=True)
 
     return predicted_labels, counts
@@ -188,8 +193,6 @@ def compute_accuracy(
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
         batch_converter = alphabet.get_batch_converter()
 
-    print(len(query_dataset))
-
     for j, (features, labels, _) in enumerate(query_dataset):
         if pretrained_transformer:
             embeddings = _infer_with_transformer(
@@ -202,7 +205,7 @@ def compute_accuracy(
         # searching each sequence separately against the index is probably slow.
         for label, sequence in zip(labels, embeddings):
             total_sequences += 1
-            # sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
             predicted_labels, counts = most_common_matches(
                 cluster_rep_index,
                 cluster_rep_labels,
@@ -489,7 +492,7 @@ def main(fasta_files, batch_size=32):
     parser = create_parser()
     args = parser.parse_args()
     min_seq_len = args.min_seq_len
-    index_device = "cuda"
+    index_device = args.index_device
 
     embed_dim = args.embed_dim
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -534,7 +537,11 @@ def main(fasta_files, batch_size=32):
     print(rep_embeddings.shape)
     # create an index
     index = utils.create_faiss_index(
-        rep_embeddings, embed_dim, device=index_device, distance_metric="l2"
+        rep_embeddings,
+        embed_dim,
+        device=index_device,
+        distance_metric="cosine",
+        quantize=False,
     )
 
     # and create a test iterator.
@@ -577,5 +584,5 @@ def main(fasta_files, batch_size=32):
 
 if __name__ == "__main__":
 
-    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*")[:300]
+    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
     main(files)

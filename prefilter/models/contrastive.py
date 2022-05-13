@@ -1,4 +1,5 @@
 import pdb
+import esm
 from abc import ABC
 
 import matplotlib.pyplot as plt
@@ -14,17 +15,31 @@ __all__ = ["ResNet1d"]
 
 
 class ResNet1d(pl.LightningModule, ABC):
-    def __init__(self, learning_rate, mlm_task, apply_mlp, training=True):
+    def __init__(
+        self,
+        learning_rate,
+        apply_mlp,
+        distill_embeddings,
+        use_embedding_layer_from_transformer=False,
+        mlm_task=False,
+        training=True,
+    ):
 
         super(ResNet1d, self).__init__()
 
         self.learning_rate = learning_rate
         self.apply_mlp = apply_mlp
         self.mlm_task = mlm_task
+        self.distill_embeddings = distill_embeddings
+        self.use_embedding_layer_from_transformer = use_embedding_layer_from_transformer
         self.training = training
 
-        self.res_block_n_filters = 1024
-        self.feat_dim = 128
+        if self.distill_embeddings:
+            # esm embedding size
+            self.res_block_n_filters = 1280
+        else:
+            self.res_block_n_filters = 1024
+
         self.res_block_kernel_size = 3
         self.n_res_blocks = 18
         self.res_bottleneck_factor = 1
@@ -34,13 +49,19 @@ class ResNet1d(pl.LightningModule, ABC):
 
         if self.mlm_task:
             self.loss_func = torch.nn.CrossEntropyLoss()
-        self.collate_fn = utils.pad_contrastive_batches_with_labelvecs
+        elif self.distill_embeddings:
+            self.loss_func = torch.nn.MSELoss()
 
         self._setup_layers()
 
         self.save_hyperparameters()
 
     def _setup_layers(self):
+
+        if self.use_embedding_layer_from_transformer:
+            # load transformer and grab the embedding layer.
+            model, _ = esm.pretrained.esm1b_t33_650M_UR50S()
+            pdb.set_trace()
 
         if self.mlm_task:
             self.embed = nn.Embedding(22, self.res_block_n_filters)
@@ -97,7 +118,7 @@ class ResNet1d(pl.LightningModule, ABC):
         return embeddings
 
     def _shared_step(self, batch):
-        if self.mlm_task:
+        if self.mlm_task or self.distill_embeddings:
             features, labelvecs, _ = batch
             masks = None
         else:
@@ -111,8 +132,8 @@ class ResNet1d(pl.LightningModule, ABC):
         else:
             embeddings = self.forward(features)
 
-        if self.mlm_task:
-            loss = self.loss_func(embeddings, labelvecs)
+        if self.mlm_task or self.distill_embeddings:
+            loss = self.loss_func(embeddings.transpose(-1, -2), labelvecs)
         else:
             if self.global_step % self.log_interval == 0:
                 loss = self.loss_func(

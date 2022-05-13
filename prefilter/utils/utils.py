@@ -44,20 +44,31 @@ TBLOUT_COLS = [0, 2, 3, 4, 18]
 def load_model(model_path, hyperparams, device):
     checkpoint = torch.load(model_path, map_location=torch.device(device))
     state_dict = checkpoint["state_dict"]
-    model = models.ResNet1d(**hyperparams, training=False).to(device)
+    if "training" in hyperparams:
+        hyperparams["training"] = False
+        model = models.ResNet1d(**hyperparams).to(device)
+    else:
+        model = models.ResNet1d(**hyperparams, training=False).to(device)
     success = model.load_state_dict(state_dict)
     model.eval()
     return model, success
 
 
-def create_faiss_index(embeddings, embed_dim, device="cpu", distance_metric="cosine"):
-    print(f"using index with {distance_metric} metric.")
+def create_faiss_index(
+    embeddings, embed_dim, device="cpu", distance_metric="cosine", quantize=True
+):
 
+    print(f"using index with {distance_metric} metric.")
     if distance_metric == "cosine":
         index = faiss.IndexFlatIP(embed_dim)
     else:
         # transformer embeddings are _not_ normalized.
         index = faiss.IndexFlatL2(embed_dim)
+
+    if quantize:
+        print("Quantizing index.")
+        index = faiss.IndexIVFFlat(index, embed_dim, 10)
+        index.nprobe = 1
 
     if device == "cuda":
         res = faiss.StandardGpuResources()
@@ -66,6 +77,10 @@ def create_faiss_index(embeddings, embed_dim, device="cpu", distance_metric="cos
     else:
         if not isinstance(embeddings, np.ndarray):
             embeddings = embeddings.cpu().numpy()
+
+    if quantize:
+        print("Training quantized index.")
+        index.train(embeddings)
 
     index.add(embeddings)
 

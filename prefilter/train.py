@@ -21,15 +21,15 @@ import prefilter.utils as utils
 
 def main(args):
 
-    if args.mlm_task:
-        train_dataset = utils.MLMSwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-            apply_indels=False,
+    if args.distill:
+        train_dataset = utils.ESMEmbeddingGenerator(
+            "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
+            "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
         )
-        valid_dataset = utils.MLMSwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+        valid_dataset = utils.ESMEmbeddingGenerator(
+            "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
+            "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
             training=False,
-            apply_indels=False,
         )
         collate_fn = None
     else:
@@ -65,7 +65,7 @@ def main(args):
     model = ResNet1d(
         learning_rate=args.learning_rate,
         apply_mlp=args.apply_mlp,
-        mlm_task=args.mlm_task,
+        distill_embeddings=args.distill,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
