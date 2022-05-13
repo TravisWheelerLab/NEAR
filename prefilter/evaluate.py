@@ -159,13 +159,13 @@ def most_common_matches(
     neighbors,
     device,
 ):
-    begin = time.time()
     distances, match_indices = search_index_device_aware(
-        faiss_index, normalized_query_embedding, device, n_neighbors=neighbors
+        faiss_index,
+        normalized_query_embedding.to(device),
+        device,
+        n_neighbors=neighbors,
     )
-    end = time.time()
-    print(end - begin)
-    if device == "cuda":
+    if "cuda" in device:
         matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
     else:
         matches = cluster_representative_labels[match_indices.ravel()]
@@ -516,11 +516,18 @@ def main(fasta_files, batch_size=32):
 
         model, _ = utils.load_model(model_path, hparams, dev)
 
-    iterator = utils.ClusterIterator(
+    # iterator = utils.ClusterIterator(
+    #     fasta_files,
+    #     min_seq_len,
+    #     representative_index=0,
+    #     include_all_families=args.include_all_families,
+    #     n_seq_per_target_family=args.n_seq_per_target_family,
+    # )
+    iterator = utils.ClusterIteratorOld(
         fasta_files,
         min_seq_len,
+        evaluate_on_clustered_split=True,
         representative_index=0,
-        include_all_families=args.include_all_families,
         n_seq_per_target_family=args.n_seq_per_target_family,
     )
 
@@ -585,4 +592,5 @@ def main(fasta_files, batch_size=32):
 if __name__ == "__main__":
 
     files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
-    main(files)
+    old_files = glob("/home/tc229954/data/prefilter/pfam/seed/clustered/0.8/*-train.fa")
+    main(old_files)

@@ -14,12 +14,13 @@ time $py_cmd -m prefilter train\
     --num_nodes 1 \
     --num_workers 0 \
     --afa_path /home/tc229954/data/prefilter/panthr/afa/ \
-    --log_dir models/may12/distill_30k_esm_embeddings \
+    --log_dir models/may13/transformer_embedding_layer \
     --batch_size 16 \
     --epochs 200 \
     --learning_rate 1e-3 \
     --apply_mlp \
-    --distill
+    --distill \
+    --use_embedding_layer_from_transformer
 
 
 

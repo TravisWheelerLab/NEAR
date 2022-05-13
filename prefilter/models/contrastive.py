@@ -61,12 +61,13 @@ class ResNet1d(pl.LightningModule, ABC):
         if self.use_embedding_layer_from_transformer:
             # load transformer and grab the embedding layer.
             model, _ = esm.pretrained.esm1b_t33_650M_UR50S()
-            pdb.set_trace()
-
-        if self.mlm_task:
-            self.embed = nn.Embedding(22, self.res_block_n_filters)
+            self.embed = model.embed_tokens
+            self.embed.requires_grad_(False)
         else:
-            self.embed = nn.Embedding(21, self.res_block_n_filters)
+            if self.mlm_task:
+                self.embed = nn.Embedding(22, self.res_block_n_filters)
+            else:
+                self.embed = nn.Embedding(21, self.res_block_n_filters)
 
         _list = []
         for _ in range(self.n_res_blocks):
@@ -157,7 +158,9 @@ class ResNet1d(pl.LightningModule, ABC):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optim = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate
+        )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim
 

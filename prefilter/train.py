@@ -25,13 +25,15 @@ def main(args):
         train_dataset = utils.ESMEmbeddingGenerator(
             "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
             "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            convert_to_tensor=False,
         )
         valid_dataset = utils.ESMEmbeddingGenerator(
             "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
             "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            convert_to_tensor=False,
             training=False,
         )
-        collate_fn = None
+        collate_fn = utils.process_with_esm_batch_converter()
     else:
         train_dataset = utils.SwissProtGenerator(
             fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
@@ -66,6 +68,7 @@ def main(args):
         learning_rate=args.learning_rate,
         apply_mlp=args.apply_mlp,
         distill_embeddings=args.distill,
+        use_embedding_layer_from_transformer=args.use_embedding_layer_from_transformer,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

@@ -30,6 +30,7 @@ __all__ = [
     "SwissProtGenerator",
     "ClusterIterator",
     "ESMEmbeddingGenerator",
+    "ClusterIteratorOld",
 ]
 
 
@@ -320,6 +321,205 @@ class SwissProtGenerator:
         return s1, s2, label
 
 
+class ClusterIteratorOld:
+    """
+    I'm going to add in alignments here so we can easily look
+    at them without grepping or anything.
+    """
+
+    def __init__(
+        self,
+        afa_files,
+        min_seq_len,
+        representative_index,
+        evaluate_on_clustered_split,
+        n_seq_per_target_family,
+        use_test=True,
+    ):
+
+        if n_seq_per_target_family is not None and not evaluate_on_clustered_split:
+            raise ValueError(
+                "Can't have more than a single rep. sequence if evaluating on non-clustered data."
+            )
+
+        self.train_afa_files = afa_files
+        self.min_seq_len = min_seq_len
+        self.representative_index = representative_index
+        self.n_seq_per_target_family = n_seq_per_target_family
+        self.use_test = use_test
+
+        self.seed_sequences = []
+        self.seed_labels = []
+        self.seed_gapped_sequences = []
+
+        self.query_sequences = []
+        self.query_labels = []
+        self.query_gapped_sequences = []
+        # dictionary to map validation files to test files.
+        self.valid_to_test = {}
+
+        if evaluate_on_clustered_split:
+            self.valid_files = []
+            for file in self.train_afa_files:
+                valid_file = file.replace("-train.fa", "-valid.fa")
+                test_file = file.replace("-train.fa", "-test.fa")
+                if os.path.isfile(valid_file):
+                    self.valid_files.append(valid_file)
+                if os.path.isfile(test_file):
+                    self.valid_to_test[valid_file] = test_file
+
+            self._build_clustered_dataset()
+
+        else:
+            self._build_dataset()
+
+    def _build_clustered_dataset(self):
+
+        label_index = 0
+
+        for valid_file in self.valid_files:
+
+            valid_headers, valid_seqs = utils.fasta_from_file(valid_file)
+            valid_seqs = [
+                s for s in valid_seqs if len(s.replace("-", "")) >= self.min_seq_len
+            ]
+            valid_ungapped_seqs = [s.replace("-", "") for s in valid_seqs]
+            valid_ungapped_seqs = [s[: self.min_seq_len] for s in valid_ungapped_seqs]
+
+            if valid_file in self.valid_to_test and self.use_test:
+                test_file = self.valid_to_test[valid_file]
+                test_headers, test_seqs = utils.fasta_from_file(test_file)
+                test_seqs = [
+                    s for s in test_seqs if len(s.replace("-", "")) >= self.min_seq_len
+                ]
+                test_ungapped_seqs = [s.replace("-", "") for s in test_seqs]
+                test_ungapped_seqs = [s[: self.min_seq_len] for s in test_ungapped_seqs]
+
+                valid_ungapped_seqs = valid_ungapped_seqs + test_ungapped_seqs
+                valid_seqs = valid_seqs + test_seqs
+
+            if len(valid_ungapped_seqs) > 1:
+                # grab the train file
+                # and process it to sequences that are > len(256).
+                train_file = valid_file.replace("-valid.fa", "-train.fa")
+                train_headers, train_seqs = utils.fasta_from_file(train_file)
+                train_seqs = [
+                    s for s in train_seqs if len(s.replace("-", "")) >= self.min_seq_len
+                ]
+                train_ungapped_seqs = [s.replace("-", "") for s in train_seqs]
+                train_ungapped_seqs = [
+                    s[: self.min_seq_len] for s in train_ungapped_seqs
+                ]
+
+                # grab a random sample from the train set.
+                shuf_idx = np.random.choice(
+                    np.arange(len(train_ungapped_seqs)),
+                    size=len(train_ungapped_seqs),
+                    replace=False,
+                )
+
+                train_ungapped_seqs = [train_ungapped_seqs[i] for i in shuf_idx]
+                train_seqs = [train_seqs[i] for i in shuf_idx]
+
+                if len(train_ungapped_seqs) > 1:
+                    if self.n_seq_per_target_family is None:
+                        self.seed_sequences.append(
+                            train_ungapped_seqs[self.representative_index]
+                        )
+                        self.seed_gapped_sequences.append(
+                            train_seqs[self.representative_index]
+                        )
+                        self.seed_labels.append(label_index)
+                    else:
+
+                        # print(f"Using {len(train_ungapped_seqs[:self.n_seq_per_target_family])} sequences in target
+                        # DB for label {label_index} corresponding to {train_file}, {len(train_ungapped_seqs)}")
+
+                        self.seed_sequences.extend(
+                            train_ungapped_seqs[: self.n_seq_per_target_family]
+                        )
+                        self.seed_gapped_sequences.extend(
+                            train_seqs[: self.n_seq_per_target_family]
+                        )
+                        self.seed_labels.extend(
+                            [label_index]
+                            * len(train_ungapped_seqs[: self.n_seq_per_target_family])
+                        )
+
+                    self.query_sequences.extend(valid_ungapped_seqs)
+                    self.query_gapped_sequences.extend(valid_seqs)
+
+                    self.query_labels.extend(
+                        [label_index for _ in range(len(valid_ungapped_seqs))]
+                    )
+
+                    label_index += 1
+
+        if len(self.seed_sequences) == 0 or len(self.query_sequences) == 0:
+            print(
+                f"No seed or query seqs over {self.min_seq_len}. Lengths of seed and query sequences: {len(self.seed_sequences)}, "
+                f"{len(self.query_sequences)}"
+            )
+            exit()
+
+        self.seed_sequences = [s[: self.min_seq_len] for s in self.seed_sequences]
+
+    def _build_dataset(self):
+
+        label_index = 0
+        for fasta in self.train_afa_files:
+            headers, seqs = utils.fasta_from_file(fasta)
+            seqs = [s for s in seqs if len(s.replace("-", "")) >= self.min_seq_len]
+            ungapped_seqs = [s.replace("-", "") for s in seqs]
+            ungapped_seqs = [s[: self.min_seq_len] for s in ungapped_seqs]
+
+            if len(ungapped_seqs) > 1:
+                self.seed_sequences.append(ungapped_seqs[self.representative_index])
+                self.seed_gapped_sequences.append(seqs[self.representative_index])
+                self.seed_labels.append(label_index)
+
+                self.query_sequences.extend(
+                    ungapped_seqs[self.representative_index + 1 :]
+                )
+                self.query_gapped_sequences.extend(
+                    seqs[self.representative_index + 1 :]
+                )
+                self.query_labels.extend(
+                    [
+                        label_index
+                        for _ in range(
+                            len(ungapped_seqs[self.representative_index + 1 :])
+                        )
+                    ]
+                )
+
+                label_index += 1
+
+        self.seed_sequences = [s[: self.min_seq_len] for s in self.seed_sequences]
+
+    def get_cluster_representatives(self):
+        seeds = []
+        for seed in self.seed_sequences:
+            santitized = _sanitize_sequence(seed)
+            seeds.append(
+                torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
+            )
+
+        return seeds, self.seed_labels
+
+    def __len__(self):
+        return len(self.query_sequences)
+
+    def __getitem__(self, idx):
+
+        qseq = self.query_sequences[idx][: self.min_seq_len]
+        label = self.query_labels[idx]
+        sanitized = _sanitize_sequence(qseq)
+        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
+
+        return seq, label, self.query_gapped_sequences[idx]
+
+
 class MLMSwissProtGenerator(SwissProtGenerator):
     def __init__(self, fa_file, apply_indels, minlen=256, training=True):
         super(MLMSwissProtGenerator, self).__init__(
@@ -501,12 +701,14 @@ class ESMEmbeddingGenerator:
         self,
         esm_embedding_path,
         fasta_path,
+        convert_to_tensor=False,
         min_seq_len=256,
         n_seqs=30000,
         training=True,
     ):
 
         self.training = training
+        self.convert_to_tensor = convert_to_tensor
 
         self.esm_embeddings = glob(os.path.join(esm_embedding_path, "*.pt"))
         headers, seqs = utils.fasta_from_file(fasta_path)
@@ -546,7 +748,8 @@ class ESMEmbeddingGenerator:
         if idx % 1000 == 0:
             self._shuf()
         seq = _sanitize_sequence(self.seqs[idx])
-        seq = torch.tensor([utils.char_to_index[c] for c in seq])
+        if self.convert_to_tensor:
+            seq = torch.tensor([utils.char_to_index[c] for c in seq])
         embed = self.esm_embeddings[idx]
         return seq, embed, idx
 

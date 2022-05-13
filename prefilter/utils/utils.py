@@ -1,4 +1,5 @@
 # pylint: disable=no-member
+import esm
 import json
 import re
 import os
@@ -29,6 +30,7 @@ __all__ = [
     "pad_contrastive_batches",
     "mask_mask",
     "load_model",
+    "process_with_esm_batch_converter",
 ]
 
 TBLOUT_COL_NAMES = [
@@ -65,22 +67,13 @@ def create_faiss_index(
         # transformer embeddings are _not_ normalized.
         index = faiss.IndexFlatL2(embed_dim)
 
-    if quantize:
-        print("Quantizing index.")
-        index = faiss.IndexIVFFlat(index, embed_dim, 10)
-        index.nprobe = 1
-
-    if device == "cuda":
+    if "cuda" in device:
         res = faiss.StandardGpuResources()
         # 0 is the index of the GPU.
-        index = faiss.index_cpu_to_gpu(res, 0, index)
+        index = faiss.index_cpu_to_gpu(res, 1, index)
     else:
         if not isinstance(embeddings, np.ndarray):
             embeddings = embeddings.cpu().numpy()
-
-    if quantize:
-        print("Training quantized index.")
-        index.train(embeddings)
 
     index.add(embeddings)
 
@@ -228,6 +221,19 @@ def pad_contrastive_batches(batch):
         None,
         torch.as_tensor(labels),
     )
+
+
+def process_with_esm_batch_converter():
+    _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
+    batch_converter = alphabet.get_batch_converter()
+
+    def process(batch):
+        seqs = [("sd", "".join(b[0])) for b in batch]
+        embeddings = [b[1] for b in batch]
+        null = [b[2] for b in batch]
+        return batch_converter(seqs)[-1][:, 1:-1], torch.stack(embeddings), null
+
+    return process
 
 
 def pad_contrastive_batches_with_labelvecs(batch):
