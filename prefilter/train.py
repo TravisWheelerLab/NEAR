@@ -34,6 +34,8 @@ def main(args):
             training=False,
         )
         collate_fn = utils.process_with_esm_batch_converter()
+        print(len(train_dataset))
+        print(len(valid_dataset))
     else:
         train_dataset = utils.SwissProtGenerator(
             fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",

@@ -14,7 +14,7 @@ time $py_cmd -m prefilter train\
     --num_nodes 1 \
     --num_workers 0 \
     --afa_path /home/tc229954/data/prefilter/panthr/afa/ \
-    --log_dir models/may13/transformer_embedding_layer \
+    --log_dir models/may13/transformer_embedding_layer_lstm \
     --batch_size 16 \
     --epochs 200 \
     --learning_rate 1e-3 \

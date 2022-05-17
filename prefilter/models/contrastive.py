@@ -62,36 +62,16 @@ class ResNet1d(pl.LightningModule, ABC):
             # load transformer and grab the embedding layer.
             model, _ = esm.pretrained.esm1b_t33_650M_UR50S()
             self.embed = model.embed_tokens
-            self.embed.requires_grad_(False)
-        else:
-            if self.mlm_task:
-                self.embed = nn.Embedding(22, self.res_block_n_filters)
-            else:
-                self.embed = nn.Embedding(21, self.res_block_n_filters)
 
-        _list = []
-        for _ in range(self.n_res_blocks):
-            _list.append(
-                model_utils.ResConv(
-                    self.res_block_n_filters,
-                    kernel_size=self.res_block_kernel_size,
-                    padding=self.padding,
-                )
-            )
-        _list.append(
-            nn.Conv1d(
-                in_channels=self.res_block_n_filters,
-                out_channels=self.res_block_n_filters,
-                kernel_size=self.res_block_kernel_size,
-                padding=self.padding,
-            )
-        )
+        _list = [torch.nn.LSTM(self.res_block_n_filters, self.res_block_n_filters, 2,
+                               batch_first=True, bidirectional=True)]
 
         self.embedding_trunk = torch.nn.Sequential(*_list)
 
         if self.apply_mlp:
             mlp_list = [
-                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+                # double up the number of input channels b/c of bidirectional LSTM.
+                torch.nn.Conv1d(self.res_block_n_filters*2, self.res_block_n_filters, 1),
                 torch.nn.ReLU(),
                 torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
             ]
@@ -105,9 +85,12 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _forward(self, x):
         x = self.embed(x)
-        x = self.embedding_trunk(x.transpose(-1, -2))
+        # removed a transpose for the LSTM.
+        x, _ = self.embedding_trunk(x)
+        # ignore hidden
         if self.apply_mlp:
-            x = self.mlp(x)
+            x = self.mlp(x.transpose(-1, -2))
+
         if self.mlm_task and self.training:
             # final conv.
             x = torch.nn.ReLU()(x)

@@ -6,10 +6,10 @@ from glob import glob
 import prefilter.utils as utils
 
 true_valid = glob(
-    "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_sequences/*fa"
+    "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid/*.afa"
 )
 tblout_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_tblouts/"
-out_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/"
+out_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa/"
 
 n_seq = 0
 n_correct = 0
@@ -17,10 +17,12 @@ n_correct = 0
 for file in true_valid:
     # grab the sequences in the split validation set
     headers, seqs = utils.fasta_from_file(file)
-    tblout_file = os.path.join(tblout_path, os.path.basename(file) + ".tblout")
+    tblout_file = os.path.join(tblout_path, os.path.basename(file) + ".fa.tblout")
     tblout_df = utils.parse_tblout(tblout_file)
     # grab the filename;
     correct_target = os.path.basename(file).replace(".afa.fa", "")
+    correct_target = os.path.basename(file).replace(".afa", "")
+
     if "-2.afa" in os.path.basename(file):
         correct_target = correct_target.replace("-2", "-1")
     else:
@@ -34,7 +36,9 @@ for file in true_valid:
     tblout_df = tblout_df.loc[tblout_df["query_name"].str.contains(correct_target), :]
     # now, grab the sequences from the validation file that are in the
     # correctly classified set;
+    headers = [h.replace(".", "") for h in headers]
     correctly_classified_names = set(tblout_df["target_name"])
+
     if len(set(headers).intersection(correctly_classified_names)):
         with open(os.path.join(out_path, os.path.basename(file)), "w") as dst:
             for header, seq in zip(headers, seqs):

@@ -5,6 +5,7 @@ import pdb
 import json
 import time
 from abc import ABC
+from copy import deepcopy
 
 import torch
 import numpy as np
@@ -344,6 +345,8 @@ class ClusterIteratorOld:
 
         self.train_afa_files = afa_files
         self.min_seq_len = min_seq_len
+        if self.min_seq_len is None:
+            self.min_seq_len = -1
         self.representative_index = representative_index
         self.n_seq_per_target_family = n_seq_per_target_family
         self.use_test = use_test
@@ -515,7 +518,7 @@ class ClusterIteratorOld:
         qseq = self.query_sequences[idx][: self.min_seq_len]
         label = self.query_labels[idx]
         sanitized = _sanitize_sequence(qseq)
-        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
+        seq = "".join(sanitized)[:1022]
 
         return seq, label, self.query_gapped_sequences[idx]
 
@@ -575,6 +578,7 @@ class ClusterIterator:
         representative_index,
         include_all_families,
         n_seq_per_target_family,
+        return_alignments=False
     ):
 
         self.train_afa_files = afa_files
@@ -582,6 +586,10 @@ class ClusterIterator:
         self.representative_index = representative_index
         self.n_seq_per_target_family = n_seq_per_target_family
         self.include_all_families = include_all_families
+        self.return_alignments = return_alignments
+
+        self.valid_afa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
+        self.valid_fa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
 
         self.seed_sequences = []
         self.seed_labels = []
@@ -590,20 +598,23 @@ class ClusterIterator:
         self.query_labels = []
         # dictionary to map train files to validation files.
         self.train_to_valid = {}
+        self.train_to_valid_afa = {}
+
         train_files_to_remove = []
 
         for file in self.train_afa_files:
             # get corresponding validation file;
-            valid_file = file.replace(
-                "train", "valid_set_subsampled_by_what_hmmer_gets_right"
-            )
+            valid_file = os.path.basename(file)
             if "-1" in os.path.basename(file):
                 valid_file = valid_file.replace("-1", "-2") + ".fa"
             else:
                 valid_file = valid_file.replace("-2", "-1") + ".fa"
 
-            if os.path.isfile(valid_file):
-                self.train_to_valid[file] = valid_file
+            valid_afa = os.path.join(self.valid_afa_path, valid_file).replace(".fa", "")
+            valid_fa = os.path.join(self.valid_fa_path, valid_file)
+            if os.path.isfile(valid_fa):
+                self.train_to_valid[file] = valid_fa
+                self.train_to_valid_afa[file] = valid_afa
             else:
                 # print(f"Couldn't find valid file for {file}")
                 if not include_all_families:
@@ -617,36 +628,54 @@ class ClusterIterator:
     def _build_clustered_dataset(self):
 
         label_index = 0
+        self.seed_alignments = []
+        self.query_alignments = []
+        self.label_to_seed_alignment = {}
 
         for train_file in self.train_afa_files:
             # first, grab representative sequences
             _, train_seqs = utils.fasta_from_file(train_file)
+            train_alignments = deepcopy(train_seqs)
             # no gaps here, forget about headers.
-            train_seqs = [
-                s.replace(".", "")[: self.min_seq_len]
-                for s in train_seqs
-                if len(s.replace(".", "")) >= self.min_seq_len
-            ]
+            _train_seqs = []
+            _train_alignments = []
+
+            for train_seq, train_ali in zip(train_seqs, train_alignments):
+                if len(train_seq.replace(".", "")) > self.min_seq_len:
+                    _train_seqs.append(train_seq.replace(".", "")[:self.min_seq_len])
+                    _train_alignments.append(train_ali[:self.min_seq_len])
+
+            train_seqs = _train_seqs
+            train_alignments = _train_alignments
 
             if not (len(train_seqs)):
                 continue
 
             # shuffle train seqs...?
             self.seed_sequences.extend(train_seqs[: self.n_seq_per_target_family])
+            self.seed_alignments.extend(train_alignments[:self.n_seq_per_target_family])
             self.seed_labels.extend(
                 [label_index] * len(train_seqs[: self.n_seq_per_target_family])
             )
+            self.label_to_seed_alignment[label_index] = train_alignments[:self.n_seq_per_target_family]
 
             if train_file in self.train_to_valid:
                 # add them into the validation set;
                 valid_file = self.train_to_valid[train_file]
+                valid_alignment_file = self.train_to_valid_afa[train_file]
                 _, valid_seqs = utils.fasta_from_file(valid_file)
+                _, valid_alignments = utils.fasta_from_file(valid_alignment_file)
 
-                valid_seqs = [
-                    s.replace(".", "")[: self.min_seq_len]
-                    for s in valid_seqs
-                    if len(s.replace(".", "")) >= self.min_seq_len
-                ]
+                _valid_seqs = []
+                _valid_alignments = []
+
+                for valid_seq, valid_ali in zip(valid_seqs, valid_alignments):
+                    if len(valid_seq.replace(".", "")) > self.min_seq_len:
+                        _valid_seqs.append(valid_seq.replace(".", "")[:self.min_seq_len])
+                        _valid_alignments.append(valid_ali[:self.min_seq_len])
+
+                valid_seqs = _valid_seqs
+                valid_alignments = _valid_alignments
 
                 if not (len(valid_seqs)):
                     # print(
@@ -654,7 +683,11 @@ class ClusterIterator:
                     # )
                     continue
 
+                if len(valid_seqs) != len(valid_alignments):
+                    pdb.set_trace()
+
                 self.query_sequences.extend(valid_seqs)
+                self.query_alignments.extend(valid_alignments)
                 self.query_labels.extend([label_index] * len(valid_seqs))
 
             label_index += 1
@@ -681,14 +714,15 @@ class ClusterIterator:
         return len(self.query_sequences)
 
     def __getitem__(self, idx):
-
         qseq = self.query_sequences[idx]
+        qali = self.query_alignments[idx]
         label = self.query_labels[idx]
         sanitized = _sanitize_sequence(qseq)
-        sanitized = [s for s in sanitized if s != "."]
-        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
-
-        return seq, label, self.query_sequences[idx]
+        sanitized = "".join([s for s in sanitized if s != "."])
+        if self.return_alignments:
+            return sanitized[:1022], qali, label, self.query_sequences[idx]
+        else:
+            return sanitized[:1022], label, self.query_sequences[idx]
 
 
 class ESMEmbeddingGenerator:

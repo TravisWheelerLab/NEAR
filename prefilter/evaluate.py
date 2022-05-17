@@ -19,11 +19,37 @@ import prefilter.utils as utils
 from pytorch_lightning import seed_everything
 
 
+def moving_average(a, n=3) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
+def calculate_pid(s1, s2):
+    if not isinstance(s2, list):
+        s2 = [s2]
+    # get maximum percent identity
+    total_pid = 0
+    for sequence in s2:
+        numerator = 0
+        denominator = 0
+        for res1, res2 in zip(s1, sequence):
+            if res1 == '.' and res2 == '.':
+                continue
+            if res1 == res2:
+                numerator += 1
+            else:
+                denominator += 1
+        total_pid += (numerator/denominator)
+
+    return total_pid / len(s2)
+
+
 def create_parser():
     ap = ArgumentParser()
     ap.add_argument("model_root_dir")
     ap.add_argument("model_name")
     ap.add_argument("--include_all_families", action="store_true")
+    ap.add_argument("--quantize_index", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--min_seq_len", type=int, default=256)
     ap.add_argument("--embed_dim", type=int, default=256)
@@ -31,6 +57,7 @@ def create_parser():
     ap.add_argument("--pretrained_transformer", action="store_true")
 
     ap.add_argument("--visualize", action="store_true")
+    ap.add_argument("--plot_recall_and_pid", action="store_true")
     ap.add_argument("--save_self_examples", action="store_true")
     ap.add_argument("--include_emission", action="store_true")
     ap.add_argument("--n_seq_per_target_family", type=int)
@@ -67,11 +94,11 @@ def save_string_sequences(filename, rep_seq, query_seq):
 
 @torch.no_grad()
 def compute_cluster_representative_embeddings(
-    representative_sequences,
-    representative_labels,
-    trained_model,
-    device,
-    pretrained_transformer,
+        representative_sequences,
+        representative_labels,
+        trained_model,
+        device,
+        pretrained_transformer,
 ):
     """
     :param device:
@@ -87,21 +114,15 @@ def compute_cluster_representative_embeddings(
     :return: embeddings, labels
     :rtype:
     """
-    representative_tensor = torch.stack(representative_sequences).to(device)
-
     if pretrained_transformer:
-        batch_size = 64
+        batch_size = 16
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
         trained_model = trained_model.to(device)
         batch_converter = alphabet.get_batch_converter()
         data = []
-        for j, prot_seq in enumerate(representative_tensor):
-            data.append(
-                (
-                    f"prot_{j}",
-                    "".join([utils.amino_alphabet[i.item()] for i in prot_seq]),
-                )
-            )
+        for j, prot_seq in enumerate(representative_sequences):
+            seq = "".join([utils.amino_alphabet[i.item()] for i in prot_seq])[:1022]
+            data.append((f"prot_{j}", seq))
 
         batch_labels, batch_strs, batch_tokens = batch_converter(data)
         representative_embeddings = []
@@ -109,17 +130,17 @@ def compute_cluster_representative_embeddings(
         for i in range(0, len(batch_tokens) - batch_size, batch_size):
             stdout.write(f"{i / len(batch_tokens):.3f}\r")
             embeddings = trained_model(
-                batch_tokens[i : i + batch_size].to(device),
+                batch_tokens[i: i + batch_size].to(device),
                 repr_layers=[33],
                 return_contacts=False,
             )
             # send to cpu so we save on some GPU memory.
-            # large embedding dim
-            representative_embeddings.append(
-                embeddings["representations"][33][:, 1:-1].detach().to("cpu")
-            )
+            # remove padding.
+            for j, (_, seq) in enumerate(data[i: i + batch_size]):
+                representative_embeddings.append(
+                    embeddings["representations"][33][j, 1: len(seq) + 1].detach().to("cpu")
+                )
         print()
-        representative_embeddings = torch.cat(representative_embeddings, dim=0)
 
     else:
         representative_embeddings = (
@@ -132,9 +153,9 @@ def compute_cluster_representative_embeddings(
         _rep_labels.extend([s] * embed.shape[0])
 
     representative_labels = np.asarray(_rep_labels)
-    representative_embeddings = torch.cat(
-        torch.unbind(representative_embeddings, axis=0)
-    )
+
+    representative_embeddings = torch.cat(representative_embeddings, dim=0)
+
     representative_embeddings = torch.nn.functional.normalize(
         representative_embeddings, dim=-1
     )
@@ -153,11 +174,11 @@ def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
 
 
 def most_common_matches(
-    faiss_index,
-    cluster_representative_labels,
-    normalized_query_embedding,
-    neighbors,
-    device,
+        faiss_index,
+        cluster_representative_labels,
+        normalized_query_embedding,
+        neighbors,
+        device,
 ):
     distances, match_indices = search_index_device_aware(
         faiss_index,
@@ -176,14 +197,14 @@ def most_common_matches(
 
 
 def compute_accuracy(
-    query_dataset,
-    cluster_rep_index,
-    cluster_rep_labels,
-    trained_model,
-    n_neighbors,
-    pretrained_transformer,
-    index_device,
-    device="cuda",
+        query_dataset,
+        cluster_rep_index,
+        cluster_rep_labels,
+        trained_model,
+        n_neighbors,
+        pretrained_transformer,
+        index_device,
+        device="cuda",
 ):
     total_sequences = 0
     thresholds = [1, 2, 3, 5, 10, 20, 100, 200]
@@ -191,13 +212,20 @@ def compute_accuracy(
 
     if pretrained_transformer:
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
-        batch_converter = alphabet.get_batch_converter()
 
-    for j, (features, labels, _) in enumerate(query_dataset):
+    for j, (features, labels, sequences) in enumerate(query_dataset):
         if pretrained_transformer:
-            embeddings = _infer_with_transformer(
-                features, trained_model, batch_converter, device
-            ).contiguous()
+            embeddings = trained_model(
+                features.to(device),
+                repr_layers=[33],
+                return_contacts=False)
+
+            embed = []
+            for k, seq in enumerate(sequences):
+                embed.append(
+                    embeddings["representations"][33][k, 1: len(seq) + 1]
+                )
+            embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
 
@@ -206,6 +234,7 @@ def compute_accuracy(
         for label, sequence in zip(labels, embeddings):
             total_sequences += 1
             sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+
             predicted_labels, counts = most_common_matches(
                 cluster_rep_index,
                 cluster_rep_labels,
@@ -218,7 +247,7 @@ def compute_accuracy(
 
             for n in thresholds:
                 top_pred = top_preds[-n:]
-                if label.item() in set(top_pred):
+                if label in set(top_pred):
                     topn[n] += 1
 
     correct_counts = np.asarray([topn[t] for t in thresholds])
@@ -234,13 +263,13 @@ def compute_accuracy(
 
 
 def _compute_count_mat_and_similarities(
-    label_to_analyze,
-    query_sequence,
-    representative_embeddings,
-    representative_labels,
-    representative_index,
-    device,
-    n_neighbors,
+        label_to_analyze,
+        query_sequence,
+        representative_embeddings,
+        representative_labels,
+        representative_index,
+        device,
+        n_neighbors,
 ):
     """
     Gets matrices of dot prods and counts. Label_to_analyze is used to look
@@ -254,7 +283,7 @@ def _compute_count_mat_and_similarities(
 
     representative_embedding = representative_embeddings[
         representative_labels == label_to_analyze
-    ]
+        ]
     representative_embedding_start_point = np.where(
         representative_labels == label_to_analyze
     )
@@ -285,19 +314,19 @@ def _compute_count_mat_and_similarities(
 
 
 def visualize_prediction_patterns(
-    query_dataset,
-    cluster_rep_index,
-    cluster_rep_labels,
-    cluster_rep_embeddings,
-    cluster_rep_gapped_seqs,
-    trained_model,
-    n_neighbors,
-    n_images,
-    image_path,
-    save_self_examples,
-    pretrained_transformer,
-    index_device,
-    device="cuda",
+        query_dataset,
+        cluster_rep_index,
+        cluster_rep_labels,
+        cluster_rep_embeddings,
+        cluster_rep_gapped_seqs,
+        trained_model,
+        n_neighbors,
+        n_images,
+        image_path,
+        save_self_examples,
+        pretrained_transformer,
+        index_device,
+        device="cuda",
 ):
     if pretrained_transformer:
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
@@ -313,12 +342,8 @@ def visualize_prediction_patterns(
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
 
         for feat_idx, (label, sequence) in enumerate(zip(labels, embeddings)):
-            if pretrained_transformer:
-                sequence = sequence.contiguous().to("cpu")
-            else:
-                sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
 
-            # searching the index takes a huge amount of time.
             predicted_labels, counts = most_common_matches(
                 cluster_rep_index,
                 cluster_rep_labels,
@@ -471,24 +496,74 @@ def visualize_prediction_patterns(
                 exit()
 
 
-def _infer_with_transformer(seq_batch, trained_model, batch_converter, device):
-    data = []
+def recall_at_pid_thresholds(
+        query_dataset,
+        cluster_rep_index,
+        cluster_rep_labels,
+        trained_model,
+        n_neighbors,
+        pretrained_transformer,
+        index_device,
+        device="cuda"):
+    # going to store the alignments in the query dataset.
+    total_sequences = 0
+    if pretrained_transformer:
+        _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
 
-    for j, prot_seq in enumerate(seq_batch):
-        data.append(
-            (f"prot_{j}", "".join([utils.amino_alphabet[i.item()] for i in prot_seq]))
-        )
-    _, _, batch_tokens = batch_converter(data)
+    pid_to_recall = defaultdict(int)
+    pid_to_total = defaultdict(int)
 
-    embeddings = trained_model(
-        batch_tokens.to(device), repr_layers=[33], return_contacts=False
-    )["representations"][33][:, 1:-1]
+    for j, (features, alis, labels, sequences) in enumerate(query_dataset):
+        if pretrained_transformer:
+            embeddings = trained_model(
+                features.to(device),
+                repr_layers=[33],
+                return_contacts=False)
 
-    return embeddings.to(device)
+            embed = []
+            for k, seq in enumerate(sequences):
+                embed.append(
+                    embeddings["representations"][33][k, 1: len(seq) + 1]
+                )
+            embeddings = embed
+        else:
+            embeddings = trained_model(features.to(device)).transpose(-1, -2)
+
+        stdout.write(f"{j / len(query_dataset):.3f}\r")
+
+        for label, sequence, gapped_sequence in zip(labels, embeddings, alis):
+            total_sequences += 1
+            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+            train_alignment = query_dataset.dataset.label_to_seed_alignment[label]
+            pid = calculate_pid(gapped_sequence, train_alignment)
+            predicted_labels, counts = most_common_matches(
+                cluster_rep_index,
+                cluster_rep_labels,
+                sequence,
+                n_neighbors,
+                index_device,
+            )
+            # get percent identity;
+            # return
+            top_preds = predicted_labels[np.argsort(counts)]
+            if label == top_preds[-1]:
+                pid_to_recall[int(100*pid)] += 1
+            pid_to_total[int(100*pid)] += 1
+
+    total = np.zeros(len(pid_to_total))
+    recall = np.zeros(len(pid_to_recall))
+    for i, key in enumerate(sorted(pid_to_recall.keys())):
+        total[i] = pid_to_total[key]
+        recall[i] = pid_to_recall[key]
+    # do the aggregation here.
+    plt.plot(moving_average(sorted(pid_to_recall.keys())), moving_average(recall)/moving_average(total))
+    plt.savefig("test256.png")
+    plt.close()
+    pdb.set_trace()
 
 
 @torch.no_grad()
-def main(fasta_files, batch_size=32):
+def main(fasta_files, batch_size=16):
     parser = create_parser()
     args = parser.parse_args()
     min_seq_len = args.min_seq_len
@@ -500,7 +575,6 @@ def main(fasta_files, batch_size=32):
     # get model files
     if args.pretrained_transformer:
         model, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
-        batch_converter = alphabet.get_batch_converter()
         model.eval()  # disables dropout for deterministic results
         embed_dim = 1280
     else:
@@ -516,21 +590,14 @@ def main(fasta_files, batch_size=32):
 
         model, _ = utils.load_model(model_path, hparams, dev)
 
-    # iterator = utils.ClusterIterator(
-    #     fasta_files,
-    #     min_seq_len,
-    #     representative_index=0,
-    #     include_all_families=args.include_all_families,
-    #     n_seq_per_target_family=args.n_seq_per_target_family,
-    # )
-    iterator = utils.ClusterIteratorOld(
+    iterator = utils.ClusterIterator(
         fasta_files,
         min_seq_len,
-        evaluate_on_clustered_split=True,
         representative_index=0,
+        include_all_families=args.include_all_families,
         n_seq_per_target_family=args.n_seq_per_target_family,
+        return_alignments=args.plot_recall_and_pid
     )
-
     rep_seqs, rep_labels = iterator.get_cluster_representatives()
     rep_gapped_seqs = iterator.seed_sequences
     # stack the seed sequences.
@@ -541,19 +608,21 @@ def main(fasta_files, batch_size=32):
         device=dev,
         pretrained_transformer=args.pretrained_transformer,
     )
-    print(rep_embeddings.shape)
+    print(f"{rep_embeddings.shape[0]} AA embeddings in target DB.")
     # create an index
     index = utils.create_faiss_index(
         rep_embeddings,
         embed_dim,
         device=index_device,
         distance_metric="cosine",
-        quantize=False,
+        quantize=args.quantize_index,
     )
 
     # and create a test iterator.
     query_dataset = torch.utils.data.DataLoader(
-        iterator, batch_size=batch_size, collate_fn=non_default_collate, shuffle=False
+        iterator, batch_size=batch_size,
+        collate_fn=utils.process_with_esm_batch_converter(return_alignments=args.plot_recall_and_pid),
+        shuffle=False
     )
 
     if args.compute_accuracy:
@@ -585,12 +654,20 @@ def main(fasta_files, batch_size=32):
             index_device,
             dev,
         )
+    elif args.plot_recall_and_pid:
+        recall_at_pid_thresholds(query_dataset,
+                                 index,
+                                 rep_labels,
+                                 model,
+                                 n_neighbors=args.n_neighbors,
+                                 pretrained_transformer=args.pretrained_transformer,
+                                 index_device=index_device,
+                                 device=dev)
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
-
+    # old_files = glob("/home/tc229954/data/prefilter/pfam/seed/clustered/0.8/*-train.fa")
     files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
-    old_files = glob("/home/tc229954/data/prefilter/pfam/seed/clustered/0.8/*-train.fa")
-    main(old_files)
+    main(files)
