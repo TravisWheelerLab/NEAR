@@ -19,10 +19,11 @@ import prefilter.utils as utils
 from pytorch_lightning import seed_everything
 
 
-def moving_average(a, n=3) :
+def moving_average(a, n=3):
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
+    return ret[n - 1 :] / n
+
 
 def calculate_pid(s1, s2):
     if not isinstance(s2, list):
@@ -33,13 +34,13 @@ def calculate_pid(s1, s2):
         numerator = 0
         denominator = 0
         for res1, res2 in zip(s1, sequence):
-            if res1 == '.' and res2 == '.':
+            if res1 == "." and res2 == ".":
                 continue
             if res1 == res2:
                 numerator += 1
             else:
                 denominator += 1
-        total_pid += (numerator/denominator)
+        total_pid += numerator / denominator
 
     return total_pid / len(s2)
 
@@ -55,6 +56,7 @@ def create_parser():
     ap.add_argument("--embed_dim", type=int, default=256)
     ap.add_argument("--index_device", type=str, default="cuda")
     ap.add_argument("--pretrained_transformer", action="store_true")
+    ap.add_argument("--dp_matrix", action="store_true")
 
     ap.add_argument("--visualize", action="store_true")
     ap.add_argument("--plot_recall_and_pid", action="store_true")
@@ -94,11 +96,11 @@ def save_string_sequences(filename, rep_seq, query_seq):
 
 @torch.no_grad()
 def compute_cluster_representative_embeddings(
-        representative_sequences,
-        representative_labels,
-        trained_model,
-        device,
-        pretrained_transformer,
+    representative_sequences,
+    representative_labels,
+    trained_model,
+    device,
+    pretrained_transformer,
 ):
     """
     :param device:
@@ -115,38 +117,56 @@ def compute_cluster_representative_embeddings(
     :rtype:
     """
     if pretrained_transformer:
-        batch_size = 16
+        batch_size = 32
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
         trained_model = trained_model.to(device)
         batch_converter = alphabet.get_batch_converter()
         data = []
+
         for j, prot_seq in enumerate(representative_sequences):
             seq = "".join([utils.amino_alphabet[i.item()] for i in prot_seq])[:1022]
             data.append((f"prot_{j}", seq))
 
         batch_labels, batch_strs, batch_tokens = batch_converter(data)
         representative_embeddings = []
-
         for i in range(0, len(batch_tokens) - batch_size, batch_size):
-            stdout.write(f"{i / len(batch_tokens):.3f}\r")
+            # stdout.write(f"{i / len(batch_tokens):.3f}\r")
             embeddings = trained_model(
-                batch_tokens[i: i + batch_size].to(device),
+                batch_tokens[i : i + batch_size].to(device),
                 repr_layers=[33],
                 return_contacts=False,
             )
             # send to cpu so we save on some GPU memory.
             # remove padding.
-            for j, (_, seq) in enumerate(data[i: i + batch_size]):
-                representative_embeddings.append(
-                    embeddings["representations"][33][j, 1: len(seq) + 1].detach().to("cpu")
+            for j, (_, seq) in enumerate(data[i : i + batch_size]):
+                seq_embed = (
+                    embeddings["representations"][33][j, 1 : len(seq) + 1]
+                    .detach()
+                    .to("cpu")
                 )
-        print()
+                representative_embeddings.append(seq_embed)
+        # how many times does batch size go into batch tokens?
+        end = len(batch_tokens) % batch_size
+        embeddings = trained_model(
+            batch_tokens[-end:].to(device),
+            repr_layers=[33],
+            return_contacts=False,
+        )
+        # send to cpu so we save on some GPU memory.
+        # remove padding.
+        for j, (_, seq) in enumerate(data[-end:]):
+            seq_embed = (
+                embeddings["representations"][33][j, 1 : len(seq) + 1]
+                .detach()
+                .to("cpu")
+            )
+            representative_embeddings.append(seq_embed)
 
     else:
         representative_embeddings = (
             trained_model(representative_tensor).transpose(-1, -2).contiguous()
         )
-
+    assert len(representative_embeddings) == len(representative_labels)
     # duplicate the labels the correct number of times
     _rep_labels = []
     for s, embed in zip(representative_labels, representative_embeddings):
@@ -174,11 +194,11 @@ def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
 
 
 def most_common_matches(
-        faiss_index,
-        cluster_representative_labels,
-        normalized_query_embedding,
-        neighbors,
-        device,
+    faiss_index,
+    cluster_representative_labels,
+    normalized_query_embedding,
+    neighbors,
+    device,
 ):
     distances, match_indices = search_index_device_aware(
         faiss_index,
@@ -197,14 +217,14 @@ def most_common_matches(
 
 
 def compute_accuracy(
-        query_dataset,
-        cluster_rep_index,
-        cluster_rep_labels,
-        trained_model,
-        n_neighbors,
-        pretrained_transformer,
-        index_device,
-        device="cuda",
+    query_dataset,
+    cluster_rep_index,
+    cluster_rep_labels,
+    trained_model,
+    n_neighbors,
+    pretrained_transformer,
+    index_device,
+    device="cuda",
 ):
     total_sequences = 0
     thresholds = [1, 2, 3, 5, 10, 20, 100, 200]
@@ -216,15 +236,12 @@ def compute_accuracy(
     for j, (features, labels, sequences) in enumerate(query_dataset):
         if pretrained_transformer:
             embeddings = trained_model(
-                features.to(device),
-                repr_layers=[33],
-                return_contacts=False)
+                features.to(device), repr_layers=[33], return_contacts=False
+            )
 
             embed = []
             for k, seq in enumerate(sequences):
-                embed.append(
-                    embeddings["representations"][33][k, 1: len(seq) + 1]
-                )
+                embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
             embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
@@ -263,13 +280,13 @@ def compute_accuracy(
 
 
 def _compute_count_mat_and_similarities(
-        label_to_analyze,
-        query_sequence,
-        representative_embeddings,
-        representative_labels,
-        representative_index,
-        device,
-        n_neighbors,
+    label_to_analyze,
+    query_sequence,
+    representative_embeddings,
+    representative_labels,
+    representative_index,
+    index_device,
+    n_neighbors,
 ):
     """
     Gets matrices of dot prods and counts. Label_to_analyze is used to look
@@ -283,11 +300,15 @@ def _compute_count_mat_and_similarities(
 
     representative_embedding = representative_embeddings[
         representative_labels == label_to_analyze
-        ]
+    ]
+    if representative_embedding.shape[0] == 0:
+        pdb.set_trace()
     representative_embedding_start_point = np.where(
         representative_labels == label_to_analyze
     )
-    similarities = torch.matmul(query_sequence, representative_embedding.T)
+    similarities = torch.matmul(
+        query_sequence, representative_embedding.T.to(query_sequence.device)
+    )
     count_mat = np.zeros((query_sequence.shape[0], representative_embedding.shape[0]))
     if len(representative_embedding_start_point):
         representative_embedding_start_point = representative_embedding_start_point[0][
@@ -301,43 +322,50 @@ def _compute_count_mat_and_similarities(
         distances, match_indices = search_index_device_aware(
             representative_index,
             amino_acid.unsqueeze(0),
-            device,
+            index_device,
             n_neighbors=n_neighbors,
         )
         # if there's a match to the predicted label
         for match_index in match_indices[0]:
             if representative_labels[match_index] == label_to_analyze:
                 offset_index = match_index - representative_embedding_start_point
+                if offset_index < 0:
+                    pdb.set_trace()
                 count_mat[i, offset_index] += 1
 
     return count_mat, similarities
 
 
 def visualize_prediction_patterns(
-        query_dataset,
-        cluster_rep_index,
-        cluster_rep_labels,
-        cluster_rep_embeddings,
-        cluster_rep_gapped_seqs,
-        trained_model,
-        n_neighbors,
-        n_images,
-        image_path,
-        save_self_examples,
-        pretrained_transformer,
-        index_device,
-        device="cuda",
+    query_dataset,
+    cluster_rep_index,
+    cluster_rep_labels,
+    cluster_rep_embeddings,
+    cluster_rep_gapped_seqs,
+    trained_model,
+    n_neighbors,
+    n_images,
+    image_path,
+    save_self_examples,
+    pretrained_transformer,
+    index_device,
+    device="cuda",
 ):
     if pretrained_transformer:
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
-        batch_converter = alphabet.get_batch_converter()
 
     image_idx = 0
     for features, labels, gapped_sequences in query_dataset:
         if pretrained_transformer:
-            embeddings = _infer_with_transformer(
-                features, trained_model, batch_converter, device
+
+            embeddings = trained_model(
+                features.to(device), repr_layers=[33], return_contacts=False
             )
+
+            embed = []
+            for k, seq in enumerate(gapped_sequences):
+                embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
+            embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
 
@@ -358,7 +386,7 @@ def visualize_prediction_patterns(
 
             representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
             query_gapped_seq = "".join(
-                utils.amino_alphabet[i.item()] for i in features[feat_idx]
+                utils.esm_toks[i.item()] for i in features[feat_idx]
             )
 
             first_cmat, first_sim = _compute_count_mat_and_similarities(
@@ -367,7 +395,7 @@ def visualize_prediction_patterns(
                 cluster_rep_embeddings,
                 cluster_rep_labels,
                 cluster_rep_index,
-                device,
+                index_device,
                 n_neighbors,
             )
 
@@ -377,7 +405,7 @@ def visualize_prediction_patterns(
                 cluster_rep_embeddings,
                 cluster_rep_labels,
                 cluster_rep_index,
-                device,
+                index_device,
                 n_neighbors,
             )
             unique_name = f"{n_neighbors}_neigh_{image_idx}"
@@ -399,7 +427,6 @@ def visualize_prediction_patterns(
 
                 fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(13, 10))
                 if pretrained_transformer:
-                    print(first_sim.shape)
                     ax[0, 0].imshow(first_sim.to("cpu"), cmap="PiYG")
                 else:
                     ax[0, 0].imshow(first_sim.to("cpu"), vmin=-1, vmax=1, cmap="PiYG")
@@ -467,7 +494,7 @@ def visualize_prediction_patterns(
                     cluster_rep_embeddings,
                     cluster_rep_labels,
                     cluster_rep_index,
-                    device,
+                    index_device,
                     n_neighbors,
                 )
                 if pretrained_transformer:
@@ -497,14 +524,15 @@ def visualize_prediction_patterns(
 
 
 def recall_at_pid_thresholds(
-        query_dataset,
-        cluster_rep_index,
-        cluster_rep_labels,
-        trained_model,
-        n_neighbors,
-        pretrained_transformer,
-        index_device,
-        device="cuda"):
+    query_dataset,
+    cluster_rep_index,
+    cluster_rep_labels,
+    trained_model,
+    n_neighbors,
+    pretrained_transformer,
+    index_device,
+    device="cuda",
+):
     # going to store the alignments in the query dataset.
     total_sequences = 0
     if pretrained_transformer:
@@ -516,15 +544,12 @@ def recall_at_pid_thresholds(
     for j, (features, alis, labels, sequences) in enumerate(query_dataset):
         if pretrained_transformer:
             embeddings = trained_model(
-                features.to(device),
-                repr_layers=[33],
-                return_contacts=False)
+                features.to(device), repr_layers=[33], return_contacts=False
+            )
 
             embed = []
             for k, seq in enumerate(sequences):
-                embed.append(
-                    embeddings["representations"][33][k, 1: len(seq) + 1]
-                )
+                embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
             embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
@@ -547,8 +572,8 @@ def recall_at_pid_thresholds(
             # return
             top_preds = predicted_labels[np.argsort(counts)]
             if label == top_preds[-1]:
-                pid_to_recall[int(100*pid)] += 1
-            pid_to_total[int(100*pid)] += 1
+                pid_to_recall[int(100 * pid)] += 1
+            pid_to_total[int(100 * pid)] += 1
 
     total = np.zeros(len(pid_to_total))
     recall = np.zeros(len(pid_to_recall))
@@ -556,7 +581,10 @@ def recall_at_pid_thresholds(
         total[i] = pid_to_total[key]
         recall[i] = pid_to_recall[key]
     # do the aggregation here.
-    plt.plot(moving_average(sorted(pid_to_recall.keys())), moving_average(recall)/moving_average(total))
+    plt.plot(
+        moving_average(sorted(pid_to_recall.keys())),
+        moving_average(recall) / moving_average(total),
+    )
     plt.savefig("test256.png")
     plt.close()
     pdb.set_trace()
@@ -596,7 +624,7 @@ def main(fasta_files, batch_size=16):
         representative_index=0,
         include_all_families=args.include_all_families,
         n_seq_per_target_family=args.n_seq_per_target_family,
-        return_alignments=args.plot_recall_and_pid
+        return_alignments=args.plot_recall_and_pid,
     )
     rep_seqs, rep_labels = iterator.get_cluster_representatives()
     rep_gapped_seqs = iterator.seed_sequences
@@ -620,9 +648,12 @@ def main(fasta_files, batch_size=16):
 
     # and create a test iterator.
     query_dataset = torch.utils.data.DataLoader(
-        iterator, batch_size=batch_size,
-        collate_fn=utils.process_with_esm_batch_converter(return_alignments=args.plot_recall_and_pid),
-        shuffle=False
+        iterator,
+        batch_size=batch_size,
+        collate_fn=utils.process_with_esm_batch_converter(
+            return_alignments=args.plot_recall_and_pid
+        ),
+        shuffle=True,
     )
 
     if args.compute_accuracy:
@@ -655,19 +686,21 @@ def main(fasta_files, batch_size=16):
             dev,
         )
     elif args.plot_recall_and_pid:
-        recall_at_pid_thresholds(query_dataset,
-                                 index,
-                                 rep_labels,
-                                 model,
-                                 n_neighbors=args.n_neighbors,
-                                 pretrained_transformer=args.pretrained_transformer,
-                                 index_device=index_device,
-                                 device=dev)
+        recall_at_pid_thresholds(
+            query_dataset,
+            index,
+            rep_labels,
+            model,
+            n_neighbors=args.n_neighbors,
+            pretrained_transformer=args.pretrained_transformer,
+            index_device=index_device,
+            device=dev,
+        )
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
     # old_files = glob("/home/tc229954/data/prefilter/pfam/seed/clustered/0.8/*-train.fa")
-    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
+    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")[:20]
     main(files)

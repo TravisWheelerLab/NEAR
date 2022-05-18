@@ -21,32 +21,16 @@ import prefilter.utils as utils
 
 def main(args):
 
-    if args.distill:
-        train_dataset = utils.ESMEmbeddingGenerator(
-            "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
-            "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-            convert_to_tensor=False,
-        )
-        valid_dataset = utils.ESMEmbeddingGenerator(
-            "/home/tc229954/data/prefilter/uniprot/esm1b_uniprot_sprot/",
-            "/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-            convert_to_tensor=False,
-            training=False,
-        )
-        collate_fn = utils.process_with_esm_batch_converter()
-        print(len(train_dataset))
-        print(len(valid_dataset))
-    else:
-        train_dataset = utils.SwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-            apply_indels=False,
-        )
-        valid_dataset = utils.SwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-            training=False,
-            apply_indels=False,
-        )
-        collate_fn = utils.pad_contrastive_batches
+    train_dataset = utils.SwissProtGenerator(
+        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+        minlen=args.min_seq_len,
+    )
+    valid_dataset = utils.SwissProtGenerator(
+        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+        training=False,
+        minlen=args.min_seq_len,
+    )
+    collate_fn = utils.pad_contrastive_batches
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -69,7 +53,6 @@ def main(args):
     model = ResNet1d(
         learning_rate=args.learning_rate,
         apply_mlp=args.apply_mlp,
-        distill_embeddings=args.distill,
         use_embedding_layer_from_transformer=args.use_embedding_layer_from_transformer,
     )
 

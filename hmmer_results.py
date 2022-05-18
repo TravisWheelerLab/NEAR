@@ -5,9 +5,7 @@ import pandas as pd
 from glob import glob
 import prefilter.utils as utils
 
-true_valid = glob(
-    "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid/*.afa"
-)
+true_valid = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/valid/*.afa")
 tblout_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_tblouts/"
 out_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa/"
 

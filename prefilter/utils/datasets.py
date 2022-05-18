@@ -263,21 +263,19 @@ class SwissProtGenerator:
     feed it to the model as a contrastive pair.
     """
 
-    def __init__(self, fa_file, apply_indels, minlen=256, training=True):
+    def __init__(self, fa_file, minlen, training=True):
 
         self.fa_file = fa_file
-        self.apply_indels = apply_indels
         labels, seqs = utils.fasta_from_file(fa_file)
-        self.seqs = [s[1 : minlen + 1] for s in seqs if minlen < len(s)]
+        self.seqs = [s for s in seqs if len(s) > minlen]
         self.training = training
         self.sub_dists = utils.generate_correct_substitution_distributions()
         self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
-        self.indel_probs = [0.01, 0.05, 0.1, 0.15]
+        self.seq_lens = [40, 50, 60, 70]
         shuffle(self.seqs)
 
     def __len__(self):
         if self.training:
-            print(len(self.seqs))
             return len(self.seqs)
         else:
             return 10000
@@ -295,25 +293,23 @@ class SwissProtGenerator:
 
         s1 = _sanitize_sequence(self.seqs[idx])
 
-        s1 = torch.tensor([utils.char_to_index[c] for c in s1])
+        s1 = torch.as_tensor([utils.char_to_index[c] for c in s1])
         n_subs = int(
             len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
-        if self.apply_indels:
-            n_indels = int(
-                len(s1) * self.indel_probs[np.random.randint(0, len(self.indel_probs))]
-            )
-        else:
-            n_indels = None
-
         s2 = utils.mutate_sequence_correct_probabilities(
             sequence=s1,
-            indels=n_indels,
+            indels=None,
             substitutions=n_subs,
             sub_distributions=self.sub_dists,
             aa_dist=utils.amino_distribution,
         )
+        # now, subsample s2.
+        if int(2 * np.random.rand()):
+            len_seq = int(self.seq_lens[np.random.randint(0, len(self.seq_lens))])
+            begin = np.random.randint(0, len(s2) - len_seq)
+            s2 = s2[begin : begin + len_seq]
 
         return s1, s2, idx % len(self.seqs)
 
@@ -524,10 +520,8 @@ class ClusterIteratorOld:
 
 
 class MLMSwissProtGenerator(SwissProtGenerator):
-    def __init__(self, fa_file, apply_indels, minlen=256, training=True):
-        super(MLMSwissProtGenerator, self).__init__(
-            fa_file, apply_indels, minlen, training
-        )
+    def __init__(self, fa_file, minlen=256, training=True):
+        super(MLMSwissProtGenerator, self).__init__(fa_file, minlen, training)
 
     def __len__(self):
         if self.training:
@@ -578,7 +572,7 @@ class ClusterIterator:
         representative_index,
         include_all_families,
         n_seq_per_target_family,
-        return_alignments=False
+        return_alignments=False,
     ):
 
         self.train_afa_files = afa_files
@@ -618,6 +612,7 @@ class ClusterIterator:
             else:
                 # print(f"Couldn't find valid file for {file}")
                 if not include_all_families:
+                    print(f"removing {file}")
                     train_files_to_remove.append(file)
 
         for file in train_files_to_remove:
@@ -642,8 +637,8 @@ class ClusterIterator:
 
             for train_seq, train_ali in zip(train_seqs, train_alignments):
                 if len(train_seq.replace(".", "")) > self.min_seq_len:
-                    _train_seqs.append(train_seq.replace(".", "")[:self.min_seq_len])
-                    _train_alignments.append(train_ali[:self.min_seq_len])
+                    _train_seqs.append(train_seq.replace(".", "")[: self.min_seq_len])
+                    _train_alignments.append(train_ali[: self.min_seq_len])
 
             train_seqs = _train_seqs
             train_alignments = _train_alignments
@@ -653,11 +648,15 @@ class ClusterIterator:
 
             # shuffle train seqs...?
             self.seed_sequences.extend(train_seqs[: self.n_seq_per_target_family])
-            self.seed_alignments.extend(train_alignments[:self.n_seq_per_target_family])
+            self.seed_alignments.extend(
+                train_alignments[: self.n_seq_per_target_family]
+            )
             self.seed_labels.extend(
                 [label_index] * len(train_seqs[: self.n_seq_per_target_family])
             )
-            self.label_to_seed_alignment[label_index] = train_alignments[:self.n_seq_per_target_family]
+            self.label_to_seed_alignment[label_index] = train_alignments[
+                : self.n_seq_per_target_family
+            ]
 
             if train_file in self.train_to_valid:
                 # add them into the validation set;
@@ -671,8 +670,10 @@ class ClusterIterator:
 
                 for valid_seq, valid_ali in zip(valid_seqs, valid_alignments):
                     if len(valid_seq.replace(".", "")) > self.min_seq_len:
-                        _valid_seqs.append(valid_seq.replace(".", "")[:self.min_seq_len])
-                        _valid_alignments.append(valid_ali[:self.min_seq_len])
+                        _valid_seqs.append(
+                            valid_seq.replace(".", "")[: self.min_seq_len]
+                        )
+                        _valid_alignments.append(valid_ali[: self.min_seq_len])
 
                 valid_seqs = _valid_seqs
                 valid_alignments = _valid_alignments
@@ -707,7 +708,6 @@ class ClusterIterator:
             seeds.append(
                 torch.as_tensor([utils.char_to_index[s.upper()] for s in sanitized])
             )
-
         return seeds, self.seed_labels
 
     def __len__(self):

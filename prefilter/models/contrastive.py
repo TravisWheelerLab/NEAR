@@ -19,9 +19,7 @@ class ResNet1d(pl.LightningModule, ABC):
         self,
         learning_rate,
         apply_mlp,
-        distill_embeddings,
         use_embedding_layer_from_transformer=False,
-        mlm_task=False,
         training=True,
     ):
 
@@ -29,28 +27,19 @@ class ResNet1d(pl.LightningModule, ABC):
 
         self.learning_rate = learning_rate
         self.apply_mlp = apply_mlp
-        self.mlm_task = mlm_task
-        self.distill_embeddings = distill_embeddings
         self.use_embedding_layer_from_transformer = use_embedding_layer_from_transformer
         self.training = training
 
-        if self.distill_embeddings:
-            # esm embedding size
-            self.res_block_n_filters = 1280
-        else:
-            self.res_block_n_filters = 1024
+        self.res_block_n_filters = 1280
 
         self.res_block_kernel_size = 3
-        self.n_res_blocks = 18
+        self.n_res_blocks = 5
         self.res_bottleneck_factor = 1
         self.padding = "same"
 
         self.log_interval = 100
 
-        if self.mlm_task:
-            self.loss_func = torch.nn.CrossEntropyLoss()
-        elif self.distill_embeddings:
-            self.loss_func = torch.nn.MSELoss()
+        self.loss_func = model_utils.SupConLoss()
 
         self._setup_layers()
 
@@ -63,73 +52,71 @@ class ResNet1d(pl.LightningModule, ABC):
             model, _ = esm.pretrained.esm1b_t33_650M_UR50S()
             self.embed = model.embed_tokens
 
-        _list = [torch.nn.LSTM(self.res_block_n_filters, self.res_block_n_filters, 2,
-                               batch_first=True, bidirectional=True)]
-
-        self.embedding_trunk = torch.nn.Sequential(*_list)
+        _list = []
+        for _ in range(self.n_res_blocks):
+            _list.append(
+                model_utils.ResConv(
+                    self.res_block_n_filters,
+                    kernel_size=self.res_block_kernel_size,
+                    padding=self.padding,
+                )
+            )
+        self.embedding_trunk = _list
 
         if self.apply_mlp:
             mlp_list = [
                 # double up the number of input channels b/c of bidirectional LSTM.
-                torch.nn.Conv1d(self.res_block_n_filters*2, self.res_block_n_filters, 1),
+                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
                 torch.nn.ReLU(),
                 torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
             ]
             self.mlp = torch.nn.Sequential(*mlp_list)
 
-        if self.mlm_task:
-            # 1x1 conv for classification.
-            self.classifier = torch.nn.Conv1d(
-                self.res_block_n_filters, len(utils.amino_alphabet), 1
-            )
-
     def _forward(self, x):
         x = self.embed(x)
         # removed a transpose for the LSTM.
-        x, _ = self.embedding_trunk(x)
-        # ignore hidden
+        x = self.embedding_trunk(x.transpose(-1, -2))
         if self.apply_mlp:
-            x = self.mlp(x.transpose(-1, -2))
-
-        if self.mlm_task and self.training:
-            # final conv.
-            x = torch.nn.ReLU()(x)
-            x = self.classifier(x)
+            x = self.mlp(x)
         return x
 
-    def forward(self, x):
-        embeddings = self._forward(x)
-        return embeddings
+    def _masked_forward(self, x, mask):
+        x = self.embed(x).transpose(-1, -2)
+        x = ~mask[:, None, :] * x
+        for layer in self.embedding_trunk:
+            x, mask = layer.masked_forward(x, mask)
+        # mask here
+        # removed a transpose for the LSTM.
+        if self.apply_mlp:
+            # point-wise mlp; no downsampling.
+            # no need t mask the mask.
+            x = self.mlp(x)
+            x = ~mask[:, None, :] * x
+        return x, mask
+
+    def forward(self, x, masks=None):
+        if masks is not None:
+            embeddings, masks = self._masked_forward(x, masks)
+        else:
+            embeddings = self._forward(x)
+        return embeddings, masks
 
     def _shared_step(self, batch):
-        if self.mlm_task or self.distill_embeddings:
-            features, labelvecs, _ = batch
-            masks = None
+        if len(batch) == 4:
+            features, masks, labelvecs, labels = batch
         else:
-            if len(batch) == 4:
-                features, masks, labelvecs, labels = batch
-            else:
-                features, masks, labelvecs = batch
+            features, masks, labelvecs = batch
 
         if masks is not None:
             embeddings, masks = self.forward(features, masks)
         else:
             embeddings = self.forward(features)
 
-        if self.mlm_task or self.distill_embeddings:
-            loss = self.loss_func(embeddings.transpose(-1, -2), labelvecs)
-        else:
-            if self.global_step % self.log_interval == 0:
-                loss = self.loss_func(
-                    embeddings,
-                    masks,
-                    labelvecs,
-                    picture_path=self.logger.log_dir,
-                    step=self.global_step,
-                )
-            else:
-                loss = self.loss_func(embeddings, masks, labelvecs)
+        # now, do max pooling:
 
+        embeddings, _ = torch.max(embeddings, dim=-1)
+        e1, e2 = torch.split(embeddings, embeddings.shape[0] // 2, dim=0)
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
         return loss
 
     def training_step(self, batch, batch_nb):

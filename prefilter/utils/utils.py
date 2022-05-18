@@ -22,6 +22,7 @@ seed(1)
 
 __all__ = [
     "parse_tblout",
+    "esm_toks",
     "parse_labels",
     "create_faiss_index",
     "handle_figure_path",
@@ -41,6 +42,36 @@ TBLOUT_COL_NAMES = [
     "description",
 ]
 TBLOUT_COLS = [0, 2, 3, 4, 18]
+
+esm_toks = [
+    "L",
+    "A",
+    "G",
+    "V",
+    "S",
+    "E",
+    "R",
+    "T",
+    "I",
+    "D",
+    "P",
+    "K",
+    "Q",
+    "N",
+    "F",
+    "Y",
+    "M",
+    "H",
+    "W",
+    "C",
+    "X",
+    "B",
+    "U",
+    "Z",
+    "O",
+    ".",
+    "-",
+]
 
 
 def load_model(model_path, hyperparams, device):
@@ -68,7 +99,7 @@ def create_faiss_index(
 
     if quantize:
         print("Training quantized index.")
-        index = faiss.IndexIVFFlat(index, embed_dim, 10000)
+        index = faiss.IndexIVFFlat(index, embed_dim, embeddings.shape[0] // 100)
         index.train(embeddings)
 
     if "cuda" in device:
@@ -200,22 +231,21 @@ def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
 
 def _pad_sequences(sequences):
     mxlen = np.max([s.shape[-1] for s in sequences])
-    padded_batch = np.zeros((len(sequences), LEN_PROTEIN_ALPHABET, mxlen))
+    padded_batch = np.zeros((len(sequences), mxlen))
     masks = []
     for i, s in enumerate(sequences):
-        padded_batch[i, :, : s.shape[-1]] = s
-        mask = np.ones((1, mxlen))
-        mask[:, : s.shape[-1]] = 0
+        padded_batch[i, : s.shape[-1]] = s
+        mask = np.ones(mxlen)
+        mask[: s.shape[-1]] = 0
         masks.append(mask)
-
     masks = np.stack(masks)
-    return torch.tensor(padded_batch).float(), torch.tensor(masks).bool()
+    return torch.as_tensor(padded_batch).float(), torch.as_tensor(masks).bool()
 
 
 def mask_mask(mask):
     idxs = torch.sum(~mask, axis=-1).squeeze().detach()
     for i, idx in enumerate(idxs):
-        mask[i, :, (idx - 1) :] = True
+        mask[i, (idx - 1) :] = True
     return mask
 
 
@@ -224,9 +254,10 @@ def pad_contrastive_batches(batch):
     member2 = [b[1] for b in batch]
     labels = [b[2] for b in batch]
     data = member1 + member2
+    data, masks = _pad_sequences(data)
     return (
-        torch.stack(data),
-        None,
+        data.long(),
+        masks,
         torch.as_tensor(labels),
     )
 
@@ -239,7 +270,12 @@ def process_with_esm_batch_converter(return_alignments=False):
         seqs = [("sd", "".join(b[0])) for b in batch]
         embeddings = [b[1] for b in batch]
         if return_alignments:
-            return batch_converter(seqs)[-1][:, 1:-1], [b[1] for b in batch], [b[2] for b in batch], [b[3] for b in batch]
+            return (
+                batch_converter(seqs)[-1][:, 1:-1],
+                [b[1] for b in batch],
+                [b[2] for b in batch],
+                [b[3] for b in batch],
+            )
 
         else:
             return batch_converter(seqs)[-1][:, 1:-1], embeddings, [b[2] for b in batch]

@@ -53,8 +53,8 @@ def main():
     train_parser.add_argument("--batch_size", type=int, required=True)
     train_parser.add_argument("--num_workers", type=int, required=True)
     train_parser.add_argument("--afa_path", type=str, required=True)
+    train_parser.add_argument("--min_seq_len", type=int, required=True)
     train_parser.add_argument("--check_val_every_n_epoch", default=1, type=int)
-    train_parser.add_argument("--distill", action="store_true")
     train_parser.add_argument(
         "--use_embedding_layer_from_transformer", action="store_true"
     )

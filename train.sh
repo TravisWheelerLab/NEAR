@@ -10,17 +10,17 @@ cd /home/tc229954/share/prefilter
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 
 time $py_cmd -m prefilter train\
-    --gpus 4 \
+    --gpus 1 \
     --num_nodes 1 \
     --num_workers 0 \
     --afa_path /home/tc229954/data/prefilter/panthr/afa/ \
-    --log_dir models/may13/transformer_embedding_layer_lstm \
-    --batch_size 16 \
+    --log_dir models/may17/resnet_supcon_maxpool \
+    --batch_size 128 \
     --epochs 200 \
     --learning_rate 1e-3 \
     --apply_mlp \
-    --distill \
-    --use_embedding_layer_from_transformer
+    --use_embedding_layer_from_transformer \
+    --min_seq_len 80
 
 
 
