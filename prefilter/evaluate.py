@@ -53,6 +53,7 @@ def compute_accuracy(
             embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
+            print(embeddings.shape)
 
         stdout.write(f"{j / len(query_dataset):.3f}\r")
         # searching each sequence separately against the index is probably slow.
@@ -94,7 +95,7 @@ def compute_accuracy(
 def main(fasta_files):
     parser = utils.create_parser()
     args = parser.parse_args()
-    min_seq_len = args.min_seq_len
+    seq_len = args.seq_len
     batch_size = args.batch_size
     index_device = args.index_device
 
@@ -106,32 +107,54 @@ def main(fasta_files):
         model, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
         model.eval()  # disables dropout for deterministic results
         embed_dim = 1280
+    elif args.msa_transformer:
+        msa_transformer, _ = esm.pretrained.esm_msa1b_t12_100M_UR50S()
+        msa_transformer.eval()
+        msa_transformer.requires_grad_ = False
+        hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
+        model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
+        with open(hparams_path, "r") as src:
+            hparams = yaml.safe_load(src)
+        # Set up model and dataset
+        if not os.path.isfile(model_path):
+            raise ValueError(f"No model found at {model_path}")
+        model, _ = utils.load_model(model_path, hparams, dev)
+
     else:
         model_path = "models/may19/17_13250.mod"
         print(f"Model path: {model_path}")
         model = torch.load(model_path, map_location=torch.device(dev))
         model.eval()
 
-    iterator = utils.ClusterIterator(
-        fasta_files,
-        min_seq_len,
-        representative_index=0,
-        include_all_families=args.include_all_families,
-        n_seq_per_target_family=args.n_seq_per_target_family,
-        transformer=args.pretrained_transformer,
-        return_alignments=args.plot_recall_and_pid,
-    )
+    if args.msa_transformer:
+        family_model = msa_transformer
+    else:
+        family_model = model
+
+    if args.msa_transformer:
+        iterator = utils.MSAClusterIterator(afa_files=fasta_files, seq_len=seq_len)
+    else:
+        iterator = utils.ClusterIterator(
+            fasta_files,
+            seq_len,
+            representative_index=0,
+            include_all_families=args.include_all_families,
+            n_seq_per_target_family=args.n_seq_per_target_family,
+            transformer=args.pretrained_transformer,
+            return_alignments=args.plot_recall_and_pid,
+        )
 
     rep_seqs, rep_labels = iterator.get_cluster_representatives()
-    rep_gapped_seqs = iterator.seed_sequences
+    rep_gapped_seqs = iterator.seed_alignments
     # stack the seed sequences.
     rep_embeddings, rep_labels = utils.compute_cluster_representative_embeddings(
         rep_seqs,
         rep_labels,
-        model,
+        family_model,
         args.normalize_embeddings,
         device=dev,
         pretrained_transformer=args.pretrained_transformer,
+        msa_transformer=args.msa_transformer,
     )
     print(
         f"{rep_embeddings.shape[0]} AA embeddings in target DB. Embedding dimension: {rep_embeddings.shape[1]}"
@@ -150,6 +173,8 @@ def main(fasta_files):
         collate_fn = utils.process_with_esm_batch_converter(
             return_alignments=args.plot_recall_and_pid
         )
+    elif args.msa_transformer:
+        collate_fn = utils.msa_transformer_collate(just_sequences=True)
     else:
         collate_fn = utils.daniel_sequence_encode
 

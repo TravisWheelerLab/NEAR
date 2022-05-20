@@ -264,20 +264,29 @@ def pad_contrastive_batches(batch):
     )
 
 
-def msa_transformer_collate():
+def msa_transformer_collate(just_sequences=False):
     _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
     batch_converter = msa_transformer_alphabet.get_batch_converter()
 
     def collate_fn(batch):
-        _, _, msa_embeds = batch_converter([b[0] for b in batch])
-        _, _, seq_embeddings = batch_converter([b[1] for b in batch])
-        # remove dummy dim and 0 begin-of-seq token.
-        seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
-        return (
-            torch.as_tensor(msa_embeds),
-            torch.as_tensor(seq_embeddings),
-            [b[2] for b in batch],
-        )
+        if just_sequences:
+            _, _, seq_embeddings = batch_converter([b[0] for b in batch])
+            return (
+                torch.as_tensor(seq_embeddings[:, :, 1:].squeeze()),
+                [b[1] for b in batch],
+                [b[2] for b in batch],
+            )
+
+        else:
+            _, _, msa_embeds = batch_converter([b[0] for b in batch])
+            _, _, seq_embeddings = batch_converter([b[1] for b in batch])
+            # remove dummy dim and 0 begin-of-seq token.
+            seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
+            return (
+                torch.as_tensor(msa_embeds),
+                torch.as_tensor(seq_embeddings),
+                [b[2] for b in batch],
+            )
 
     return collate_fn
 

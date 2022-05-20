@@ -170,8 +170,11 @@ def compute_cluster_representative_embeddings(
     normalize,
     device,
     pretrained_transformer,
+    msa_transformer,
 ):
     """
+    :param msa_transformer:
+    :type msa_transformer:
     :param normalize:
     :type normalize:
     :param device:
@@ -231,9 +234,41 @@ def compute_cluster_representative_embeddings(
                 .to("cpu")
             )
             representative_embeddings.append(seq_embed)
+    elif msa_transformer:
 
+        trained_model = trained_model.to(device)
+        _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
+        batch_converter = msa_transformer_alphabet.get_batch_converter()
+        batch_tokens = []
+
+        for msa in representative_sequences:
+            _, _, toks = batch_converter(msa)
+            batch_tokens.append(toks)
+
+        representative_embeddings = []
+        # embed each MSA separately.
+        for i in range(0, len(batch_tokens)):
+            stdout.write(f"{i / len(batch_tokens):.3f}\r")
+            embeddings = trained_model(
+                batch_tokens[i].to(device),
+                repr_layers=[12],
+                return_contacts=False,
+            )
+            # send to cpu so we save on some GPU memory.
+            # remove padding.
+            msa_embed = embeddings["representations"][12].squeeze()
+            # TODO:
+            # Grab a different representation?
+            # are the labels incorrect? It's doing
+            # _worse_ than guessing.
+            if msa_embed.ndim == 2:
+                msa_embed = msa_embed.unsqueeze(0)
+
+            mean_msa_embed = torch.mean(msa_embed[:, 1:], dim=0)
+            msa_embed = msa_embed[0, 1:]
+            representative_embeddings.append(msa_embed)
     else:
-        # create representative tensor
+        # create representative tensor for raw sequences.
         representative_embeddings = []
         for rep_seq in representative_sequences:
             embed = (
@@ -251,12 +286,10 @@ def compute_cluster_representative_embeddings(
 
     representative_labels = np.asarray(_rep_labels)
 
-    if pretrained_transformer:
-        representative_embeddings = torch.cat(representative_embeddings, dim=0)
-    else:
-        representative_embeddings = torch.cat(representative_embeddings)
+    representative_embeddings = torch.cat(representative_embeddings)
 
     if normalize:
+        print(representative_embeddings.shape)
         representative_embeddings = torch.nn.functional.normalize(
             representative_embeddings, dim=-1
         )
@@ -273,14 +306,15 @@ def save_integer_encoded_sequences(filename, rep_seq, q_seq):
 
 
 def save_string_sequences(filename, rep_seq, query_seq, true_seq=None):
-    with open(filename, "w") as dst:
-        dst.write(">cluster representative\n")
-        dst.write(rep_seq)
-        dst.write("\n>query\n")
-        dst.write(query_seq)
-        if true_seq is not None:
-            dst.write("\n>true\n")
-            dst.write(true_seq)
+    pass
+    # with open(filename, "w") as dst:
+    #    dst.write(">cluster representative\n")
+    #    dst.write(rep_seq)
+    #    dst.write("\n>query\n")
+    #    dst.write(query_seq)
+    #    if true_seq is not None:
+    #        dst.write("\n>true\n")
+    #        dst.write(true_seq)
 
 
 def create_parser():
@@ -290,7 +324,7 @@ def create_parser():
     ap.add_argument("--include_all_families", action="store_true")
     ap.add_argument("--quantize_index", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
-    ap.add_argument("--min_seq_len", type=int, default=256)
+    ap.add_argument("--seq_len", type=int, default=256)
     ap.add_argument("--batch_size", type=int, default=1)
     ap.add_argument("--embed_dim", type=int, default=256)
     ap.add_argument("--index_device", type=str, default="cuda")
@@ -299,6 +333,7 @@ def create_parser():
     ap.add_argument("--dp_matrix", action="store_true")
     ap.add_argument("--daniel", action="store_true")
     ap.add_argument("--normalize_embeddings", action="store_true")
+    ap.add_argument("--msa_transformer", action="store_true")
 
     ap.add_argument("--visualize", action="store_true")
     ap.add_argument("--plot_recall_and_pid", action="store_true")
@@ -459,39 +494,16 @@ def visualize_prediction_patterns(
             top_pred_embedding = cluster_rep_embeddings[
                 cluster_rep_labels == predicted_labels[-1]
             ]
-            if pretrained_transformer:
-                # dots = torch.matmul(sequence, top_pred_embedding.T.to(sequence.device))
-                dots = -1 * L2Dist(sequence.T, top_pred_embedding.to(sequence.device).T)
-                print(dots)
-            else:
-                dots = 1 - trained_model.L2Dist(
-                    sequence.T, top_pred_embedding.to(sequence.device).T
-                )
 
-            from copy import deepcopy
-
-            a_copy = dots.clone()
-
-            plt.imshow(dots.to("cpu"), vmin=0, vmax=1)
-            plt.savefig(f"test_{np.random.randint(0,100)}.png")
-            plt.close()
-
-            calculate_maximum_scoring_path(a_copy, predicted_labels[-1] == label)
-            continue
+            # calculate_maximum_scoring_path(a_copy, predicted_labels[-1] == label)
+            # continue
 
             if plot_dots:
                 # i want a bunch of false matches and then the true one.
                 fig, ax = plt.subplots(ncols=2, nrows=5, figsize=(13, 10))
                 for kk, lab in enumerate(predicted_labels[::-1][:10]):
                     rep_embedding = cluster_rep_embeddings[cluster_rep_labels == lab]
-                    if not pretrained_transformer:
-                        l2s = trained_model.L2Dist(
-                            sequence.T, rep_embedding.to(sequence.device).T
-                        )
-                    else:
-                        l2s = torch.matmul(
-                            sequence, rep_embedding.to(sequence.device).T
-                        )
+                    l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
                     ax[kk % 5, kk // 5].imshow(
                         l2s.to("cpu"),
                         cmap="PiYG",
@@ -504,12 +516,7 @@ def visualize_prediction_patterns(
 
                 rep_embedding = cluster_rep_embeddings[cluster_rep_labels == label]
 
-                if not pretrained_transformer:
-                    l2s = trained_model.L2Dist(
-                        sequence.T, rep_embedding.to(sequence.device).T
-                    )
-                else:
-                    l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
+                l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
 
                 ax[kk % 5, kk // 5].imshow(
                     l2s.to("cpu"),
@@ -546,11 +553,8 @@ def visualize_prediction_patterns(
 
             predicted_label = predicted_labels[-1]
             second_label = predicted_labels[-2]
-
             representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
-            query_gapped_seq = "".join(
-                [amino_n_to_a[f] for f in features[feat_idx].argmax(dim=0)]
-            )
+            query_gapped_seq = ""
 
             first_cmat, first_sim = _compute_count_mat_and_similarities(
                 predicted_label,

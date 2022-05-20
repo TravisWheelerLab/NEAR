@@ -9,15 +9,20 @@ __all__ = ["ResConv"]
 
 
 class ResConv(torch.nn.Module):
-    def __init__(self, filters, kernel_size, padding):
+    def __init__(self, filters, kernel_size, padding, padding_mode):
         super(ResConv, self).__init__()
 
         self.padding = padding
+        self.padding_mode = padding_mode
         self.kernel_size = kernel_size
-        self.conv1 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
+        self.conv1 = torch.nn.Conv1d(
+            filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
+        )
         self.bn1 = torch.nn.BatchNorm1d(filters)
         self.act = torch.nn.ReLU()
-        self.conv2 = torch.nn.Conv1d(filters, filters, kernel_size, padding=padding)
+        self.conv2 = torch.nn.Conv1d(
+            filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
+        )
         self.bn2 = torch.nn.BatchNorm1d(filters)
 
     def masked_forward(self, features, mask):

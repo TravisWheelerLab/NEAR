@@ -21,16 +21,28 @@ import prefilter.utils as utils
 
 def main(args):
 
-    train_dataset = utils.SwissProtGenerator(
-        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-        minlen=args.min_seq_len,
-    )
-    valid_dataset = utils.SwissProtGenerator(
-        fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
-        training=False,
-        minlen=args.min_seq_len,
-    )
-    collate_fn = utils.pad_contrastive_batches
+    if args.msa_transformer:
+        afa_files = glob(
+            "/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa"
+        )[:100]
+        train_dataset = utils.MSATransAndCNN(afa_files=afa_files, seq_len=args.seq_len)
+        valid_dataset = utils.MSATransAndCNN(
+            afa_files=afa_files,
+            seq_len=args.seq_len,
+            training=False,
+        )
+        collate_fn = utils.msa_transformer_collate()
+    else:
+        train_dataset = utils.SwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            minlen=args.min_seq_len,
+        )
+        valid_dataset = utils.SwissProtGenerator(
+            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            training=False,
+            minlen=args.min_seq_len,
+        )
+        collate_fn = utils.pad_contrastive_batches
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -52,8 +64,7 @@ def main(args):
 
     model = ResNet1d(
         learning_rate=args.learning_rate,
-        apply_mlp=args.apply_mlp,
-        use_embedding_layer_from_transformer=args.use_embedding_layer_from_transformer,
+        embed_msas=args.msa_transformer,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

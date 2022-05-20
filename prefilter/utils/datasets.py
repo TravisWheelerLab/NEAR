@@ -36,6 +36,7 @@ __all__ = [
     "ESMEmbeddingGenerator",
     "MSATransAndCNN",
     "ClusterIteratorOld",
+    "MSAClusterIterator",
 ]
 
 
@@ -563,6 +564,95 @@ class MLMSwissProtGenerator(SwissProtGenerator):
         return s1, labelvector, label
 
 
+class MSAClusterIterator:
+    """
+    I'm going to add in alignments here so we can easily look
+    at them without grepping or anything.
+    """
+
+    def __init__(self, afa_files, seq_len, seqs_per_msa=10):
+
+        self.train_afa_files = afa_files
+        self.seq_len = seq_len
+        self.seqs_per_msa = seqs_per_msa
+
+        self.valid_afa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
+        self.valid_fa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
+
+        self.train_to_valid = {}
+
+        train_files_to_remove = []
+
+        for file in self.train_afa_files:
+            # get corresponding validation file;
+            valid_file = os.path.basename(file)
+            if "-1" in os.path.basename(file):
+                valid_file = valid_file.replace("-1", "-2") + ".fa"
+            else:
+                valid_file = valid_file.replace("-2", "-1") + ".fa"
+
+            valid_fa = os.path.join(self.valid_fa_path, valid_file)
+            if os.path.isfile(valid_fa):
+                self.train_to_valid[file] = valid_fa
+            else:
+                # print(f"Couldn't find valid file for {file}")
+                train_files_to_remove.append(file)
+
+        for file in train_files_to_remove:
+            self.train_afa_files.remove(file)
+
+        self._build_clustered_dataset()
+
+    def _build_clustered_dataset(self):
+
+        label_index = 0
+        self.seed_alignments = []
+        self.seed_labels = []
+        self.query_sequences = []
+        self.query_labels = []
+
+        self.label_to_seed_alignment = {}
+
+        for train_file in self.train_afa_files:
+            if train_file in self.train_to_valid:
+                train_headers, train_msa = utils.fasta_from_file(train_file)
+                # return tuples of (name, sequence)
+                # after forcing them to be the same length.
+                train_seqs = [
+                    (h, s[: self.seq_len])
+                    for h, s in zip(train_headers, train_msa)
+                    if len(s[1]) >= self.seq_len
+                ]
+                if len(train_seqs):
+                    if len(train_seqs) > self.seqs_per_msa:
+                        train_seqs = train_seqs[: self.seqs_per_msa]
+
+                    valid_headers, valid_msa = utils.fasta_from_file(valid_file)
+                    valid_seqs = [
+                        (h, s[: self.seq_len])
+                        for h, s in zip(valid_headers, valid_msa)
+                        if len(s[1]) >= self.seq_len
+                    ]
+                    self.seed_alignments.append(train_seqs)
+                    self.seed_labels.append(label_index)
+
+                    self.query_sequences.extend(valid_seqs)
+                    self.query_labels.extend([label_index] * len(valid_seqs))
+                    label_index += 1
+
+    def get_cluster_representatives(self):
+        return self.seed_alignments, self.seed_labels
+
+    def __len__(self):
+        return len(self.query_sequences)
+
+    def __getitem__(self, idx):
+
+        qseq = self.query_sequences[idx]
+        label = self.query_labels[idx]
+        return qseq, label, self.query_sequences[idx][1]
+
+
 class ClusterIterator:
     """
     I'm going to add in alignments here so we can easily look
@@ -843,13 +933,15 @@ class MSATransAndCNN:
     def _build_dataset(self):
         for train_afa in self.afa_files:
             # this removes all gaps.
-            msa = read_msa(train_afa)
+            headers, seqs = utils.fasta_from_file(train_afa)
+            msa = []
+            for h, s in zip(headers, seqs):
+                if len(s.replace(".", "")) >= self.seq_len:
+                    msa.append((h, s))
             # return tuples of (name, sequence)
             # after forcing them to be the same length.
-            seqs = [
-                (s[0], s[1][: self.seq_len]) for s in msa if len(s[1]) >= self.seq_len
-            ]
-            if len(seqs) > 5:
+            seqs = [(s[0], s[1]) for s in msa]
+            if len(seqs) >= 5:
                 self.msas.append(seqs)
 
         self.length = sum([len(s) for s in self.msas])
@@ -860,23 +952,53 @@ class MSATransAndCNN:
         else:
             return self.length // 20
 
+    def _create_labelvectors(self, msas):
+
+        labels = torch.zeros((len(msas), self.seq_len)) - 1
+        for char_idx in range(self.seq_len):
+            for i, msa in enumerate(msas):
+                # if there isn't a gap, put a label in there.
+                if msa[1][char_idx] != ".":
+                    labels[i, char_idx] = char_idx
+        return labels
+
     def __getitem__(self, idx):
         # have to have a circular index
         # since I want the length to be the number of sequences contained in the
         msa = deepcopy(self.msas[idx % len(self.msas)])
-        query_seq = msa.pop(np.random.randint(0, len(msa)))
+        # make a labelvector for each sequence in the msa
+        labels = self._create_labelvectors(msa)
+        pop_idx = np.random.randint(0, len(msa))
+        query_header, query_seq = msa.pop(pop_idx)
+        query_labelvector = labels[pop_idx].clone()
+
+        _labels = []
+
+        for j in range(labels.shape[0]):
+            if j != pop_idx:
+                _labels.append(labels[j])
+
+        msa = [(m[0], m[1][: self.seq_len]) for m in msa]
+
+        if len(_labels) > 1:
+            labels = torch.stack(_labels)[:, : self.seq_len]
+        else:
+            labels = labels[0][:, : self.seq_len]
+
+        query_seq = query_seq.replace(".", "")[: self.seq_len]
+        query_seq = (query_header, query_seq)
+
         # sample 80% of sequences from MSA too
         if int(0.8) * len(msa) == 0:
             idx = np.arange(len(msa))
         else:
             idx = np.random.randint(0, len(msa), size=int(0.8 * len(msa)))
+
         subsampled = [msa[i] for i in idx]
-        if len(subsampled) > 10:
-            subsampled = subsampled[:10]
-        # could mutate the query sequence too
-        # that was easy, now i need to
-        # a) stop grad on MSA transformer
-        # b) figure out how to encode sequences
+
+        if len(subsampled) > 5:
+            subsampled = subsampled[:5]
+
         return subsampled, query_seq, idx
 
 

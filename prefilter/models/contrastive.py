@@ -18,24 +18,31 @@ class ResNet1d(pl.LightningModule, ABC):
     def __init__(
         self,
         learning_rate,
-        apply_mlp,
-        use_embedding_layer_from_transformer=False,
+        embed_msas,
         training=True,
     ):
 
         super(ResNet1d, self).__init__()
 
         self.learning_rate = learning_rate
-        self.apply_mlp = apply_mlp
-        self.use_embedding_layer_from_transformer = use_embedding_layer_from_transformer
         self.training = training
+        self.embed_msas = embed_msas
 
-        self.res_block_n_filters = 1280
+        if self.embed_msas:
+            self.msa_transformer, _ = esm.pretrained.esm_msa1b_t12_100M_UR50S()
+            self.msa_transformer.eval()
+            self.msa_transformer.requires_grad_ = False
+
+        if self.msa_transformer:
+            self.res_block_n_filters = 768
+        else:
+            self.res_block_n_filters = 256
 
         self.res_block_kernel_size = 3
         self.n_res_blocks = 5
         self.res_bottleneck_factor = 1
         self.padding = "same"
+        self.padding_mode = "circular"
 
         self.log_interval = 100
 
@@ -47,10 +54,8 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _setup_layers(self):
 
-        if self.use_embedding_layer_from_transformer:
-            # load transformer and grab the embedding layer.
-            model, _ = esm.pretrained.esm1b_t33_650M_UR50S()
-            self.embed = model.embed_tokens
+        self.embed = nn.Embedding(27, self.res_block_n_filters)
+        print(f"Using padding {self.padding_mode}, with {self.padding} padding.")
 
         _list = []
         for _ in range(self.n_res_blocks):
@@ -59,25 +64,23 @@ class ResNet1d(pl.LightningModule, ABC):
                     self.res_block_n_filters,
                     kernel_size=self.res_block_kernel_size,
                     padding=self.padding,
+                    padding_mode=self.padding_mode,
                 )
             )
-        self.embedding_trunk = _list
+        self.embedding_trunk = torch.nn.Sequential(*_list)
 
-        if self.apply_mlp:
-            mlp_list = [
-                # double up the number of input channels b/c of bidirectional LSTM.
-                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
-                torch.nn.ReLU(),
-                torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
-            ]
-            self.mlp = torch.nn.Sequential(*mlp_list)
+        mlp_list = [
+            # double up the number of input channels b/c of bidirectional LSTM.
+            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+        ]
+        self.mlp = torch.nn.Sequential(*mlp_list)
 
     def _forward(self, x):
         x = self.embed(x)
-        # removed a transpose for the LSTM.
         x = self.embedding_trunk(x.transpose(-1, -2))
-        if self.apply_mlp:
-            x = self.mlp(x)
+        x = self.mlp(x)
         return x
 
     def _masked_forward(self, x, mask):
@@ -87,36 +90,78 @@ class ResNet1d(pl.LightningModule, ABC):
             x, mask = layer.masked_forward(x, mask)
         # mask here
         # removed a transpose for the LSTM.
-        if self.apply_mlp:
-            # point-wise mlp; no downsampling.
-            # no need t mask the mask.
-            x = self.mlp(x)
-            x = ~mask[:, None, :] * x
+        # point-wise mlp; no downsampling.
+        # no need to mask the mask (kernel size 1).
+        x = self.mlp(x)
+        x = ~mask[:, None, :] * x
         return x, mask
 
     def forward(self, x, masks=None):
         if masks is not None:
             embeddings, masks = self._masked_forward(x, masks)
+            return embeddings, masks
         else:
             embeddings = self._forward(x)
-        return embeddings, masks
+            return embeddings
 
     def _shared_step(self, batch):
-        if len(batch) == 4:
+        if self.msa_transformer:
+            msas, seqs, labels = batch
+        elif len(batch) == 4:
             features, masks, labelvecs, labels = batch
         else:
             features, masks, labelvecs = batch
 
-        if masks is not None:
-            embeddings, masks = self.forward(features, masks)
+        if self.msa_transformer:
+            # each msa gets an _entire_ embedding
+            msa_embeddings = self.msa_transformer(
+                msas, repr_layers=[12], return_contacts=False
+            )["representations"][12]
+            # take a single msa rep.
+            msa_embeddings = msa_embeddings[:, torch.randint(0, 5, (1,)).item(), 1:, :]
+            sequence_embeddings = self.forward(seqs).transpose(-1, -2)
         else:
-            embeddings = self.forward(features)
+            if masks is not None:
+                embeddings, masks = self.forward(features, masks)
+            else:
+                embeddings = self.forward(features)
 
         # now, do max pooling:
+        if self.msa_transformer:
+            msa_embeddings = torch.cat(torch.unbind(msa_embeddings, dim=0))
+            sequence_embeddings = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+            # assume they're all aligned?
+            msa_embeddings = torch.nn.functional.normalize(msa_embeddings, dim=-1)
+            sequence_embeddings = torch.nn.functional.normalize(
+                sequence_embeddings, dim=-1
+            )
 
-        embeddings, _ = torch.max(embeddings, dim=-1)
-        e1, e2 = torch.split(embeddings, embeddings.shape[0] // 2, dim=0)
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+            if self.global_step % self.log_interval == 0:
+                with torch.no_grad():
+                    plt.imshow(
+                        torch.matmul(sequence_embeddings, msa_embeddings.T)
+                        .to("cpu")
+                        .detach()
+                        .numpy()
+                    )
+                    plt.colorbar()
+                    plt.savefig(
+                        f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
+                        bbox_inches="tight",
+                    )
+                    plt.close()
+            # have to normalize for the supcon loss
+            loss = self.loss_func(
+                torch.cat(
+                    (msa_embeddings.unsqueeze(1), sequence_embeddings.unsqueeze(1)),
+                    dim=1,
+                )
+            )
+        else:
+            embeddings, _ = torch.max(embeddings, dim=-1)
+            e1, e2 = torch.split(embeddings, embeddings.shape[0] // 2, dim=0)
+            loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+
         return loss
 
     def training_step(self, batch, batch_nb):
