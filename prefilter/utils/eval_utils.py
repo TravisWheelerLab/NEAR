@@ -4,14 +4,68 @@ import esm
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import utils as utils
 from sys import stdout
 from argparse import ArgumentParser
 
 amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
 
-def calculate_maximum_scoring_path(dot_products):
-    pass
+
+def L2Dist(A, B):
+    return torch.cdist(torch.transpose(A, -1, -2), torch.transpose(B, -1, -2))
+
+
+def calculate_maximum_scoring_path(dot_products, true_match):
+    plt.imshow(dot_products)
+    scores = torch.zeros_like(dot_products)
+    scores[:, 0] = dot_products[:, 0]
+    scores[0, :] = dot_products[0, :]
+
+    best_path = torch.zeros((scores.shape[0], scores.shape[1], 2), dtype=torch.int)
+    # for each row
+    gap_pen = torch.min(scores.view(-1))
+    for i in range(1, scores.shape[0]):
+        # for each column
+        for j in range(1, scores.shape[1]):
+            # where did we come from?
+            # 0.2 as gap penalty
+            vals = [
+                gap_pen + scores[i - 1, j],
+                gap_pen + scores[i, j - 1],
+                scores[i - 1, j - 1] + dot_products[i, j],
+            ]
+            # vals = [scores[i - 1, j], scores[i, j - 1], scores[i - 1, j - 1]]
+            idxs = [[i - 1, j], [i, j - 1], [i - 1, j - 1]]
+            amax = np.argmax(vals)
+            scores[i, j] = vals[amax]
+            best_path[i, j] = torch.as_tensor(idxs[amax])
+
+    # best column:
+    best_col = torch.argmax(scores[-1, :])
+    best_row = torch.argmax(scores[:, -1])
+    if scores[-1, best_col] > scores[best_row, -1]:
+        starting_point = best_path[-1, best_col]
+    else:
+        starting_point = best_path[best_row, -1]
+    row_idx = starting_point[0]
+    col_idx = starting_point[1]
+    # while we haven't reached a side:
+    path_log = [starting_point]
+    total_score = 0
+
+    while row_idx != 0 and col_idx != 0:
+        next_best = best_path[row_idx, col_idx]
+        total_score += dot_products[row_idx, col_idx]
+        path_log.append(next_best)
+        row_idx, col_idx = best_path[row_idx, col_idx]
+
+    # plt.imshow(dot_products)
+    for y, x in path_log:
+        plt.scatter(x.item(), y.item(), c="r", s=2)
+    plt.title(f"{true_match} match. Sum of score: {total_score}")
+    plt.colorbar()
+    plt.savefig(f"l2_with_dannel_test{np.random.randint(0,100)}.png")
+    plt.close()
+
 
 def _compute_count_mat_and_similarities(
     label_to_analyze,
@@ -20,6 +74,7 @@ def _compute_count_mat_and_similarities(
     representative_labels,
     representative_index,
     index_device,
+    pretrained_transformer,
     n_neighbors,
 ):
     """
@@ -38,10 +93,17 @@ def _compute_count_mat_and_similarities(
     representative_embedding_start_point = np.where(
         representative_labels == label_to_analyze
     )
-    similarities = torch.matmul(
-        query_sequence, representative_embedding.T.to(query_sequence.device)
-    )
+    if pretrained_transformer:
+        similarities = torch.matmul(
+            query_sequence, representative_embedding.T.to(query_sequence.device)
+        )
+    else:
+        similarities = torch.cdist(
+            query_sequence, representative_embedding.to(query_sequence.device)
+        )
+
     count_mat = np.zeros((query_sequence.shape[0], representative_embedding.shape[0]))
+
     if len(representative_embedding_start_point):
         representative_embedding_start_point = representative_embedding_start_point[0][
             0
@@ -172,30 +234,27 @@ def compute_cluster_representative_embeddings(
 
     else:
         # create representative tensor
-        pdb.set_trace()
-        representative_embeddings = (
-            trained_model(
-                torch.cat([r.unsqueeze(0) for r in representative_sequences], dim=0)
-                .float()
-                .to(device)
+        representative_embeddings = []
+        for rep_seq in representative_sequences:
+            embed = (
+                trained_model(rep_seq.unsqueeze(0).to(device))
+                .transpose(-1, -2)
+                .contiguous()
             )
-            .transpose(-1, -2)
-            .contiguous()
-        )
+            representative_embeddings.append(embed.squeeze())
+
     assert len(representative_embeddings) == len(representative_labels)
     # duplicate the labels the correct number of times
     _rep_labels = []
     for s, embed in zip(representative_labels, representative_embeddings):
-        _rep_labels.extend([s] * embed.shape[0])
+        _rep_labels.extend([s] * embed.squeeze().shape[0])
 
     representative_labels = np.asarray(_rep_labels)
 
     if pretrained_transformer:
         representative_embeddings = torch.cat(representative_embeddings, dim=0)
     else:
-        representative_embeddings = torch.cat(
-            torch.unbind(representative_embeddings, dim=0)
-        )
+        representative_embeddings = torch.cat(representative_embeddings)
 
     if normalize:
         representative_embeddings = torch.nn.functional.normalize(
@@ -213,12 +272,15 @@ def save_integer_encoded_sequences(filename, rep_seq, q_seq):
         dst.write("".join([utils.amino_alphabet[i] for i in q_seq]))
 
 
-def save_string_sequences(filename, rep_seq, query_seq):
+def save_string_sequences(filename, rep_seq, query_seq, true_seq=None):
     with open(filename, "w") as dst:
         dst.write(">cluster representative\n")
         dst.write(rep_seq)
         dst.write("\n>query\n")
         dst.write(query_seq)
+        if true_seq is not None:
+            dst.write("\n>true\n")
+            dst.write(true_seq)
 
 
 def create_parser():
@@ -229,10 +291,12 @@ def create_parser():
     ap.add_argument("--quantize_index", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--min_seq_len", type=int, default=256)
+    ap.add_argument("--batch_size", type=int, default=1)
     ap.add_argument("--embed_dim", type=int, default=256)
     ap.add_argument("--index_device", type=str, default="cuda")
     ap.add_argument("--pretrained_transformer", action="store_true")
     ap.add_argument("--plot_dots", action="store_true")
+    ap.add_argument("--dp_matrix", action="store_true")
     ap.add_argument("--daniel", action="store_true")
     ap.add_argument("--normalize_embeddings", action="store_true")
 
@@ -390,17 +454,46 @@ def visualize_prediction_patterns(
                 n_neighbors,
                 index_device,
             )
-
             predicted_labels = predicted_labels[np.argsort(counts)]
+            # now, get the dp matrix going.
+            top_pred_embedding = cluster_rep_embeddings[
+                cluster_rep_labels == predicted_labels[-1]
+            ]
+            if pretrained_transformer:
+                # dots = torch.matmul(sequence, top_pred_embedding.T.to(sequence.device))
+                dots = -1 * L2Dist(sequence.T, top_pred_embedding.to(sequence.device).T)
+                print(dots)
+            else:
+                dots = 1 - trained_model.L2Dist(
+                    sequence.T, top_pred_embedding.to(sequence.device).T
+                )
+
+            from copy import deepcopy
+
+            a_copy = dots.clone()
+
+            plt.imshow(dots.to("cpu"), vmin=0, vmax=1)
+            plt.savefig(f"test_{np.random.randint(0,100)}.png")
+            plt.close()
+
+            calculate_maximum_scoring_path(a_copy, predicted_labels[-1] == label)
+            continue
+
             if plot_dots:
                 # i want a bunch of false matches and then the true one.
                 fig, ax = plt.subplots(ncols=2, nrows=5, figsize=(13, 10))
                 for kk, lab in enumerate(predicted_labels[::-1][:10]):
                     rep_embedding = cluster_rep_embeddings[cluster_rep_labels == lab]
+                    if not pretrained_transformer:
+                        l2s = trained_model.L2Dist(
+                            sequence.T, rep_embedding.to(sequence.device).T
+                        )
+                    else:
+                        l2s = torch.matmul(
+                            sequence, rep_embedding.to(sequence.device).T
+                        )
                     ax[kk % 5, kk // 5].imshow(
-                        torch.matmul(sequence, rep_embedding.to(sequence.device).T).to(
-                            "cpu"
-                        ),
+                        l2s.to("cpu"),
                         cmap="PiYG",
                     )
                     ax[kk % 5, kk // 5].set_title(
@@ -410,10 +503,16 @@ def visualize_prediction_patterns(
                     ax[kk % 5, kk // 5].set_yticks([])
 
                 rep_embedding = cluster_rep_embeddings[cluster_rep_labels == label]
+
+                if not pretrained_transformer:
+                    l2s = trained_model.L2Dist(
+                        sequence.T, rep_embedding.to(sequence.device).T
+                    )
+                else:
+                    l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
+
                 ax[kk % 5, kk // 5].imshow(
-                    torch.matmul(sequence, rep_embedding.to(sequence.device).T).to(
-                        "cpu"
-                    ),
+                    l2s.to("cpu"),
                     cmap="PiYG",
                 )
                 ax[kk % 5, kk // 5].set_xticks([])
@@ -431,9 +530,15 @@ def visualize_prediction_patterns(
                     )
 
                 if predicted_labels[-1] == label:
-                    plt.savefig(f"{image_path}/dots_true_hit_{image_idx}.png", bbox_inches="tight")
+                    plt.savefig(
+                        f"{image_path}/dots_true_hit_{image_idx}.png",
+                        bbox_inches="tight",
+                    )
                 else:
-                    plt.savefig(f"{image_path}/dots_false_hit_{image_idx}.png", bbox_inches="tight")
+                    plt.savefig(
+                        f"{image_path}/dots_false_hit_{image_idx}.png",
+                        bbox_inches="tight",
+                    )
 
                 image_idx += 1
 
@@ -443,7 +548,9 @@ def visualize_prediction_patterns(
             second_label = predicted_labels[-2]
 
             representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
-            query_gapped_seq = "".join([amino_n_to_a[f] for f in features[feat_idx].argmax(dim=0)])
+            query_gapped_seq = "".join(
+                [amino_n_to_a[f] for f in features[feat_idx].argmax(dim=0)]
+            )
 
             first_cmat, first_sim = _compute_count_mat_and_similarities(
                 predicted_label,
@@ -452,7 +559,8 @@ def visualize_prediction_patterns(
                 cluster_rep_labels,
                 cluster_rep_index,
                 index_device,
-                n_neighbors,
+                pretrained_transformer=pretrained_transformer,
+                n_neighbors=n_neighbors,
             )
 
             second_cmat, second_sim = _compute_count_mat_and_similarities(
@@ -462,7 +570,8 @@ def visualize_prediction_patterns(
                 cluster_rep_labels,
                 cluster_rep_index,
                 index_device,
-                n_neighbors,
+                pretrained_transformer=pretrained_transformer,
+                n_neighbors=n_neighbors,
             )
             unique_name = f"{n_neighbors}_neigh_{image_idx}"
 
@@ -551,7 +660,8 @@ def visualize_prediction_patterns(
                     cluster_rep_labels,
                     cluster_rep_index,
                     index_device,
-                    n_neighbors,
+                    pretrained_transformer=pretrained_transformer,
+                    n_neighbors=n_neighbors,
                 )
                 if pretrained_transformer:
                     ax[2, 0].imshow(true_sim.to("cpu"), cmap="PiYG")
@@ -566,10 +676,13 @@ def visualize_prediction_patterns(
                     f"{image_path}/false_{unique_name}.png", bbox_inches="tight"
                 )
 
+                true_gapped_seq = cluster_rep_gapped_seqs[label]
+
                 save_string_sequences(
                     f"{image_path}/false_{unique_name}.fa",
                     representative_gapped_seq,
                     query_gapped_seq,
+                    true_seq=true_gapped_seq,
                 )
 
             image_idx += 1

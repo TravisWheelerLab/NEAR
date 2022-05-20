@@ -22,6 +22,7 @@ from pytorch_lightning import seed_everything
 from prefilter.models import ResNet, ResidualBlock, DotProdModel
 import prefilter.utils as utils
 
+
 def compute_accuracy(
     query_dataset,
     cluster_rep_index,
@@ -90,10 +91,11 @@ def compute_accuracy(
 
 
 @torch.no_grad()
-def main(fasta_files, batch_size=16):
+def main(fasta_files):
     parser = utils.create_parser()
     args = parser.parse_args()
     min_seq_len = args.min_seq_len
+    batch_size = args.batch_size
     index_device = args.index_device
 
     embed_dim = args.embed_dim
@@ -104,20 +106,11 @@ def main(fasta_files, batch_size=16):
         model, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
         model.eval()  # disables dropout for deterministic results
         embed_dim = 1280
-    elif args.daniel:
+    else:
         model_path = "models/may19/17_13250.mod"
         print(f"Model path: {model_path}")
         model = torch.load(model_path, map_location=torch.device(dev))
         model.eval()
-    else:
-        hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
-        model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
-        with open(hparams_path, "r") as src:
-            hparams = yaml.safe_load(src)
-        # Set up model and dataset
-        if not os.path.isfile(model_path):
-            raise ValueError(f"No model found at {model_path}")
-        model, _ = utils.load_model(model_path, hparams, dev)
 
     iterator = utils.ClusterIterator(
         fasta_files,
@@ -128,6 +121,7 @@ def main(fasta_files, batch_size=16):
         transformer=args.pretrained_transformer,
         return_alignments=args.plot_recall_and_pid,
     )
+
     rep_seqs, rep_labels = iterator.get_cluster_representatives()
     rep_gapped_seqs = iterator.seed_sequences
     # stack the seed sequences.
@@ -139,7 +133,9 @@ def main(fasta_files, batch_size=16):
         device=dev,
         pretrained_transformer=args.pretrained_transformer,
     )
-    print(f"{rep_embeddings.shape[0]} AA embeddings in target DB. Embedding dimension: {rep_embeddings.shape[1]}")
+    print(
+        f"{rep_embeddings.shape[0]} AA embeddings in target DB. Embedding dimension: {rep_embeddings.shape[1]}"
+    )
 
     # create an index
     index = utils.create_faiss_index(
@@ -213,6 +209,5 @@ def main(fasta_files, batch_size=16):
 
 
 if __name__ == "__main__":
-
     files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
     main(files)

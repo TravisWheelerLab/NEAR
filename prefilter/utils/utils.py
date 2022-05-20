@@ -32,6 +32,8 @@ __all__ = [
     "mask_mask",
     "load_model",
     "process_with_esm_batch_converter",
+    "msa_transformer_collate",
+    "daniel_sequence_encode",
 ]
 
 TBLOUT_COL_NAMES = [
@@ -259,6 +261,41 @@ def pad_contrastive_batches(batch):
         data.long(),
         masks,
         torch.as_tensor(labels),
+    )
+
+
+def msa_transformer_collate():
+    _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
+    batch_converter = msa_transformer_alphabet.get_batch_converter()
+
+    def collate_fn(batch):
+        _, _, msa_embeds = batch_converter([b[0] for b in batch])
+        _, _, seq_embeddings = batch_converter([b[1] for b in batch])
+        # remove dummy dim and 0 begin-of-seq token.
+        seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
+        return (
+            torch.as_tensor(msa_embeds),
+            torch.as_tensor(seq_embeddings),
+            [b[2] for b in batch],
+        )
+
+    return collate_fn
+
+
+def daniel_sequence_encode(batch):
+    seqs = []
+
+    for seq in [b[0] for b in batch]:
+        seqs.append(
+            torch.stack(
+                [models.amino_n_to_v[models.amino_a_to_n[s.upper()]] for s in seq]
+            ).T
+        )
+
+    return (
+        torch.cat([s.unsqueeze(0) for s in seqs]),
+        [b[1] for b in batch],
+        [b[2] for b in batch],
     )
 
 

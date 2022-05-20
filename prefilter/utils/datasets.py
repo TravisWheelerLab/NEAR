@@ -1,6 +1,8 @@
 # pylint: disable=no-member
 import os
+from Bio import SeqIO
 import matplotlib.pyplot as plt
+import string
 import pdb
 import json
 import time
@@ -20,6 +22,7 @@ import yaml
 
 import prefilter
 import prefilter.utils as utils
+import prefilter.models as models
 from prefilter import DECOY_FLAG
 import warnings
 
@@ -31,6 +34,7 @@ __all__ = [
     "SwissProtGenerator",
     "ClusterIterator",
     "ESMEmbeddingGenerator",
+    "MSATransAndCNN",
     "ClusterIteratorOld",
 ]
 
@@ -572,6 +576,7 @@ class ClusterIterator:
         representative_index,
         include_all_families,
         n_seq_per_target_family,
+        transformer,
         return_alignments=False,
     ):
 
@@ -579,6 +584,7 @@ class ClusterIterator:
         self.min_seq_len = min_seq_len
         self.representative_index = representative_index
         self.n_seq_per_target_family = n_seq_per_target_family
+        self.transformer = transformer
         self.include_all_families = include_all_families
         self.return_alignments = return_alignments
 
@@ -612,7 +618,6 @@ class ClusterIterator:
             else:
                 # print(f"Couldn't find valid file for {file}")
                 if not include_all_families:
-                    print(f"removing {file}")
                     train_files_to_remove.append(file)
 
         for file in train_files_to_remove:
@@ -682,14 +687,14 @@ class ClusterIterator:
                     # print(
                     #     f"No sequence > {self.min_seq_len} in {valid_file}. Skipping."
                     # )
-                    continue
+                    pass
+                else:
+                    if len(valid_seqs) != len(valid_alignments):
+                        pdb.set_trace()
 
-                if len(valid_seqs) != len(valid_alignments):
-                    pdb.set_trace()
-
-                self.query_sequences.extend(valid_seqs)
-                self.query_alignments.extend(valid_alignments)
-                self.query_labels.extend([label_index] * len(valid_seqs))
+                    self.query_sequences.extend(valid_seqs)
+                    self.query_alignments.extend(valid_alignments)
+                    self.query_labels.extend([label_index] * len(valid_seqs))
 
             label_index += 1
 
@@ -702,12 +707,24 @@ class ClusterIterator:
 
     def get_cluster_representatives(self):
         seeds = []
+        if not self.transformer:
+            print("Using Daniel's encoding.")
+
         for seed in self.seed_sequences:
             sanitized = _sanitize_sequence(seed)
-            sanitized = [s for s in sanitized if s != "."]
-            seeds.append(
-                torch.as_tensor([utils.char_to_index[s.upper()] for s in sanitized])
-            )
+            sanitized = [s for s in sanitized if s != "."][: self.min_seq_len]
+            if not self.transformer:
+                seeds.append(
+                    torch.stack(
+                        [
+                            models.amino_n_to_v[models.amino_a_to_n[s.upper()]]
+                            for s in sanitized
+                        ]
+                    ).T
+                )
+            else:
+                seeds.append(sanitized[:1022])
+
         return seeds, self.seed_labels
 
     def __len__(self):
@@ -751,7 +768,7 @@ class ESMEmbeddingGenerator:
         self.esm_embeddings = []
         print(f"Loading {n_seqs} sequences and embeddings.")
         for i, (header, seq) in enumerate(zip(headers, seqs)):
-            stdout.write(f"{i/n_seqs:.3f}\r")
+            stdout.write(f"{i / n_seqs:.3f}\r")
             if i == n_seqs:
                 break
             esm_file_path = os.path.join(esm_embedding_path, header + ".pt")
@@ -786,6 +803,81 @@ class ESMEmbeddingGenerator:
             seq = torch.tensor([utils.char_to_index[c] for c in seq])
         embed = self.esm_embeddings[idx]
         return seq, embed, idx
+
+
+deletekeys = dict.fromkeys(string.ascii_lowercase)
+deletekeys["."] = None
+deletekeys["*"] = None
+translation = str.maketrans(deletekeys)
+
+
+def read_sequence(filename: str) -> Tuple[str, str]:
+    """Reads the first (reference) sequences from a fasta or MSA file."""
+    record = next(SeqIO.parse(filename, "fasta"))
+    return record.description, str(record.seq)
+
+
+def remove_insertions(sequence: str) -> str:
+    """Removes any insertions into the sequence. Needed to load aligned sequences in an MSA."""
+    return sequence.translate(translation)
+
+
+def read_msa(filename: str) -> List[Tuple[str, str]]:
+    """Reads the sequences from an MSA file, automatically removes insertions."""
+    return [
+        (record.description, remove_insertions(str(record.seq)))
+        for record in SeqIO.parse(filename, "fasta")
+    ]
+
+
+class MSATransAndCNN:
+    def __init__(self, afa_files, seq_len, training=True):
+        # parse afa files
+        # on train,
+        self.afa_files = afa_files
+        self.seq_len = seq_len
+        self.training = training
+        self.msas = []
+        self._build_dataset()
+
+    def _build_dataset(self):
+        for train_afa in self.afa_files:
+            # this removes all gaps.
+            msa = read_msa(train_afa)
+            # return tuples of (name, sequence)
+            # after forcing them to be the same length.
+            seqs = [
+                (s[0], s[1][: self.seq_len]) for s in msa if len(s[1]) >= self.seq_len
+            ]
+            if len(seqs) > 5:
+                self.msas.append(seqs)
+
+        self.length = sum([len(s) for s in self.msas])
+
+    def __len__(self):
+        if self.training:
+            return self.length
+        else:
+            return self.length // 20
+
+    def __getitem__(self, idx):
+        # have to have a circular index
+        # since I want the length to be the number of sequences contained in the
+        msa = deepcopy(self.msas[idx % len(self.msas)])
+        query_seq = msa.pop(np.random.randint(0, len(msa)))
+        # sample 80% of sequences from MSA too
+        if int(0.8) * len(msa) == 0:
+            idx = np.arange(len(msa))
+        else:
+            idx = np.random.randint(0, len(msa), size=int(0.8 * len(msa)))
+        subsampled = [msa[i] for i in idx]
+        if len(subsampled) > 10:
+            subsampled = subsampled[:10]
+        # could mutate the query sequence too
+        # that was easy, now i need to
+        # a) stop grad on MSA transformer
+        # b) figure out how to encode sequences
+        return subsampled, query_seq, idx
 
 
 if __name__ == "__main__":
