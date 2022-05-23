@@ -1,4 +1,5 @@
 import pdb
+import os
 import esm
 from abc import ABC
 
@@ -15,12 +16,7 @@ __all__ = ["ResNet1d"]
 
 
 class ResNet1d(pl.LightningModule, ABC):
-    def __init__(
-        self,
-        learning_rate,
-        embed_msas,
-        training=True,
-    ):
+    def __init__(self, learning_rate, embed_msas, training=True):
 
         super(ResNet1d, self).__init__()
 
@@ -35,11 +31,22 @@ class ResNet1d(pl.LightningModule, ABC):
 
         if self.msa_transformer:
             self.res_block_n_filters = 768
+            self.msa_mlp = torch.nn.Sequential(
+                *[
+                    torch.nn.Conv2d(
+                        self.res_block_n_filters, self.res_block_n_filters, 1
+                    ),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(
+                        self.res_block_n_filters, self.res_block_n_filters, 1
+                    ),
+                ]
+            )
         else:
             self.res_block_n_filters = 256
 
         self.res_block_kernel_size = 3
-        self.n_res_blocks = 5
+        self.n_res_blocks = 12
         self.res_bottleneck_factor = 1
         self.padding = "same"
         self.padding_mode = "circular"
@@ -70,7 +77,6 @@ class ResNet1d(pl.LightningModule, ABC):
         self.embedding_trunk = torch.nn.Sequential(*_list)
 
         mlp_list = [
-            # double up the number of input channels b/c of bidirectional LSTM.
             torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
             torch.nn.ReLU(),
             torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
@@ -106,7 +112,10 @@ class ResNet1d(pl.LightningModule, ABC):
 
     def _shared_step(self, batch):
         if self.msa_transformer:
-            msas, seqs, labels = batch
+            if len(batch) == 3:
+                msas, seqs, labels = batch
+            else:
+                msas, msa_labels, seqs, seq_labels, labels = batch
         elif len(batch) == 4:
             features, masks, labelvecs, labels = batch
         else:
@@ -116,40 +125,73 @@ class ResNet1d(pl.LightningModule, ABC):
             # each msa gets an _entire_ embedding
             msa_embeddings = self.msa_transformer(
                 msas, repr_layers=[12], return_contacts=False
-            )["representations"][12]
-            # take a single msa rep.
-            msa_embeddings = msa_embeddings[:, torch.randint(0, 5, (1,)).item(), 1:, :]
+            )["representations"][12].detach()
+            msa_embeddings = msa_embeddings[:, :, 1:, :]
+            # use a cnn to embed the MSAs
+            # it's an image though... and we want a single final
+            # embedding to use, so make the embedding dimension
+            # the channel dimension
+            # apply a CNN with embed dim. as channel dimension
+            msa_embeddings = self.msa_mlp(msa_embeddings.transpose(-1, 1))
+            # mean pool sequence embeddings across
+            # msa dimension
+            msa_embeddings = msa_embeddings.transpose(-1, 1).mean(dim=1)
             sequence_embeddings = self.forward(seqs).transpose(-1, -2)
+            if self.global_step % self.log_interval == 0:
+                with torch.no_grad():
+                    _msa = torch.cat(torch.unbind(msa_embeddings, dim=0))
+                    _seq = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+                    plt.imshow(torch.matmul(_msa, _seq.T).to("cpu").detach().numpy())
+                    plt.colorbar()
+                    fpath = (
+                        f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
+                    )
+                    if os.path.isdir(self.trainer.logger.log_dir):
+                        print(f"saving to {fpath}")
+                        plt.savefig(
+                            f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
+                            bbox_inches="tight",
+                        )
+                    plt.close()
         else:
             if masks is not None:
                 embeddings, masks = self.forward(features, masks)
             else:
                 embeddings = self.forward(features)
 
-        # now, do max pooling:
         if self.msa_transformer:
-            msa_embeddings = torch.cat(torch.unbind(msa_embeddings, dim=0))
-            sequence_embeddings = torch.cat(torch.unbind(sequence_embeddings, dim=0))
-            # assume they're all aligned?
+            msa_characters = []
+            seq_characters = []
+
+            # grab the aligned characters between the query sequence and the msa embedding and push them together.
+            for msa_label, query_label, msa_embed, seq_embed in zip(
+                msa_labels, seq_labels, msa_embeddings, sequence_embeddings
+            ):
+                # only grab 1 msa label
+                msa_label = msa_label[0]
+                # now i need to knock out the -1s... how do I do this?
+                end = torch.sum(msa_label == -1)
+                # put negative unique labels in masked positions
+                msa_label[msa_label == -1] = torch.arange(
+                    -1, -end - 1, step=-1, dtype=msa_label.dtype
+                ).to(msa_label.device)
+                query_label[query_label == -1] = torch.arange(
+                    -end - 2,
+                    -end - 2 - torch.sum(query_label == -1),
+                    step=-1,
+                    dtype=query_label.dtype,
+                ).to(query_label.device)
+                aligned = torch.where(msa_label == query_label.T)[0]
+                msa_characters.extend(msa_embed[aligned])
+                seq_characters.extend(seq_embed[aligned])
+
+            msa_embeddings = torch.stack(msa_characters)
+            sequence_embeddings = torch.stack(seq_characters)
             msa_embeddings = torch.nn.functional.normalize(msa_embeddings, dim=-1)
             sequence_embeddings = torch.nn.functional.normalize(
                 sequence_embeddings, dim=-1
             )
 
-            if self.global_step % self.log_interval == 0:
-                with torch.no_grad():
-                    plt.imshow(
-                        torch.matmul(sequence_embeddings, msa_embeddings.T)
-                        .to("cpu")
-                        .detach()
-                        .numpy()
-                    )
-                    plt.colorbar()
-                    plt.savefig(
-                        f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
-                        bbox_inches="tight",
-                    )
-                    plt.close()
             # have to normalize for the supcon loss
             loss = self.loss_func(
                 torch.cat(

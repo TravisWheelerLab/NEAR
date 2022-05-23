@@ -10,12 +10,13 @@ cd /home/tc229954/share/prefilter
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 
 time $py_cmd -m prefilter train\
-    --gpus 1 \
+    --gpus 2 \
     --num_nodes 1 \
     --num_workers 0 \
-    --log_dir models/may20/msas_with_gaps \
-    --batch_size 6 \
+    --log_dir models/may23/larger_resnet \
+    --batch_size 4\
     --epochs 200 \
     --learning_rate 1e-4 \
     --msa_transformer \
-    --seq_len 128
+    --seq_len 256 \
+    --only_aligned_characters

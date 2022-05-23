@@ -52,8 +52,9 @@ def compute_accuracy(
                 embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
             embeddings = embed
         else:
+            if features.shape[0] == 128:
+                features = features.unsqueeze(0)
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
-            print(embeddings.shape)
 
         stdout.write(f"{j / len(query_dataset):.3f}\r")
         # searching each sequence separately against the index is probably slow.
@@ -151,7 +152,8 @@ def main(fasta_files):
         rep_seqs,
         rep_labels,
         family_model,
-        args.normalize_embeddings,
+        cnn_model=model,
+        normalize=args.normalize_embeddings,
         device=dev,
         pretrained_transformer=args.pretrained_transformer,
         msa_transformer=args.msa_transformer,
@@ -234,5 +236,5 @@ def main(fasta_files):
 
 
 if __name__ == "__main__":
-    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*fa")
+    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa")[:300]
     main(files)

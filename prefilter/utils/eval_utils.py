@@ -2,41 +2,60 @@ import pdb
 
 import esm
 import torch
+from random import shuffle
 import numpy as np
 import matplotlib.pyplot as plt
 from sys import stdout
 from argparse import ArgumentParser
 
 amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
+toks = [
+    "L",
+    "A",
+    "G",
+    "V",
+    "S",
+    "E",
+    "R",
+    "T",
+    "I",
+    "D",
+    "P",
+    "K",
+    "Q",
+    "N",
+    "F",
+    "Y",
+    "M",
+    "H",
+    "W",
+    "C",
+    "X",
+    "B",
+    "U",
+    "Z",
+    "O",
+    ".",
+    "-",
+]
 
 
-def L2Dist(A, B):
-    return torch.cdist(torch.transpose(A, -1, -2), torch.transpose(B, -1, -2))
-
-
-def calculate_maximum_scoring_path(dot_products, true_match):
-    plt.imshow(dot_products)
+def calculate_maximum_scoring_path(dot_products, image_filename):
     scores = torch.zeros_like(dot_products)
     scores[:, 0] = dot_products[:, 0]
     scores[0, :] = dot_products[0, :]
 
     best_path = torch.zeros((scores.shape[0], scores.shape[1], 2), dtype=torch.int)
     # for each row
-    gap_pen = torch.min(scores.view(-1))
     for i in range(1, scores.shape[0]):
         # for each column
         for j in range(1, scores.shape[1]):
             # where did we come from?
             # 0.2 as gap penalty
-            vals = [
-                gap_pen + scores[i - 1, j],
-                gap_pen + scores[i, j - 1],
-                scores[i - 1, j - 1] + dot_products[i, j],
-            ]
-            # vals = [scores[i - 1, j], scores[i, j - 1], scores[i - 1, j - 1]]
+            vals = [scores[i - 1, j], scores[i, j - 1], scores[i - 1, j - 1]]
             idxs = [[i - 1, j], [i, j - 1], [i - 1, j - 1]]
             amax = np.argmax(vals)
-            scores[i, j] = vals[amax]
+            scores[i, j] = vals[amax] + dot_products[i, j]
             best_path[i, j] = torch.as_tensor(idxs[amax])
 
     # best column:
@@ -57,13 +76,14 @@ def calculate_maximum_scoring_path(dot_products, true_match):
         total_score += dot_products[row_idx, col_idx]
         path_log.append(next_best)
         row_idx, col_idx = best_path[row_idx, col_idx]
-
-    # plt.imshow(dot_products)
+    plt.imshow(dot_products, cmap="PiYG", vmin=0, vmax=1)
     for y, x in path_log:
-        plt.scatter(x.item(), y.item(), c="r", s=2)
-    plt.title(f"{true_match} match. Sum of score: {total_score}")
+        plt.scatter(x.item(), y.item(), c="r", s=0.5)
+
+    match = "True" in image_filename
+    plt.title(f"{match} match.")
     plt.colorbar()
-    plt.savefig(f"l2_with_dannel_test{np.random.randint(0,100)}.png")
+    plt.savefig(f"{image_filename}")
     plt.close()
 
 
@@ -167,29 +187,12 @@ def compute_cluster_representative_embeddings(
     representative_sequences,
     representative_labels,
     trained_model,
+    cnn_model,
     normalize,
     device,
     pretrained_transformer,
     msa_transformer,
 ):
-    """
-    :param msa_transformer:
-    :type msa_transformer:
-    :param normalize:
-    :type normalize:
-    :param device:
-    :type device:
-    :param pretrained_transformer: bool
-    :type pretrained_transformer: bool
-    :param representative_sequences: Cluster reps.
-    :type representative_sequences: List of lists of integer encodings of sequences.
-    :param representative_labels: List of cluster rep labels.
-    :type representative_labels:
-    :param trained_model: A trained neural network.
-    :type trained_model: torch.nn.Module.
-    :return: embeddings, labels
-    :rtype:
-    """
     if pretrained_transformer:
         batch_size = 16
         _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
@@ -235,14 +238,14 @@ def compute_cluster_representative_embeddings(
             )
             representative_embeddings.append(seq_embed)
     elif msa_transformer:
-
         trained_model = trained_model.to(device)
         _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
         batch_converter = msa_transformer_alphabet.get_batch_converter()
         batch_tokens = []
 
         for msa in representative_sequences:
-            _, _, toks = batch_converter(msa)
+            shuffle(msa)
+            _, _, toks = batch_converter(msa[:5])
             batch_tokens.append(toks)
 
         representative_embeddings = []
@@ -254,19 +257,19 @@ def compute_cluster_representative_embeddings(
                 repr_layers=[12],
                 return_contacts=False,
             )
-            # send to cpu so we save on some GPU memory.
-            # remove padding.
+
             msa_embed = embeddings["representations"][12].squeeze()
-            # TODO:
-            # Grab a different representation?
-            # are the labels incorrect? It's doing
-            # _worse_ than guessing.
+
             if msa_embed.ndim == 2:
                 msa_embed = msa_embed.unsqueeze(0)
+            if msa_embed.ndim == 3:
+                msa_embed = msa_embed[:, 1:].unsqueeze(0)
+                msa_embed = cnn_model.msa_mlp(msa_embed.transpose(-1, 1))
+                # mean pool sequence embed across
+                # msa dimension
+                msa_embed = msa_embed.transpose(-1, 1).mean(dim=1)
 
-            mean_msa_embed = torch.mean(msa_embed[:, 1:], dim=0)
-            msa_embed = msa_embed[0, 1:]
-            representative_embeddings.append(msa_embed)
+            representative_embeddings.append(msa_embed.squeeze())
     else:
         # create representative tensor for raw sequences.
         representative_embeddings = []
@@ -285,9 +288,7 @@ def compute_cluster_representative_embeddings(
         _rep_labels.extend([s] * embed.squeeze().shape[0])
 
     representative_labels = np.asarray(_rep_labels)
-
     representative_embeddings = torch.cat(representative_embeddings)
-
     if normalize:
         print(representative_embeddings.shape)
         representative_embeddings = torch.nn.functional.normalize(
@@ -306,15 +307,14 @@ def save_integer_encoded_sequences(filename, rep_seq, q_seq):
 
 
 def save_string_sequences(filename, rep_seq, query_seq, true_seq=None):
-    pass
-    # with open(filename, "w") as dst:
-    #    dst.write(">cluster representative\n")
-    #    dst.write(rep_seq)
-    #    dst.write("\n>query\n")
-    #    dst.write(query_seq)
-    #    if true_seq is not None:
-    #        dst.write("\n>true\n")
-    #        dst.write(true_seq)
+    with open(filename, "w") as dst:
+        dst.write(">cluster representative\n")
+        dst.write(rep_seq)
+        dst.write("\n>query\n")
+        dst.write(query_seq)
+        if true_seq is not None:
+            dst.write("\n>true\n")
+            dst.write(true_seq)
 
 
 def create_parser():
@@ -494,9 +494,29 @@ def visualize_prediction_patterns(
             top_pred_embedding = cluster_rep_embeddings[
                 cluster_rep_labels == predicted_labels[-1]
             ]
+            dots = torch.matmul(top_pred_embedding.to(sequence.device), sequence.T)
+            top_pred_seq = cluster_rep_gapped_seqs[predicted_labels[-1]].replace(
+                ".", ""
+            )
+            if pretrained_transformer:
+                query_gapped_seq = gapped_sequences[feat_idx].replace(".", "")
+            else:
+                query_gapped_seq = ""
 
-            # calculate_maximum_scoring_path(a_copy, predicted_labels[-1] == label)
-            # continue
+            jj = image_idx
+
+            fpath = f"transformer/transformer_{predicted_labels[-1] == label}_{jj}"
+            calculate_maximum_scoring_path(
+                dots.to("cpu"), image_filename=fpath + ".png"
+            )
+            with open(f"query_{jj}.fa", "w") as dst:
+                dst.write(">query\n")
+                dst.write(f"{query_gapped_seq}\n")
+            with open(f"top_match_{jj}.fa", "w") as dst:
+                dst.write(">top_match\n")
+                dst.write(f"{top_pred_seq}\n")
+            image_idx += 1
+            continue
 
             if plot_dots:
                 # i want a bunch of false matches and then the true one.

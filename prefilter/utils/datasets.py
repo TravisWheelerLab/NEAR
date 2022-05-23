@@ -570,7 +570,7 @@ class MSAClusterIterator:
     at them without grepping or anything.
     """
 
-    def __init__(self, afa_files, seq_len, seqs_per_msa=10):
+    def __init__(self, afa_files, seq_len, seqs_per_msa=5):
 
         self.train_afa_files = afa_files
         self.seq_len = seq_len
@@ -619,38 +619,54 @@ class MSAClusterIterator:
                 # return tuples of (name, sequence)
                 # after forcing them to be the same length.
                 train_seqs = [
-                    (h, s[: self.seq_len])
+                    (h, s[:1023])
                     for h, s in zip(train_headers, train_msa)
-                    if len(s[1]) >= self.seq_len
+                    if len(s.replace(".", "")) >= self.seq_len
                 ]
+
                 if len(train_seqs):
+
                     if len(train_seqs) > self.seqs_per_msa:
                         train_seqs = train_seqs[: self.seqs_per_msa]
 
+                    valid_file = self.train_to_valid[train_file]
                     valid_headers, valid_msa = utils.fasta_from_file(valid_file)
                     valid_seqs = [
-                        (h, s[: self.seq_len])
+                        (h, s)
                         for h, s in zip(valid_headers, valid_msa)
-                        if len(s[1]) >= self.seq_len
+                        if len(s.replace(".", "")) >= self.seq_len
                     ]
-                    self.seed_alignments.append(train_seqs)
-                    self.seed_labels.append(label_index)
+                    if len(valid_seqs) > 0:
 
-                    self.query_sequences.extend(valid_seqs)
-                    self.query_labels.extend([label_index] * len(valid_seqs))
-                    label_index += 1
+                        self.seed_alignments.append(train_seqs)
+                        self.seed_labels.append(label_index)
+                        self.query_sequences.extend(valid_seqs)
+                        self.query_labels.extend([label_index] * len(valid_seqs))
+                        # print("Replacing valid sequences with train sequences.")
+                        seq = [
+                            t
+                            for t in train_seqs
+                            if len(t[1].replace(".", "")) > self.seq_len
+                        ]
+                        self.query_sequences.extend(seq)
+                        self.query_labels.extend([label_index] * len(seq))
+                        label_index += 1
 
     def get_cluster_representatives(self):
-        return self.seed_alignments, self.seed_labels
+        seeds = []
+        for s in self.seed_alignments:
+            seeds.append([(ss[0], ss[1].upper()[: self.seq_len]) for ss in s])
+        return seeds, self.seed_labels
 
     def __len__(self):
         return len(self.query_sequences)
 
     def __getitem__(self, idx):
 
-        qseq = self.query_sequences[idx]
+        qheader, qseq = self.query_sequences[idx]
+        qseq = qseq.replace(".", "")[: self.seq_len]
         label = self.query_labels[idx]
-        return qseq, label, self.query_sequences[idx][1]
+        return (qheader, qseq.upper()), label, self.query_sequences[idx][1]
 
 
 class ClusterIterator:
@@ -928,6 +944,8 @@ class MSATransAndCNN:
         self.seq_len = seq_len
         self.training = training
         self.msas = []
+        self.n_msas = 5
+
         self._build_dataset()
 
     def _build_dataset(self):
@@ -940,8 +958,8 @@ class MSATransAndCNN:
                     msa.append((h, s))
             # return tuples of (name, sequence)
             # after forcing them to be the same length.
-            seqs = [(s[0], s[1]) for s in msa]
-            if len(seqs) >= 5:
+            seqs = [(s[0], s[1].upper()) for s in msa]
+            if len(seqs) >= self.n_msas:
                 self.msas.append(seqs)
 
         self.length = sum([len(s) for s in self.msas])
@@ -968,6 +986,7 @@ class MSATransAndCNN:
         msa = deepcopy(self.msas[idx % len(self.msas)])
         # make a labelvector for each sequence in the msa
         labels = self._create_labelvectors(msa)
+        # make the labels another mask flag
         pop_idx = np.random.randint(0, len(msa))
         query_header, query_seq = msa.pop(pop_idx)
         query_labelvector = labels[pop_idx].clone()
@@ -983,7 +1002,7 @@ class MSATransAndCNN:
         if len(_labels) > 1:
             labels = torch.stack(_labels)[:, : self.seq_len]
         else:
-            labels = labels[0][:, : self.seq_len]
+            labels = _labels[0][:, : self.seq_len]
 
         query_seq = query_seq.replace(".", "")[: self.seq_len]
         query_seq = (query_header, query_seq)
@@ -996,10 +1015,21 @@ class MSATransAndCNN:
 
         subsampled = [msa[i] for i in idx]
 
-        if len(subsampled) > 5:
-            subsampled = subsampled[:5]
+        # then grab only a few - i need to stochastify this
+        if len(subsampled) >= self.n_msas:
+            subsampled = subsampled[: self.n_msas]
+            labels = labels[: self.n_msas]
 
-        return subsampled, query_seq, idx
+        # get positions where there are any masked aminos
+        # in that column
+        label_unali_mask = labels.clone()
+        label_unali_mask[label_unali_mask != -1] = 0
+        label_unali_mask[label_unali_mask == -1] = 1
+        bad_columns = torch.sum(label_unali_mask, dim=0) != 0
+        labels[:, bad_columns] = -1
+        query_labelvector[bad_columns] = -1
+        # can also put posteriors in as targets
+        return subsampled, labels, query_seq, query_labelvector, idx
 
 
 if __name__ == "__main__":
