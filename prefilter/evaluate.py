@@ -23,6 +23,13 @@ from prefilter.models import ResNet, ResidualBlock, DotProdModel
 import prefilter.utils as utils
 
 
+def non_default_collate(batch):
+    return (
+        torch.stack([b[0] for b in batch]),
+        torch.stack([torch.tensor(b[1]) for b in batch]),
+        [b[2] for b in batch],
+    )
+
 def compute_accuracy(
     query_dataset,
     cluster_rep_index,
@@ -64,6 +71,8 @@ def compute_accuracy(
                 sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
             else:
                 sequence = sequence.contiguous()
+
+            print(sequence)
 
             predicted_labels, counts = utils.most_common_matches(
                 cluster_rep_index,
@@ -122,10 +131,14 @@ def main(fasta_files):
         model, _ = utils.load_model(model_path, hparams, dev)
 
     else:
-        model_path = "models/may19/17_13250.mod"
-        print(f"Model path: {model_path}")
-        model = torch.load(model_path, map_location=torch.device(dev))
-        model.eval()
+        hparams_path = os.path.join(args.model_root_dir, "hparams.yaml")
+        model_path = os.path.join(args.model_root_dir, "checkpoints", args.model_name)
+        with open(hparams_path, "r") as src:
+            hparams = yaml.safe_load(src)
+        # Set up model and dataset
+        if not os.path.isfile(model_path):
+            raise ValueError(f"No model found at {model_path}")
+        model, _ = utils.load_model(model_path, hparams, dev)
 
     if args.msa_transformer:
         family_model = msa_transformer
@@ -178,7 +191,8 @@ def main(fasta_files):
     elif args.msa_transformer:
         collate_fn = utils.msa_transformer_collate(just_sequences=True)
     else:
-        collate_fn = utils.daniel_sequence_encode
+        print("hello")
+        collate_fn = non_default_collate
 
     # and create a test iterator.
     query_dataset = torch.utils.data.DataLoader(

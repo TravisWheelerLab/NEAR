@@ -44,8 +44,10 @@ class ResConv(torch.nn.Module):
 
     def forward(self, features):
         x = self.conv1(features)
+        # x = self.bn1(x)
         x = self.act(x)
         x = self.conv2(x)
+        # x = self.bn2(x)
         x = self.act(x)
         if self.padding == "valid":
             # two convolutions; so multiply half the kernel width by 2.

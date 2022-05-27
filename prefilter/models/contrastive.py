@@ -29,24 +29,19 @@ class ResNet1d(pl.LightningModule, ABC):
             self.msa_transformer.eval()
             self.msa_transformer.requires_grad_ = False
 
-        if self.msa_transformer:
+        if self.embed_msas:
             self.res_block_n_filters = 768
             self.msa_mlp = torch.nn.Sequential(
-                *[
-                    torch.nn.Conv2d(
-                        self.res_block_n_filters, self.res_block_n_filters, 1
-                    ),
-                    torch.nn.ReLU(),
-                    torch.nn.Conv2d(
-                        self.res_block_n_filters, self.res_block_n_filters, 1
-                    ),
-                ]
+                *[torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1)]
+            )
+            self.seq_mlp = torch.nn.Sequential(
+                *[torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1)]
             )
         else:
             self.res_block_n_filters = 256
 
         self.res_block_kernel_size = 3
-        self.n_res_blocks = 12
+        self.n_res_blocks = 10
         self.res_bottleneck_factor = 1
         self.padding = "same"
         self.padding_mode = "circular"
@@ -62,7 +57,6 @@ class ResNet1d(pl.LightningModule, ABC):
     def _setup_layers(self):
 
         self.embed = nn.Embedding(27, self.res_block_n_filters)
-        print(f"Using padding {self.padding_mode}, with {self.padding} padding.")
 
         _list = []
         for _ in range(self.n_res_blocks):
@@ -111,7 +105,7 @@ class ResNet1d(pl.LightningModule, ABC):
             return embeddings
 
     def _shared_step(self, batch):
-        if self.msa_transformer:
+        if self.embed_msas:
             if len(batch) == 3:
                 msas, seqs, labels = batch
             else:
@@ -121,26 +115,36 @@ class ResNet1d(pl.LightningModule, ABC):
         else:
             features, masks, labelvecs = batch
 
-        if self.msa_transformer:
+        if self.embed_msas:
             # each msa gets an _entire_ embedding
+            # is there something weird about this?
             msa_embeddings = self.msa_transformer(
                 msas, repr_layers=[12], return_contacts=False
             )["representations"][12].detach()
-            msa_embeddings = msa_embeddings[:, :, 1:, :]
-            # use a cnn to embed the MSAs
-            # it's an image though... and we want a single final
-            # embedding to use, so make the embedding dimension
-            # the channel dimension
-            # apply a CNN with embed dim. as channel dimension
-            msa_embeddings = self.msa_mlp(msa_embeddings.transpose(-1, 1))
+            # remove begin-of-sequence token.
+            # msa_embeddings = msa_embeddings[:, :, 1:, :]
             # mean pool sequence embeddings across
             # msa dimension
-            msa_embeddings = msa_embeddings.transpose(-1, 1).mean(dim=1)
-            sequence_embeddings = self.forward(seqs).transpose(-1, -2)
+            # msa_embeddings, _ = torch.max(msa_embeddings, dim=1)
+            msa_embeddings = msa_embeddings[:, 0]
+            # now apply two mlps.
+            sequence_embeddings = self.msa_transformer(seqs,
+                                                       repr_layers=[12],
+                                                       return_contacts=False)['representations'][12].detach().squeeze()
+            # this should work well. If it doesn't something is up.
+            sequence_embeddings = sequence_embeddings.transpose(-1, -2)
+            msa_embeddings = msa_embeddings.transpose(-1, -2)
+
+            msa_embeddings = self.msa_mlp(sequence_embeddings).transpose(-1, -2)
+            sequence_embeddings = self.seq_mlp(sequence_embeddings).transpose(-1, -2)
+
             if self.global_step % self.log_interval == 0:
                 with torch.no_grad():
                     _msa = torch.cat(torch.unbind(msa_embeddings, dim=0))
                     _seq = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+                    _msa = torch.nn.functional.normalize(_msa, dim=-1)
+                    _seq = torch.nn.functional.normalize(_seq, dim=-1)
+
                     plt.imshow(torch.matmul(_msa, _seq.T).to("cpu").detach().numpy())
                     plt.colorbar()
                     fpath = (
@@ -159,49 +163,21 @@ class ResNet1d(pl.LightningModule, ABC):
             else:
                 embeddings = self.forward(features)
 
-        if self.msa_transformer:
-            msa_characters = []
-            seq_characters = []
+        if self.embed_msas:
+            _msa = torch.cat(torch.unbind(msa_embeddings, dim=0))
+            _seq = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+            _msa = torch.nn.functional.normalize(_msa, dim=-1)
+            _seq = torch.nn.functional.normalize(_seq, dim=-1)
+            # now, drop ye old masked characters.
+            x = torch.cat((_msa.unsqueeze(1), _seq.unsqueeze(1)), dim=1)
+            loss = self.loss_func(x)
 
-            # grab the aligned characters between the query sequence and the msa embedding and push them together.
-            for msa_label, query_label, msa_embed, seq_embed in zip(
-                msa_labels, seq_labels, msa_embeddings, sequence_embeddings
-            ):
-                # only grab 1 msa label
-                msa_label = msa_label[0]
-                # now i need to knock out the -1s... how do I do this?
-                end = torch.sum(msa_label == -1)
-                # put negative unique labels in masked positions
-                msa_label[msa_label == -1] = torch.arange(
-                    -1, -end - 1, step=-1, dtype=msa_label.dtype
-                ).to(msa_label.device)
-                query_label[query_label == -1] = torch.arange(
-                    -end - 2,
-                    -end - 2 - torch.sum(query_label == -1),
-                    step=-1,
-                    dtype=query_label.dtype,
-                ).to(query_label.device)
-                aligned = torch.where(msa_label == query_label.T)[0]
-                msa_characters.extend(msa_embed[aligned])
-                seq_characters.extend(seq_embed[aligned])
-
-            msa_embeddings = torch.stack(msa_characters)
-            sequence_embeddings = torch.stack(seq_characters)
-            msa_embeddings = torch.nn.functional.normalize(msa_embeddings, dim=-1)
-            sequence_embeddings = torch.nn.functional.normalize(
-                sequence_embeddings, dim=-1
-            )
-
-            # have to normalize for the supcon loss
-            loss = self.loss_func(
-                torch.cat(
-                    (msa_embeddings.unsqueeze(1), sequence_embeddings.unsqueeze(1)),
-                    dim=1,
-                )
-            )
         else:
-            embeddings, _ = torch.max(embeddings, dim=-1)
-            e1, e2 = torch.split(embeddings, embeddings.shape[0] // 2, dim=0)
+            e1, e2 = torch.split(embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0)
+            e1 = torch.cat(torch.unbind(e1, dim=0))
+            e2 = torch.cat(torch.unbind(e2, dim=0))
+            e1 = torch.nn.functional.normalize(e1, dim=-1)
+            e2 = torch.nn.functional.normalize(e2, dim=-1)
             loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss

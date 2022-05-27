@@ -272,6 +272,7 @@ def compute_cluster_representative_embeddings(
             representative_embeddings.append(msa_embed.squeeze())
     else:
         # create representative tensor for raw sequences.
+        # what, I'm not batching?
         representative_embeddings = []
         for rep_seq in representative_sequences:
             embed = (

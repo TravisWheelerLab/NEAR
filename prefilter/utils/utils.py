@@ -87,6 +87,7 @@ def load_model(model_path, hyperparams, device):
     success = model.load_state_dict(state_dict)
     print(success)
     model.eval()
+    success = 0
     return model, success
 
 
@@ -257,10 +258,9 @@ def pad_contrastive_batches(batch):
     member2 = [b[1] for b in batch]
     labels = [b[2] for b in batch]
     data = member1 + member2
-    data, masks = _pad_sequences(data)
     return (
-        data.long(),
-        masks,
+        torch.stack(data),
+        None,
         torch.as_tensor(labels),
     )
 
@@ -279,9 +279,9 @@ def msa_transformer_collate(just_sequences=False, with_labelvectors=False):
             )
         elif with_labelvectors:
             _, _, msa_embeds = batch_converter([b[0] for b in batch])
-            _, _, seq_embeddings = batch_converter([b[2] for b in batch])
+            _, _, seq_embeddings = batch_converter([[b[2]] for b in batch])
             # remove dummy dim and 0 begin-of-seq token.
-            seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
+            # seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
             return (
                 torch.as_tensor(msa_embeds),
                 [torch.as_tensor(b[1]) for b in batch],
