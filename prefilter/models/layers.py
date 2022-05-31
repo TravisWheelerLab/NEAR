@@ -5,7 +5,7 @@ import math
 import torch.nn as nn
 import prefilter.utils as utils
 
-__all__ = ["ResConv"]
+__all__ = ["PositionalEncoding", "ResConv"]
 
 
 class ResConv(torch.nn.Module):
@@ -18,12 +18,10 @@ class ResConv(torch.nn.Module):
         self.conv1 = torch.nn.Conv1d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
         )
-        self.bn1 = torch.nn.BatchNorm1d(filters)
         self.act = torch.nn.ReLU()
         self.conv2 = torch.nn.Conv1d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
         )
-        self.bn2 = torch.nn.BatchNorm1d(filters)
 
     def masked_forward(self, features, mask):
         x = self.conv1(features)
@@ -44,10 +42,8 @@ class ResConv(torch.nn.Module):
 
     def forward(self, features):
         x = self.conv1(features)
-        # x = self.bn1(x)
         x = self.act(x)
         x = self.conv2(x)
-        # x = self.bn2(x)
         x = self.act(x)
         if self.padding == "valid":
             # two convolutions; so multiply half the kernel width by 2.
@@ -56,3 +52,26 @@ class ResConv(torch.nn.Module):
                 :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2)
             ]
         return x + features
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
+        )
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[: x.size(0)]
+        return self.dropout(x)

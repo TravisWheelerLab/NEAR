@@ -1,6 +1,6 @@
 # pylint: disable=no-member
 import os
-from Bio import SeqIO
+from Bio import AlignIO
 import esm as esm
 import matplotlib.pyplot as plt
 import string
@@ -29,14 +29,10 @@ import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = [
-    "MSAGenerator",
-    "SwissProtGenerator",
-    "ClusterIterator"
-]
+__all__ = ["MSAGenerator", "SwissProtGenerator", "ClusterIterator", "ProfmarkDataset"]
+
 
 class MSAGenerator:
-
     def __init__(self, afa_files):
 
         self.msa_to_seqs = defaultdict(list)
@@ -44,7 +40,7 @@ class MSAGenerator:
             bs = os.path.basename(f)
             for header, seq in esm.data.read_fasta(f):
                 # replace the dang gap character.
-                seq = seq.replace('.', "-")[:128]
+                seq = seq.replace(".", "-")[:128]
                 if len(seq):
                     self.msa_to_seqs[bs].append((header, seq.upper()))
 
@@ -56,6 +52,7 @@ class MSAGenerator:
     def __getitem__(self, idx):
         name = self.names[idx % len(self.names)]
         return self.msa_to_seqs[name][:10], 0, self.msa_to_seqs[name][0], 0, idx
+
 
 def _sanitize_sequence(sequence):
     """
@@ -107,7 +104,7 @@ class SwissProtGenerator:
 
     def __len__(self):
         if self.training:
-            return len(self.seqs)
+            return len(self.seqs) // 10
         else:
             return 10000
 
@@ -307,3 +304,88 @@ class ClusterIterator:
         seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
 
         return seq, label, self.query_sequences[idx]
+
+
+class ProfmarkDataset:
+    def __init__(self, basename, profmark_dir, n_seq_per_target_family=1, seq_len=-1):
+        msa_files = glob(os.path.join(profmark_dir, "msas/afa/*"))
+        self.seq_len = seq_len
+        # now load the query sequences
+        # i need to clip the bits of the query sequences out of the
+        # test.fa file by looking at test.pos
+        target_sequence_db = os.path.join(profmark_dir, basename + ".fa")
+        headers, seqs = utils.fasta_from_file(target_sequence_db)
+        target_msa_name_to_sequence = defaultdict(list)
+
+        for header, seq in zip(headers, seqs):
+            if "decoy" in header:
+                break
+            # parse header:
+            # is there an issue with counting?
+            name, _, first_domain, second_domain = header.split(" domain")[0].split("/")
+            d1, d2 = first_domain.split("-")
+
+            if (int(d2) - int(d1)) > seq_len:
+                target_msa_name_to_sequence[name].append(seq[int(d1) : int(d2)])
+
+            d3, d4 = second_domain.split("-")
+
+            if (int(d4) - int(d3)) > seq_len:
+                target_msa_name_to_sequence[name].append(seq[int(d3) : int(d4)])
+
+        # read the msa files:
+        self.cluster_representatives = []
+        self.cluster_rep_labels = []
+        self.query_sequences = []
+        self.query_labels = []
+        label_index = 0
+
+        for msa_file in msa_files:
+            # filter by inclusion in validation set.
+            if (
+                os.path.basename(msa_file).replace(".msa.afa", "")
+                in target_msa_name_to_sequence
+            ):
+                headers, seqs = utils.fasta_from_file(msa_file)
+                for i, s in enumerate(seqs):
+                    if i == n_seq_per_target_family:
+                        break
+                    s = s.replace("-", "")
+                    if len(s) > seq_len:
+                        self.cluster_representatives.append(s)
+                        self.cluster_rep_labels.append(label_index)
+
+                qseqs = target_msa_name_to_sequence[
+                    os.path.basename(msa_file).replace(".msa.afa", "")
+                ]
+                self.query_sequences.extend(qseqs)
+                self.query_labels.extend([label_index] * len(qseqs))
+                label_index += 1
+
+        self.seed_alignments = self.cluster_representatives
+
+    def get_cluster_representatives(self):
+        seeds = []
+        for seed in self.cluster_representatives:
+            santitized = _sanitize_sequence(seed)[: self.seq_len]
+            seeds.append(
+                torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
+            )
+
+        return seeds, self.cluster_rep_labels
+
+    def __len__(self):
+        return len(self.query_sequences)
+
+    def __getitem__(self, idx):
+        qseq = self.query_sequences[idx][: self.seq_len]
+        label = self.query_labels[idx]
+        sanitized = _sanitize_sequence(qseq)
+        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
+
+        return seq, label, self.query_sequences[idx]
+
+
+if __name__ == "__main__":
+
+    dset = ProfmarkDataset("test", "/home/tc229954/data/prefilter/pfam/seed/profmark")

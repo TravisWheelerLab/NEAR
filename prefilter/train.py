@@ -22,7 +22,9 @@ import prefilter.utils as utils
 def main(args):
 
     if args.msa_transformer:
-        afa_files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa")[:1000]
+        afa_files = glob(
+            "/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa"
+        )[:1000]
         train_dataset = utils.MSAGenerator(afa_files=afa_files)
         valid_dataset = utils.MSAGenerator(
             afa_files=afa_files,
@@ -63,6 +65,7 @@ def main(args):
     model = ResNet1d(
         learning_rate=args.learning_rate,
         embed_msas=args.msa_transformer,
+        apply_attention=args.apply_attention,
     )
 
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(

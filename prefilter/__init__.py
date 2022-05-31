@@ -56,6 +56,7 @@ def main():
     train_parser.add_argument("--check_val_every_n_epoch", default=1, type=int)
     train_parser.add_argument("--msa_transformer", action="store_true")
     train_parser.add_argument("--only_aligned_characters", action="store_true")
+    train_parser.add_argument("--apply_attention", action="store_true")
 
     args = ap.parse_args()
     if args.subcmd == "train":

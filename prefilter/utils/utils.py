@@ -81,6 +81,8 @@ def load_model(model_path, hyperparams, device):
     state_dict = checkpoint["state_dict"]
     if "training" in hyperparams:
         hyperparams["training"] = False
+        if "apply_attention" not in hyperparams:
+            hyperparams["apply_attention"] = False
         model = models.ResNet1d(**hyperparams).to(device)
     else:
         model = models.ResNet1d(**hyperparams, training=False).to(device)

@@ -30,6 +30,7 @@ def non_default_collate(batch):
         [b[2] for b in batch],
     )
 
+
 def compute_accuracy(
     query_dataset,
     cluster_rep_index,
@@ -66,13 +67,13 @@ def compute_accuracy(
         stdout.write(f"{j / len(query_dataset):.3f}\r")
         # searching each sequence separately against the index is probably slow.
         for label, sequence in zip(labels, embeddings):
+            if not isinstance(label, int):
+                label = int(label)
             total_sequences += 1
             if normalize:
                 sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
             else:
                 sequence = sequence.contiguous()
-
-            print(sequence)
 
             predicted_labels, counts = utils.most_common_matches(
                 cluster_rep_index,
@@ -147,6 +148,13 @@ def main(fasta_files):
 
     if args.msa_transformer:
         iterator = utils.MSAClusterIterator(afa_files=fasta_files, seq_len=seq_len)
+    elif args.profmark:
+        iterator = utils.ProfmarkDataset(
+            "test",
+            profmark_dir="/home/tc229954/data/prefilter/pfam/seed/profmark",
+            n_seq_per_target_family=args.n_seq_per_target_family,
+            seq_len=seq_len,
+        )
     else:
         iterator = utils.ClusterIterator(
             fasta_files,
@@ -191,7 +199,6 @@ def main(fasta_files):
     elif args.msa_transformer:
         collate_fn = utils.msa_transformer_collate(just_sequences=True)
     else:
-        print("hello")
         collate_fn = non_default_collate
 
     # and create a test iterator.
@@ -250,5 +257,5 @@ def main(fasta_files):
 
 
 if __name__ == "__main__":
-    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa")[:300]
+    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa")
     main(files)

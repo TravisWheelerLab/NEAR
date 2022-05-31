@@ -8,11 +8,11 @@
 
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 set -e
-model_root="models/may26/random_subs_18layerresnet/default/version_0/"
-model_name="epoch_19_1.673977.ckpt"
+model_root="models/may27/18_layer_resnet_with_attn_no_pos_enc/default/version_0/"
+model_name="epoch_19_1.466130.ckpt"
 echo $model_root $model_name
 
 $py_cmd prefilter/evaluate.py "$model_root" "$model_name" \
 --compute_accuracy --n_seq_per_target_family 1 \
---embed_dim 256 \
---seq_len 128 --batch_size 16 --index_device "cuda" --normalize_embeddings
+--embed_dim 256  \
+--seq_len -1 --batch_size 1 --index_device "cuda" --normalize_embeddings

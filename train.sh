@@ -13,8 +13,9 @@ time $py_cmd -m prefilter train\
     --gpus 4 \
     --num_nodes 1 \
     --num_workers 0 \
-    --log_dir models/may26/random_subs_10layerresnet_no_batchnorm \
-    --batch_size 64 \
-    --epochs 200 \
-    --learning_rate 1e-3 \
-    --seq_len 128 \
+    --log_dir models/may27/18_layer_resnet_with_attn_no_pos_enc \
+    --batch_size 16 \
+    --epochs 20 \
+    --learning_rate 1e-4 \
+    --seq_len 400 \
+    --apply_attention

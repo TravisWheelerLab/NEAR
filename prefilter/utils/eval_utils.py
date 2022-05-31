@@ -291,7 +291,7 @@ def compute_cluster_representative_embeddings(
     representative_labels = np.asarray(_rep_labels)
     representative_embeddings = torch.cat(representative_embeddings)
     if normalize:
-        print(representative_embeddings.shape)
+        print("Normalizing...")
         representative_embeddings = torch.nn.functional.normalize(
             representative_embeddings, dim=-1
         )
@@ -333,6 +333,7 @@ def create_parser():
     ap.add_argument("--plot_dots", action="store_true")
     ap.add_argument("--dp_matrix", action="store_true")
     ap.add_argument("--daniel", action="store_true")
+    ap.add_argument("--profmark", action="store_true")
     ap.add_argument("--normalize_embeddings", action="store_true")
     ap.add_argument("--msa_transformer", action="store_true")
 
