@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-import prefilter.models as models
-from prefilter import DECOY_FLAG, MASK_FLAG
+import src.models as models
+from src import DECOY_FLAG, MASK_FLAG
 
 log = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ def handle_figure_path(figure_path: str, ext: str = ".png") -> str:
 def parse_labels(labelstring: str) -> Union[List[str], None]:
     """
     Parses the Pfam accession IDs from a > line in a fasta file.
-    Assumes that the fasta files have been generated with prefilter.utils.label_fasta.
+    Assumes that the fasta files have been generated with src.utils.label_fasta.
     Each > line of the fasta file should look like this:
     >arbitrary name of sequence | PFAMID1 PFAMID2 PFAMID3 ... PFAMIDN
     <sequence>

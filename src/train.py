@@ -12,18 +12,16 @@ import torch
 from pytorch_lightning import seed_everything
 from shopty import ShoptyConfig
 
-import prefilter.utils as utils
-from prefilter.models import ResNet1d
-
-# seed_everything(20943)
+import src.utils as utils
+from src.models import ResNet1d
 
 
 def main(args):
 
     if args.msa_transformer:
-        afa_files = glob(
-            "/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa"
-        )[:1000]
+        afa_files = glob("/home/tc229954/data/src/pfam/seed/20piddata/train/*afa")[
+            :1000
+        ]
         train_dataset = utils.MSAGenerator(afa_files=afa_files)
         valid_dataset = utils.MSAGenerator(
             afa_files=afa_files,
@@ -33,11 +31,11 @@ def main(args):
         )
     else:
         train_dataset = utils.SwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            fa_file="/home/tc229954/data/src/uniprot/uniprot_sprot.fasta",
             minlen=args.seq_len,
         )
         valid_dataset = utils.SwissProtGenerator(
-            fa_file="/home/tc229954/data/prefilter/uniprot/uniprot_sprot.fasta",
+            fa_file="/home/tc229954/data/src/uniprot/uniprot_sprot.fasta",
             training=False,
             minlen=args.seq_len,
         )

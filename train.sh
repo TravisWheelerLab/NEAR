@@ -6,10 +6,10 @@
 #SBATCH --gres=gpu:4
 #SBATCH --output=mlp.out
 
-cd /home/tc229954/share/prefilter
+cd /home/tc229954/share/src
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 
-time $py_cmd -m prefilter train\
+time $py_cmd -m src train\
     --gpus 4 \
     --num_nodes 1 \
     --num_workers 0 \

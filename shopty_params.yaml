@@ -1,5 +1,5 @@
 project_name: 'pre'
-run_command: "time python -m prefilter train"
+run_command: "time python -m src train"
 project_dir: "50PIDTune"
 monitor: "min"
 poll_interval: 20
@@ -32,7 +32,7 @@ statics:
   num_workers:
     val: 8
     type: 'int'
-  log_dir: "$HOME/prefilter-logs/new-lease-on-life"
+  log_dir: "$HOME/src-logs/new-lease-on-life"
   model_name: "model.pt"
   data_path: "$HOME/subset/training_data0.5/"
   decoy_path: "$HOME/tmp/"

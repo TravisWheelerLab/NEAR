@@ -16,7 +16,7 @@ from pytorch_metric_learning.losses import NTXentLoss
 
 __all__ = ["SupConLoss"]
 
-import prefilter
+import src
 
 
 def _save(fpath, arr):

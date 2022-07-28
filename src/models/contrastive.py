@@ -9,8 +9,8 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-import prefilter.models as model_utils
-import prefilter.utils as utils
+import src.models as model_utils
+import src.utils as utils
 
 __all__ = ["ResNet1d"]
 

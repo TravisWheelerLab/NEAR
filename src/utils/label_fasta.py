@@ -15,8 +15,8 @@ log = logging.getLogger(__name__)
 
 from argparse import ArgumentParser
 
-import prefilter.utils as utils
-from prefilter import array_job_template, name_to_accession_id, single_job_template
+import src.utils as utils
+from src import array_job_template, name_to_accession_id, single_job_template
 
 DOMTBLOUT_COLS = [0, 4, 11, 19, 20, 22]
 DOMTBLOUT_COL_NAMES = [

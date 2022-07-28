@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from prefilter.utils import (
+from src.utils import (
     fasta_from_file,
     handle_figure_path,
     label_fasta,

@@ -12,10 +12,10 @@ models/*
 *.ddgm
 *.domtblout
 *pt
-prefilter/logs/*
-prefilter/lightning_logs/*
+src/logs/*
+src/lightning_logs/*
 trained_models/*
-/prefilter/.nextflow.log
+/src/.nextflow.log
 *.nextflow*
-/prefilter/work/
+/src/work/
 .idea/

@@ -20,10 +20,10 @@ import torch
 import yaml
 from Bio import AlignIO
 
-import prefilter
-import prefilter.models as models
-import prefilter.utils as utils
-from prefilter import DECOY_FLAG
+import src
+import src.models as models
+import src.utils as utils
+from src import DECOY_FLAG
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -164,8 +164,8 @@ class ClusterIterator:
         self.include_all_families = include_all_families
         self.return_alignments = return_alignments
 
-        self.valid_afa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
-        self.valid_fa_path = "/home/tc229954/data/prefilter/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
+        self.valid_afa_path = "/home/tc229954/data/src/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
+        self.valid_fa_path = "/home/tc229954/data/src/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
 
         self.seed_sequences = []
         self.seed_labels = []
@@ -386,4 +386,4 @@ class ProfmarkDataset:
 
 if __name__ == "__main__":
 
-    dset = ProfmarkDataset("test", "/home/tc229954/data/prefilter/pfam/seed/profmark")
+    dset = ProfmarkDataset("test", "/home/tc229954/data/src/pfam/seed/profmark")

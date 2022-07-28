@@ -12,7 +12,7 @@ model_root="models/may27/10_layer_resnet_no_batchnorm_large_sequences/default/ve
 model_name="epoch_17_2.024041.ckpt"
 echo $model_root $model_name
 
-$py_cmd prefilter/evaluate.py "$model_root" "$model_name" \
+$py_cmd src/evaluate.py "$model_root" "$model_name" \
 --compute_accuracy --n_seq_per_target_family 1 \
 --embed_dim 256  \
 --seq_len -1 --batch_size 1 --index_device "cuda" --normalize_embeddings

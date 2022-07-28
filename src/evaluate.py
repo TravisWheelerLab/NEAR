@@ -17,9 +17,9 @@ import torch
 import yaml
 from pytorch_lightning import seed_everything
 
-import prefilter.models as model_utils
-import prefilter.utils as utils
-from prefilter.models import DotProdModel, ResidualBlock, ResNet
+import src.models as model_utils
+import src.utils as utils
+from src.models import DotProdModel, ResidualBlock, ResNet
 
 
 def non_default_collate(batch):
@@ -150,7 +150,7 @@ def main(fasta_files):
     elif args.profmark:
         iterator = utils.ProfmarkDataset(
             "test",
-            profmark_dir="/home/tc229954/data/prefilter/pfam/seed/profmark",
+            profmark_dir="/home/tc229954/data/src/pfam/seed/profmark",
             n_seq_per_target_family=args.n_seq_per_target_family,
             seq_len=seq_len,
         )
@@ -256,5 +256,5 @@ def main(fasta_files):
 
 
 if __name__ == "__main__":
-    files = glob("/home/tc229954/data/prefilter/pfam/seed/20piddata/train/*afa")
+    files = glob("/home/tc229954/data/src/pfam/seed/20piddata/train/*afa")
     main(files)
