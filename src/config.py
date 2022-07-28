@@ -11,7 +11,7 @@ def config():
     num_nodes = 1
     num_workers = 0
     check_val_every_n_epoch = 1
-    log_dir = "models/may27/18_layer_resnet_with_attn_no_pos_enc"
+    log_dir = "model_data/july28/testing"
     batch_size = 16
     epochs = 20
     learning_rate = 1e-4
