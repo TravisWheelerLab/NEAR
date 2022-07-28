@@ -1,21 +1,16 @@
 import os
-import pdb
-from abc import ABC
-from pathlib import Path
 
 import esm
 import matplotlib.pyplot as plt
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-import src.models as model_utils
-import src.utils as utils
+from src.models import ModelBase
+from src.utils.layers import PositionalEncoding, ResConv
+from src.utils.losses import SupConLoss
 
-__all__ = ["ResNet1d"]
 
-
-class ResNet1d(pl.LightningModule, ABC):
+class ResNet1d(ModelBase):
     def __init__(self, learning_rate, embed_msas, apply_attention, training=True):
 
         super(ResNet1d, self).__init__()
@@ -57,11 +52,14 @@ class ResNet1d(pl.LightningModule, ABC):
 
         self.log_interval = 100
 
-        self.loss_func = model_utils.SupConLoss()
+        self.loss_func = SupConLoss()
 
         self._setup_layers()
 
         self.save_hyperparameters()
+
+    def collate_fn(self):
+        return None
 
     def _setup_layers(self):
 
@@ -70,7 +68,7 @@ class ResNet1d(pl.LightningModule, ABC):
         _list = []
         for _ in range(self.n_res_blocks):
             _list.append(
-                model_utils.ResConv(
+                ResConv(
                     self.res_block_n_filters,
                     kernel_size=self.res_block_kernel_size,
                     padding=self.padding,
@@ -86,7 +84,7 @@ class ResNet1d(pl.LightningModule, ABC):
                 dim_feedforward=2 * self.res_block_n_filters,
             )
 
-            self.pos_unc = model_utils.PositionalEncoding(self.res_block_n_filters)
+            self.pos_unc = PositionalEncoding(self.res_block_n_filters)
         # could apply attention after max pooling then project back up to original dimension.
 
         mlp_list = [

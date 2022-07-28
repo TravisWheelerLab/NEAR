@@ -5,5 +5,5 @@ from pytorch_lightning import LightningModule
 
 class ModelBase(ABC, LightningModule):
     @abstractmethod
-    def evaluate(self):
+    def collate_fn(self):
         raise NotImplementedError()

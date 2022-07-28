@@ -15,7 +15,9 @@ import pandas as pd
 import torch
 
 import src.models as models
-from src import DECOY_FLAG, MASK_FLAG
+
+DECOY_FLAG = -1
+MASK_FLAG = 1
 
 log = logging.getLogger(__name__)
 

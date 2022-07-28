@@ -23,14 +23,16 @@ from Bio import AlignIO
 import src
 import src.models as models
 import src.utils as utils
-from src import DECOY_FLAG
+from src.datasets import DataModule
+
+DECOY_FLAG = -1
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 __all__ = ["MSAGenerator", "SwissProtGenerator", "ClusterIterator", "ProfmarkDataset"]
 
 
-class MSAGenerator:
+class MSAGenerator(DataModule):
     def __init__(self, afa_files):
 
         self.msa_to_seqs = defaultdict(list)
@@ -50,6 +52,9 @@ class MSAGenerator:
     def __getitem__(self, idx):
         name = self.names[idx % len(self.names)]
         return self.msa_to_seqs[name][:10], 0, self.msa_to_seqs[name][0], 0, idx
+
+    def collate_fn(self):
+        return None
 
 
 def _sanitize_sequence(sequence):
@@ -84,7 +89,7 @@ def _sanitize_sequence(sequence):
     return sanitized
 
 
-class SwissProtGenerator:
+class SwissProtGenerator(DataModule):
     """
     Grab a sequence from swiss-prot, mutate it, then
     feed it to the model as a contrastive pair.
@@ -105,6 +110,9 @@ class SwissProtGenerator:
             return len(self.seqs) // 10
         else:
             return 10000
+
+    def collate_fn(self):
+        return utils.pad_contrastive_batches
 
     def shuffle(self):
         shuffle(self.seqs)
@@ -139,7 +147,7 @@ class SwissProtGenerator:
         return s1, s2, label
 
 
-class ClusterIterator:
+class ClusterIterator(DataModule):
     """
     I'm going to add in alignments here so we can easily look
     at them without grepping or anything.
@@ -200,6 +208,9 @@ class ClusterIterator:
             self.train_afa_files.remove(file)
 
         self._build_clustered_dataset()
+
+    def collate_fn(self):
+        return None
 
     def _build_clustered_dataset(self):
 
@@ -304,7 +315,7 @@ class ClusterIterator:
         return seq, label, self.query_sequences[idx]
 
 
-class ProfmarkDataset:
+class ProfmarkDataset(DataModule):
     def __init__(self, basename, profmark_dir, n_seq_per_target_family=1, seq_len=-1):
         msa_files = glob(os.path.join(profmark_dir, "msas/afa/*"))
         self.seq_len = seq_len
@@ -371,6 +382,9 @@ class ProfmarkDataset:
             )
 
         return seeds, self.cluster_rep_labels
+
+    def collate_fn(self):
+        return None
 
     def __len__(self):
         return len(self.query_sequences)

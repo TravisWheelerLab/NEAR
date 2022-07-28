@@ -11,7 +11,7 @@ __all__ = ["PositionalEncoding", "ResConv"]
 
 class ResConv(torch.nn.Module):
     def __init__(self, filters, kernel_size, padding, padding_mode):
-        super(ResConv, self).__init__()
+        super().__init__()
 
         self.padding = padding
         self.padding_mode = padding_mode

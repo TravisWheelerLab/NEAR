@@ -3,10 +3,10 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [tool.flit.scripts]
-run = "prefilter:go"
+run = "src:train"
 
 [tool.flit.metadata]
-module = "prefilter"
+module = "src"
 author = "Thomas Colligan"
 maintainer = "Thomas Colligan"
 maintainer-email = "thomas.colligan@umontana.edu"

@@ -14,10 +14,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning.losses import NTXentLoss
 
-__all__ = ["SupConLoss"]
-
-import src
-
 
 def _save(fpath, arr):
     plt.imshow(arr.cpu())
@@ -39,7 +35,7 @@ class SupConLoss(nn.Module):
     It also supports the unsupervised contrastive loss in SimCLR"""
 
     def __init__(self, temperature=0.07, contrast_mode="all", base_temperature=0.07):
-        super(SupConLoss, self).__init__()
+        super().__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
