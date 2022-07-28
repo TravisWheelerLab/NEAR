@@ -1,12 +1,12 @@
 import pdb
+from argparse import ArgumentParser
+from random import shuffle
+from sys import stdout
 
 import esm
-import torch
-from random import shuffle
-import numpy as np
 import matplotlib.pyplot as plt
-from sys import stdout
-from argparse import ArgumentParser
+import numpy as np
+import torch
 
 amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
 toks = [

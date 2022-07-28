@@ -1,20 +1,21 @@
 # pylint: disable=no-member
-import esm
 import json
-import re
+import logging
 import os
 import pdb
-import logging
-from random import shuffle, seed
-from typing import Union, List, Tuple
+import re
+from random import seed, shuffle
+from typing import List, Tuple, Union
 
-import numpy as np
-import torch
-import pandas as pd
+import esm
 import faiss
 import faiss.contrib.torch_utils
-from prefilter import MASK_FLAG, DECOY_FLAG
+import numpy as np
+import pandas as pd
+import torch
+
 import prefilter.models as models
+from prefilter import DECOY_FLAG, MASK_FLAG
 
 log = logging.getLogger(__name__)
 

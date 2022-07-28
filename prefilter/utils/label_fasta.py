@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-import pdb
-import subprocess
-import numpy as np
-import yaml
-import pandas as pd
 import logging
 import os
+import pdb
+import subprocess
 import time
-from typing import List
 from glob import glob
+from typing import List
+
+import numpy as np
+import pandas as pd
+import yaml
 
 log = logging.getLogger(__name__)
 
 from argparse import ArgumentParser
-from prefilter import array_job_template, single_job_template, name_to_accession_id
+
 import prefilter.utils as utils
+from prefilter import array_job_template, name_to_accession_id, single_job_template
 
 DOMTBLOUT_COLS = [0, 4, 11, 19, 20, 22]
 DOMTBLOUT_COL_NAMES = [

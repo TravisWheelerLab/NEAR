@@ -6,9 +6,9 @@ from __future__ import print_function
 
 import os.path
 import pdb
-import matplotlib.pyplot as plt
-import matplotlib
 
+import matplotlib
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -2,22 +2,20 @@
 import os
 import pdb
 import random
-
-from pytorch_lightning import seed_everything
+from argparse import ArgumentParser
+from glob import glob
+from random import seed, shuffle
 from time import time
 
-# seed_everything(20943)
-
-import torch
 import pytorch_lightning as pl
-from random import shuffle, seed
+import torch
+from pytorch_lightning import seed_everything
 from shopty import ShoptyConfig
 
-from glob import glob
-from argparse import ArgumentParser
-
-from prefilter.models import ResNet1d
 import prefilter.utils as utils
+from prefilter.models import ResNet1d
+
+# seed_everything(20943)
 
 
 def main(args):

@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from glob import glob
 from sys import stdout
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,10 +12,10 @@ import yaml
 
 from prefilter.utils import (
     fasta_from_file,
-    parse_labels,
     handle_figure_path,
     label_fasta,
     load_sequences_and_labels,
+    parse_labels,
 )
 
 

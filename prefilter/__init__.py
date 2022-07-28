@@ -1,10 +1,11 @@
 """
 Prefilter passes good candidates to hmmer.
 """
-import pdb
-from types import SimpleNamespace
 import os
+import pdb
 from argparse import ArgumentParser
+from types import SimpleNamespace
+
 from prefilter.config import ex
 
 __version__ = "0.0.1"
@@ -41,10 +42,11 @@ DEPENDENCY
 RUN_CMD
 """
 
+
 @ex.automain
 def main(_config):
     from prefilter.train import main
+
     args = SimpleNamespace(**_config)
     pdb.set_trace()
     main(args)
-

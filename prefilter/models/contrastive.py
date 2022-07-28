@@ -1,16 +1,16 @@
-import pdb
 import os
-import esm
+import pdb
 from abc import ABC
+from pathlib import Path
 
+import esm
 import matplotlib.pyplot as plt
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
 
 import prefilter.models as model_utils
 import prefilter.utils as utils
-from pathlib import Path
 
 __all__ = ["ResNet1d"]
 

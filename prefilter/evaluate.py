@@ -1,26 +1,25 @@
-import pdb
-import time
-from glob import glob
-from collections import defaultdict
-from sys import stdout
-
-import faiss
-import matplotlib.pyplot as plt
-import torch
-import numpy as np
 import itertools
 import os
-import yaml
+import pdb
 import re
+import time
 from argparse import ArgumentParser
-import esm
+from collections import defaultdict
+from glob import glob
+from sys import stdout
 from typing import List
+
+import esm
+import faiss
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import yaml
+from pytorch_lightning import seed_everything
+
 import prefilter.models as model_utils
 import prefilter.utils as utils
-
-from pytorch_lightning import seed_everything
-from prefilter.models import ResNet, ResidualBlock, DotProdModel
-import prefilter.utils as utils
+from prefilter.models import DotProdModel, ResidualBlock, ResNet
 
 
 def non_default_collate(batch):

@@ -1,8 +1,9 @@
-import torch
 import os
-import matplotlib.pyplot as plt
 import re
 from glob import glob
+
+import matplotlib.pyplot as plt
+import torch
 
 
 def read_posterior_file(file_path):

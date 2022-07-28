@@ -2,6 +2,7 @@ from sacred import Experiment
 
 ex = Experiment()
 
+
 @ex.config
 def config():
     gpus = 4

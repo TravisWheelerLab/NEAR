@@ -1,31 +1,29 @@
 # pylint: disable=no-member
+import json
 import os
-from Bio import AlignIO
+import pdb
+import string
+import time
+import warnings
+from abc import ABC
+from collections import defaultdict
+from copy import deepcopy
+from glob import glob
+from random import shuffle
+from sys import stdout
+from typing import Dict, List, Optional, Tuple, Union
+
 import esm as esm
 import matplotlib.pyplot as plt
-import string
-import pdb
-import json
-import time
-from abc import ABC
-from copy import deepcopy
-
-import torch
 import numpy as np
-
-from collections import defaultdict
-from random import shuffle
-from typing import List, Union, Tuple, Optional, Dict
-from glob import glob
-from sys import stdout
-
+import torch
 import yaml
+from Bio import AlignIO
 
 import prefilter
-import prefilter.utils as utils
 import prefilter.models as models
+import prefilter.utils as utils
 from prefilter import DECOY_FLAG
-import warnings
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 

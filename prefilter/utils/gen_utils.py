@@ -1,9 +1,8 @@
 import pdb
-
-import torch
-import numpy as np
-
 from typing import Dict, Union
+
+import numpy as np
+import torch
 
 __all__ = [
     "generate_sequences",
