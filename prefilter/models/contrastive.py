@@ -207,6 +207,7 @@ class ResNet1d(pl.LightningModule, ABC):
             e2 = torch.cat(torch.unbind(e2, dim=0))
             e1 = torch.nn.functional.normalize(e1, dim=-1)
             e2 = torch.nn.functional.normalize(e2, dim=-1)
+
             if self.global_step % self.log_interval == 0:
                 with torch.no_grad():
                     plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy())

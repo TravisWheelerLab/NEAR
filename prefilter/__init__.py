@@ -1,8 +1,11 @@
 """
 Prefilter passes good candidates to hmmer.
 """
+import pdb
+from types import SimpleNamespace
 import os
 from argparse import ArgumentParser
+from prefilter.config import ex
 
 __version__ = "0.0.1"
 
@@ -38,31 +41,10 @@ DEPENDENCY
 RUN_CMD
 """
 
+@ex.automain
+def main(_config):
+    from prefilter.train import main
+    args = SimpleNamespace(**_config)
+    pdb.set_trace()
+    main(args)
 
-def main():
-    ap = ArgumentParser()
-    ap.add_argument("--version", action="version", version="0.0.1")
-    subparsers = ap.add_subparsers(title="subcommands", dest="subcmd")
-    # train parser ---------------------------------------------------
-    train_parser = subparsers.add_parser("train", help="train a model")
-    train_parser.add_argument("--log_dir", required=True)
-    train_parser.add_argument("--gpus", type=int)
-    train_parser.add_argument("--num_nodes", type=int, required=True)
-    train_parser.add_argument("--epochs", type=int, required=True)
-    train_parser.add_argument("--learning_rate", type=float, required=True)
-    train_parser.add_argument("--batch_size", type=int, required=True)
-    train_parser.add_argument("--num_workers", type=int, required=True)
-    train_parser.add_argument("--seq_len", type=int, required=True)
-    train_parser.add_argument("--check_val_every_n_epoch", default=1, type=int)
-    train_parser.add_argument("--msa_transformer", action="store_true")
-    train_parser.add_argument("--only_aligned_characters", action="store_true")
-    train_parser.add_argument("--apply_attention", action="store_true")
-
-    args = ap.parse_args()
-    if args.subcmd == "train":
-        from prefilter.train import main
-
-        main(args)
-    else:
-        ap.print_help()
-        exit(1)

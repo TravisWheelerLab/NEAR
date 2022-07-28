@@ -8,8 +8,8 @@
 
 py_cmd="/home/tc229954/anaconda/envs/prefilter/bin/python"
 set -e
-model_root="models/may27/18_layer_resnet_with_attn_no_pos_enc/default/version_0/"
-model_name="epoch_19_1.466130.ckpt"
+model_root="models/may27/10_layer_resnet_no_batchnorm_large_sequences/default/version_0/"
+model_name="epoch_17_2.024041.ckpt"
 echo $model_root $model_name
 
 $py_cmd prefilter/evaluate.py "$model_root" "$model_name" \

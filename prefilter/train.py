@@ -1,5 +1,6 @@
 # pylint: disable=no-member
 import os
+import pdb
 import random
 
 from pytorch_lightning import seed_everything
@@ -20,6 +21,7 @@ import prefilter.utils as utils
 
 
 def main(args):
+    pdb.set_trace()
 
     if args.msa_transformer:
         afa_files = glob(
