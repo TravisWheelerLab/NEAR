@@ -43,10 +43,12 @@ RUN_CMD
 """
 
 
-@ex.automain
-def main(_config):
+@ex.main
+def train(_config):
     from prefilter.train import main
 
     args = SimpleNamespace(**_config)
-    pdb.set_trace()
     main(args)
+
+
+ex.run()

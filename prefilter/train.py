@@ -19,7 +19,6 @@ from prefilter.models import ResNet1d
 
 
 def main(args):
-    pdb.set_trace()
 
     if args.msa_transformer:
         afa_files = glob(
