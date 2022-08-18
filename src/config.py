@@ -5,20 +5,22 @@ ex = Experiment()
 
 @ex.config
 def config():
-    # TODO: wrap this function with sensible defaults,
-    # so I don't have to specify all of them in the config.
-    gpus = 0
+
+    gpus = 1
     num_nodes = 1
     num_workers = 0
     check_val_every_n_epoch = 1
-    log_dir = "model_data/july28/testing"
+    log_dir = "model_data/aug18/testing"
     batch_size = 16
     epochs = 20
     learning_rate = 1e-4
     seq_len = 400
 
+    description = input("Describe your experiment.\n")
+
     model_name = "ResNet1d"
     dataset_name = "SwissProtGenerator"
+
     embed_msas = False
 
     model_args = {
@@ -28,12 +30,12 @@ def config():
     }
 
     train_dataset_args = {
-        "fa_file": "/Users/mac/data/uniprot_sprot.fasta",
+        "fa_file": "/home/u4/colligan/data/prefilter/uniprot_sprot.fasta",
         "minlen": seq_len,
     }
 
     val_dataset_args = {
-        "fa_file": "/Users/mac/data/uniprot_sprot.fasta",
+        "fa_file": "/home/u4/colligan/data/prefilter/uniprot_sprot.fasta",
         "minlen": seq_len,
         "training": False,
     }

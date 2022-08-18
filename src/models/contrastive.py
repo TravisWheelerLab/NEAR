@@ -1,4 +1,5 @@
 import os
+import pdb
 
 import esm
 import matplotlib.pyplot as plt
@@ -6,6 +7,7 @@ import torch
 import torch.nn as nn
 
 from src.models import ModelBase
+from src.utils.helpers import plot_to_image
 from src.utils.layers import PositionalEncoding, ResConv
 from src.utils.losses import SupConLoss
 
@@ -42,7 +44,7 @@ class ResNet1d(ModelBase):
                 ]
             )
         else:
-            self.res_block_n_filters = 256
+            self.res_block_n_filters = 1024
 
         self.res_block_kernel_size = 5
         self.n_res_blocks = 18
@@ -175,13 +177,7 @@ class ResNet1d(ModelBase):
                     fpath = (
                         f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
                     )
-                    if os.path.isdir(self.trainer.logger.log_dir):
-                        print(f"saving to {fpath}")
-                        plt.savefig(
-                            f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
-                            bbox_inches="tight",
-                        )
-                    plt.close()
+                    self.logger.experiment.add_figure(str(self.global_step), plt.gcf())
         else:
             if masks is not None:
                 embeddings, masks = self.forward(features, masks)
@@ -208,18 +204,14 @@ class ResNet1d(ModelBase):
 
             if self.global_step % self.log_interval == 0:
                 with torch.no_grad():
+                    fig = plt.figure(figsize=(10, 10))
                     plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy())
                     plt.colorbar()
                     fpath = (
                         f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
                     )
-                    if os.path.isdir(self.trainer.logger.log_dir):
-                        print(f"saving to {fpath}")
-                        plt.savefig(
-                            f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
-                            bbox_inches="tight",
-                        )
-                    plt.close()
+                    self.logger.experiment.add_figure("test", plt.gcf())
+
             loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss

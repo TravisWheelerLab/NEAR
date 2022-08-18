@@ -1,0 +1,10 @@
+stages:
+  train:
+    cmd: run
+    deps:
+    - data
+    - src/
+    params:
+    - src/config.py:
+    outs:
+    - model_data/

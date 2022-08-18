@@ -19,3 +19,5 @@ trained_models/*
 *.nextflow*
 /src/work/
 .idea/
+/models
+/model_data

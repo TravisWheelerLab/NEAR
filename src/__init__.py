@@ -18,8 +18,6 @@ from src.callbacks import CallbackSet
 from src.config import ex
 from src.utils.util import load_dataset_class, load_model_class
 
-ex.add_config({"testing": "am i working?"})
-
 
 @ex.config
 def _observer(log_dir, model_name):
@@ -35,7 +33,6 @@ def _cls_loader(model_name, dataset_name):
 @ex.config
 def _trainer_args(trainer_args):
     # set fairly permanent trainer args here.
-
     if trainer_args["gpus"] > 0:
         trainer_args["precision"] = 16
 
@@ -82,4 +79,5 @@ def train(_config):
     )
 
 
-ex.run()
+def main():
+    ex.run()
