@@ -16,17 +16,15 @@ def config():
     learning_rate = 1e-4
     seq_len = 400
 
-    description = input("Describe your experiment.\n")
+    # description = input("Describe your experiment.\n")
 
-    model_name = "ResNetSparseAttention"
+    model_name = "MSAEmbedder"
     dataset_name = "SwissProtGenerator"
 
     embed_msas = False
 
     model_args = {
         "learning_rate": learning_rate,
-        "embed_msas": embed_msas,
-        "apply_attention": False,
         "log_interval": 3,
     }
 

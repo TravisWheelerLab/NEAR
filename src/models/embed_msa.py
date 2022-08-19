@@ -11,15 +11,25 @@ from src.utils.layers import PositionalEncoding, ResConv
 from src.utils.losses import SupConLoss
 
 
-class ResNet1d(ModelBase):
+class MSAEmbedder(ModelBase):
     def __init__(self, learning_rate, log_interval, training=True):
 
-        super(ResNet1d, self).__init__()
+        super(MSAEmbedder, self).__init__()
 
         self.learning_rate = learning_rate
         self.training = training
 
-        self.res_block_n_filters = 128
+        self.msa_transformer, _ = esm.pretrained.esm_msa1b_t12_100M_UR50S()
+        self.msa_transformer.eval()
+        self.msa_transformer.requires_grad_ = False
+
+        self.res_block_n_filters = 768
+        self.msa_mlp = torch.nn.Sequential(
+            *[torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1)]
+        )
+        self.seq_mlp = torch.nn.Sequential(
+            *[torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1)]
+        )
 
         self.res_block_kernel_size = 5
         self.n_res_blocks = 18
@@ -73,7 +83,10 @@ class ResNet1d(ModelBase):
         x = ~mask[:, None, :] * x
         for layer in self.embedding_trunk:
             x, mask = layer.masked_forward(x, mask)
-
+        # mask here
+        # removed a transpose for the LSTM.
+        # point-wise mlp; no downsampling.
+        # no need to mask the mask (kernel size 1).
         x = self.mlp(x)
         x = ~mask[:, None, :] * x
         return x, mask
@@ -87,33 +100,58 @@ class ResNet1d(ModelBase):
             return embeddings
 
     def _shared_step(self, batch):
-        features, masks, labelvecs = batch
-
-        if masks is not None:
-            embeddings, masks = self.forward(features, masks)
+        if len(batch) == 3:
+            msas, seqs, labels = batch
         else:
-            embeddings = self.forward(features)
+            msas, msa_labels, seqs, seq_labels, labels = batch
 
-        e1, e2 = torch.split(
-            embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
+        # each msa gets an _entire_ embedding
+        # is there something weird about this?
+        msa_embeddings = self.msa_transformer(
+            msas, repr_layers=[12], return_contacts=False
+        )["representations"][12].detach()
+        # remove begin-of-sequence token.
+        # msa_embeddings = msa_embeddings[:, :, 1:, :]
+        # mean pool sequence embeddings across
+        # msa dimension
+        # msa_embeddings, _ = torch.max(msa_embeddings, dim=1)
+        msa_embeddings = msa_embeddings[:, 0]
+        # now apply two mlps.
+        sequence_embeddings = (
+            self.msa_transformer(seqs, repr_layers=[12], return_contacts=False)[
+                "representations"
+            ][12]
+            .detach()
+            .squeeze()
         )
-        e1 = torch.cat(torch.unbind(e1, dim=0))
-        e2 = torch.cat(torch.unbind(e2, dim=0))
-        e1 = torch.nn.functional.normalize(e1, dim=-1)
-        e2 = torch.nn.functional.normalize(e2, dim=-1)
+        # this should work well. If it doesn't something is up.
+        sequence_embeddings = sequence_embeddings.transpose(-1, -2)
+        msa_embeddings = msa_embeddings.transpose(-1, -2)
+
+        msa_embeddings = self.msa_mlp(sequence_embeddings).transpose(-1, -2)
+        sequence_embeddings = self.seq_mlp(sequence_embeddings).transpose(-1, -2)
 
         if self.global_step % self.log_interval == 0:
-
             with torch.no_grad():
-                fig = plt.figure(figsize=(10, 10))
-                plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy())
+                _msa = torch.cat(torch.unbind(msa_embeddings, dim=0))
+                _seq = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+                _msa = torch.nn.functional.normalize(_msa, dim=-1)
+                _seq = torch.nn.functional.normalize(_seq, dim=-1)
+
+                plt.imshow(torch.matmul(_msa, _seq.T).to("cpu").detach().numpy())
                 plt.colorbar()
                 fpath = (f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",)
                 self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
+                    f"image_{self.global_step}", plt.gcf()
                 )
 
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+        _msa = torch.cat(torch.unbind(msa_embeddings, dim=0))
+        _seq = torch.cat(torch.unbind(sequence_embeddings, dim=0))
+        _msa = torch.nn.functional.normalize(_msa, dim=-1)
+        _seq = torch.nn.functional.normalize(_seq, dim=-1)
+        # now, drop ye old masked characters.
+        x = torch.cat((_msa.unsqueeze(1), _seq.unsqueeze(1)), dim=1)
+        loss = self.loss_func(x)
 
         return loss
 
