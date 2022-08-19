@@ -3,7 +3,7 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [tool.flit.scripts]
-run = "src:main"
+train = "src:main"
 
 [tool.flit.metadata]
 module = "src"

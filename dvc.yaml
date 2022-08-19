@@ -1,8 +1,7 @@
 stages:
   train:
-    cmd: run
+    cmd: train
     deps:
-    - data
     - src/
     params:
     - src/config.py:

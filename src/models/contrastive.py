@@ -7,13 +7,14 @@ import torch
 import torch.nn as nn
 
 from src.models import ModelBase
-from src.utils.helpers import plot_to_image
 from src.utils.layers import PositionalEncoding, ResConv
 from src.utils.losses import SupConLoss
 
 
 class ResNet1d(ModelBase):
-    def __init__(self, learning_rate, embed_msas, apply_attention, training=True):
+    def __init__(
+        self, learning_rate, embed_msas, apply_attention, log_interval, training=True
+    ):
 
         super(ResNet1d, self).__init__()
 
@@ -44,7 +45,7 @@ class ResNet1d(ModelBase):
                 ]
             )
         else:
-            self.res_block_n_filters = 1024
+            self.res_block_n_filters = 128
 
         self.res_block_kernel_size = 5
         self.n_res_blocks = 18
@@ -52,7 +53,7 @@ class ResNet1d(ModelBase):
         self.padding = "same"
         self.padding_mode = "circular"
 
-        self.log_interval = 100
+        self.log_interval = log_interval
 
         self.loss_func = SupConLoss()
 
@@ -177,7 +178,9 @@ class ResNet1d(ModelBase):
                     fpath = (
                         f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
                     )
-                    self.logger.experiment.add_figure(str(self.global_step), plt.gcf())
+                    self.logger.experiment.add_figure(
+                        f"image_{self.global_step}", plt.gcf()
+                    )
         else:
             if masks is not None:
                 embeddings, masks = self.forward(features, masks)
@@ -210,7 +213,9 @@ class ResNet1d(ModelBase):
                     fpath = (
                         f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",
                     )
-                    self.logger.experiment.add_figure("test", plt.gcf())
+                    self.logger.experiment.add_figure(
+                        f"image", plt.gcf(), global_step=self.global_step
+                    )
 
             loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 

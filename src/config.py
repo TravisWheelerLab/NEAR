@@ -8,17 +8,17 @@ def config():
 
     gpus = 1
     num_nodes = 1
-    num_workers = 0
+    num_workers = 10
     check_val_every_n_epoch = 1
     log_dir = "model_data/aug18/testing"
-    batch_size = 16
+    batch_size = 32
     epochs = 20
     learning_rate = 1e-4
     seq_len = 400
 
     description = input("Describe your experiment.\n")
 
-    model_name = "ResNet1d"
+    model_name = "ResNetSparseAttention"
     dataset_name = "SwissProtGenerator"
 
     embed_msas = False
@@ -27,6 +27,7 @@ def config():
         "learning_rate": learning_rate,
         "embed_msas": embed_msas,
         "apply_attention": False,
+        "log_interval": 3,
     }
 
     train_dataset_args = {

@@ -1,5 +1,4 @@
 # pylint: disable=no-member
-import io
 import json
 import logging
 import os
@@ -14,7 +13,6 @@ import faiss.contrib.torch_utils
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 import torch
 
 import src.models as models
