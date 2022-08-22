@@ -6,12 +6,14 @@ __version__ = "0.0.1"
 
 import os
 import pdb
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytorch_lightning
 import torch
-from pytorch_lightning import seed_everything
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.plugins import DDPPlugin
 from sacred.observers import FileStorageObserver
 
 from src.callbacks import CallbackSet
@@ -36,10 +38,8 @@ def _trainer_args(trainer_args):
     if trainer_args["gpus"] > 0:
         trainer_args["precision"] = 16
 
-    trainer_args["strategy"] = "ddp"
 
-
-@ex.main
+@ex.command
 def train(_config):
 
     seed_everything(_config["seed"])
@@ -64,14 +64,21 @@ def train(_config):
     else:
         val_dataloader = None
 
-    logger = pytorch_lightning.loggers.TensorBoardLogger(
+    logger = TensorBoardLogger(
         save_dir=os.path.split(ex.observers[0].dir)[0],
         version=Path(ex.observers[0].dir).name,
         name="",
     )
 
-    trainer = pytorch_lightning.Trainer(
-        **params.trainer_args, callbacks=CallbackSet.callbacks(), logger=logger
+    logger.experiment.add_text(
+        tag="description", text_string=params.description, walltime=time.time()
+    )
+
+    trainer = Trainer(
+        **params.trainer_args,
+        callbacks=CallbackSet.callbacks(),
+        logger=logger,
+        plugins=DDPPlugin(find_unused_parameters=False),
     )
 
     trainer.fit(
@@ -79,5 +86,14 @@ def train(_config):
     )
 
 
-def main():
-    ex.run()
+@ex.command
+def evaluate(_config):
+    print("I'm evaluating!")
+
+
+def train_main():
+    ex.run("train")
+
+
+def evaluate_main():
+    ex.run("evaluate")

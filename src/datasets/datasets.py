@@ -139,7 +139,6 @@ class SwissProtGenerator(DataModule):
             sub_distributions=self.sub_dists,
             aa_dist=utils.amino_distribution,
         )
-
         return s1, s2, idx % len(self.seqs)
 
     def __getitem__(self, idx):

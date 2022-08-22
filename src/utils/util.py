@@ -11,14 +11,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional, TextIO, Tuple, Type
 
+import pytorch_lightning as pl
+
 from src import datasets, models
 from src.utils import pluginloader
 
 
-def load_models() -> Dict[str, Type[models.ModelBase]]:
+def load_models() -> Dict[str, Type[pl.LightningModule]]:
     return {
         m.__name__: m
-        for m in pluginloader.load_plugin_classes(models, models.ModelBase)
+        for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
     }
 
 
@@ -38,7 +40,7 @@ def _get_dataset(name: str) -> Type[datasets.DataModule]:
     return dataset_dict[name]
 
 
-def _get_model(name: str) -> Type[models.ModelBase]:
+def _get_model(name: str) -> Type[pl.LightningModule]:
     model_dict = load_models()
 
     if name not in model_dict:

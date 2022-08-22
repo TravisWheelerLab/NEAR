@@ -3,15 +3,15 @@ import pdb
 
 import esm
 import matplotlib.pyplot as plt
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-from src.models import ModelBase
 from src.utils.layers import PositionalEncoding, ResConv
 from src.utils.losses import SupConLoss
 
 
-class MSAEmbedder(ModelBase):
+class MSAEmbedder(pl.LightningModule):
     def __init__(self, learning_rate, log_interval, training=True):
 
         super(MSAEmbedder, self).__init__()
@@ -44,9 +44,6 @@ class MSAEmbedder(ModelBase):
         self._setup_layers()
 
         self.save_hyperparameters()
-
-    def collate_fn(self):
-        return None
 
     def _setup_layers(self):
 

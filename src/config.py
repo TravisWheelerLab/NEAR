@@ -8,24 +8,24 @@ def config():
 
     gpus = 1
     num_nodes = 1
-    num_workers = 10
+    num_workers = 0
     check_val_every_n_epoch = 1
     log_dir = "model_data/aug18/testing"
     batch_size = 32
     epochs = 20
     learning_rate = 1e-4
-    seq_len = 400
+    seq_len = 150
 
     # description = input("Describe your experiment.\n")
 
-    model_name = "MSAEmbedder"
+    model_name = "ResNet1d"
     dataset_name = "SwissProtGenerator"
 
     embed_msas = False
 
     model_args = {
         "learning_rate": learning_rate,
-        "log_interval": 3,
+        "log_interval": 10,
     }
 
     train_dataset_args = {
