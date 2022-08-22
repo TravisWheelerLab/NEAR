@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import torch
+import yaml
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.plugins import DDPPlugin
@@ -18,7 +19,8 @@ from sacred.observers import FileStorageObserver
 
 from src.callbacks import CallbackSet
 from src.config import ex
-from src.utils.util import load_dataset_class, load_model_class
+from src.eval_config import evaluation_ex
+from src.utils.util import load_dataset_class, load_evaluator_class, load_model_class
 
 
 @ex.config
@@ -86,9 +88,27 @@ def train(_config):
     )
 
 
-@ex.command
+# test whether or not I'm interactive
+
+
+@evaluation_ex.config
+def _cls_loader(model_name, evaluator_name):
+    model_class = load_model_class(model_name)
+    evaluator_class = load_evaluator_class(evaluator_name)
+
+
+@evaluation_ex.command
 def evaluate(_config):
-    print("I'm evaluating!")
+    params = SimpleNamespace(**_config)
+
+    with (Path(params.model_path) / "hparams.yaml").open("r") as src:
+        hyperparams = yaml.safe_load(src)
+
+    model = params.model_class(**hyperparams)
+    evaluator = params.evaluator_class(**params.evaluator_args)
+
+    result = evaluator.evaluate(model_class=model)
+    # save dict with dvc.
 
 
 def train_main():
@@ -96,4 +116,4 @@ def train_main():
 
 
 def evaluate_main():
-    ex.run("evaluate")
+    evaluation_ex.run("evaluate")

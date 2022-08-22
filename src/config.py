@@ -8,15 +8,18 @@ def config():
 
     gpus = 1
     num_nodes = 1
-    num_workers = 0
+    num_workers = 12
     check_val_every_n_epoch = 1
-    log_dir = "model_data/aug18/testing"
+    log_dir = "model_data/aug22/single_epoch_run/"
     batch_size = 32
-    epochs = 20
+    epochs = 100
     learning_rate = 1e-4
     seq_len = 150
+    log_interval = 1000
 
-    # description = input("Describe your experiment.\n")
+    description = (
+        "A single-epoch test of the framework to get a trained model to work with."
+    )
 
     model_name = "ResNet1d"
     dataset_name = "SwissProtGenerator"
@@ -25,7 +28,7 @@ def config():
 
     model_args = {
         "learning_rate": learning_rate,
-        "log_interval": 10,
+        "log_interval": log_interval,
     }
 
     train_dataset_args = {
