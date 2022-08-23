@@ -1,11 +1,12 @@
 from sacred import Experiment
 
-ex = Experiment()
+train_ex = Experiment()
 
 
-@ex.config
+@train_ex.config
 def config():
 
+    description = "A single GPU test."
     gpus = 1
     num_nodes = 1
     num_workers = 12
@@ -16,10 +17,6 @@ def config():
     learning_rate = 1e-4
     seq_len = 150
     log_interval = 1000
-
-    description = (
-        "A single-epoch test of the framework to get a trained model to work with."
-    )
 
     model_name = "ResNet1d"
     dataset_name = "SwissProtGenerator"

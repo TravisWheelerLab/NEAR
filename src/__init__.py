@@ -6,6 +6,7 @@ __version__ = "0.0.1"
 
 import os
 import pdb
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,30 +19,40 @@ from pytorch_lightning.plugins import DDPPlugin
 from sacred.observers import FileStorageObserver
 
 from src.callbacks import CallbackSet
-from src.config import ex
+from src.config import train_ex
 from src.eval_config import evaluation_ex
 from src.utils.util import load_dataset_class, load_evaluator_class, load_model_class
 
 
-@ex.config
+@train_ex.config
 def _observer(log_dir, model_name):
-    ex.observers.append(FileStorageObserver(f"{log_dir}/{model_name}/"))
+    train_ex.observers.append(FileStorageObserver(f"{log_dir}/{model_name}/"))
 
 
-@ex.config
+@train_ex.config
 def _cls_loader(model_name, dataset_name):
     model_class = load_model_class(model_name)
     dataset_class = load_dataset_class(dataset_name)
 
 
-@ex.config
+@train_ex.config
 def _trainer_args(trainer_args):
     # set fairly permanent trainer args here.
     if trainer_args["gpus"] > 0:
         trainer_args["precision"] = 16
 
 
-@ex.command
+@train_ex.config
+def _ensure_description(description):
+
+    if description == "":
+        if sys.stdout.isatty():
+            description = input("Describe your experiment.")
+        else:
+            raise ValueError("Describe your experiment by editing config.py.")
+
+
+@train_ex.command
 def train(_config):
 
     seed_everything(_config["seed"])
@@ -67,8 +78,8 @@ def train(_config):
         val_dataloader = None
 
     logger = TensorBoardLogger(
-        save_dir=os.path.split(ex.observers[0].dir)[0],
-        version=Path(ex.observers[0].dir).name,
+        save_dir=os.path.split(train_ex.observers[0].dir)[0],
+        version=Path(train_ex.observers[0].dir).name,
         name="",
     )
 
@@ -112,7 +123,7 @@ def evaluate(_config):
 
 
 def train_main():
-    ex.run("train")
+    train_ex.run("train")
 
 
 def evaluate_main():
