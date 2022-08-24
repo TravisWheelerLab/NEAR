@@ -30,8 +30,6 @@
 
 module load python/3.9
 source ~/venvs/prefilter/bin/activate
-echo "Hello!"
 
 cd /home/u4/colligan/share/prefilter/
 
-train

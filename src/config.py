@@ -6,14 +6,14 @@ train_ex = Experiment()
 @train_ex.config
 def config():
 
-    description = "A single GPU test."
+    description = "A four (!) GPU test."
     gpus = 1
     num_nodes = 1
     num_workers = 12
     check_val_every_n_epoch = 1
     log_dir = "model_data/aug22/single_epoch_run/"
     batch_size = 32
-    epochs = 100
+    epochs = 1
     learning_rate = 1e-4
     seq_len = 150
     log_interval = 1000

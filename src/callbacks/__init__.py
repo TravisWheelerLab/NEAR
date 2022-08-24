@@ -8,9 +8,9 @@ class CallbackSet:
     checkpoint_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
         monitor="val_loss",
         mode="min",
-        filename="epoch_{epoch}_{val_loss:.6f}",
+        filename="best_loss_model.pt",
         auto_insert_metric_name=False,
-        save_top_k=50,
+        save_top_k=1,
     )
 
     _callbacks.append(checkpoint_callback)

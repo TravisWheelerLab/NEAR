@@ -2,9 +2,13 @@ stages:
   train:
     cmd: train
     deps:
-    - src/
-    params:
-    - src/config.py:
+    - src
     outs:
+    - model_data/best_loss_model.pt
+  evaluate:
+    cmd: evaluate
+    deps:
+    - src
     - model_data/
-
+    outs:
+    - results.txt

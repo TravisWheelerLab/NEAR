@@ -6,6 +6,7 @@ __version__ = "0.0.1"
 
 import os
 import pdb
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -98,6 +99,11 @@ def train(_config):
         model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
     )
 
+    shutil.copy2(
+        Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.pt",
+        "model_data/",
+    )
+
 
 # test whether or not I'm interactive
 
@@ -115,11 +121,13 @@ def evaluate(_config):
     with (Path(params.model_path) / "hparams.yaml").open("r") as src:
         hyperparams = yaml.safe_load(src)
 
-    model = params.model_class(**hyperparams)
+    # TODO: make sure this isn't producing nonsense...
+    model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
+        params.device
+    )
     evaluator = params.evaluator_class(**params.evaluator_args)
-
     result = evaluator.evaluate(model_class=model)
-    # save dict with dvc.
+    # now, track output of this evaluation with DVC.
 
 
 def train_main():

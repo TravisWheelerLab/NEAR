@@ -36,6 +36,7 @@ __all__ = [
     "mask_mask",
     "load_model",
     "process_with_esm_batch_converter",
+    "non_default_collate",
     "msa_transformer_collate",
     "daniel_sequence_encode",
 ]
@@ -268,6 +269,14 @@ def pad_contrastive_batches(batch):
         torch.stack(data),
         None,
         torch.as_tensor(labels),
+    )
+
+
+def non_default_collate(batch):
+    return (
+        torch.stack([b[0] for b in batch]),
+        torch.stack([torch.tensor(b[1]) for b in batch]),
+        [b[2] for b in batch],
     )
 
 

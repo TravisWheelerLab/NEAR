@@ -22,14 +22,6 @@ import src.utils as utils
 from src.models import DotProdModel, ResidualBlock, ResNet
 
 
-def non_default_collate(batch):
-    return (
-        torch.stack([b[0] for b in batch]),
-        torch.stack([torch.tensor(b[1]) for b in batch]),
-        [b[2] for b in batch],
-    )
-
-
 def compute_accuracy(
     query_dataset,
     cluster_rep_index,

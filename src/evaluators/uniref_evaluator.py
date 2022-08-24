@@ -1,10 +1,31 @@
 import pdb
 import re
+from collections import defaultdict
 
 import torch
 
 from src.evaluators import Evaluator
 from src.utils import fasta_from_file
+
+
+def get_model_hits(file_path):
+    queries = dict()
+    with open(file_path, "r") as file:
+        lines = file.readlines()
+        # print("lines: ",len(lines))
+        for line in lines:
+            line = line.strip()
+            line = line.split(" ")
+            query = line[0]
+            key = line[1]
+            value = float(line[2])
+
+            # print(query, key)
+
+            if query not in queries:
+                queries[query] = dict()
+            queries[query][key] = value
+    return queries
 
 
 # load hits from the hmmer file.
@@ -61,29 +82,37 @@ class UniRefEvaluator(Evaluator):
     def _calc_embeddings(self, model_class, sequences):
 
         embeddings = []
+        i = 0
         for sequence in sequences:
-            embed = (
-                model_class(self.encoding_func(sequence).unsqueeze(0))
-                .squeeze(0)
-                .to("cuda")
-            )
+            embed = model_class(self.encoding_func(sequence).unsqueeze(0)).squeeze(0)
             embeddings.append(embed.transpose(-1, -2))
-
         return embeddings
 
     def evaluate(self, model_class):
         """Must have already loaded model weights."""
         # smash the queries and targets against each other
         # why did daniel sort the sequences by length?
-        query_embeddings = self._calc_embeddings(model_class, self.query_names)
-        target_embeddings = self._calc_embeddings(model_class, self.target_names)
-        hits = self.filter(
-            query_embeddings,
-            target_embeddings,
-            self.query_names,
-            self.target_names,
-            threshold=100.0,
-        )
+        with torch.no_grad():
+            query_embeddings = self._calc_embeddings(model_class, self.queries)
+            target_embeddings = self._calc_embeddings(model_class, self.targets)
+            hits = self.filter(
+                query_embeddings,
+                target_embeddings,
+                self.query_names,
+                self.target_names,
+                threshold=100.0,
+            )
+
+        with open("./hits.txt", "w") as file:
+            for key in hits:
+                for entry in range(len(hits[key])):
+                    query = key
+                    target = hits[key][entry][0]
+                    distance = float(hits[key][entry][1])
+                    file.write(query + " " + target + " " + str(distance) + "\n")
+
+        our_hits = get_model_hits("./hits.txt")
+        pdb.set_trace()
 
         return 0
 

@@ -57,7 +57,7 @@ class MSAGenerator(DataModule):
         return None
 
 
-def _sanitize_sequence(sequence):
+def sanitize_sequence(sequence):
     """
     Remove bad/unknown/ambiguous characters from sequences.
     :param sequence:
@@ -125,7 +125,7 @@ class SwissProtGenerator(DataModule):
 
             idx = np.random.randint(0, len(self.seqs))
 
-        s1 = _sanitize_sequence(self.seqs[idx])
+        s1 = sanitize_sequence(self.seqs[idx])
 
         s1 = torch.as_tensor([utils.char_to_index[c] for c in s1])
         n_subs = int(
@@ -159,20 +159,16 @@ class ClusterIterator(DataModule):
         representative_index,
         include_all_families,
         n_seq_per_target_family,
-        transformer,
-        return_alignments=False,
     ):
 
-        self.train_afa_files = afa_files
+        self.train_afa_files = [f for f in afa_files]
         self.min_seq_len = min_seq_len
         self.representative_index = representative_index
         self.n_seq_per_target_family = n_seq_per_target_family
-        self.transformer = transformer
         self.include_all_families = include_all_families
-        self.return_alignments = return_alignments
 
-        self.valid_afa_path = "/home/tc229954/data/src/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
-        self.valid_fa_path = "/home/tc229954/data/src/pfam/seed/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
+        self.valid_afa_path = "/home/u4/colligan/data/prefilter/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
+        self.valid_fa_path = "/home/u4/colligan/data/prefilter/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
 
         self.seed_sequences = []
         self.seed_labels = []
@@ -186,7 +182,7 @@ class ClusterIterator(DataModule):
         train_files_to_remove = []
 
         for file in self.train_afa_files:
-            # get corresponding validation file;
+            # get corresponding validation file
             valid_file = os.path.basename(file)
             if "-1" in os.path.basename(file):
                 valid_file = valid_file.replace("-1", "-2") + ".fa"
@@ -294,7 +290,7 @@ class ClusterIterator(DataModule):
     def get_cluster_representatives(self):
         seeds = []
         for seed in self.seed_sequences:
-            santitized = _sanitize_sequence(seed)
+            santitized = sanitize_sequence(seed)
             seeds.append(
                 torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
             )
@@ -308,7 +304,7 @@ class ClusterIterator(DataModule):
 
         qseq = self.query_sequences[idx][: self.min_seq_len]
         label = self.query_labels[idx]
-        sanitized = _sanitize_sequence(qseq)
+        sanitized = sanitize_sequence(qseq)
         seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
 
         return seq, label, self.query_sequences[idx]
@@ -375,7 +371,7 @@ class ProfmarkDataset(DataModule):
     def get_cluster_representatives(self):
         seeds = []
         for seed in self.cluster_representatives:
-            santitized = _sanitize_sequence(seed)[: self.seq_len]
+            santitized = sanitize_sequence(seed)[: self.seq_len]
             seeds.append(
                 torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
             )
@@ -391,7 +387,7 @@ class ProfmarkDataset(DataModule):
     def __getitem__(self, idx):
         qseq = self.query_sequences[idx][: self.seq_len]
         label = self.query_labels[idx]
-        sanitized = _sanitize_sequence(qseq)
+        sanitized = sanitize_sequence(qseq)
         seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
 
         return seq, label, self.query_sequences[idx]

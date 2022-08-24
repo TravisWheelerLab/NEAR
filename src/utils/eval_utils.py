@@ -187,100 +187,19 @@ def compute_cluster_representative_embeddings(
     representative_sequences,
     representative_labels,
     trained_model,
-    cnn_model,
     normalize,
     device,
-    pretrained_transformer,
-    msa_transformer,
 ):
-    if pretrained_transformer:
-        batch_size = 16
-        _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
-        trained_model = trained_model.to(device)
-        batch_converter = alphabet.get_batch_converter()
-        data = []
-
-        for j, prot_seq in enumerate(representative_sequences):
-            data.append((f"prot_{j}", "".join(prot_seq)))
-
-        batch_labels, batch_strs, batch_tokens = batch_converter(data)
-        representative_embeddings = []
-        for i in range(0, len(batch_tokens) - batch_size, batch_size):
-            stdout.write(f"{i / len(batch_tokens):.3f}\r")
-            embeddings = trained_model(
-                batch_tokens[i : i + batch_size].to(device),
-                repr_layers=[33],
-                return_contacts=False,
-            )
-            # send to cpu so we save on some GPU memory.
-            # remove padding.
-            for j, (_, seq) in enumerate(data[i : i + batch_size]):
-                seq_embed = (
-                    embeddings["representations"][33][j, 1 : len(seq) + 1]
-                    .detach()
-                    .to("cpu")
-                )
-                representative_embeddings.append(seq_embed)
-        # how many times does batch size go into batch tokens?
-        end = len(batch_tokens) % batch_size
-        embeddings = trained_model(
-            batch_tokens[-end:].to(device),
-            repr_layers=[33],
-            return_contacts=False,
+    # create representative tensor for raw sequences.
+    # what, I'm not batching?
+    representative_embeddings = []
+    for rep_seq in representative_sequences:
+        embed = (
+            trained_model(rep_seq.unsqueeze(0).to(device))
+            .transpose(-1, -2)
+            .contiguous()
         )
-        # send to cpu so we save on some GPU memory.
-        # remove padding.
-        for j, (_, seq) in enumerate(data[-end:]):
-            seq_embed = (
-                embeddings["representations"][33][j, 1 : len(seq) + 1]
-                .detach()
-                .to("cpu")
-            )
-            representative_embeddings.append(seq_embed)
-    elif msa_transformer:
-        trained_model = trained_model.to(device)
-        _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
-        batch_converter = msa_transformer_alphabet.get_batch_converter()
-        batch_tokens = []
-
-        for msa in representative_sequences:
-            shuffle(msa)
-            _, _, toks = batch_converter(msa[:5])
-            batch_tokens.append(toks)
-
-        representative_embeddings = []
-        # embed each MSA separately.
-        for i in range(0, len(batch_tokens)):
-            stdout.write(f"{i / len(batch_tokens):.3f}\r")
-            embeddings = trained_model(
-                batch_tokens[i].to(device),
-                repr_layers=[12],
-                return_contacts=False,
-            )
-
-            msa_embed = embeddings["representations"][12].squeeze()
-
-            if msa_embed.ndim == 2:
-                msa_embed = msa_embed.unsqueeze(0)
-            if msa_embed.ndim == 3:
-                msa_embed = msa_embed[:, 1:].unsqueeze(0)
-                msa_embed = cnn_model.msa_mlp(msa_embed.transpose(-1, 1))
-                # mean pool sequence embed across
-                # msa dimension
-                msa_embed = msa_embed.transpose(-1, 1).mean(dim=1)
-
-            representative_embeddings.append(msa_embed.squeeze())
-    else:
-        # create representative tensor for raw sequences.
-        # what, I'm not batching?
-        representative_embeddings = []
-        for rep_seq in representative_sequences:
-            embed = (
-                trained_model(rep_seq.unsqueeze(0).to(device))
-                .transpose(-1, -2)
-                .contiguous()
-            )
-            representative_embeddings.append(embed.squeeze())
+        representative_embeddings.append(embed.squeeze())
 
     assert len(representative_embeddings) == len(representative_labels)
     # duplicate the labels the correct number of times
