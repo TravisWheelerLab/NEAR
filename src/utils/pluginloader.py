@@ -5,6 +5,8 @@ Module includes methods useful to loading all plugins placed in a folder, or mod
 import pkgutil
 import sys
 import warnings
+
+warnings.simplefilter("always", ImportWarning)
 from types import ModuleType
 from typing import Set, Type, TypeVar
 
@@ -52,7 +54,6 @@ def load_plugin_classes(
                 sub_module = importer.find_module(mod_name).load_module(mod_name)
                 sys.modules[mod_name] = sub_module
             except Exception as e:
-                print(e)
                 if display_error:
                     import traceback
 
