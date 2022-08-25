@@ -91,10 +91,12 @@ def load_model(model_path, hyperparams, device):
         model = models.ResNet1d(**hyperparams).to(device)
     else:
         model = models.ResNet1d(**hyperparams, training=False).to(device)
+
     success = model.load_state_dict(state_dict)
     print(success)
     model.eval()
     success = 0
+
     return model, success
 
 

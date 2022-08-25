@@ -1,3 +1,4 @@
+#!/home/u4/colligan/venvs/prefilter/bin/python3
 """
 Prefilter passes good candidates to hmmer.
 """
@@ -96,11 +97,15 @@ def train(_config):
     )
 
     trainer.fit(
-        model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
+        model,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
     )
 
+    pdb.set_trace()
+
     shutil.copy2(
-        Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.pt",
+        Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.ckpt",
         "model_data/",
     )
 

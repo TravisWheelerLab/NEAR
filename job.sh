@@ -33,3 +33,4 @@ source ~/venvs/prefilter/bin/activate
 
 cd /home/u4/colligan/share/prefilter/
 
+evaluate

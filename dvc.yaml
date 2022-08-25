@@ -4,11 +4,11 @@ stages:
     deps:
     - src
     outs:
-    - model_data/best_loss_model.pt
+    - model_data/best_loss_model.ckpt
   evaluate:
     cmd: evaluate
     deps:
     - src
-    - model_data/
+    - model_data/best_loss_model.ckpt
     outs:
     - results.txt
