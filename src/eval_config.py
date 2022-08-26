@@ -52,6 +52,8 @@ def wraps(device):
 def config():
 
     device = "cuda"
+    index_device = "cpu"
+    n_neighbors = 10
     model_name = "ResNet1d"
     evaluator_name = "UniRefEvaluator"
     model_path = "model_data/aug22/single_epoch_run/ResNet1d/1/"
@@ -62,8 +64,10 @@ def config():
     evaluator_args = {
         "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
         "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
+        "normalize_embeddings": False,
         "encoding_func": wraps(device),
         "use_faiss": True,
         "quantize_index": False,
         "index_device": device,
+        "n_neighbors": n_neighbors,
     }

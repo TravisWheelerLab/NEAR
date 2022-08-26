@@ -6,7 +6,7 @@ from collections import defaultdict
 import torch
 
 from src.evaluators import Evaluator
-from src.utils import create_faiss_index, fasta_from_file
+from src.utils import create_faiss_index, fasta_from_file, search_index_device_aware
 
 
 def get_model_hits(file_path):
@@ -72,6 +72,7 @@ class UniRefEvaluator(Evaluator):
         target_file,
         encoding_func,
         use_faiss,
+        n_neighbors,
         normalize_embeddings=False,
         quantize_index=False,
         index_device="cpu",
@@ -85,6 +86,7 @@ class UniRefEvaluator(Evaluator):
         self.use_faiss = use_faiss
         self.quantize_index = quantize_index
         self.index_device = index_device
+        self.n_neighbors = n_neighbors
 
         root = "/home/u4/colligan/data/prefilter/uniref_benchmark/"
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
@@ -187,10 +189,26 @@ class UniRefEvaluator(Evaluator):
             else:
                 qval = queries[i]
 
-            D, I = index.search(qval, k=50)
+            D, I = search_index_device_aware(
+                index,
+                qval.contiguous(),
+                self.index_device,
+                n_neighbors=self.n_neighbors,
+            )
 
-            for distance, idx in zip(D, I):
-                filtered_list.append((unrolled_names[idx], distance))
+            cnt = 2
+            while torch.all(D <= threshold):
+                print(
+                    "having to increase size of search for"
+                    f" each query AA to {50*cnt}."
+                )
+
+                D, I = index.search(qval.contiguous(), k=50 * cnt)
+                cnt += 1
+
+            for distance, idx in zip(D.ravel(), I.ravel()):
+                if distance <= threshold:
+                    filtered_list.append((unrolled_names[int(idx)], distance))
 
             qdict[query_names[i]] = filtered_list
             time_taken = time.time() - begin
