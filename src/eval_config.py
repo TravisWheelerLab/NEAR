@@ -52,11 +52,16 @@ def wraps(device):
 def config():
 
     device = "cuda"
-    index_device = "cpu"
+    index_device = "cuda"
     n_neighbors = 10
-    model_name = "ResNet1d"
+    quantize_index = True
+
+    use_model_path = True
+
+    model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
-    model_path = "model_data/aug22/single_epoch_run/ResNet1d/1/"
+    model_path = "/home/u4/colligan/data/prefilter/cycle_16_2500.mod"
+
     checkpoint_path = (
         "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
     )
@@ -67,7 +72,7 @@ def config():
         "normalize_embeddings": False,
         "encoding_func": wraps(device),
         "use_faiss": True,
-        "quantize_index": False,
-        "index_device": device,
+        "quantize_index": quantize_index,
+        "index_device": index_device,
         "n_neighbors": n_neighbors,
     }

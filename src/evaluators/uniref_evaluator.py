@@ -1,4 +1,6 @@
+import os
 import pdb
+import pickle
 import re
 import time
 from collections import defaultdict
@@ -110,8 +112,20 @@ class UniRefEvaluator(Evaluator):
         # smash the queries and targets against each other
         # why did daniel sort the sequences by length?
 
-        query_embeddings = self._calc_embeddings(model_class, self.queries)
-        target_embeddings = self._calc_embeddings(model_class, self.targets)
+        if os.path.isfile("query_embeds.pkl"):
+            with open("query_embeds.pkl", "rb") as src:
+                query_embeddings = pickle.load(src)
+            with open("target_embeds.pkl", "rb") as src:
+                target_embeddings = pickle.load(src)
+        else:
+            query_embeddings = self._calc_embeddings(model_class, self.queries)
+            target_embeddings = self._calc_embeddings(model_class, self.targets)
+
+            with open("query_embeds.pkl", "wb") as dst:
+                pickle.dump(query_embeddings, dst)
+
+            with open("target_embeds.pkl", "wb") as dst:
+                pickle.dump(target_embeddings, dst)
 
         print("Computing hits.")
 
@@ -195,8 +209,8 @@ class UniRefEvaluator(Evaluator):
                 self.index_device,
                 n_neighbors=self.n_neighbors,
             )
-
             cnt = 2
+
             while torch.all(D <= threshold):
                 print(
                     "having to increase size of search for"

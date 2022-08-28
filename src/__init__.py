@@ -123,13 +123,29 @@ def _cls_loader(model_name, evaluator_name):
 def evaluate(_config):
     params = SimpleNamespace(**_config)
 
-    with (Path(params.model_path) / "hparams.yaml").open("r") as src:
-        hyperparams = yaml.safe_load(src)
+    hparams_path = Path(params.model_path) / "hparams.yaml"
 
-    # TODO: make sure this isn't producing nonsense...
-    model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
-        params.device
-    )
+    if hparams_path.exists():
+        with hparams_path.open("r") as src:
+            hyperparams = yaml.safe_load(src)
+    else:
+        print("Couldn't find hyperparams.")
+
+    if params.use_model_path:
+        import sys
+
+        sys.path.insert(0, "/home/u4/colligan/share/prefilter/src/models/")
+        # from src.models.dot_prod_model import ResNet as ResNet
+        pdb.set_trace()
+        model = torch.load(params.model_path)
+        model = params.model_class.load_from_checkpoint(params.model_path)
+
+    else:
+        print(f"Loading from checkpoint in {params.checkpoint_path}")
+        model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
+            params.device
+        )
+
     evaluator = params.evaluator_class(**params.evaluator_args)
     result = evaluator.evaluate(model_class=model)
     # now, track output of this evaluation with DVC.

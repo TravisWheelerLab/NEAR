@@ -179,7 +179,7 @@ def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
     else:
         distances, match_indices = faiss_index.search(embedding, k=n_neighbors)
     # strip dummy dimension
-    return distances, match_indices
+    return torch.as_tensor(distances), torch.as_tensor(match_indices)
 
 
 @torch.no_grad()
