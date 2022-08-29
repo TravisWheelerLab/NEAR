@@ -54,13 +54,16 @@ def config():
     device = "cuda"
     index_device = "cuda"
     n_neighbors = 10
-    quantize_index = True
+    quantize_index = False
+    distance_threshold = 0.5
+    normalize_embeddings = True
 
-    use_model_path = True
+    use_model_path = False
 
-    model_name = "ResNet"
+    model_name = "ResNet1d"
     evaluator_name = "UniRefEvaluator"
-    model_path = "/home/u4/colligan/data/prefilter/cycle_16_2500.mod"
+    # TODO: Change the name of this directory.
+    model_path = "model_data/aug22/single_epoch_run/ResNet1d/1/"
 
     checkpoint_path = (
         "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
@@ -69,10 +72,11 @@ def config():
     evaluator_args = {
         "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
         "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
-        "normalize_embeddings": False,
+        "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "use_faiss": True,
         "quantize_index": quantize_index,
         "index_device": index_device,
         "n_neighbors": n_neighbors,
+        "distance_threshold": distance_threshold,
     }

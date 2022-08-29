@@ -113,7 +113,8 @@ def create_faiss_index(
     if quantize:
         print("Training quantized index.")
         index = faiss.IndexIVFFlat(index, embed_dim, embeddings.shape[0] // 100)
-        index.train(embeddings.to(device))
+        # for some reason this has to be on CPU.
+        index.train(embeddings.to("cpu"))
 
     if "cuda" in device:
         if ":" in device:

@@ -5,10 +5,21 @@ import re
 import time
 from collections import defaultdict
 
+import matplotlib.pyplot as plt
 import torch
 
 from src.evaluators import Evaluator
 from src.utils import create_faiss_index, fasta_from_file, search_index_device_aware
+
+
+def filtered_hits(queries, threshold):
+    filtered_queries = dict()
+    for key in queries:
+        filtered_queries[key] = dict()
+        for tkey in queries[key]:
+            if queries[key][tkey] >= threshold:
+                filtered_queries[key][tkey] = True
+    return filtered_queries
 
 
 def get_model_hits(file_path):
@@ -17,18 +28,26 @@ def get_model_hits(file_path):
         lines = file.readlines()
         # print("lines: ",len(lines))
         for line in lines:
+
             line = line.strip()
             line = line.split(" ")
             query = line[0]
             key = line[1]
             value = float(line[2])
 
-            # print(query, key)
-
             if query not in queries:
                 queries[query] = dict()
+
             queries[query][key] = value
     return queries
+
+
+def number_of_hits(queries):
+    num = 0
+    for key in queries:
+        num += len(queries[key])
+
+    return num
 
 
 # load hits from the hmmer file.
@@ -55,6 +74,28 @@ def get_hmmer_hits(file_path):
         return queries
 
 
+def union_hits(query1, query2):
+    queries = dict()
+    for qkey in query1:
+        queries[qkey] = dict()
+        if qkey in query2:
+            for tkey in query1[qkey]:
+                if tkey in query2[qkey]:
+                    queries[qkey][tkey] = True
+
+    return queries
+
+
+def union_queries(primary, secondary):
+    new_secondary = dict()
+    for qkey in primary:
+        if qkey in secondary:
+            new_secondary[qkey] = secondary[qkey]
+        else:
+            secondary[qkey] = dict()
+    return new_secondary
+
+
 def scores(hmmer, other):
     found = []
     not_found = []
@@ -67,6 +108,15 @@ def scores(hmmer, other):
     return found, not_found
 
 
+def all_our_scores(hits):
+    values = []
+    for qkey in hits:
+        for tkey in hits[qkey]:
+            values.append(hits[qkey][tkey])
+
+    return torch.tensor(values)
+
+
 class UniRefEvaluator(Evaluator):
     def __init__(
         self,
@@ -75,6 +125,7 @@ class UniRefEvaluator(Evaluator):
         encoding_func,
         use_faiss,
         n_neighbors,
+        distance_threshold=100,
         normalize_embeddings=False,
         quantize_index=False,
         index_device="cpu",
@@ -82,6 +133,8 @@ class UniRefEvaluator(Evaluator):
 
         self.query_names, self.queries = fasta_from_file(fasta_file=query_file)
         self.target_names, self.targets = fasta_from_file(fasta_file=target_file)
+        self.query_names = list(map(lambda x: x.split(" ")[0], self.query_names))
+        self.target_names = list(map(lambda x: x.split(" ")[0], self.target_names))
         # a function to encode a sequence to a tensor from its text representation
         self.encoding_func = encoding_func
         self.normalize_embeddings = normalize_embeddings
@@ -89,10 +142,11 @@ class UniRefEvaluator(Evaluator):
         self.quantize_index = quantize_index
         self.index_device = index_device
         self.n_neighbors = n_neighbors
+        self.distance_threshold = distance_threshold
 
         root = "/home/u4/colligan/data/prefilter/uniref_benchmark/"
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
-        self.normal_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
+        self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
     def _calc_embeddings(self, model_class, sequences):
         embeddings = []
@@ -121,6 +175,7 @@ class UniRefEvaluator(Evaluator):
             query_embeddings = self._calc_embeddings(model_class, self.queries)
             target_embeddings = self._calc_embeddings(model_class, self.targets)
 
+            print("Saving embeddings for debugging.")
             with open("query_embeds.pkl", "wb") as dst:
                 pickle.dump(query_embeddings, dst)
 
@@ -129,34 +184,198 @@ class UniRefEvaluator(Evaluator):
 
         print("Computing hits.")
 
-        if self.use_faiss:
-            hits = self.filter_with_faiss(
-                query_embeddings,
-                target_embeddings,
-                self.query_names,
-                self.target_names,
-                threshold=100.0,
-            )
-        else:
-            hits = self.filter_exhaustive(
-                query_embeddings,
-                target_embeddings,
-                self.query_names,
-                self.target_names,
-                threshold=100.0,
-            )
+        if not os.path.isfile("./hits.txt"):
+            if self.use_faiss:
+                hits = self.filter_with_faiss(
+                    query_embeddings,
+                    target_embeddings,
+                    self.query_names,
+                    self.target_names,
+                    threshold=self.distance_threshold,
+                )
+            else:
+                hits = self.filter_exhaustive(
+                    query_embeddings,
+                    target_embeddings,
+                    self.query_names,
+                    self.target_names,
+                    threshold=self.distance_threshold,
+                )
 
-        pdb.set_trace()
-        exit()
-        with open("./hits.txt", "w") as file:
-            for key in hits:
-                for entry in range(len(hits[key])):
-                    query = key
-                    target = hits[key][entry][0]
-                    distance = float(hits[key][entry][1])
-                    file.write(query + " " + target + " " + str(distance) + "\n")
+            with open("./hits.txt", "w") as file:
+                for key in hits:
+                    for entry in range(len(hits[key])):
+                        query = key
+                        target = hits[key][entry][0]
+                        distance = hits[key][entry][1]
+                        file.write(query + " " + target + " " + str(distance) + "\n")
 
-        our_hits = get_model_hits("./hits.txt")
+        max_hits = get_hmmer_hits(
+            "/home/u4/colligan/data/prefilter/uniref_benchmark/max_hmmer_hits.txt"
+        )
+        normal_hits = get_hmmer_hits(
+            "/home/u4/colligan/data/prefilter/uniref_benchmark/normal_hmmer_hits.txt"
+        )
+        our_hits = get_model_hits("hits.txt")
+
+        print(number_of_hits(max_hits))
+        print(number_of_hits(normal_hits))
+        print(number_of_hits(our_hits))
+
+        values = all_our_scores(our_hits)
+        values, _ = torch.sort(values)
+        small_max = union_queries(our_hits, max_hits)
+        small_normal = union_queries(our_hits, normal_hits)
+        our_filter = filtered_hits(our_hits, 0.4)
+        filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
+
+        print(number_of_hits(our_filter), "=", filtration)
+        print("--")
+        print(
+            "max:",
+            number_of_hits(small_max),
+            number_of_hits(union_hits(our_filter, small_max)),
+        )
+        print(
+            "normal:",
+            number_of_hits(small_normal),
+            number_of_hits(union_hits(our_filter, small_normal)),
+        )
+
+        filt_value = 0.73  # 0.740 gives great results
+        our_filter = filtered_hits(our_hits, filt_value)
+        small_max = union_queries(our_hits, max_hits)
+        small_normal = union_queries(our_hits, normal_hits)
+
+        filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
+
+        fig, axs = plt.subplots(3, 2)
+        fig.set_size_inches(15.0, 15)
+
+        # small_max = union_queries(our_filter, max_hits)
+        # small_normal = union_queries(our_filter, normal_hits)
+
+        found, not_found = scores(max_hits, our_filter)
+
+        recall = len(found) / (len(found) + len(not_found))
+
+        found, _ = torch.sort(torch.tensor(found))
+        not_found, _ = torch.sort(torch.tensor(not_found))
+
+        axs[0, 0].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(0, 40),
+            label=["found", "not_found"],
+        )
+        # axs[0,0].hist(not_found, bins=10, color=(1,0,0,0.5),range=(0,80), label='not found')
+        axs[0, 0].text(
+            25, 2000, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
+        )
+
+        axs[0, 0].legend()
+
+        axs[0, 1].hist(
+            [found[found > 10], not_found[not_found > 10]],
+            stacked=True,
+            bins=10,
+            range=(10, 40),
+            label=["found", "not_found"],
+        )
+        # axs[0,1].hist(not_found[not_found > 10], bins=10, color=(1,0,0,0.5),range=(10,80), label='not found')
+        axs[0, 1].legend()
+        recall = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
+        )
+        axs[0, 1].text(
+            25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
+        )
+
+        our_filter = filtered_hits(our_hits, filt_value)
+
+        # small_max = union_queries(our_filter, max_hits)
+        # small_normal = union_queries(our_filter, normal_hits)
+
+        found, not_found = scores(normal_hits, our_filter)
+        recall = len(found) / (len(found) + len(not_found))
+        found, _ = torch.sort(torch.tensor(found))
+        not_found, _ = torch.sort(torch.tensor(not_found))
+
+        axs[1, 0].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(0, 40),
+            label=["found", "not_found"],
+        )
+        axs[1, 0].text(
+            25, 2000, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
+        )
+        axs[1, 0].legend()
+
+        axs[1, 1].hist(
+            [found[found > 10], not_found[not_found > 10]],
+            stacked=True,
+            bins=10,
+            range=(10, 40),
+            label=["found", "not_found"],
+        )
+        axs[1, 1].legend()
+
+        recall = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
+        )
+        # axs[1,1].text(25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall))
+        found, not_found = scores(max_hits, small_normal)
+        recall = len(found) / (len(found) + len(not_found))
+        found, _ = torch.sort(torch.tensor(found))
+        not_found, _ = torch.sort(torch.tensor(not_found))
+
+        filtration = 0.995572
+        axs[2, 0].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(0, 40),
+            label=["found", "not_found"],
+        )
+        axs[2, 0].text(
+            25,
+            2000,
+            "filtration: " + str(filtration) + "\nrecall: " + str(recall),
+            label="not found",
+        )
+        axs[2, 0].legend()
+        axs[2, 1].hist(
+            [found[found > 10], not_found[not_found > 10]],
+            stacked=True,
+            bins=10,
+            range=(10, 40),
+            label=["found", "not_found"],
+        )
+        axs[2, 1].legend()
+
+        recall = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
+        )
+        # axs[2,1].text(25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall))
+
+        axs[0, 0].set_ylabel("Sequences found")
+        axs[0, 1].set_ylabel("Sequences found")
+        axs[1, 0].set_ylabel("Sequences found")
+        axs[1, 1].set_ylabel("Sequences found")
+        axs[2, 0].set_ylabel("Sequences found")
+        axs[2, 1].set_ylabel("Sequences found")
+
+        axs[0, 0].set_xlabel("HMMER score")
+        axs[0, 1].set_xlabel("HMMER score")
+        axs[1, 0].set_xlabel("HMMER score")
+        axs[1, 1].set_xlabel("HMMER score")
+        axs[2, 0].set_xlabel("HMMER score")
+        axs[2, 1].set_xlabel("HMMER score")
+        plt.savefig("/home/u4/colligan/tst.png", bbox_inches="tight")
+
         return 0
 
     def filter_with_faiss(
@@ -192,8 +411,10 @@ class UniRefEvaluator(Evaluator):
 
         # for query in queries
         t_tot = 0
+        t_begin = time.time()
+
         for i in range(start, num_queries):
-            begin = time.time()
+            # begin = time.time()
             print(f"{i / (num_queries - start):.3f}", end="\r")
 
             filtered_list = []
@@ -214,21 +435,32 @@ class UniRefEvaluator(Evaluator):
             while torch.all(D <= threshold):
                 print(
                     "having to increase size of search for"
-                    f" each query AA to {50*cnt}."
+                    f" each query AA to {50 * cnt}."
                 )
 
-                D, I = index.search(qval.contiguous(), k=50 * cnt)
+                D, I = index.search(qval.contiguous(), k=self.n_neighbors * cnt)
                 cnt += 1
 
-            for distance, idx in zip(D.ravel(), I.ravel()):
-                if distance <= threshold:
-                    filtered_list.append((unrolled_names[int(idx)], distance))
+            if self.normalize_embeddings:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance >= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
+            else:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance <= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
 
             qdict[query_names[i]] = filtered_list
-            time_taken = time.time() - begin
-            t_tot += time_taken
+            # time_taken = time.time() - begin
+            # t_tot += time_taken
 
-            print(f"time/it: {time_taken}, avg time/it: {t_tot / (i+1)}")
+            # print(f"time/it: {time_taken}, avg time/it: {t_tot / (i+1)}")
+
+        print(f"Entire loop took: {time.time() - t_begin}")
 
         return qdict
 
@@ -290,6 +522,6 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - begin
             t_tot += time_taken
 
-            print(f"time/it: {time_taken}, avg time/it: {t_tot / (i+1)}")
+            print(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         return qdict

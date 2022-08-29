@@ -4,10 +4,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=one_epoch_train
+#SBATCH --job-name=phmmer_benchmark
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=train-run-%x-%j.out
+#SBATCH --output=/home/u4/colligan/data/prefilter/uniref_benchmark/phmmer-run-%x-%j.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### REQUIRED. Set the partition for your job. Four partitions are available in
@@ -24,16 +24,15 @@
 ### REQUIRED. Set the memory required for this job.
 #SBATCH --mem-per-cpu=5gb
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
-#SBATCH --time=12:01:00
+#SBATCH --time=3:01:00
 ### any other slurm options are supported, but not required.
-#SBATCH --gres=gpu:1
 
-module load python/3.9
-source ~/venvs/prefilter/bin/activate
+module load hmmer
 
-cd /home/u4/colligan/share/prefilter/
+cd /home/u4/colligan/data/prefilter/uniref_benchmark
 
 for i in {1..10};
 do
-time evaluate
+  time phmmer --cpu 11 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k30k.fa
 done
+

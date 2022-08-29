@@ -13,7 +13,9 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytorch_lightning as pl
 import torch
+import torch.nn as nn
 import yaml
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -132,13 +134,12 @@ def evaluate(_config):
         print("Couldn't find hyperparams.")
 
     if params.use_model_path:
-        import sys
-
-        sys.path.insert(0, "/home/u4/colligan/share/prefilter/src/models/")
+        # import sys
+        # sys.path.insert(0, "/home/u4/colligan/share/prefilter/src/models/")
         # from src.models.dot_prod_model import ResNet as ResNet
-        pdb.set_trace()
+        # pdb.set_trace()
         model = torch.load(params.model_path)
-        model = params.model_class.load_from_checkpoint(params.model_path)
+        # model = params.model_class.load_from_checkpoint(params.model_path)
 
     else:
         print(f"Loading from checkpoint in {params.checkpoint_path}")
