@@ -56,7 +56,7 @@ def _ensure_description(description):
             raise ValueError("Describe your experiment by editing config.py.")
 
 
-@train_ex.command
+@train_ex.main
 def train(_config):
 
     seed_everything(_config["seed"])
@@ -121,8 +121,9 @@ def _cls_loader(model_name, evaluator_name):
     evaluator_class = load_evaluator_class(evaluator_name)
 
 
-@evaluation_ex.command
+@evaluation_ex.main
 def evaluate(_config):
+    pdb.set_trace()
     params = SimpleNamespace(**_config)
 
     hparams_path = Path(params.model_path) / "hparams.yaml"
@@ -133,16 +134,15 @@ def evaluate(_config):
     else:
         print("Couldn't find hyperparams.")
 
-    if params.use_model_path:
-        # import sys
-        # sys.path.insert(0, "/home/u4/colligan/share/prefilter/src/models/")
-        # from src.models.dot_prod_model import ResNet as ResNet
-        # pdb.set_trace()
-        model = torch.load(params.model_path)
-        # model = params.model_class.load_from_checkpoint(params.model_path)
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
 
+    if hasattr(params, "model_args"):
+        # required with loading from state dict
+        model = params.model_class(**params.model_args)
+        success = model.load_state_dict(torch.load(params.checkpoint_path))
+        print(success)
+        model.eval().to(params.device)
     else:
-        print(f"Loading from checkpoint in {params.checkpoint_path}")
         model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
             params.device
         )
@@ -153,8 +153,9 @@ def evaluate(_config):
 
 
 def train_main():
-    train_ex.run("train")
+    train_ex.run_commandline()
 
 
 def evaluate_main():
-    evaluation_ex.run("evaluate")
+    evaluation_ex.run_commandline()
+    pdb.set_trace()

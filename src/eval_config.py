@@ -50,33 +50,48 @@ def wraps(device):
 
 @evaluation_ex.config
 def config():
-
     device = "cuda"
     index_device = "cuda"
     n_neighbors = 10
     quantize_index = False
-    distance_threshold = 0.5
-    normalize_embeddings = True
+    distance_threshold = 100
+    normalize_embeddings = False
+    use_faiss = False
+    hit_filename = "without_faiss.txt"
 
     use_model_path = False
 
-    model_name = "ResNet1d"
+    model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
     # TODO: Change the name of this directory.
-    model_path = "model_data/aug22/single_epoch_run/ResNet1d/1/"
 
-    checkpoint_path = (
-        "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
-    )
+    # checkpoint_path = (
+    #     "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
+    # )
+    model_path = "/nsflj/tsdaf.txt"
+
+    checkpoint_path = "/home/u4/colligan/data/prefilter/model_16.sdic"
+    model_args = {
+        "emb_dim": 256,
+        "blocks": 5,
+        "block_layers": 2,
+        "first_kernel": 11,
+        "kernel_size": 5,
+        "groups": 2,
+        "padding_mode": "reflect",
+    }
 
     evaluator_args = {
         "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
         "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
-        "use_faiss": True,
+        "use_faiss": use_faiss,
         "quantize_index": quantize_index,
         "index_device": index_device,
         "n_neighbors": n_neighbors,
         "distance_threshold": distance_threshold,
+        "hit_filename": hit_filename,
     }
+
+    print(f"I've changed! {normalize_embeddings}")
