@@ -33,4 +33,4 @@ source ~/venvs/prefilter/bin/activate
 
 cd /home/u4/colligan/share/prefilter/
 
-evaluate with use_faiss=False hit_filename="without_faiss.txt"
+evaluate with target_file="/home/u4/colligan/data/prefilter/uniprot_sprot.fasta"

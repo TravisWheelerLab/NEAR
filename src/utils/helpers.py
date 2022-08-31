@@ -106,10 +106,10 @@ def create_faiss_index(
 
     print(f"using index with {distance_metric} metric.")
 
-    faiss.omp_set_num_threads(12)
+    faiss.omp_set_num_threads(32)
 
     k = int(10 * np.sqrt(embeddings.shape[0]).item())
-    num_samples = k * 50
+    num_samples = 5 * k
     permutation = torch.randperm(embeddings.shape[0])
     embeds = embeddings[permutation[:num_samples]]
     if "IVF" in index_string:
@@ -129,7 +129,7 @@ def create_faiss_index(
         index.add(embeddings)
     else:
         index.train(embeds.to("cpu"))
-        index.add(embeddings)
+        index.add(embeddings.to("cpu"))
 
     print("Done training index.")
 

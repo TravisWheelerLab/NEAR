@@ -30,8 +30,9 @@ def config():
     normalize_embeddings = False
     use_faiss = True
     hit_filename = "with_faiss.txt"
-    istr = "OPQ8_32,IVF{},PQ8"
+    istr = "OPQ64_128,IVF{}_HNSW32,PQ64"
     use_model_path = False
+    target_file = "/home/u4/colligan/data/prefilter/uniprot_sprot.fasta"
 
     model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
@@ -55,7 +56,7 @@ def config():
 
     evaluator_args = {
         "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
-        "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
+        "target_file": target_file,
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "use_faiss": use_faiss,

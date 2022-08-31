@@ -213,10 +213,27 @@ class UniRefEvaluator(Evaluator):
         i = 0
 
         for sequence in sequences:
-            embed = model_class(self.encoding_func(sequence).unsqueeze(0)).squeeze(0)
-            embeddings.append(embed.transpose(-1, -2))
-            print(f"{i}, {len(sequences)} {i / len(sequences):.3f}", end="\r")
+            if len(sequence) <= 10:
+                print(f"Removing sequence {sequence}")
+                continue
+            try:
+                embed = model_class(self.encoding_func(sequence).unsqueeze(0)).squeeze(
+                    0
+                )
+            except KeyError:
+                print(f"keyerror: skipping {sequence}")
+            embeddings.append(embed.transpose(-1, -2).to("cpu"))
+
+            if (i + 1) % 100000 == 0:
+                with open(
+                    f"/xdisk/twheeler/colligan/uniprot_sprot_{i}.pkl", "wb"
+                ) as dst:
+                    pickle.dump(embeddings, dst)
+                    embeddings = []
             i += 1
+
+        with open(f"/xdisk/twheeler/colligan/uniprot_sprot_{i}.pkl", "wb") as dst:
+            pickle.dump(embeddings, dst)
 
         return embeddings
 
@@ -235,6 +252,10 @@ class UniRefEvaluator(Evaluator):
         else:
             query_embeddings = self._calc_embeddings(model_class, self.queries)
             target_embeddings = self._calc_embeddings(model_class, self.targets)
+            with open(
+                "/xdisk/twheeler/colligan/swiss_prot_embeddings.pkl", "wb"
+            ) as dst:
+                pickle.dump(target_embeddings, dst)
 
         print("Computing hits.")
 
@@ -482,8 +503,6 @@ class UniRefEvaluator(Evaluator):
             else:
                 qval = queries[i]
 
-            # D, I = search_index_device_aware(index, qval.contiguous(), self.index_device, n_neighbors=self.n_neighbors, )
-
             D, I = search_index_device_aware(
                 index,
                 qval.contiguous(),
@@ -541,6 +560,7 @@ class UniRefEvaluator(Evaluator):
         end=torch.inf,
     ):
         qdict = dict()
+        print("I'm here")
 
         num_queries = min(end, len(queries))
 
@@ -550,7 +570,7 @@ class UniRefEvaluator(Evaluator):
         for i in range(start, num_queries):
             begin = time.time()
 
-            print(f"{i / (num_queries - start):.3f}", end="\r")
+            # print(f"{i / (num_queries - start):.3f}", end="\r")
 
             filtered_list = []
 
