@@ -242,7 +242,7 @@ def create_parser():
     ap.add_argument("model_root_dir")
     ap.add_argument("model_name")
     ap.add_argument("--include_all_families", action="store_true")
-    ap.add_argument("--quantize_index", action="store_true")
+    ap.add_argument("--index_string", action="store_true")
     ap.add_argument("--compute_accuracy", action="store_true")
     ap.add_argument("--seq_len", type=int, default=256)
     ap.add_argument("--batch_size", type=int, default=1)

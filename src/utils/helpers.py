@@ -101,34 +101,37 @@ def load_model(model_path, hyperparams, device):
 
 
 def create_faiss_index(
-    embeddings, embed_dim, device="cpu", distance_metric="cosine", quantize=True
+    embeddings, embed_dim, index_string, device="cpu", distance_metric="cosine"
 ):
+
     print(f"using index with {distance_metric} metric.")
-    if distance_metric == "cosine":
-        index = faiss.IndexFlatIP(embed_dim)
-    else:
-        # transformer embeddings are _not_ normalized.
-        index = faiss.IndexFlatL2(embed_dim)
 
-    if quantize:
-        print("Training quantized index.")
-        index = faiss.IndexIVFFlat(index, embed_dim, embeddings.shape[0] // 100)
-        # for some reason this has to be on CPU.
-        index.train(embeddings.to("cpu"))
+    faiss.omp_set_num_threads(12)
 
-    if "cuda" in device:
-        if ":" in device:
-            _, num = device.split(":")
-        else:
-            num = 0
+    k = int(10 * np.sqrt(embeddings.shape[0]).item())
+    num_samples = k * 50
+    permutation = torch.randperm(embeddings.shape[0])
+    embeds = embeddings[permutation[:num_samples]]
+    if "IVF" in index_string:
+        print(f"Following recs. on number of voronoi cells: {k}")
+        index_string = index_string.format(k)
+
+    print(f"Using index {index_string}")
+
+    index = faiss.index_factory(embed_dim, index_string)
+    faiss.ParameterSpace().set_index_parameter(index, "verbose", 1)
+
+    if device == "cuda":
+        num = 0
         res = faiss.StandardGpuResources()
-        # 0 is the index of the GPU.
         index = faiss.index_cpu_to_gpu(res, int(num), index)
+        index.train(embeds)
+        index.add(embeddings)
     else:
-        if not isinstance(embeddings, np.ndarray):
-            embeddings = embeddings.cpu().numpy()
+        index.train(embeds.to("cpu"))
+        index.add(embeddings)
 
-    index.add(embeddings)
+    print("Done training index.")
 
     return index
 

@@ -123,7 +123,6 @@ def _cls_loader(model_name, evaluator_name):
 
 @evaluation_ex.main
 def evaluate(_config):
-    pdb.set_trace()
     params = SimpleNamespace(**_config)
 
     hparams_path = Path(params.model_path) / "hparams.yaml"
@@ -140,7 +139,6 @@ def evaluate(_config):
         # required with loading from state dict
         model = params.model_class(**params.model_args)
         success = model.load_state_dict(torch.load(params.checkpoint_path))
-        print(success)
         model.eval().to(params.device)
     else:
         model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
@@ -158,4 +156,3 @@ def train_main():
 
 def evaluate_main():
     evaluation_ex.run_commandline()
-    pdb.set_trace()

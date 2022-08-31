@@ -4,10 +4,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=one_epoch_train
+#SBATCH --job-name=brute_force
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=train-run-%x-%j.out
+#SBATCH --output=brute-force-hits-run-%x-%j.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### REQUIRED. Set the partition for your job. Four partitions are available in
@@ -24,7 +24,7 @@
 ### REQUIRED. Set the memory required for this job.
 #SBATCH --mem-per-cpu=5gb
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
-#SBATCH --time=12:01:00
+#SBATCH --time=03:01:00
 ### any other slurm options are supported, but not required.
 #SBATCH --gres=gpu:1
 
@@ -33,7 +33,4 @@ source ~/venvs/prefilter/bin/activate
 
 cd /home/u4/colligan/share/prefilter/
 
-for i in {1..10};
-do
-time evaluate
-done
+evaluate with use_faiss=False hit_filename="without_faiss.txt"

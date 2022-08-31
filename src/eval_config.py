@@ -20,45 +20,17 @@ def wraps(device):
     return encode
 
 
-# @evaluation_ex.config
-# def config():
-#
-#     device = "cuda"
-#     model_name = "ResNet1d"
-#     evaluator_name = "AccuracyComputer"
-#     model_path = "model_data/aug22/single_epoch_run/ResNet1d/1/"
-#     checkpoint_path = (
-#         "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
-#     )
-#
-#     fasta_files = glob("/home/u4/colligan/data/prefilter/20piddata/train/*afa")
-#
-#     evaluator_args = {
-#         "fasta_files": fasta_files,
-#         "sequence_length": -1,
-#         "include_all_families": False,
-#         "n_seq_per_target_family": 1,
-#         "normalize": True,
-#         "embed_dim": 128,
-#         "quantize_index": False,
-#         "device": device,
-#         "n_neighbors": 10,
-#         "batch_size": 1,
-#         "collate_fn": non_default_collate,
-#     }
-
-
 @evaluation_ex.config
 def config():
-    device = "cuda"
-    index_device = "cuda"
-    n_neighbors = 10
-    quantize_index = False
-    distance_threshold = 100
-    normalize_embeddings = False
-    use_faiss = False
-    hit_filename = "without_faiss.txt"
 
+    device = "cuda"
+    index_device = "cpu"
+    n_neighbors = 10
+    distance_threshold = 0.5
+    normalize_embeddings = False
+    use_faiss = True
+    hit_filename = "with_faiss.txt"
+    istr = "OPQ8_32,IVF{},PQ8"
     use_model_path = False
 
     model_name = "ResNet"
@@ -87,11 +59,9 @@ def config():
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "use_faiss": use_faiss,
-        "quantize_index": quantize_index,
         "index_device": index_device,
+        "index_string": istr,
         "n_neighbors": n_neighbors,
         "distance_threshold": distance_threshold,
         "hit_filename": hit_filename,
     }
-
-    print(f"I've changed! {normalize_embeddings}")

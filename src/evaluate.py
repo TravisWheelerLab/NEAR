@@ -180,7 +180,7 @@ def main(fasta_files):
         embed_dim,
         device=index_device,
         distance_metric="cosine" if args.normalize_embeddings else "l2",
-        quantize=args.quantize_index,
+        quantize=args.index_string,
     )
 
     if args.pretrained_transformer:

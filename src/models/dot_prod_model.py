@@ -20,6 +20,18 @@ class DotProdModel(pl.LightningModule):
         return torch.cdist(torch.transpose(A, -1, -2), torch.transpose(B, -1, -2))
 
 
+class SinActivation(nn.Module):
+    def __init__(self):
+        super(SinActivation, self).__init__()
+
+    def forward(self, x):
+        return torch.sin(x)
+
+
+# Residual block class
+# Takes [batch_size, channels, seq_len] and outputs the same shape
+# Performs (num_layers) 1d convolutions and activations and then
+# adds the output to the original input
 class ResidualBlock(nn.Module):
     def __init__(
         self,
@@ -71,16 +83,17 @@ class ResNet(DotProdModel):
     ):
         super(ResNet, self).__init__()
 
-        layers = [
+        layers = []
+        layers.append(
             nn.Conv1d(
                 start_emb,
                 emb_dim,
                 first_kernel,
                 padding=padding,
                 padding_mode=padding_mode,
-            ),
-            activation(),
-        ]
+            )
+        )
+        layers.append(activation())
         for i in range(blocks):
             layers.append(
                 ResidualBlock(

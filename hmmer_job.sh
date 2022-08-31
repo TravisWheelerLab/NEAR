@@ -18,7 +18,7 @@
 ### <standard,windfall>
 #SBATCH --partition=standard
 ### REQUIRED. Set the number of cores that will be used for this job.
-#SBATCH --ntasks=12
+#SBATCH --ntasks=32
 ### REQUIRED. Set the number of nodes
 #SBATCH --nodes=1
 ### REQUIRED. Set the memory required for this job.
@@ -33,6 +33,6 @@ cd /home/u4/colligan/data/prefilter/uniref_benchmark
 
 for i in {1..10};
 do
-  time phmmer --cpu 11 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k30k.fa
+  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa /xdisk/twheeler/colligan/uniprot_sprot.fasta
 done
 
