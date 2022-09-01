@@ -2,13 +2,13 @@ stages:
   train:
     cmd: train
     deps:
-    - src
-    outs:
-    - model_data/best_loss_model.ckpt
+    - src/models/
+    - src/datasets/
   evaluate:
     cmd: evaluate
     deps:
-    - src
-    - model_data/best_loss_model.ckpt
+    - src/evaluators/
+    - src/utils/
     outs:
-    - results.txt
+    - timings.txt
+    - result_figure.png

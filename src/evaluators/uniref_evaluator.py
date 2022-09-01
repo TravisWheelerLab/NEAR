@@ -83,7 +83,6 @@ def get_model_hits(file_path):
     queries = dict()
     with open(file_path, "r") as file:
         lines = file.readlines()
-        # print("lines: ",len(lines))
         for line in lines:
 
             line = line.strip()
@@ -189,12 +188,9 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
     ):
 
-        self.query_names, self.queries = fasta_from_file(fasta_file=query_file)
-        self.target_names, self.targets = fasta_from_file(fasta_file=target_file)
-        self.query_names = list(map(lambda x: x.split(" ")[0], self.query_names))
-        self.target_names = list(map(lambda x: x.split(" ")[0], self.target_names))
-        # a function to encode a sequence to a tensor from its text representation
-        # TODO: don't do the hardcoding below
+        self.query_file = query_file
+        self.target_file = target_file
+
         self.encoding_func = wraps_tensor_for_sequence("cuda")
         self.normalize_embeddings = normalize_embeddings
         self.use_faiss = use_faiss
@@ -208,89 +204,81 @@ class UniRefEvaluator(Evaluator):
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
         self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
-    def _calc_embeddings(self, model_class, sequences):
-        embeddings = []
-        i = 0
+    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
 
-        for sequence in sequences:
-            if len(sequence) <= 10:
-                print(f"Removing sequence {sequence}")
-                continue
-            try:
-                embed = model_class(self.encoding_func(sequence).unsqueeze(0)).squeeze(
-                    0
-                )
-            except KeyError:
-                print(f"keyerror: skipping {sequence}")
-            embeddings.append(embed.transpose(-1, -2).to("cpu"))
+        names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
+        names = list(map(lambda x: x.split(" ")[0], names))
 
-            if (i + 1) % 100000 == 0:
-                with open(
-                    f"/xdisk/twheeler/colligan/uniprot_sprot_{i}.pkl", "wb"
-                ) as dst:
-                    pickle.dump(embeddings, dst)
-                    embeddings = []
-            i += 1
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa":
+            embeddings = []
+            i = 0
+            for sequence in sequences:
+                if len(sequence) <= 10:
+                    print(f"Removing sequence {sequence} with length {len(sequence)}")
+                    continue
+                try:
+                    embed = model_class(
+                        self.encoding_func(sequence).unsqueeze(0)
+                    ).squeeze(0)
+                except KeyError:
+                    print(f"keyerror: skipping {sequence}")
+                embeddings.append(embed.transpose(-1, -2).to("cpu"))
+                i += 1
 
-        with open(f"/xdisk/twheeler/colligan/uniprot_sprot_{i}.pkl", "wb") as dst:
-            pickle.dump(embeddings, dst)
+            outf = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
+            print(f"Saving embeddings to {outf}.")
+            with open(outf, "wb") as dst:
+                pickle.dump(embeddings, dst)
+        else:
+            print(f"Loading embeddings from {fasta_or_pickle_file}.")
+            with open(fasta_or_pickle_file, "rb") as src:
+                embeddings = pickle.load(src)
 
-        return embeddings
+        return names, sequences, embeddings
 
     @torch.no_grad()
     def evaluate(self, model_class):
-        """Must have already loaded model weights."""
-        # smash the queries and targets against each other
-        # why did daniel sort the sequences by length?
-        overwrite = False
+        query_names, query_sequences, query_embeddings = self._calc_or_load_embeddings(
+            self.query_file, model_class=model_class
+        )
 
-        if os.path.isfile("query_embeds.pkl"):
-            with open("query_embeds.pkl", "rb") as src:
-                query_embeddings = pickle.load(src)
-            with open("target_embeds.pkl", "rb") as src:
-                target_embeddings = pickle.load(src)
+        (
+            target_names,
+            query_sequences,
+            target_embeddings,
+        ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
+
+        if self.use_faiss:
+            hits, avg_it, total_t = self.filter_with_faiss(
+                query_embeddings,
+                target_embeddings,
+                query_names,
+                target_names,
+                threshold=self.distance_threshold,
+            )
         else:
-            query_embeddings = self._calc_embeddings(model_class, self.queries)
-            target_embeddings = self._calc_embeddings(model_class, self.targets)
-            with open(
-                "/xdisk/twheeler/colligan/swiss_prot_embeddings.pkl", "wb"
-            ) as dst:
-                pickle.dump(target_embeddings, dst)
+            hits, avg_it, total_t = self.filter_exhaustive(
+                query_embeddings,
+                target_embeddings,
+                query_names,
+                target_names,
+                threshold=self.distance_threshold,
+            )
 
-        print("Computing hits.")
+        with open("timings.txt", "w") as dst:
+            dst.write(f"avg.time/it:{avg_it}, total_time:{total_t}")
 
-        if not os.path.isfile(self.hit_filename):
-            if self.use_faiss:
-                hits = self.filter_with_faiss(
-                    query_embeddings,
-                    target_embeddings,
-                    self.query_names,
-                    self.target_names,
-                    threshold=self.distance_threshold,
-                )
-            else:
-                hits = self.filter_exhaustive(
-                    query_embeddings,
-                    target_embeddings,
-                    self.query_names,
-                    self.target_names,
-                    threshold=self.distance_threshold,
-                )
+        with open(self.hit_filename, "w") as file:
+            for key in hits:
+                for entry in range(len(hits[key])):
+                    query = key
+                    target = hits[key][entry][0]
+                    distance = hits[key][entry][1]
+                    file.write(query + " " + target + " " + str(distance) + "\n")
 
-            with open(self.hit_filename, "w") as file:
-                for key in hits:
-                    for entry in range(len(hits[key])):
-                        query = key
-                        target = hits[key][entry][0]
-                        distance = hits[key][entry][1]
-                        file.write(query + " " + target + " " + str(distance) + "\n")
+        max_hits = get_hmmer_hits(self.max_hmmer_hits)
+        normal_hits = get_hmmer_hits(self.normal_hmmer_hits)
 
-        max_hits = get_hmmer_hits(
-            "/home/u4/colligan/data/prefilter/uniref_benchmark/max_hmmer_hits.txt"
-        )
-        normal_hits = get_hmmer_hits(
-            "/home/u4/colligan/data/prefilter/uniref_benchmark/normal_hmmer_hits.txt"
-        )
         our_hits = get_model_hits(self.hit_filename)
 
         print(number_of_hits(max_hits))
@@ -449,7 +437,12 @@ class UniRefEvaluator(Evaluator):
         axs[1, 1].set_xlabel("HMMER score")
         axs[2, 0].set_xlabel("HMMER score")
         axs[2, 1].set_xlabel("HMMER score")
-        plt.savefig(f"/home/u4/colligan/{self.hit_filename}.png", bbox_inches="tight")
+        plt.savefig(
+            f"/home/u4/colligan/{os.path.splitext(self.hit_filename)[0]}.png",
+            bbox_inches="tight",
+        )
+
+        plt.savefig(f"result_figure.png", bbox_inches="tight")
 
         return 0
 
@@ -493,7 +486,7 @@ class UniRefEvaluator(Evaluator):
         t_begin = time.time()
 
         for i in range(start, num_queries):
-            begin = time.time()
+            loop_begin = time.time()
             print(f"{i / (num_queries - start):.3f}", end="\r")
 
             filtered_list = []
@@ -539,14 +532,16 @@ class UniRefEvaluator(Evaluator):
                         )
 
             qdict[query_names[i]] = filtered_list
-            time_taken = time.time() - begin
+            time_taken = time.time() - loop_begin
             t_tot += time_taken
 
             print(f"time/it: {time_taken}, avg time/it: {t_tot / (i+1)}")
 
-        print(f"Entire loop took: {time.time() - t_begin}")
+        loop_time = time.time() - t_begin
 
-        return qdict
+        print(f"Entire loop took: {loop_time}.")
+
+        return qdict, loop_time / i, loop_time
 
     @torch.no_grad()
     def filter_exhaustive(
@@ -610,4 +605,4 @@ class UniRefEvaluator(Evaluator):
 
             print(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
-        return qdict
+        return qdict, t_tot / i, t_tot

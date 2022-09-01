@@ -29,14 +29,13 @@ def config():
     distance_threshold = 0.5
     normalize_embeddings = False
     use_faiss = True
-    hit_filename = "with_faiss.txt"
-    istr = "OPQ64_128,IVF{}_HNSW32,PQ64"
+    hit_filename = "with_faiss_HNSW.txt"
+    # istr = "OPQ64_128,IVF{}_HNSW32,PQ64"
+    istr = "HNSW32"
     use_model_path = False
-    target_file = "/home/u4/colligan/data/prefilter/uniprot_sprot.fasta"
 
     model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
-    # TODO: Change the name of this directory.
 
     # checkpoint_path = (
     #     "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
@@ -44,6 +43,7 @@ def config():
     model_path = "/nsflj/tsdaf.txt"
 
     checkpoint_path = "/home/u4/colligan/data/prefilter/model_16.sdic"
+
     model_args = {
         "emb_dim": 256,
         "blocks": 5,
@@ -56,7 +56,7 @@ def config():
 
     evaluator_args = {
         "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
-        "target_file": target_file,
+        "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "use_faiss": use_faiss,
