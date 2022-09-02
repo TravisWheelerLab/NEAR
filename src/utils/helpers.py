@@ -104,33 +104,29 @@ def create_faiss_index(
     embeddings, embed_dim, index_string, device="cpu", distance_metric="cosine"
 ):
 
-    print(f"using index with {distance_metric} metric.")
+    log.info(f"using index with {distance_metric} metric.")
 
     faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
-    k = int(10 * np.sqrt(embeddings.shape[0]).item())
-    num_samples = 10 * k
-    permutation = torch.randperm(embeddings.shape[0])
-    embeds = embeddings[permutation[:num_samples]]
     if "IVF" in index_string:
-        print(f"Following recs. on number of voronoi cells: {k}")
+        log.info(f"Following recs. on number of voronoi cells: {k}")
         index_string = index_string.format(k)
 
-    print(f"Using index {index_string}")
-
-    index = faiss.index_factory(embed_dim, index_string)
+    log.info(f"Using index {index_string}")
+    if "LSH" in index_string:
+        index = faiss.IndexLSH(embed_dim, 64)
+    else:
+        index = faiss.index_factory(embed_dim, index_string)
 
     if device == "cuda":
         num = 0
         res = faiss.StandardGpuResources()
         index = faiss.index_cpu_to_gpu(res, int(num), index)
-        index.train(embeds)
-        index.add(embeddings)
+        index.train(embeddings)
     else:
-        index.train(embeds.to("cpu"))
-        index.add(embeddings.to("cpu"))
+        index.train(embeddings.to("cpu"))
 
-    print("Done training index.")
+    log.info("Done training index.")
 
     return index
 

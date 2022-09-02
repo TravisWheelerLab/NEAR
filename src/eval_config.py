@@ -32,17 +32,19 @@ def config():
     device = "cpu"
     index_device = "cpu"
     n_neighbors = 10
-    distance_threshold = 0.5
+    distance_threshold = 1
     normalize_embeddings = False
     use_faiss = True
+    sample_percent = 0.05
     istr = "HNSW32"
-    hit_filename = f"with_faiss_{istr}.txt"
+    select_random_aminos = False
+    hit_filename = f"{istr}_sample_{sample_percent*100}pct.txt"
     num_threads = 32
-    query_file = "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
+    query_file = "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark1k30k.fa"
     target_file = (
-        "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
+        "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k15k.fa"
     )
-    log_verbosity = logging.DEBUG
+    log_verbosity = logging.INFO
 
     model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
@@ -70,5 +72,7 @@ def config():
         "n_neighbors": n_neighbors,
         "distance_threshold": distance_threshold,
         "hit_filename": hit_filename,
+        "sample_percent": sample_percent,
         "model_device": device,
+        "select_random_aminos": select_random_aminos,
     }

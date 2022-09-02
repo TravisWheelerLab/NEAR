@@ -135,7 +135,7 @@ def _log_verbosity(log_verbosity):
 def evaluate(_config):
     params = SimpleNamespace(**_config)
 
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
+    params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
 
     if hasattr(params, "model_args"):
         # required with loading from state dict

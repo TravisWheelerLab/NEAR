@@ -189,9 +189,11 @@ class UniRefEvaluator(Evaluator):
         target_file,
         encoding_func,
         model_device,
+        sample_percent,
         use_faiss,
         n_neighbors,
         hit_filename,
+        select_random_aminos,
         distance_threshold=100,
         normalize_embeddings=False,
         index_string=False,
@@ -203,9 +205,11 @@ class UniRefEvaluator(Evaluator):
 
         self.encoding_func = wraps_tensor_for_sequence(model_device)
         self.model_device = model_device
+        self.sample_percent = sample_percent
         self.normalize_embeddings = normalize_embeddings
         self.use_faiss = use_faiss
         self.hit_filename = hit_filename
+        self.select_random_aminos = select_random_aminos
         self.index_string = index_string
         self.index_device = index_device
         self.n_neighbors = n_neighbors
@@ -261,43 +265,47 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def evaluate(self, model_class):
-        query_names, query_sequences, query_embeddings = self._calc_or_load_embeddings(
-            self.query_file, model_class=model_class
-        )
+        if not os.path.isfile(self.hit_filename):
 
-        (
-            target_names,
-            query_sequences,
-            target_embeddings,
-        ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
-
-        if self.use_faiss:
-            hits, avg_it, total_t = self.filter_with_faiss(
-                query_embeddings,
-                target_embeddings,
+            (
                 query_names,
-                target_names,
-                threshold=self.distance_threshold,
-            )
-        else:
-            hits, avg_it, total_t = self.filter_exhaustive(
+                query_sequences,
                 query_embeddings,
-                target_embeddings,
-                query_names,
+            ) = self._calc_or_load_embeddings(self.query_file, model_class=model_class)
+
+            (
                 target_names,
-                threshold=self.distance_threshold,
-            )
+                query_sequences,
+                target_embeddings,
+            ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
 
-        with open("timings.txt", "w") as dst:
-            dst.write(f"avg.time/it:{avg_it}, total_time:{total_t}")
+            if self.use_faiss:
+                hits, avg_it, total_t = self.filter_with_faiss(
+                    query_embeddings,
+                    target_embeddings,
+                    query_names,
+                    target_names,
+                    threshold=self.distance_threshold,
+                )
+            else:
+                hits, avg_it, total_t = self.filter_exhaustive(
+                    query_embeddings,
+                    target_embeddings,
+                    query_names,
+                    target_names,
+                    threshold=self.distance_threshold,
+                )
 
-        with open(self.hit_filename, "w") as file:
-            for key in hits:
-                for entry in range(len(hits[key])):
-                    query = key
-                    target = hits[key][entry][0]
-                    distance = hits[key][entry][1]
-                    file.write(query + " " + target + " " + str(distance) + "\n")
+            with open("timings.txt", "w") as dst:
+                dst.write(f"avg.time/it:{avg_it}, total_time:{total_t}")
+
+            with open(self.hit_filename, "w") as file:
+                for key in hits:
+                    for entry in range(len(hits[key])):
+                        query = key
+                        target = hits[key][entry][0]
+                        distance = hits[key][entry][1]
+                        file.write(query + " " + target + " " + str(distance) + "\n")
 
         max_hits = self.max_hmmer_hits
         normal_hits = self.normal_hmmer_hits
@@ -313,7 +321,7 @@ class UniRefEvaluator(Evaluator):
 
         small_max = union_queries(our_hits, max_hits)
         small_normal = union_queries(our_hits, normal_hits)
-        our_filter = filtered_hits(our_hits, 0.4)
+        our_filter = filtered_hits(our_hits, 0.1)
 
         filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
 
@@ -326,9 +334,9 @@ class UniRefEvaluator(Evaluator):
             f"normal: {number_of_hits(small_normal)}, {number_of_hits(union_hits(our_filter, small_normal))}"
         )
 
-        filt_value = 0.73  # 0.740 gives great results
+        filt_value = 0.4  # 0.740 gives great results
         our_filter = filtered_hits(our_hits, filt_value)
-        small_max = union_queries(our_hits, max_hits)
+
         small_normal = union_queries(our_hits, normal_hits)
 
         filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
@@ -350,9 +358,9 @@ class UniRefEvaluator(Evaluator):
             range=(0, 40),
             label=["found", "not_found"],
         )
-        axs[0, 0].text(
-            25, 2000, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
-        )
+        axs[0, 0].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
+
+        axs[0, 0].set_title("hmmsearch max vs our filter")
 
         axs[0, 0].legend()
 
@@ -367,9 +375,7 @@ class UniRefEvaluator(Evaluator):
         recall = len(found[found > 10]) / (
             len(found[found > 10]) + len(not_found[not_found > 10])
         )
-        axs[0, 1].text(
-            25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
-        )
+        axs[0, 1].text(25, 100, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
 
         our_filter = filtered_hits(our_hits, filt_value)
         found, not_found = scores(normal_hits, our_filter)
@@ -384,9 +390,10 @@ class UniRefEvaluator(Evaluator):
             range=(0, 40),
             label=["found", "not_found"],
         )
-        axs[1, 0].text(
-            25, 2000, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
-        )
+        axs[1, 0].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
+
+        axs[1, 0].set_title("normal hmmsearch vs our filter")
+
         axs[1, 0].legend()
 
         axs[1, 1].hist(
@@ -403,7 +410,6 @@ class UniRefEvaluator(Evaluator):
         found, _ = torch.sort(torch.tensor(found))
         not_found, _ = torch.sort(torch.tensor(not_found))
 
-        filtration = 0.995572
         axs[2, 0].hist(
             [found, not_found],
             stacked=True,
@@ -412,11 +418,9 @@ class UniRefEvaluator(Evaluator):
             label=["found", "not_found"],
         )
         axs[2, 0].text(
-            25,
-            2000,
-            "filtration: " + str(filtration) + "\nrecall: " + str(recall),
-            label="not found",
+            25, 2000, f"filtration: {filtration:.3f}\n recall: {recall: .3f}"
         )
+
         axs[2, 0].legend()
         axs[2, 1].hist(
             [found[found > 10], not_found[not_found > 10]],
@@ -425,6 +429,7 @@ class UniRefEvaluator(Evaluator):
             range=(10, 40),
             label=["found", "not_found"],
         )
+
         axs[2, 1].legend()
 
         axs[0, 0].set_ylabel("Sequences found")
@@ -463,16 +468,43 @@ class UniRefEvaluator(Evaluator):
         qdict = dict()
         # construct index.
         lengths = list(map(lambda s: s.shape[0], targets))
-        logger.info(f"Number of aminos in target DB: {sum(lengths)}")
-        unrolled_targets = torch.cat(targets, dim=0)
 
-        unrolled_names = []
-        # create a new device for getting the name of the
-        # target sequence (this could actually be _way_ easier and faster; but it's fine for now.
-        for i, (length, name) in enumerate(zip(lengths, target_names)):
-            unrolled_names.extend([name] * length)
+        if self.select_random_aminos:
+            unrolled_targets = torch.cat(targets, dim=0)
+            unrolled_names = []
+            # create a new device for getting the name of the
+            # target sequence (this could actually be _way_ easier and faster; but it's fine for now.
+            for i, (length, name) in enumerate(zip(lengths, target_names)):
+                unrolled_names.extend([name] * length)
 
-        assert len(unrolled_names) > 0
+            assert len(unrolled_names) > 0
+        else:
+            # ko
+            # do something clever.
+            unrolled_targets = []
+            unrolled_names = []
+            for i, (length, name, target) in enumerate(
+                zip(lengths, target_names, targets)
+            ):
+                # sample N% of aminos from each sequence
+                n_sample = length * self.sample_percent
+                sampled_idx = torch.randperm(length)[: int(n_sample)].to("cpu").numpy()
+                logger.debug(
+                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
+                )
+
+                if len(sampled_idx) == 0:
+                    sampled_idx = [0]
+
+                sampled_aminos = torch.cat(
+                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
+                )
+                unrolled_names.extend([name] * len(sampled_aminos))
+                unrolled_targets.append(sampled_aminos)
+
+            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -481,6 +513,8 @@ class UniRefEvaluator(Evaluator):
             index_string=self.index_string,
             device=self.index_device,
         )
+
+        index.add(unrolled_targets)
 
         num_queries = min(end, len(queries))
 
@@ -508,10 +542,10 @@ class UniRefEvaluator(Evaluator):
             cnt = 2
 
             while torch.all(D <= threshold):
-                # logger.log(
-                #     "having to increase size of search for"
-                #     f" each query AA to {50 * cnt}."
-                # )
+                logger.debug(
+                    "having to increase size of search for"
+                    f" each query AA to {50 * cnt}."
+                )
 
                 D, I = search_index_device_aware(
                     index,
@@ -542,7 +576,7 @@ class UniRefEvaluator(Evaluator):
 
         loop_time = time.time() - t_begin
 
-        logger.info(f"Entire loop took: {loop_time}.")
+        logger.warning(f"Entire loop took: {loop_time}.")
 
         return qdict, loop_time / i, loop_time
 
@@ -564,7 +598,6 @@ class UniRefEvaluator(Evaluator):
         # for query in queries
         t_tot = 0
         logger.info("Starting brute-force cdist.")
-        print("HLLO")
 
         for i in range(start, num_queries):
             begin = time.time()
