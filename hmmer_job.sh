@@ -31,8 +31,29 @@ module load hmmer
 
 cd /home/u4/colligan/data/prefilter/uniref_benchmark
 
-for i in {1..10};
+echo "Time benchmarking 2k30k"
+for i in {1..5};
 do
-  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa /xdisk/twheeler/colligan/uniprot_sprot.fasta
+  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k30k.fa
 done
 
+echo "================"
+echo "Time benchmarking 1k30k"
+for i in {1..5};
+do
+  time phmmer --cpu 31 -o /dev/null Q_benchmark1k30k.fa T_benchmark2k30k.fa
+done
+
+echo "================"
+echo "Time benchmarking 2k15k"
+for i in {1..5};
+do
+  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k15k.fa
+done
+
+echo "================"
+echo "Time benchmarking 1k15k"
+for i in {1..5};
+do
+  time phmmer --cpu 31 -o /dev/null Q_benchmark1k30k.fa T_benchmark2k15k.fa
+done

@@ -1,15 +1,20 @@
+import logging
 import os
 import pdb
 import pickle
 import re
 import time
 from collections import defaultdict
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import torch
+import tqdm
 
 from src.evaluators import Evaluator
 from src.utils import create_faiss_index, fasta_from_file, search_index_device_aware
+
+logger = logging.getLogger("evaluate")
 
 amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
 amino_a_to_n = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
@@ -37,7 +42,6 @@ amino_frequencies = torch.tensor(
         0.068,
     ]
 )
-
 
 amino_n_to_v = torch.zeros(len(amino_n_to_a), 20)
 for i in range(20):
@@ -71,11 +75,11 @@ def wraps_tensor_for_sequence(device):
 
 def filtered_hits(queries, threshold):
     filtered_queries = dict()
-    for key in queries:
-        filtered_queries[key] = dict()
-        for tkey in queries[key]:
-            if queries[key][tkey] <= threshold:
-                filtered_queries[key][tkey] = True
+    for query in queries:
+        filtered_queries[query] = dict()
+        for hit in queries[query]:
+            if queries[query][hit] <= threshold:
+                filtered_queries[query][hit] = True
     return filtered_queries
 
 
@@ -88,13 +92,13 @@ def get_model_hits(file_path):
             line = line.strip()
             line = line.split(" ")
             query = line[0]
-            key = line[1]
-            value = float(line[2])
+            hit_name = line[1]
+            distance = float(line[2])
 
             if query not in queries:
                 queries[query] = dict()
 
-            queries[query][key] = value
+            queries[query][hit_name] = distance
     return queries
 
 
@@ -102,7 +106,6 @@ def number_of_hits(queries):
     num = 0
     for key in queries:
         num += len(queries[key])
-
     return num
 
 
@@ -132,18 +135,24 @@ def get_hmmer_hits(file_path):
 
 def union_hits(query1, query2):
     queries = dict()
+
+    # where do the two dictionaries overlap?
     for qkey in query1:
         queries[qkey] = dict()
         if qkey in query2:
-            for tkey in query1[qkey]:
-                if tkey in query2[qkey]:
-                    queries[qkey][tkey] = True
+            for hit in query1[qkey]:
+                if hit in query2[qkey]:
+                    queries[qkey][hit] = True
 
     return queries
 
 
 def union_queries(primary, secondary):
     new_secondary = dict()
+    # create a new dictionary with only the queries
+    # that appear in primary. This _removes_
+    # hits from hmmer matches to only contain the ones
+    # that are present in our hits
     for qkey in primary:
         if qkey in secondary:
             new_secondary[qkey] = secondary[qkey]
@@ -179,6 +188,7 @@ class UniRefEvaluator(Evaluator):
         query_file,
         target_file,
         encoding_func,
+        model_device,
         use_faiss,
         n_neighbors,
         hit_filename,
@@ -188,10 +198,11 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
     ):
 
-        self.query_file = query_file
-        self.target_file = target_file
+        self.query_file = deepcopy(query_file)
+        self.target_file = deepcopy(target_file)
 
-        self.encoding_func = wraps_tensor_for_sequence("cuda")
+        self.encoding_func = wraps_tensor_for_sequence(model_device)
+        self.model_device = model_device
         self.normalize_embeddings = normalize_embeddings
         self.use_faiss = use_faiss
         self.hit_filename = hit_filename
@@ -206,32 +217,44 @@ class UniRefEvaluator(Evaluator):
 
     def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
 
-        names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
-        names = list(map(lambda x: x.split(" ")[0], names))
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
+            names, sequences = fasta_from_file(
+                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
+            )
+            names = list(map(lambda x: x.split(" ")[0], names))
+        else:
+            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
+            names = list(map(lambda x: x.split(" ")[0], names))
 
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa":
+        pkl_file = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
+
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa" and not os.path.isfile(
+            pkl_file
+        ):
             embeddings = []
             i = 0
-            for sequence in sequences:
+            for sequence in tqdm.tqdm(sequences):
                 if len(sequence) <= 10:
-                    print(f"Removing sequence {sequence} with length {len(sequence)}")
+                    logger.debug(
+                        f"Removing sequence {sequence} with length {len(sequence)}"
+                    )
                     continue
                 try:
                     embed = model_class(
                         self.encoding_func(sequence).unsqueeze(0)
                     ).squeeze(0)
                 except KeyError:
-                    print(f"keyerror: skipping {sequence}")
+                    logger.debug(f"keyerror: skipping {sequence}")
                 embeddings.append(embed.transpose(-1, -2).to("cpu"))
                 i += 1
 
             outf = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
-            print(f"Saving embeddings to {outf}.")
+            logger.info(f"Saving embeddings to {outf}.")
             with open(outf, "wb") as dst:
                 pickle.dump(embeddings, dst)
         else:
-            print(f"Loading embeddings from {fasta_or_pickle_file}.")
-            with open(fasta_or_pickle_file, "rb") as src:
+            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
+            with open(pkl_file, "rb") as src:
                 embeddings = pickle.load(src)
 
         return names, sequences, embeddings
@@ -276,33 +299,31 @@ class UniRefEvaluator(Evaluator):
                     distance = hits[key][entry][1]
                     file.write(query + " " + target + " " + str(distance) + "\n")
 
-        max_hits = get_hmmer_hits(self.max_hmmer_hits)
-        normal_hits = get_hmmer_hits(self.normal_hmmer_hits)
+        max_hits = self.max_hmmer_hits
+        normal_hits = self.normal_hmmer_hits
 
         our_hits = get_model_hits(self.hit_filename)
 
-        print(number_of_hits(max_hits))
-        print(number_of_hits(normal_hits))
-        print(number_of_hits(our_hits))
+        logger.info(number_of_hits(max_hits))
+        logger.info(number_of_hits(normal_hits))
+        logger.info(number_of_hits(our_hits))
 
         values = all_our_scores(our_hits)
         values, _ = torch.sort(values)
+
         small_max = union_queries(our_hits, max_hits)
         small_normal = union_queries(our_hits, normal_hits)
         our_filter = filtered_hits(our_hits, 0.4)
+
         filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
 
-        print(number_of_hits(our_filter), "=", filtration)
-        print("--")
-        print(
-            "max:",
-            number_of_hits(small_max),
-            number_of_hits(union_hits(our_filter, small_max)),
+        logger.info(f"Filtered {filtration} at a distance of 0.4.")
+        logger.info(
+            f"max: {number_of_hits(small_max)}, {number_of_hits(union_hits(our_filter, small_max))}"
         )
-        print(
-            "normal:",
-            number_of_hits(small_normal),
-            number_of_hits(union_hits(our_filter, small_normal)),
+
+        logger.info(
+            f"normal: {number_of_hits(small_normal)}, {number_of_hits(union_hits(our_filter, small_normal))}"
         )
 
         filt_value = 0.73  # 0.740 gives great results
@@ -314,9 +335,6 @@ class UniRefEvaluator(Evaluator):
 
         fig, axs = plt.subplots(3, 2)
         fig.set_size_inches(15.0, 15)
-
-        # small_max = union_queries(our_filter, max_hits)
-        # small_normal = union_queries(our_filter, normal_hits)
 
         found, not_found = scores(max_hits, our_filter)
 
@@ -332,7 +350,6 @@ class UniRefEvaluator(Evaluator):
             range=(0, 40),
             label=["found", "not_found"],
         )
-        # axs[0,0].hist(not_found, bins=10, color=(1,0,0,0.5),range=(0,80), label='not found')
         axs[0, 0].text(
             25, 2000, "filtration: " + str(filtration) + "\nrecall: " + str(recall)
         )
@@ -346,7 +363,6 @@ class UniRefEvaluator(Evaluator):
             range=(10, 40),
             label=["found", "not_found"],
         )
-        # axs[0,1].hist(not_found[not_found > 10], bins=10, color=(1,0,0,0.5),range=(10,80), label='not found')
         axs[0, 1].legend()
         recall = len(found[found > 10]) / (
             len(found[found > 10]) + len(not_found[not_found > 10])
@@ -356,10 +372,6 @@ class UniRefEvaluator(Evaluator):
         )
 
         our_filter = filtered_hits(our_hits, filt_value)
-
-        # small_max = union_queries(our_filter, max_hits)
-        # small_normal = union_queries(our_filter, normal_hits)
-
         found, not_found = scores(normal_hits, our_filter)
         recall = len(found) / (len(found) + len(not_found))
         found, _ = torch.sort(torch.tensor(found))
@@ -386,10 +398,6 @@ class UniRefEvaluator(Evaluator):
         )
         axs[1, 1].legend()
 
-        recall = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        # axs[1,1].text(25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall))
         found, not_found = scores(max_hits, small_normal)
         recall = len(found) / (len(found) + len(not_found))
         found, _ = torch.sort(torch.tensor(found))
@@ -419,11 +427,6 @@ class UniRefEvaluator(Evaluator):
         )
         axs[2, 1].legend()
 
-        recall = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        # axs[2,1].text(25, 100, "filtration: " + str(filtration) + "\nrecall: " + str(recall))
-
         axs[0, 0].set_ylabel("Sequences found")
         axs[0, 1].set_ylabel("Sequences found")
         axs[1, 0].set_ylabel("Sequences found")
@@ -438,7 +441,7 @@ class UniRefEvaluator(Evaluator):
         axs[2, 0].set_xlabel("HMMER score")
         axs[2, 1].set_xlabel("HMMER score")
         plt.savefig(
-            f"/home/u4/colligan/{os.path.splitext(self.hit_filename)[0]}.png",
+            f"{os.path.splitext(self.hit_filename)[0]}.png",
             bbox_inches="tight",
         )
 
@@ -460,7 +463,7 @@ class UniRefEvaluator(Evaluator):
         qdict = dict()
         # construct index.
         lengths = list(map(lambda s: s.shape[0], targets))
-        print("Number of aminos in target DB:", sum(lengths))
+        logger.info(f"Number of aminos in target DB: {sum(lengths)}")
         unrolled_targets = torch.cat(targets, dim=0)
 
         unrolled_names = []
@@ -487,7 +490,7 @@ class UniRefEvaluator(Evaluator):
 
         for i in range(start, num_queries):
             loop_begin = time.time()
-            print(f"{i / (num_queries - start):.3f}", end="\r")
+            logger.info(f"{i / (num_queries - start):.3f}")
 
             filtered_list = []
 
@@ -505,7 +508,7 @@ class UniRefEvaluator(Evaluator):
             cnt = 2
 
             while torch.all(D <= threshold):
-                # print(
+                # logger.log(
                 #     "having to increase size of search for"
                 #     f" each query AA to {50 * cnt}."
                 # )
@@ -535,11 +538,11 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            print(f"time/it: {time_taken}, avg time/it: {t_tot / (i+1)}")
+            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
-        print(f"Entire loop took: {loop_time}.")
+        logger.info(f"Entire loop took: {loop_time}.")
 
         return qdict, loop_time / i, loop_time
 
@@ -555,24 +558,27 @@ class UniRefEvaluator(Evaluator):
         end=torch.inf,
     ):
         qdict = dict()
-        print("I'm here")
 
         num_queries = min(end, len(queries))
 
         # for query in queries
         t_tot = 0
+        logger.info("Starting brute-force cdist.")
+        print("HLLO")
 
         for i in range(start, num_queries):
             begin = time.time()
 
-            # print(f"{i / (num_queries - start):.3f}", end="\r")
+            logger.info(f"{i / (num_queries - start):.3f}")
 
             filtered_list = []
 
             if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
+                qval = torch.nn.functional.normalize(
+                    queries[i].to(self.model_device), dim=-1
+                )
             else:
-                qval = queries[i]
+                qval = queries[i].to(self.model_device)
 
             # get the minimum distance between each
             # of the sequences in the query set and the target set
@@ -585,9 +591,11 @@ class UniRefEvaluator(Evaluator):
             for j in range(len(targets)):
 
                 if self.normalize_embeddings:
-                    tval = torch.nn.functional.normalize(targets[j], dim=-1)
+                    tval = torch.nn.functional.normalize(
+                        targets[j].to(self.model_device), dim=-1
+                    )
                 else:
-                    tval = targets[j]
+                    tval = targets[j].to(self.model_device)
 
                 # basically, you get the minimum distance between the query embedding
                 # and the target embedding.
@@ -603,6 +611,6 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - begin
             t_tot += time_taken
 
-            print(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         return qdict, t_tot / i, t_tot

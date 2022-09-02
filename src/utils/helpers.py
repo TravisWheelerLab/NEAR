@@ -106,10 +106,10 @@ def create_faiss_index(
 
     print(f"using index with {distance_metric} metric.")
 
-    faiss.omp_set_num_threads(32)
+    faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     k = int(10 * np.sqrt(embeddings.shape[0]).item())
-    num_samples = 5 * k
+    num_samples = 10 * k
     permutation = torch.randperm(embeddings.shape[0])
     embeds = embeddings[permutation[:num_samples]]
     if "IVF" in index_string:
@@ -119,7 +119,6 @@ def create_faiss_index(
     print(f"Using index {index_string}")
 
     index = faiss.index_factory(embed_dim, index_string)
-    faiss.ParameterSpace().set_index_parameter(index, "verbose", 1)
 
     if device == "cuda":
         num = 0

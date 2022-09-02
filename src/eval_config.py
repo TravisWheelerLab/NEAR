@@ -1,12 +1,18 @@
+import logging
 import pdb
+from copy import deepcopy
 from glob import glob
 
+import faiss
 import torch
 from sacred import Experiment
 
 from src.datasets.datasets import sanitize_sequence
 from src.utils import char_to_index
 from src.utils.helpers import non_default_collate
+
+logger = logging.getLogger("evaluate")
+logger.setLevel(logging.WARNING)
 
 evaluation_ex = Experiment()
 
@@ -23,24 +29,23 @@ def wraps(device):
 @evaluation_ex.config
 def config():
 
-    device = "cuda"
+    device = "cpu"
     index_device = "cpu"
     n_neighbors = 10
     distance_threshold = 0.5
     normalize_embeddings = False
     use_faiss = True
-    hit_filename = "with_faiss_HNSW.txt"
-    # istr = "OPQ64_128,IVF{}_HNSW32,PQ64"
     istr = "HNSW32"
-    use_model_path = False
+    hit_filename = f"with_faiss_{istr}.txt"
+    num_threads = 32
+    query_file = "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
+    target_file = (
+        "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
+    )
+    log_verbosity = logging.DEBUG
 
     model_name = "ResNet"
     evaluator_name = "UniRefEvaluator"
-
-    # checkpoint_path = (
-    #     "model_data/aug22/single_epoch_run/ResNet1d/1/checkpoints/epoch_0_2.174716.ckpt"
-    # )
-    model_path = "/nsflj/tsdaf.txt"
 
     checkpoint_path = "/home/u4/colligan/data/prefilter/model_16.sdic"
 
@@ -55,8 +60,8 @@ def config():
     }
 
     evaluator_args = {
-        "query_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa",
-        "target_file": "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa",
+        "query_file": query_file,
+        "target_file": target_file,
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "use_faiss": use_faiss,
@@ -65,4 +70,5 @@ def config():
         "n_neighbors": n_neighbors,
         "distance_threshold": distance_threshold,
         "hit_filename": hit_filename,
+        "model_device": device,
     }

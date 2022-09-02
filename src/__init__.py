@@ -5,6 +5,7 @@ Prefilter passes good candidates to hmmer.
 
 __version__ = "0.0.1"
 
+import logging
 import os
 import pdb
 import shutil
@@ -113,37 +114,40 @@ def train(_config):
 
 
 # test whether or not I'm interactive
-
-
 @evaluation_ex.config
 def _cls_loader(model_name, evaluator_name):
     model_class = load_model_class(model_name)
     evaluator_class = load_evaluator_class(evaluator_name)
 
 
+@evaluation_ex.config
+def _thread_exporter(num_threads):
+    os.environ["NUM_THREADS"] = str(num_threads)
+
+
+@evaluation_ex.config
+def _log_verbosity(log_verbosity):
+    logger = logging.getLogger("evaluate")
+    logger.setLevel(log_verbosity)
+
+
 @evaluation_ex.main
 def evaluate(_config):
     params = SimpleNamespace(**_config)
-
-    hparams_path = Path(params.model_path) / "hparams.yaml"
-
-    if hparams_path.exists():
-        with hparams_path.open("r") as src:
-            hyperparams = yaml.safe_load(src)
-    else:
-        print("Couldn't find hyperparams.")
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
 
     if hasattr(params, "model_args"):
         # required with loading from state dict
         model = params.model_class(**params.model_args)
-        success = model.load_state_dict(torch.load(params.checkpoint_path))
+        success = model.load_state_dict(
+            torch.load(params.checkpoint_path, map_location=torch.device(params.device))
+        )
         model.eval().to(params.device)
     else:
-        model = params.model_class.load_from_checkpoint(params.checkpoint_path).to(
-            params.device
-        )
+        model = params.model_class.load_from_checkpoint(
+            params.checkpoint_path, map_location=torch.device(params.device)
+        ).to(params.device)
 
     evaluator = params.evaluator_class(**params.evaluator_args)
     result = evaluator.evaluate(model_class=model)

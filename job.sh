@@ -4,10 +4,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=brute_force
+#SBATCH --job-name=benchmark
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=brute-force-hits-run-%x-%j.out
+#SBATCH --output=benchmark-faiss-%x-%j.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### REQUIRED. Set the partition for your job. Four partitions are available in
@@ -24,13 +24,24 @@
 ### REQUIRED. Set the memory required for this job.
 #SBATCH --mem-per-cpu=5gb
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
-#SBATCH --time=03:01:00
+#SBATCH --time=05:01:00
 ### any other slurm options are supported, but not required.
 #SBATCH --gres=gpu:1
 
 module load python/3.9
 source ~/venvs/prefilter/bin/activate
-
 cd /home/u4/colligan/share/prefilter/
 
-evaluate with target_file="/home/u4/colligan/data/prefilter/uniprot_sprot.fasta"
+root="/home/u4/colligan/data/prefilter/uniref_benchmark/"
+
+echo "2k30k"
+time evaluate with hit_filename="$root""/2k30k_hits.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k30k.fa"
+
+echo "1k30k"
+time evaluate with hit_filename="$root""/1k30k_hits.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k30k.fa"
+
+echo "2k15k"
+time evaluate with hit_filename="$root""/2k15k_hits.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k15k.fa"
+
+echo "1k15k"
+time evaluate with hit_filename="$root""/1k15k_hits.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k15k.fa"
