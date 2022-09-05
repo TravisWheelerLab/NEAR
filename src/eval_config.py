@@ -34,10 +34,9 @@ def config():
     n_neighbors = 10
     distance_threshold = 1
     normalize_embeddings = False
-    use_faiss = True
-    sample_percent = 0.05
+    sample_percent = 0.001
     istr = "HNSW32"
-    select_random_aminos = False
+    select_random_aminos = True
     hit_filename = f"{istr}_sample_{sample_percent*100}pct.txt"
     num_threads = 32
     query_file = "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark1k30k.fa"
@@ -47,7 +46,7 @@ def config():
     log_verbosity = logging.INFO
 
     model_name = "ResNet"
-    evaluator_name = "UniRefEvaluator"
+    evaluator_name = "UniRefFaissEvaluator"
 
     checkpoint_path = "/home/u4/colligan/data/prefilter/model_16.sdic"
 
@@ -66,7 +65,6 @@ def config():
         "target_file": target_file,
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
-        "use_faiss": use_faiss,
         "index_device": index_device,
         "index_string": istr,
         "n_neighbors": n_neighbors,

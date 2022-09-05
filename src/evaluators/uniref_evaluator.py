@@ -63,6 +63,51 @@ amino_n_to_v[amino_a_to_n["U"]] = amino_frequencies
 amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
 
+def compute_ali_score(query, target):
+    dot_products = torch.dot(query, target.T)
+
+    scores = torch.zeros_like(dot_products)
+    scores[:, 0] = dot_products[:, 0]
+    scores[0, :] = dot_products[0, :]
+
+    best_path = torch.zeros((scores.shape[0], scores.shape[1], 2), dtype=torch.int)
+    # for each row
+    for i in range(1, scores.shape[0]):
+        # for each column
+        for j in range(1, scores.shape[1]):
+            vals = [
+                scores[i - 1, j],
+                scores[i, j - 1],
+                scores[i - 1, j - 1] + dot_products[i, j],
+            ]
+            idxs = [[i - 1, j], [i, j - 1], [i - 1, j - 1]]
+            amax = np.argmax(vals)
+            scores[i, j] = vals[amax]
+            best_path[i, j] = torch.as_tensor(idxs[amax])
+
+    # best column:
+    best_col = torch.argmax(scores[-1, :])
+    best_row = torch.argmax(scores[:, -1])
+    if scores[-1, best_col] > scores[best_row, -1]:
+        starting_point = best_path[-1, best_col]
+    else:
+        starting_point = best_path[best_row, -1]
+
+    row_idx = starting_point[0]
+    col_idx = starting_point[1]
+    # while we haven't reached a side:
+    path_log = [starting_point]
+    total_score = 0
+
+    while row_idx != 0 and col_idx != 0:
+        next_best = best_path[row_idx, col_idx]
+        total_score += dot_products[row_idx, col_idx]
+        path_log.append(next_best)
+        row_idx, col_idx = best_path[row_idx, col_idx]
+
+    return total_score
+
+
 def wraps_tensor_for_sequence(device):
     def tensor_for_sequence(sequence):
         data = torch.zeros(20, len(sequence))
@@ -190,7 +235,6 @@ class UniRefEvaluator(Evaluator):
         encoding_func,
         model_device,
         sample_percent,
-        use_faiss,
         n_neighbors,
         hit_filename,
         select_random_aminos,
@@ -207,7 +251,6 @@ class UniRefEvaluator(Evaluator):
         self.model_device = model_device
         self.sample_percent = sample_percent
         self.normalize_embeddings = normalize_embeddings
-        self.use_faiss = use_faiss
         self.hit_filename = hit_filename
         self.select_random_aminos = select_random_aminos
         self.index_string = index_string
@@ -263,10 +306,8 @@ class UniRefEvaluator(Evaluator):
 
         return names, sequences, embeddings
 
-    @torch.no_grad()
     def evaluate(self, model_class):
         if not os.path.isfile(self.hit_filename):
-
             (
                 query_names,
                 query_sequences,
@@ -279,22 +320,13 @@ class UniRefEvaluator(Evaluator):
                 target_embeddings,
             ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
 
-            if self.use_faiss:
-                hits, avg_it, total_t = self.filter_with_faiss(
-                    query_embeddings,
-                    target_embeddings,
-                    query_names,
-                    target_names,
-                    threshold=self.distance_threshold,
-                )
-            else:
-                hits, avg_it, total_t = self.filter_exhaustive(
-                    query_embeddings,
-                    target_embeddings,
-                    query_names,
-                    target_names,
-                    threshold=self.distance_threshold,
-                )
+            hits, avg_it, total_t = self.filter(
+                query_embeddings,
+                target_embeddings,
+                query_names,
+                target_names,
+                threshold=self.distance_threshold,
+            )
 
             with open("timings.txt", "w") as dst:
                 dst.write(f"avg.time/it:{avg_it}, total_time:{total_t}")
@@ -309,8 +341,10 @@ class UniRefEvaluator(Evaluator):
 
         max_hits = self.max_hmmer_hits
         normal_hits = self.normal_hmmer_hits
-
         our_hits = get_model_hits(self.hit_filename)
+        self._plot(our_hits, max_hits, normal_hits)
+
+    def _plot(self, our_hits, max_hits, normal_hits):
 
         logger.info(number_of_hits(max_hits))
         logger.info(number_of_hits(normal_hits))
@@ -454,7 +488,15 @@ class UniRefEvaluator(Evaluator):
 
         return 0
 
-    def filter_with_faiss(
+    def filter(self, *args, **kwargs):
+        raise NotImplementedError()
+
+
+class UniRefFaissEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def filter(
         self,
         queries,
         targets,
@@ -464,7 +506,6 @@ class UniRefEvaluator(Evaluator):
         start=0,
         end=torch.inf,
     ):
-
         qdict = dict()
         # construct index.
         lengths = list(map(lambda s: s.shape[0], targets))
@@ -514,7 +555,11 @@ class UniRefEvaluator(Evaluator):
             device=self.index_device,
         )
 
+        logger.info("Adding targets to index.")
+
         index.add(unrolled_targets)
+
+        logger.info("Beginning search.")
 
         num_queries = min(end, len(queries))
 
@@ -524,7 +569,7 @@ class UniRefEvaluator(Evaluator):
 
         for i in range(start, num_queries):
             loop_begin = time.time()
-            logger.info(f"{i / (num_queries - start):.3f}")
+            logger.debug(f"{i / (num_queries - start):.3f}")
 
             filtered_list = []
 
@@ -580,8 +625,13 @@ class UniRefEvaluator(Evaluator):
 
         return qdict, loop_time / i, loop_time
 
+
+class UniRefBruteForceEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     @torch.no_grad()
-    def filter_exhaustive(
+    def filter(
         self,
         queries,
         targets,
@@ -647,3 +697,72 @@ class UniRefEvaluator(Evaluator):
             logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         return qdict, t_tot / i, t_tot
+
+
+class UniRefAlignmentEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @torch.no_grad()
+    def filter(
+        self,
+        queries,
+        targets,
+        query_names,
+        target_names,
+        threshold,
+        start=0,
+        end=torch.inf,
+    ):
+
+        qdict = dict()
+        num_queries = min(end, len(queries))
+
+        # for query in queries
+        t_tot = 0
+        logger.info("Starting brute-force cdist.")
+
+        for i in range(start, num_queries):
+            begin = time.time()
+
+            logger.info(f"{i / (num_queries - start):.3f}")
+
+            filtered_list = []
+
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(
+                    queries[i].to(self.model_device), dim=-1
+                )
+            else:
+                qval = queries[i].to(self.model_device)
+
+            # get the minimum distance between each
+            # of the sequences in the query set and the target set
+            # if the val is less than or equal to the threshold,
+            # then record it as a hit;
+            # each query then gets a record of (target hit, distance, and index into target)
+            # this can be transformed:
+            # for each query in queries:
+            #     range_search(index_of_targets, threshold)
+            for j in range(len(targets)):
+
+                if self.normalize_embeddings:
+                    tval = torch.nn.functional.normalize(
+                        targets[j].to(self.model_device), dim=-1
+                    )
+                else:
+                    tval = targets[j].to(self.model_device)
+
+                ali_score = compute_ali_score(query, target, self.normalize_embeddings)
+
+                if val <= threshold:
+                    filtered_list.append((target_names[j], val.item(), j))
+
+            qdict[query_names[i]] = filtered_list
+
+            time_taken = time.time() - begin
+            t_tot += time_taken
+
+            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+
+            return qdict, t_tot / i, t_tot

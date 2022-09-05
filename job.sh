@@ -27,24 +27,21 @@
 #SBATCH --time=05:01:00
 ### any other slurm options are supported, but not required.
 
-module load python/3.9
-source ~/venvs/prefilter/bin/activate
 cd /home/u4/colligan/share/prefilter/
+source "$HOME"/miniconda3/bin/activate
+conda activate faiss
 
 root="/home/u4/colligan/data/prefilter/uniref_benchmark/"
 
+echo "1k15k"
+time evaluate with hit_filename="$root""/1k15k_hits2.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k15k.fa"
+
 echo "2k30k"
-time evaluate with hit_filename="$root""/2k30k_hits2.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k30k.fa"\
-select_random_aminos=True
+time evaluate with hit_filename="$root""/2k30k_hits2.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k30k.fa"
 
 echo "1k30k"
-time evaluate with hit_filename="$root""/1k30k_hits2.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k30k.fa"\
-select_random_aminos=True
+time evaluate with hit_filename="$root""/1k30k_hits2.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k30k.fa"
 
 echo "2k15k"
-time evaluate with hit_filename="$root""/2k15k_hits2.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k15k.fa"\
-select_random_aminos=True
+time evaluate with hit_filename="$root""/2k15k_hits2.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k15k.fa"
 
-echo "1k15k"
-time evaluate with hit_filename="$root""/1k15k_hits2.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k15k.fa"\
-select_random_aminos=True
