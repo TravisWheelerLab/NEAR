@@ -101,7 +101,7 @@ def load_model(model_path, hyperparams, device):
 
 
 def create_faiss_index(
-    embeddings, embed_dim, index_string, device="cpu", distance_metric="cosine"
+    embeddings, embed_dim, index_string, nprobe, device="cpu", distance_metric="cosine"
 ):
 
     log.info(f"using index with {distance_metric} metric.")
@@ -109,14 +109,17 @@ def create_faiss_index(
     faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     if "IVF" in index_string:
-        log.info(f"Following recs. on number of voronoi cells: {k}")
-        index_string = index_string.format(k)
+        embeddings = embeddings[torch.randperm(embeddings.shape[0])]
+        log.info(f"Sampling {embeddings.shape[0]} embeddings.")
 
     log.info(f"Using index {index_string}")
     if "LSH" in index_string:
         index = faiss.IndexLSH(embed_dim, 64)
     else:
         index = faiss.index_factory(embed_dim, index_string)
+        if "IVF" in index_string:
+            index.nprobe = nprobe
+            log.info(f"Setting nprobe to {nprobe}.")
 
     if device == "cuda":
         num = 0

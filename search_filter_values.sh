@@ -26,29 +26,17 @@
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
 #SBATCH --time=05:01:00
 ### any other slurm options are supported, but not required.
-#SBATCH --gres=gpu:1
+set -e
 
 cd /home/u4/colligan/share/prefilter/
 source "$HOME"/miniconda3/bin/activate
 conda activate faiss
 export LD_LIBRARY_PATH=$HOME/miniconda3/lib/:$LD_LIBRARY_PATH
-echo "$LD_LIBRARY_PATH"
 
 root="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
 
-echo "1k15k"
-time evaluate with hit_filename="$root""/1k15k_hits_IVF_gpu20pct.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k15k.fa"\
- index_device="cuda"
-
-echo "2k30k"
-time evaluate with hit_filename="$root""/2k30k_hits_IVF_gpu20pct.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k30k.fa"\
- index_device="cuda"
-
-echo "1k30k"
-time evaluate with hit_filename="$root""/1k30k_hits_IVF_gpu20pct.txt" query_file="$root""/Q_benchmark1k30k.fa" target_file="$root""/T_benchmark2k30k.fa"\
- index_device="cuda"
-
-echo "2k15k"
-time evaluate with hit_filename="$root""/2k15k_hits_IVF_gpu20pct.txt" query_file="$root""/Q_benchmark2k30k.fa" target_file="$root""/T_benchmark2k15k.fa"\
- index_device="cuda"
+for filter_value in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+do
+  evaluate with hit_filename="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/2k30k_hits_IVF_gpu20pct.txt" filter_value="$filter_value"
+done
 

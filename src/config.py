@@ -6,14 +6,14 @@ train_ex = Experiment()
 @train_ex.config
 def config():
 
-    description = "A four (!) GPU test."
+    description = "A test of the contrastive dot product model (with normalization)."
     gpus = 1
     num_nodes = 1
     num_workers = 12
     check_val_every_n_epoch = 1
-    log_dir = "model_data/aug22/single_epoch_run/"
+    log_dir = "model_data/sept6/"
     batch_size = 32
-    epochs = 1
+    epochs = 100
     learning_rate = 1e-4
     seq_len = 150
     log_interval = 1000

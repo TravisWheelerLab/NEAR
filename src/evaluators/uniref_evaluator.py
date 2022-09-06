@@ -232,7 +232,9 @@ class UniRefEvaluator(Evaluator):
         self,
         query_file,
         target_file,
+        nprobe,
         encoding_func,
+        filter_value,
         model_device,
         sample_percent,
         n_neighbors,
@@ -248,6 +250,8 @@ class UniRefEvaluator(Evaluator):
         self.target_file = deepcopy(target_file)
 
         self.encoding_func = wraps_tensor_for_sequence(model_device)
+        self.nprobe = nprobe
+        self.filter_value = filter_value
         self.model_device = model_device
         self.sample_percent = sample_percent
         self.normalize_embeddings = normalize_embeddings
@@ -258,7 +262,7 @@ class UniRefEvaluator(Evaluator):
         self.n_neighbors = n_neighbors
         self.distance_threshold = distance_threshold
 
-        root = "/home/u4/colligan/data/prefilter/uniref_benchmark/"
+        root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
         self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
@@ -316,7 +320,7 @@ class UniRefEvaluator(Evaluator):
 
             (
                 target_names,
-                query_sequences,
+                target_sequences,
                 target_embeddings,
             ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
 
@@ -338,11 +342,11 @@ class UniRefEvaluator(Evaluator):
                         target = hits[key][entry][0]
                         distance = hits[key][entry][1]
                         file.write(query + " " + target + " " + str(distance) + "\n")
+        else:
+            logger.info(f"Loading hits from {self.hit_filename}.")
 
-        max_hits = self.max_hmmer_hits
-        normal_hits = self.normal_hmmer_hits
         our_hits = get_model_hits(self.hit_filename)
-        self._plot(our_hits, max_hits, normal_hits)
+        self._plot(our_hits, self.max_hmmer_hits, self.normal_hmmer_hits)
 
     def _plot(self, our_hits, max_hits, normal_hits):
 
@@ -355,11 +359,11 @@ class UniRefEvaluator(Evaluator):
 
         small_max = union_queries(our_hits, max_hits)
         small_normal = union_queries(our_hits, normal_hits)
-        our_filter = filtered_hits(our_hits, 0.1)
+        our_filter = filtered_hits(our_hits, self.filter_value)
 
         filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
 
-        logger.info(f"Filtered {filtration} at a distance of 0.4.")
+        logger.info(f"Filtered {filtration} at a distance of {self.filter_value}")
         logger.info(
             f"max: {number_of_hits(small_max)}, {number_of_hits(union_hits(our_filter, small_max))}"
         )
@@ -368,8 +372,7 @@ class UniRefEvaluator(Evaluator):
             f"normal: {number_of_hits(small_normal)}, {number_of_hits(union_hits(our_filter, small_normal))}"
         )
 
-        filt_value = 0.4  # 0.740 gives great results
-        our_filter = filtered_hits(our_hits, filt_value)
+        our_filter = filtered_hits(our_hits, self.filter_value)
 
         small_normal = union_queries(our_hits, normal_hits)
 
@@ -411,7 +414,7 @@ class UniRefEvaluator(Evaluator):
         )
         axs[0, 1].text(25, 100, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
 
-        our_filter = filtered_hits(our_hits, filt_value)
+        our_filter = filtered_hits(our_hits, self.filter_value)
         found, not_found = scores(normal_hits, our_filter)
         recall = len(found) / (len(found) + len(not_found))
         found, _ = torch.sort(torch.tensor(found))
@@ -480,7 +483,7 @@ class UniRefEvaluator(Evaluator):
         axs[2, 0].set_xlabel("HMMER score")
         axs[2, 1].set_xlabel("HMMER score")
         plt.savefig(
-            f"{os.path.splitext(self.hit_filename)[0]}.png",
+            f"{os.path.splitext(self.hit_filename)[0]}_{self.filter_value}.png",
             bbox_inches="tight",
         )
 
@@ -524,12 +527,14 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             # do something clever.
             unrolled_targets = []
             unrolled_names = []
+            logger.info(f"Original DB size: {sum(lengths)}")
             for i, (length, name, target) in enumerate(
                 zip(lengths, target_names, targets)
             ):
                 # sample N% of aminos from each sequence
                 n_sample = length * self.sample_percent
-                sampled_idx = torch.randperm(length)[: int(n_sample)].to("cpu").numpy()
+                # sample every N amino.
+                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
                 logger.debug(
                     f"sampled_index length: {len(sampled_idx)}. original length: {length}"
                 )
@@ -552,6 +557,7 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             embed_dim=unrolled_targets.shape[-1],
             distance_metric="cosine" if self.normalize_embeddings else "l2",
             index_string=self.index_string,
+            nprobe=self.nprobe,
             device=self.index_device,
         )
 
@@ -617,11 +623,11 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
-        logger.warning(f"Entire loop took: {loop_time}.")
+        logger.info(f"Entire loop took: {loop_time}.")
 
         return qdict, loop_time / i, loop_time
 
@@ -694,7 +700,7 @@ class UniRefBruteForceEvaluator(UniRefEvaluator):
             time_taken = time.time() - begin
             t_tot += time_taken
 
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         return qdict, t_tot / i, t_tot
 
@@ -753,9 +759,9 @@ class UniRefAlignmentEvaluator(UniRefEvaluator):
                 else:
                     tval = targets[j].to(self.model_device)
 
-                ali_score = compute_ali_score(query, target, self.normalize_embeddings)
+                ali_score = compute_ali_score(qval, tval, self.normalize_embeddings)
 
-                if val <= threshold:
+                if ali_score <= threshold:
                     filtered_list.append((target_names[j], val.item(), j))
 
             qdict[query_names[i]] = filtered_list

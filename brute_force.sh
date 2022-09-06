@@ -28,11 +28,4 @@
 ### any other slurm options are supported, but not required.
 #SBATCH --gres=gpu:1
 
-module load python/3.9
-source ~/venvs/prefilter/bin/activate
-cd /home/u4/colligan/share/prefilter/
-
-root="/home/u4/colligan/data/prefilter/uniref_benchmark/"
-
-
-evaluate with use_faiss=False hit_filename=brute_force.txt device="cuda"
+evaluate with hit_filename="/home/u4/colligan/data/prefilter/uniref_benchmark/hits.txt"

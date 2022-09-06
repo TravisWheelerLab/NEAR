@@ -30,25 +30,29 @@ def wraps(device):
 def config():
 
     device = "cpu"
-    index_device = "cpu"
+    index_device = "cuda"
     n_neighbors = 10
     distance_threshold = 1
     normalize_embeddings = False
-    sample_percent = 0.001
-    istr = "HNSW32"
-    select_random_aminos = True
-    hit_filename = f"{istr}_sample_{sample_percent*100}pct.txt"
+    sample_percent = 0.2
+    nprobe = 1
+    istr = "IVF65536,Flat"
+    select_random_aminos = False
+    hit_filename = f"{istr}_distance_threshold_1.txt"
+    filter_value = 0.74
     num_threads = 32
-    query_file = "/home/u4/colligan/data/prefilter/uniref_benchmark/Q_benchmark1k30k.fa"
+    query_file = (
+        "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
+    )
     target_file = (
-        "/home/u4/colligan/data/prefilter/uniref_benchmark/T_benchmark2k15k.fa"
+        "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
     )
     log_verbosity = logging.INFO
 
     model_name = "ResNet"
     evaluator_name = "UniRefFaissEvaluator"
 
-    checkpoint_path = "/home/u4/colligan/data/prefilter/model_16.sdic"
+    checkpoint_path = "/xdisk/twheeler/colligan/data/prefilter/model_16.sdic"
 
     model_args = {
         "emb_dim": 256,
@@ -62,7 +66,9 @@ def config():
 
     evaluator_args = {
         "query_file": query_file,
+        "nprobe": nprobe,
         "target_file": target_file,
+        "filter_value": filter_value,
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": wraps(device),
         "index_device": index_device,
