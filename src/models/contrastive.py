@@ -3,6 +3,7 @@ import pdb
 
 import esm
 import matplotlib.pyplot as plt
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -103,9 +104,10 @@ class ResNet1d(pl.LightningModule):
 
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
-                plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy())
+                arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()
+                arr = arr.astype(float)
+                plt.imshow(arr)
                 plt.colorbar()
-                fpath = (f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",)
                 self.logger.experiment.add_figure(
                     f"image", plt.gcf(), global_step=self.global_step
                 )

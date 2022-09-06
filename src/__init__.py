@@ -93,10 +93,7 @@ def train(_config):
     )
 
     trainer = Trainer(
-        **params.trainer_args,
-        callbacks=CallbackSet.callbacks(),
-        logger=logger,
-        plugins=DDPPlugin(find_unused_parameters=False),
+        **params.trainer_args, callbacks=CallbackSet.callbacks(), logger=logger
     )
 
     trainer.fit(
@@ -105,12 +102,13 @@ def train(_config):
         val_dataloaders=val_dataloader,
     )
 
-    pdb.set_trace()
-
+    # copy best model checkpoint
     shutil.copy2(
         Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.ckpt",
         "model_data/",
     )
+    # and the hparams file.
+    shutil.copy2(Path(logger.experiment.log_dir) / "hparams.yaml", "model_data/")
 
 
 # test whether or not I'm interactive
