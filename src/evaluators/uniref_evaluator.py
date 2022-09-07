@@ -8,6 +8,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
+import scann
 import torch
 import tqdm
 
@@ -361,7 +362,9 @@ class UniRefEvaluator(Evaluator):
         small_normal = union_queries(our_hits, normal_hits)
         our_filter = filtered_hits(our_hits, self.filter_value)
 
-        filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
+        logger.info("Using 2000*30000 as the total number of possible matches.")
+        # filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
+        filtration = 1.0 - (number_of_hits(our_filter) / 2000 * 30000)
 
         logger.info(f"Filtered {filtration} at a distance of {self.filter_value}")
         logger.info(
@@ -376,10 +379,15 @@ class UniRefEvaluator(Evaluator):
 
         small_normal = union_queries(our_hits, normal_hits)
 
-        filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
+        filtration = 1.0 - (number_of_hits(our_filter) / (2000 * 30000))
 
-        fig, axs = plt.subplots(3, 2)
+        fig, axs = plt.subplots(2, 2)
         fig.set_size_inches(15.0, 15)
+        plt.suptitle(
+            f"filter threshold: {self.filter_value} \n"
+            f"hit file: {os.path.basename(os.path.splitext(self.hit_filename)[0])}",
+            fontsize=20,
+        )
 
         found, not_found = scores(max_hits, our_filter)
 
@@ -442,46 +450,21 @@ class UniRefEvaluator(Evaluator):
         )
         axs[1, 1].legend()
 
-        found, not_found = scores(max_hits, small_normal)
-        recall = len(found) / (len(found) + len(not_found))
-        found, _ = torch.sort(torch.tensor(found))
-        not_found, _ = torch.sort(torch.tensor(not_found))
-
-        axs[2, 0].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(0, 40),
-            label=["found", "not_found"],
+        recall = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
         )
-        axs[2, 0].text(
-            25, 2000, f"filtration: {filtration:.3f}\n recall: {recall: .3f}"
-        )
-
-        axs[2, 0].legend()
-        axs[2, 1].hist(
-            [found[found > 10], not_found[not_found > 10]],
-            stacked=True,
-            bins=10,
-            range=(10, 40),
-            label=["found", "not_found"],
-        )
-
-        axs[2, 1].legend()
+        axs[1, 1].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
 
         axs[0, 0].set_ylabel("Sequences found")
         axs[0, 1].set_ylabel("Sequences found")
         axs[1, 0].set_ylabel("Sequences found")
         axs[1, 1].set_ylabel("Sequences found")
-        axs[2, 0].set_ylabel("Sequences found")
-        axs[2, 1].set_ylabel("Sequences found")
 
         axs[0, 0].set_xlabel("HMMER score")
         axs[0, 1].set_xlabel("HMMER score")
         axs[1, 0].set_xlabel("HMMER score")
         axs[1, 1].set_xlabel("HMMER score")
-        axs[2, 0].set_xlabel("HMMER score")
-        axs[2, 1].set_xlabel("HMMER score")
+
         plt.savefig(
             f"{os.path.splitext(self.hit_filename)[0]}_{self.filter_value}.png",
             bbox_inches="tight",
@@ -703,6 +686,185 @@ class UniRefBruteForceEvaluator(UniRefEvaluator):
             logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         return qdict, t_tot / i, t_tot
+
+
+class UniRefAlignmentEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @torch.no_grad()
+    def filter(
+        self,
+        queries,
+        targets,
+        query_names,
+        target_names,
+        threshold,
+        start=0,
+        end=torch.inf,
+    ):
+
+        qdict = dict()
+        num_queries = min(end, len(queries))
+
+        # for query in queries
+        t_tot = 0
+        logger.info("Starting brute-force cdist.")
+
+        for i in range(start, num_queries):
+            begin = time.time()
+
+            logger.info(f"{i / (num_queries - start):.3f}")
+
+            filtered_list = []
+
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(
+                    queries[i].to(self.model_device), dim=-1
+                )
+            else:
+                qval = queries[i].to(self.model_device)
+
+            # get the minimum distance between each
+            # of the sequences in the query set and the target set
+            # if the val is less than or equal to the threshold,
+            # then record it as a hit;
+            # each query then gets a record of (target hit, distance, and index into target)
+            # this can be transformed:
+            # for each query in queries:
+            #     range_search(index_of_targets, threshold)
+            for j in range(len(targets)):
+
+                if self.normalize_embeddings:
+                    tval = torch.nn.functional.normalize(
+                        targets[j].to(self.model_device), dim=-1
+                    )
+                else:
+                    tval = targets[j].to(self.model_device)
+
+                ali_score = compute_ali_score(qval, tval, self.normalize_embeddings)
+
+                if ali_score <= threshold:
+                    filtered_list.append((target_names[j], val.item(), j))
+
+            qdict[query_names[i]] = filtered_list
+
+            time_taken = time.time() - begin
+            t_tot += time_taken
+
+            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+
+            return qdict, t_tot / i, t_tot
+
+
+class UniRefScannEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @torch.no_grad()
+    def filter(
+        self,
+        queries,
+        targets,
+        query_names,
+        target_names,
+        threshold,
+        start=0,
+        end=torch.inf,
+    ):
+
+        qdict = dict()
+        num_queries = min(end, len(queries))
+        # construct index.
+        lengths = list(map(lambda s: s.shape[0], targets))
+
+        if self.select_random_aminos:
+            unrolled_targets = torch.cat(targets, dim=0)
+            unrolled_names = []
+            # create a new device for getting the name of the
+            # target sequence (this could actually be _way_ easier and faster; but it's fine for now.
+            for i, (length, name) in enumerate(zip(lengths, target_names)):
+                unrolled_names.extend([name] * length)
+
+            assert len(unrolled_names) > 0
+        else:
+            # ko
+            # do something clever.
+            unrolled_targets = []
+            unrolled_names = []
+            logger.info(f"Original DB size: {sum(lengths)}")
+            for i, (length, name, target) in enumerate(
+                zip(lengths, target_names, targets)
+            ):
+                # sample N% of aminos from each sequence
+                n_sample = length * self.sample_percent
+                # sample every N amino.
+                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
+                logger.debug(
+                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
+                )
+
+                if len(sampled_idx) == 0:
+                    sampled_idx = [0]
+
+                sampled_aminos = torch.cat(
+                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
+                )
+                unrolled_names.extend([name] * len(sampled_aminos))
+                unrolled_targets.append(sampled_aminos)
+
+            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+
+        searcher = (
+            scann.scann_ops_pybind.builder(unrolled_targets, 7, "squared_l2")
+            .tree(num_leaves=2000, num_leaves_to_search=3, training_sample_size=250000)
+            .score_ah(2, anisotropic_quantization_threshold=0.2)
+            .reorder(20)
+            .build()
+        )
+
+        t_tot = 0
+        t_begin = time.time()
+
+        for i in range(start, num_queries):
+            loop_begin = time.time()
+            logger.debug(f"{i / (num_queries - start):.3f}")
+
+            filtered_list = []
+
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(queries[i], dim=-1)
+            else:
+                qval = queries[i]
+
+            I, D = searcher.search_batched(qval)
+
+            if self.normalize_embeddings:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance >= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
+            else:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance <= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
+
+            qdict[query_names[i]] = filtered_list
+            time_taken = time.time() - loop_begin
+            t_tot += time_taken
+
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+
+        loop_time = time.time() - t_begin
+
+        logger.info(f"Entire loop took: {loop_time}.")
+
+        return qdict, loop_time / i, loop_time
 
 
 class UniRefAlignmentEvaluator(UniRefEvaluator):
