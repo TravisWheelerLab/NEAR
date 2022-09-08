@@ -20,6 +20,8 @@ class ResNetSparseAttention(pl.LightningModule):
 
         self.res_block_kernel_size = 5
         self.res_block_n_filters = 128
+        self.n_transformer_layers = 3
+        # small number of residual blocks
         self.n_res_blocks = 5
         self.res_bottleneck_factor = 1
         self.padding = "same"
@@ -50,11 +52,15 @@ class ResNetSparseAttention(pl.LightningModule):
             )
 
         self.embedding_trunk = torch.nn.Sequential(*_list)
-        self.transformer = torch.nn.TransformerEncoderLayer(
-            self.res_block_n_filters,
-            nhead=8,
-            dim_feedforward=2 * self.res_block_n_filters,
-        )
+        # the question is: Do we _need_ a full embed/attention/mlp?
+        _transformer_list = []
+        for _ in range(self.n_transformer_layers):
+            transformer = torch.nn.TransformerEncoderLayer(
+                self.res_block_n_filters,
+                nhead=8,
+                dim_feedforward=2 * self.res_block_n_filters,
+            )
+            _transformer_list.append(transformer)
 
         self.pos_unc = PositionalEncoding(self.res_block_n_filters)
 
@@ -65,9 +71,11 @@ class ResNetSparseAttention(pl.LightningModule):
         ]
 
         self.mlp = torch.nn.Sequential(*mlp_list)
+        self.transformer = torch.nn.Sequential(*_transformer_list)
 
     def _forward(self, x):
         x = self.embed(x)
+        x = self.pos_unc(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
         x = x.transpose(1, 0).transpose(0, -1)
         x = self.transformer(x)
@@ -76,12 +84,8 @@ class ResNetSparseAttention(pl.LightningModule):
         return x
 
     def forward(self, x, masks=None):
-        if masks is not None:
-            embeddings, masks = self._masked_forward(x, masks)
-            return embeddings, masks
-        else:
-            embeddings = self._forward(x)
-            return embeddings
+        embeddings = self._forward(x)
+        return embeddings
 
     def _shared_step(self, batch):
         features, masks, labelvecs = batch
@@ -99,9 +103,10 @@ class ResNetSparseAttention(pl.LightningModule):
 
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
-                plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy())
+                plt.imshow(
+                    torch.matmul(e1, e2.T).to("cpu").detach().numpy().astype(float)
+                )
                 plt.colorbar()
-                fpath = (f"{self.trainer.logger.log_dir}/image_{self.global_step}.png",)
                 self.logger.experiment.add_figure(
                     f"image", plt.gcf(), global_step=self.global_step
                 )
