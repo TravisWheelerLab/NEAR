@@ -18,3 +18,4 @@ trained_models/*
 *.nextflow*
 /prefilter/work/
 .idea/
+.DS_Store
