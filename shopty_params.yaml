@@ -1,0 +1,86 @@
+project_name: 'pre'
+run_command: "time python -m src train"
+project_dir: "50PIDTune"
+monitor: "min"
+poll_interval: 20
+
+hparams:
+  learning_rate:
+    begin: -5
+    end: -1
+    random: true
+    log: true
+    type: float
+  step_lr_step_size:
+    begin: 500
+    end: 5000
+    step: 300
+    type: 'int'
+  step_lr_decay_factor:
+    begin: 0.1
+    end: 0.9
+    random: true
+    type: 'float'
+
+statics:
+  gpus:
+    val: 1
+    type: 'int'
+  num_nodes:
+    val: 1
+    type: 'int'
+  num_workers:
+    val: 8
+    type: 'int'
+  log_dir: "$HOME/src-logs/new-lease-on-life"
+  model_name: "model.pt"
+  data_path: "$HOME/subset/training_data0.5/"
+  decoy_path: "$HOME/tmp/"
+  batch_size:
+    val: 32
+    type: 'int'
+  epochs:
+    val: 1000
+    type: 'int'
+  single_label: true
+  train_from_scratch: true
+  resample_based_on_uniform_dist: true
+  resample_families: true
+  shoptimize: true
+  normalize_output_embedding: true
+
+  learning_rate:
+    val: 1e-3
+    type: 'float'
+  check_val_every_n_epoch:
+    val: 2
+    type: 'int'
+  res_block_n_filters:
+    val: 1100
+    type: 'int'
+  vocab_size:
+    val: 23
+    type: 'int'
+  res_block_kernel_size:
+    val: 7
+    type: 'int'
+  res_bottleneck_factor:
+    val: 0.5
+    type: 'float'
+  n_res_blocks:
+    val: 5
+    type: 'int'
+  dilation_rate:
+    val: 2
+    type: 'float'
+  schedule_lr: true
+
+slurm_directives:
+  - "--partition=wheeler_lab_gpu"
+  - "--gres=gpu:1"
+
+environment_commands:
+  - 'source ~/anaconda/bin/activate'
+  - 'conda activate beetles'
+
+
