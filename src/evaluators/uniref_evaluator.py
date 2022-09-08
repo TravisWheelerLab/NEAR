@@ -495,26 +495,35 @@ class UniRefFaissEvaluator(UniRefEvaluator):
         qdict = dict()
         # construct index.
         lengths = list(map(lambda s: s.shape[0], targets))
+        logger.info(f"Original DB size: {sum(lengths)}")
+        unrolled_targets = []
+        unrolled_names = []
 
         if self.select_random_aminos:
-            unrolled_targets = torch.cat(targets, dim=0)
-            unrolled_names = []
-            # create a new device for getting the name of the
-            # target sequence (this could actually be _way_ easier and faster; but it's fine for now.
-            for i, (length, name) in enumerate(zip(lengths, target_names)):
-                unrolled_names.extend([name] * length)
-
-            assert len(unrolled_names) > 0
-        else:
-            # ko
-            # do something clever.
-            unrolled_targets = []
-            unrolled_names = []
-            logger.info(f"Original DB size: {sum(lengths)}")
             for i, (length, name, target) in enumerate(
                 zip(lengths, target_names, targets)
             ):
-                # sample N% of aminos from each sequence
+                # sample N% of aminos from each sequence randomly.
+                n_sample = length * self.sample_percent
+                sampled_idx = torch.randperm(length)[: int(n_sample)]
+                logger.debug(
+                    f"random sampling: sampled_index length: {len(sampled_idx)}. original length: {length}"
+                )
+
+                if len(sampled_idx) == 0:
+                    sampled_idx = [0]
+
+                sampled_aminos = torch.cat(
+                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
+                )
+                unrolled_names.extend([name] * len(sampled_aminos))
+                unrolled_targets.append(sampled_aminos)
+
+            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+        else:
+            for i, (length, name, target) in enumerate(
+                zip(lengths, target_names, targets)
+            ):
                 n_sample = length * self.sample_percent
                 # sample every N amino.
                 sampled_idx = torch.arange(length)[:: int(length / n_sample)]
@@ -580,6 +589,11 @@ class UniRefFaissEvaluator(UniRefEvaluator):
                     "having to increase size of search for"
                     f" each query AA to {50 * cnt}."
                 )
+                if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
+                    logger.debug(
+                        "Breaking loop, can't search for more than 2048 neighbors on GPU."
+                    )
+                    break
 
                 D, I = search_index_device_aware(
                     index,
