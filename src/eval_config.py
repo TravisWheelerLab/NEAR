@@ -32,15 +32,17 @@ def config():
     device = "cpu"
     index_device = "cuda"
     n_neighbors = 10
-    distance_threshold = 1
+    distance_threshold = 100
     normalize_embeddings = False
-    sample_percent = 0.2
+    sample_percent = 0.10
     nprobe = 1
-    istr = "IVF65536,Flat"
-    select_random_aminos = False
-    hit_filename = f"{istr}_distance_threshold_1.txt"
-    filter_value = 0.74
+    istr = "Flat"
+    select_random_aminos = True
+    hit_filename = f"alignment_evaluator"
+    filter_value = 0.75
     num_threads = 32
+    model_name = "ResNet"
+    evaluator_name = "UniRefAlignmentEvaluator"
     query_file = (
         "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
     )
@@ -48,9 +50,6 @@ def config():
         "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
     )
     log_verbosity = logging.INFO
-
-    model_name = "ResNet"
-    evaluator_name = "UniRefFaissEvaluator"
 
     checkpoint_path = "/xdisk/twheeler/colligan/data/prefilter/model_16.sdic"
 

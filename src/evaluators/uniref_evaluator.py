@@ -8,6 +8,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
+import numpy as np
 import scann
 import torch
 import tqdm
@@ -65,7 +66,7 @@ amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZ
 
 
 def compute_ali_score(query, target):
-    dot_products = torch.dot(query, target.T)
+    dot_products = torch.matmul(query, target.T)
 
     scores = torch.zeros_like(dot_products)
     scores[:, 0] = dot_products[:, 0]
@@ -756,10 +757,14 @@ class UniRefAlignmentEvaluator(UniRefEvaluator):
                 else:
                     tval = targets[j].to(self.model_device)
 
-                ali_score = compute_ali_score(qval, tval, self.normalize_embeddings)
+                # divide by the minimum length.
+                ali_score = compute_ali_score(qval, tval) / min(
+                    qval.shape[0], tval.shape[0]
+                )
+                logger.info(f"Alignment score: {ali_score}")
 
                 if ali_score <= threshold:
-                    filtered_list.append((target_names[j], val.item(), j))
+                    filtered_list.append((target_names[j], ali_score.item(), j))
 
             qdict[query_names[i]] = filtered_list
 
@@ -879,72 +884,3 @@ class UniRefScannEvaluator(UniRefEvaluator):
         logger.info(f"Entire loop took: {loop_time}.")
 
         return qdict, loop_time / i, loop_time
-
-
-class UniRefAlignmentEvaluator(UniRefEvaluator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    @torch.no_grad()
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
-
-        qdict = dict()
-        num_queries = min(end, len(queries))
-
-        # for query in queries
-        t_tot = 0
-        logger.info("Starting brute-force cdist.")
-
-        for i in range(start, num_queries):
-            begin = time.time()
-
-            logger.info(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(
-                    queries[i].to(self.model_device), dim=-1
-                )
-            else:
-                qval = queries[i].to(self.model_device)
-
-            # get the minimum distance between each
-            # of the sequences in the query set and the target set
-            # if the val is less than or equal to the threshold,
-            # then record it as a hit;
-            # each query then gets a record of (target hit, distance, and index into target)
-            # this can be transformed:
-            # for each query in queries:
-            #     range_search(index_of_targets, threshold)
-            for j in range(len(targets)):
-
-                if self.normalize_embeddings:
-                    tval = torch.nn.functional.normalize(
-                        targets[j].to(self.model_device), dim=-1
-                    )
-                else:
-                    tval = targets[j].to(self.model_device)
-
-                ali_score = compute_ali_score(qval, tval, self.normalize_embeddings)
-
-                if ali_score <= threshold:
-                    filtered_list.append((target_names[j], val.item(), j))
-
-            qdict[query_names[i]] = filtered_list
-
-            time_taken = time.time() - begin
-            t_tot += time_taken
-
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-            return qdict, t_tot / i, t_tot
