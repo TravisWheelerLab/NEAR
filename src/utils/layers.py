@@ -19,7 +19,7 @@ class ResConv(torch.nn.Module):
         self.conv1 = torch.nn.Conv1d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
         )
-        self.act = torch.nn.ReLU()
+        self.act = torch.nn.ELU()
         self.conv2 = torch.nn.Conv1d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode
         )
