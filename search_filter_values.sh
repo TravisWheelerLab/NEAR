@@ -35,8 +35,12 @@ export LD_LIBRARY_PATH=$HOME/miniconda3/lib/:$LD_LIBRARY_PATH
 
 root="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
 
-for filter_value in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+for filter_value in 0.1 0.35 0.5 0.75 0.9
 do
-  evaluate with hit_filename="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/2k30k_hits_IVF_gpu20pct.txt" filter_value="$filter_value"
+  for hf in "2k30k_hits_IVF_gpu20pct.txt" "hits.txt" "2k30k_hits_IVF_nprobe4.txt" "2k30k_hits_IVF_gpu.txt"
+  do
+    echo $hf
+    evaluate with hit_filename="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/""$hf" filter_value="$filter_value"
+  done
 done
 

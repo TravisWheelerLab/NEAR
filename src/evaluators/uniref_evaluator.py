@@ -8,6 +8,7 @@ from collections import defaultdict
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
+import numba
 import numpy as np
 import scann
 import torch
@@ -65,31 +66,34 @@ amino_n_to_v[amino_a_to_n["U"]] = amino_frequencies
 amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
 
-def compute_ali_score(query, target):
-    dot_products = torch.matmul(query, target.T)
+@numba.jit(nopython=True)
+def compute_ali_score(dot_products):
 
-    scores = torch.zeros_like(dot_products)
+    scores = np.zeros_like(dot_products)
     scores[:, 0] = dot_products[:, 0]
     scores[0, :] = dot_products[0, :]
 
-    best_path = torch.zeros((scores.shape[0], scores.shape[1], 2), dtype=torch.int)
+    best_path = np.zeros((scores.shape[0], scores.shape[1], 2), dtype=numba.int64)
     # for each row
     for i in range(1, scores.shape[0]):
         # for each column
         for j in range(1, scores.shape[1]):
-            vals = [
-                scores[i - 1, j],
-                scores[i, j - 1],
-                scores[i - 1, j - 1] + dot_products[i, j],
-            ]
-            idxs = [[i - 1, j], [i, j - 1], [i - 1, j - 1]]
+            vals = np.array(
+                [
+                    scores[i - 1, j],
+                    scores[i, j - 1],
+                    scores[i - 1, j - 1] + dot_products[i, j],
+                ]
+            )
+            idxs = np.array([[i - 1, j], [i, j - 1], [i - 1, j - 1]])
             amax = np.argmax(vals)
+
             scores[i, j] = vals[amax]
-            best_path[i, j] = torch.as_tensor(idxs[amax])
+            best_path[i, j] = idxs[amax]
 
     # best column:
-    best_col = torch.argmax(scores[-1, :])
-    best_row = torch.argmax(scores[:, -1])
+    best_col = np.argmax(scores[-1, :])
+    best_row = np.argmax(scores[:, -1])
     if scores[-1, best_col] > scores[best_row, -1]:
         starting_point = best_path[-1, best_col]
     else:
@@ -107,7 +111,7 @@ def compute_ali_score(query, target):
         path_log.append(next_best)
         row_idx, col_idx = best_path[row_idx, col_idx]
 
-    return total_score
+    return np.abs(total_score)
 
 
 def wraps_tensor_for_sequence(device):
@@ -651,7 +655,7 @@ class UniRefBruteForceEvaluator(UniRefEvaluator):
 
         # for query in queries
         t_tot = 0
-        logger.info("Starting brute-force cdist.")
+        logger.info("Starting alignment-aware distances.")
 
         for i in range(start, num_queries):
             begin = time.time()
@@ -758,13 +762,15 @@ class UniRefAlignmentEvaluator(UniRefEvaluator):
                     tval = targets[j].to(self.model_device)
 
                 # divide by the minimum length.
-                ali_score = compute_ali_score(qval, tval) / min(
+                dot_products = -torch.cdist(qval, tval).to("cpu").numpy()
+                ali_score = compute_ali_score(dot_products) / min(
                     qval.shape[0], tval.shape[0]
                 )
-                logger.info(f"Alignment score: {ali_score}")
+
+                logger.debug(f"Alignment score: {ali_score}")
 
                 if ali_score <= threshold:
-                    filtered_list.append((target_names[j], ali_score.item(), j))
+                    filtered_list.append((target_names[j], ali_score, j))
 
             qdict[query_names[i]] = filtered_list
 
