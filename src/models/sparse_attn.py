@@ -74,6 +74,8 @@ class ResNetSparseAttention(pl.LightningModule):
         self.transformer = torch.nn.Sequential(*_transformer_list)
 
     def _forward(self, x):
+        if not isinstance(x, torch.LongTensor):
+            x = x.long()
         x = self.embed(x)
         x = self.pos_unc(x)
         x = self.embedding_trunk(x.transpose(-1, -2))
