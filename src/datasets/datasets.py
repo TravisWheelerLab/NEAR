@@ -18,12 +18,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
-from Bio import AlignIO
 
 import src
 import src.models as models
 import src.utils as utils
 from src.datasets import DataModule
+from src.evaluators.uniref_evaluator import tensor_for_sequence
 
 DECOY_FLAG = -1
 
@@ -144,6 +144,50 @@ class SwissProtGenerator(DataModule):
     def __getitem__(self, idx):
         s1, s2, label = self._sample(idx)
         return s1, s2, label
+
+
+class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
+    """
+    Grab a sequence from swiss-prot, mutate it, then
+    feed it to the model as a contrastive pair.
+    """
+
+    def __init__(self, fa_file, minlen, training=True):
+        super().__init__(fa_file, minlen, training)
+
+    def _sample(self, idx):
+        if not self.training:
+            if idx == 0:
+                print("shuffling.")
+                self.shuffle()
+
+            idx = np.random.randint(0, len(self.seqs))
+
+        s1 = sanitize_sequence(self.seqs[idx])
+
+        s1 = torch.as_tensor([utils.char_to_index[c] for c in s1])
+        n_subs = int(
+            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        )
+
+        s2 = utils.mutate_sequence_correct_probabilities(
+            sequence=s1,
+            indels=None,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+            aa_dist=utils.amino_distribution,
+        )
+        # now convert _back_ to character space and then to daniel's encoding.
+        s2 = [utils.amino_alphabet[n] for n in s2]
+        # now convert with Daniel's thing.
+        s2 = tensor_for_sequence(s2)
+        return s2, idx % len(self.seqs)
+
+    def __getitem__(self, idx):
+        return self._sample(idx)
+
+    def collate_fn(self):
+        return utils.pad_contrastive_batches_daniel
 
 
 class ClusterIterator(DataModule):

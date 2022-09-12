@@ -114,6 +114,13 @@ def compute_ali_score(dot_products):
     return np.abs(total_score)
 
 
+def tensor_for_sequence(sequence):
+    data = torch.zeros(20, len(sequence))
+    for i, c in enumerate(sequence):
+        data[:, i] = amino_a_to_v[c]
+    return data
+
+
 def wraps_tensor_for_sequence(device):
     def tensor_for_sequence(sequence):
         data = torch.zeros(20, len(sequence))
@@ -246,6 +253,7 @@ class UniRefEvaluator(Evaluator):
         n_neighbors,
         hit_filename,
         select_random_aminos,
+        query_percent,
         distance_threshold=100,
         normalize_embeddings=False,
         index_string=False,
@@ -255,7 +263,11 @@ class UniRefEvaluator(Evaluator):
         self.query_file = deepcopy(query_file)
         self.target_file = deepcopy(target_file)
 
-        self.encoding_func = wraps_tensor_for_sequence(model_device)
+        self.encoding_func = (
+            wraps_tensor_for_sequence(model_device)
+            if encoding_func is None
+            else encoding_func
+        )
         self.nprobe = nprobe
         self.filter_value = filter_value
         self.model_device = model_device
@@ -266,12 +278,14 @@ class UniRefEvaluator(Evaluator):
         self.index_string = index_string
         self.index_device = index_device
         self.n_neighbors = n_neighbors
+        self.query_percent = query_percent
         self.distance_threshold = distance_threshold
 
-        root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
+        root = "/home/tc229954/prefilter_data/data/prefilter/uniref_benchmark/"
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
         self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
+    @torch.no_grad()
     def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
 
         if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
@@ -548,6 +562,7 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -569,6 +584,9 @@ class UniRefFaissEvaluator(UniRefEvaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
+        comp_func = np.greater_equal if self.normalize_embeddings else np.less_equal
+
+        logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
 
         for i in range(start, num_queries):
             loop_begin = time.time()
@@ -581,6 +599,10 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             else:
                 qval = queries[i]
 
+            qval = qval[
+                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
+            ]
+
             D, I = search_index_device_aware(
                 index,
                 qval.contiguous(),
@@ -589,7 +611,10 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             )
             cnt = 2
 
-            while torch.all(D <= threshold):
+            while (
+                torch.all(comp_func(D, threshold))
+                and self.n_neighbors * cnt <= qval.shape[0]
+            ):
                 logger.debug(
                     "having to increase size of search for"
                     f" each query AA to {50 * cnt}."
@@ -779,7 +804,7 @@ class UniRefAlignmentEvaluator(UniRefEvaluator):
 
             logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
-            return qdict, t_tot / i, t_tot
+        return qdict, t_tot / i, t_tot
 
 
 class UniRefScannEvaluator(UniRefEvaluator):
@@ -865,6 +890,231 @@ class UniRefScannEvaluator(UniRefEvaluator):
                 qval = queries[i]
 
             I, D = searcher.search_batched(qval)
+
+            if self.normalize_embeddings:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance >= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
+            else:
+                for distance, idx in zip(D.ravel(), I.ravel()):
+                    if distance <= threshold:
+                        filtered_list.append(
+                            (unrolled_names[int(idx)], distance.item())
+                        )
+
+            qdict[query_names[i]] = filtered_list
+            time_taken = time.time() - loop_begin
+            t_tot += time_taken
+
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+
+        loop_time = time.time() - t_begin
+
+        logger.info(f"Entire loop took: {loop_time}.")
+
+        return qdict, loop_time / i, loop_time
+
+
+class UniRefVAEEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @torch.no_grad()
+    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
+
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
+            names, sequences = fasta_from_file(
+                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
+            )
+            names = list(map(lambda x: x.split(" ")[0], names))
+        else:
+            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
+            names = list(map(lambda x: x.split(" ")[0], names))
+
+        pkl_file = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
+
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa" and not os.path.isfile(
+            pkl_file
+        ):
+            embeddings = []
+            i = 0
+            for sequence in tqdm.tqdm(sequences):
+                if len(sequence) <= 127:
+                    logger.debug(
+                        f"Removing sequence {sequence} with length {len(sequence)}"
+                    )
+                    continue
+                try:
+                    # have to fix the sequence to be a certain length.
+                    slices = []
+                    encoded_seq = self.encoding_func(sequence).unsqueeze(0)
+
+                    for i in range(0, encoded_seq.shape[-1] - 128, 128):
+                        slices.append(
+                            model_class(encoded_seq[:, :, i : i + 128])
+                            .squeeze(0)
+                            .reshape(128, 8)
+                            .T
+                        )
+                    # take the end.
+                    slices.append(
+                        model_class(encoded_seq[:, :, -128:])
+                        .squeeze(0)
+                        .reshape(128, 8)
+                        .T
+                    )
+                    # if it works I'll figure that out. Right now, just take the last 128 overlapping aminos.
+                    embeddings.append(torch.cat(slices, dim=0).to("cpu"))
+
+                except KeyError:
+                    logger.debug(f"keyerror: skipping {sequence}")
+
+                i += 1
+
+            outf = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
+            logger.info(f"Saving embeddings to {outf}.")
+            with open(outf, "wb") as dst:
+                pickle.dump(embeddings, dst)
+        else:
+            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
+            with open(pkl_file, "rb") as src:
+                embeddings = pickle.load(src)
+
+        return names, sequences, embeddings
+
+    def filter(
+        self,
+        queries,
+        targets,
+        query_names,
+        target_names,
+        threshold,
+        start=0,
+        end=torch.inf,
+    ):
+        qdict = dict()
+        # construct index.
+        lengths = list(map(lambda s: s.shape[0], targets))
+        logger.info(f"Original DB size: {sum(lengths)}")
+        unrolled_targets = []
+        unrolled_names = []
+
+        if self.select_random_aminos:
+            for i, (length, name, target) in enumerate(
+                zip(lengths, target_names, targets)
+            ):
+                # sample N% of aminos from each sequence randomly.
+                n_sample = length * self.sample_percent
+                sampled_idx = torch.randperm(length)[: int(n_sample)]
+                logger.debug(
+                    f"random sampling: sampled_index length: {len(sampled_idx)}. original length: {length}"
+                )
+
+                if len(sampled_idx) == 0:
+                    sampled_idx = [0]
+
+                sampled_aminos = torch.cat(
+                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
+                )
+                unrolled_names.extend([name] * len(sampled_aminos))
+                unrolled_targets.append(sampled_aminos)
+
+            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+        else:
+            for i, (length, name, target) in enumerate(
+                zip(lengths, target_names, targets)
+            ):
+                n_sample = length * self.sample_percent
+                # sample every N amino.
+                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
+                logger.debug(
+                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
+                )
+
+                if len(sampled_idx) == 0:
+                    sampled_idx = [0]
+
+                sampled_aminos = torch.cat(
+                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
+                )
+                unrolled_names.extend([name] * len(sampled_aminos))
+                unrolled_targets.append(sampled_aminos)
+
+            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+
+        index = create_faiss_index(
+            embeddings=unrolled_targets,
+            embed_dim=unrolled_targets.shape[-1],
+            distance_metric="cosine" if self.normalize_embeddings else "l2",
+            index_string=self.index_string,
+            nprobe=self.nprobe,
+            device=self.index_device,
+        )
+
+        logger.info("Adding targets to index.")
+
+        index.add(unrolled_targets)
+
+        logger.info("Beginning search.")
+
+        num_queries = min(end, len(queries))
+
+        # for query in queries
+        t_tot = 0
+        t_begin = time.time()
+        comp_func = np.greater_equal if self.normalize_embeddings else np.less_equal
+
+        logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
+
+        for i in range(start, num_queries):
+            loop_begin = time.time()
+            logger.debug(f"{i / (num_queries - start):.3f}")
+
+            filtered_list = []
+
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(queries[i], dim=-1)
+            else:
+                qval = queries[i]
+
+            qval = qval[
+                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
+            ]
+
+            D, I = search_index_device_aware(
+                index,
+                qval.contiguous(),
+                self.index_device,
+                n_neighbors=self.n_neighbors,
+            )
+            cnt = 2
+
+            while (
+                torch.all(comp_func(D, threshold))
+                and self.n_neighbors * cnt <= qval.shape[0]
+            ):
+                logger.debug(
+                    "having to increase size of search for"
+                    f" each query AA to {50 * cnt}."
+                )
+                if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
+                    logger.debug(
+                        "Breaking loop, can't search for more than 2048 neighbors on GPU."
+                    )
+                    break
+
+                D, I = search_index_device_aware(
+                    index,
+                    qval.contiguous(),
+                    self.index_device,
+                    n_neighbors=self.n_neighbors * cnt,
+                )
+                cnt += 1
 
             if self.normalize_embeddings:
                 for distance, idx in zip(D.ravel(), I.ravel()):

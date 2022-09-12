@@ -31,6 +31,7 @@ __all__ = [
     "create_faiss_index",
     "handle_figure_path",
     "fasta_from_file",
+    "pad_contrastive_batches_daniel",
     "pad_contrastive_batches_with_labelvecs",
     "pad_contrastive_batches",
     "mask_mask",
@@ -116,7 +117,14 @@ def create_faiss_index(
     if "LSH" in index_string:
         index = faiss.IndexLSH(embed_dim, 64)
     else:
-        index = faiss.index_factory(embed_dim, index_string)
+        if distance_metric == "cosine":
+            log.info("Normalizing embeddings for use with cosine metric.")
+            index = faiss.index_factory(
+                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
+            )
+        else:
+            index = faiss.index_factory(embed_dim, index_string)
+
         if "IVF" in index_string:
             index.nprobe = nprobe
             log.info(f"Setting nprobe to {nprobe}.")
@@ -125,7 +133,7 @@ def create_faiss_index(
         num = 0
         res = faiss.StandardGpuResources()
         index = faiss.index_cpu_to_gpu(res, int(num), index)
-        index.train(embeddings)
+        index.train(embeddings.to("cuda"))
     else:
         index.train(embeddings.to("cpu"))
 
@@ -262,6 +270,16 @@ def mask_mask(mask):
     for i, idx in enumerate(idxs):
         mask[i, (idx - 1) :] = True
     return mask
+
+
+def pad_contrastive_batches_daniel(batch):
+    member1 = [b[0] for b in batch]
+    labels = [b[1] for b in batch]
+    return (
+        torch.stack(member1),
+        None,
+        torch.as_tensor(labels),
+    )
 
 
 def pad_contrastive_batches(batch):
