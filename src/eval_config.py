@@ -31,30 +31,36 @@ def config():
 
     device = "cuda"
     index_device = "cuda"
-    n_neighbors = 10
-    distance_threshold = 0.75
+    n_neighbors = 100
+    # distance threshold to use for faiss and
+    # filtering
+    distance_threshold = 0.68
     normalize_embeddings = False
-    sample_percent = 1.0
+    sample_percent = 0.2
     nprobe = 1
     istr = "Flat"
     select_random_aminos = False
     query_percent = 1.0
-    hit_filename = f"sequence_vae.txt"
-    filter_value = 0.75
+    hit_filename = f"query_100pct_10pcttarget_db.txt"
     num_threads = 32
-    model_name = "SequenceVAE"
-    evaluator_name = "UniRefVAEEvaluator"
-    root = "/home/tc229954/prefilter_data/data/"
+    model_name = "ResNet"
+    evaluator_name = "UniRefFaissEvaluator"
+    root = "/xdisk/twheeler/colligan/"
 
-    query_file = f"{root}/prefilter/uniref_benchmark/{model_name}/Q_benchmark2k30k.fa"
-    target_file = f"{root}/prefilter/uniref_benchmark/{model_name}/T_benchmark2k30k.fa"
+    query_file = (
+        f"{root}/data/prefilter/uniref_benchmark/{model_name}/Q_benchmark2k30k.fa"
+    )
+    target_file = (
+        f"{root}/data/prefilter/uniref_benchmark/{model_name}/T_benchmark2k30k.fa"
+    )
 
     log_verbosity = logging.INFO
 
-    checkpoint_path = f"model_data/sept6/SequenceVAE/1/checkpoints/best_loss_model.ckpt"
+    checkpoint_path = f"{root}/data/prefilter/model_16.sdic"
+    # checkpoint_path = f"model_data/sept6/SequenceVAE/1/checkpoints/best_loss_model.ckpt"
 
     cnn_model_state_dict = f"{root}/prefilter/model_16.sdic"
-    cnn_model_args = {
+    model_args = {
         "emb_dim": 256,
         "blocks": 5,
         "block_layers": 2,
@@ -64,18 +70,17 @@ def config():
         "padding_mode": "reflect",
     }
 
-    model_args = {
-        "learning_rate": 1e-4,
-        "log_interval": 100,
-        "cnn_model_state_dict": cnn_model_state_dict,
-        "cnn_model_args": cnn_model_args,
-    }
+    # model_args = {
+    #     "learning_rate": 1e-4,
+    #     "log_interval": 100,
+    #     "cnn_model_state_dict": cnn_model_state_dict,
+    #     "cnn_model_args": cnn_model_args,
+    # }
 
     evaluator_args = {
         "query_file": query_file,
         "nprobe": nprobe,
         "target_file": target_file,
-        "filter_value": filter_value,
         "normalize_embeddings": normalize_embeddings,
         "encoding_func": None,
         "index_device": index_device,

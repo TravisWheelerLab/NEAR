@@ -131,12 +131,12 @@ def wraps_tensor_for_sequence(device):
     return tensor_for_sequence
 
 
-def filtered_hits(queries, threshold):
+def filter_hits(queries, threshold, comp_func):
     filtered_queries = dict()
     for query in queries:
         filtered_queries[query] = dict()
         for hit in queries[query]:
-            if queries[query][hit] <= threshold:
+            if comp_func(queries[query][hit], threshold):
                 filtered_queries[query][hit] = True
     return filtered_queries
 
@@ -205,30 +205,22 @@ def union_hits(query1, query2):
     return queries
 
 
-def union_queries(primary, secondary):
-    new_secondary = dict()
-    # create a new dictionary with only the queries
-    # that appear in primary. This _removes_
-    # hits from hmmer matches to only contain the ones
-    # that are present in our hits
-    for qkey in primary:
-        if qkey in secondary:
-            new_secondary[qkey] = secondary[qkey]
-        else:
-            secondary[qkey] = dict()
-    return new_secondary
-
-
-def scores(hmmer, other):
+def compute_matches(our_hits, hmmer_hits):
     found = []
     not_found = []
-    for qkey in other:
-        for tkey in hmmer[qkey]:
-            if tkey in other[qkey]:
-                found.append(hmmer[qkey][tkey][1])
-            else:
-                not_found.append(hmmer[qkey][tkey][1])
-    return found, not_found
+    for query in hmmer_hits:
+        hmmer_query_hits = hmmer_hits[query]
+        if query in our_hits:
+            for hit in hmmer_query_hits.keys():
+                if hit in our_hits[query]:
+                    found.append(hmmer_query_hits[hit][1])
+                else:
+                    not_found.append(hmmer_query_hits[hit][1])
+        else:
+            for hit, e_value in hmmer_query_hits.items():
+                not_found.append(e_value[1])
+
+    return np.asarray(found), np.asarray(not_found)
 
 
 def all_our_scores(hits):
@@ -240,6 +232,32 @@ def all_our_scores(hits):
     return torch.tensor(values)
 
 
+def compute_recall(our_hits, hmmer_hits, distance_threshold, comp_func):
+
+    match_count = 0
+    for query in hmmer_hits:
+        true_matches = hmmer_hits[query]
+        if query in our_hits:
+            our_matches = our_hits[query]
+            for match in our_matches:
+                if match in true_matches:
+                    if comp_func(our_matches[match], distance_threshold):
+                        # count the matches for each query.
+                        match_count += 1
+                else:
+                    logger.debug(
+                        f"Our method did not have any of the same matches as hmmer."
+                    )
+        else:
+            logger.debug(
+                f"Our method did not find any hits for query sequence {query} (hmmer found {len(true_matches)})."
+            )
+
+    denominator = sum(list(map(lambda x: len(x), list(hmmer_hits.values()))))
+
+    return 100 * (match_count / denominator)
+
+
 class UniRefEvaluator(Evaluator):
     def __init__(
         self,
@@ -247,7 +265,6 @@ class UniRefEvaluator(Evaluator):
         target_file,
         nprobe,
         encoding_func,
-        filter_value,
         model_device,
         sample_percent,
         n_neighbors,
@@ -269,7 +286,6 @@ class UniRefEvaluator(Evaluator):
             else encoding_func
         )
         self.nprobe = nprobe
-        self.filter_value = filter_value
         self.model_device = model_device
         self.sample_percent = sample_percent
         self.normalize_embeddings = normalize_embeddings
@@ -281,7 +297,14 @@ class UniRefEvaluator(Evaluator):
         self.query_percent = query_percent
         self.distance_threshold = distance_threshold
 
-        root = "/home/tc229954/prefilter_data/data/prefilter/uniref_benchmark/"
+        if self.normalize_embeddings:
+            logger.info("Using comparison function >= threshold for filtration.")
+            self.comp_func = np.greater_equal
+        else:
+            logger.info("Using comparison function <= threshold for filtration.")
+            self.comp_func = np.less_equal
+
+        root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
         self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
         self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
@@ -370,126 +393,97 @@ class UniRefEvaluator(Evaluator):
 
     def _plot(self, our_hits, max_hits, normal_hits):
 
-        logger.info(number_of_hits(max_hits))
-        logger.info(number_of_hits(normal_hits))
-        logger.info(number_of_hits(our_hits))
+        logger.info(f"Max hit num: {number_of_hits(max_hits)}")
+        logger.info(f"Normal hit num: {number_of_hits(normal_hits)}")
+        logger.info(f"Our hit num: {number_of_hits(our_hits)}")
 
-        values = all_our_scores(our_hits)
-        values, _ = torch.sort(values)
-
-        small_max = union_queries(our_hits, max_hits)
-        small_normal = union_queries(our_hits, normal_hits)
-        our_filter = filtered_hits(our_hits, self.filter_value)
+        normal_recall = compute_recall(
+            our_hits, normal_hits, self.distance_threshold, self.comp_func
+        )
+        max_recall = compute_recall(
+            our_hits, max_hits, self.distance_threshold, self.comp_func
+        )
 
         logger.info("Using 2000*30000 as the total number of possible matches.")
-        # filtration = 1.0 - (number_of_hits(our_filter) / number_of_hits(our_hits))
-        filtration = 1.0 - (number_of_hits(our_filter) / 2000 * 30000)
-
-        logger.info(f"Filtered {filtration} at a distance of {self.filter_value}")
+        our_filtered_hits = filter_hits(
+            our_hits, self.distance_threshold, self.comp_func
+        )
+        filtration = 1.0 - (number_of_hits(our_filtered_hits) / (2000 * 30000))
         logger.info(
-            f"max: {number_of_hits(small_max)}, {number_of_hits(union_hits(our_filter, small_max))}"
+            f"Our method filtered {filtration*100:.3f}% of possible query/target pairs."
+        )
+        logger.info(f"Our method got {normal_recall:.3f}% of hmmer normal hits.")
+        logger.info(f"Our method got {max_recall:.3f}% of hmmer max hits.")
+        # now, get the hmmer hits at different e-values
+        # and compute whether or not we got them.
+        found, not_found = compute_matches(our_filtered_hits, normal_hits)
+
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(13, 13))
+        ax[0, 0].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(0, 40),
+            label=["found", "not_found"],
+        )
+        ax[0, 1].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(10, 40),
+            label=["found", "not_found"],
+        )
+        normal_recall_over_10 = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
+        )
+        ax[0, 0].set_title(
+            f"recall: {normal_recall:.3f}\n" f"filtration: {filtration*100:.5f}"
+        )
+        ax[0, 1].set_title(
+            f"recall: {100*normal_recall_over_10:.3f}\n"
+            f"filtration: {filtration*100:.5f}"
         )
 
-        logger.info(
-            f"normal: {number_of_hits(small_normal)}, {number_of_hits(union_hits(our_filter, small_normal))}"
+        found, not_found = compute_matches(our_filtered_hits, max_hits)
+
+        ax[1, 0].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(0, 40),
+            label=["found", "not_found"],
         )
 
-        our_filter = filtered_hits(our_hits, self.filter_value)
+        ax[1, 1].hist(
+            [found, not_found],
+            stacked=True,
+            bins=10,
+            range=(10, 40),
+            label=["found", "not_found"],
+        )
+        ax[1, 0].set_title(
+            f"recall: {max_recall:.3f}\n" f"filtration: {filtration*100:.5f}"
+        )
+        max_recall_over_10 = len(found[found > 10]) / (
+            len(found[found > 10]) + len(not_found[not_found > 10])
+        )
+        ax[1, 1].set_title(
+            f"recall: {100*max_recall_over_10:.3f}\n"
+            f"filtration: {filtration*100:.5f}"
+        )
 
-        small_normal = union_queries(our_hits, normal_hits)
-
-        filtration = 1.0 - (number_of_hits(our_filter) / (2000 * 30000))
-
-        fig, axs = plt.subplots(2, 2)
-        fig.set_size_inches(15.0, 15)
         plt.suptitle(
-            f"filter threshold: {self.filter_value} \n"
-            f"hit file: {os.path.basename(os.path.splitext(self.hit_filename)[0])}",
+            f"distance threshold: {self.distance_threshold}"
+            f"\nhit file: {os.path.basename(os.path.splitext(self.hit_filename)[0])}",
             fontsize=20,
         )
 
-        found, not_found = scores(max_hits, our_filter)
-
-        recall = len(found) / (len(found) + len(not_found))
-
-        found, _ = torch.sort(torch.tensor(found))
-        not_found, _ = torch.sort(torch.tensor(not_found))
-
-        axs[0, 0].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(0, 40),
-            label=["found", "not_found"],
-        )
-        axs[0, 0].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
-
-        axs[0, 0].set_title("hmmsearch max vs our filter")
-
-        axs[0, 0].legend()
-
-        axs[0, 1].hist(
-            [found[found > 10], not_found[not_found > 10]],
-            stacked=True,
-            bins=10,
-            range=(10, 40),
-            label=["found", "not_found"],
-        )
-        axs[0, 1].legend()
-        recall = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        axs[0, 1].text(25, 100, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
-
-        our_filter = filtered_hits(our_hits, self.filter_value)
-        found, not_found = scores(normal_hits, our_filter)
-        recall = len(found) / (len(found) + len(not_found))
-        found, _ = torch.sort(torch.tensor(found))
-        not_found, _ = torch.sort(torch.tensor(not_found))
-
-        axs[1, 0].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(0, 40),
-            label=["found", "not_found"],
-        )
-        axs[1, 0].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
-
-        axs[1, 0].set_title("normal hmmsearch vs our filter")
-
-        axs[1, 0].legend()
-
-        axs[1, 1].hist(
-            [found[found > 10], not_found[not_found > 10]],
-            stacked=True,
-            bins=10,
-            range=(10, 40),
-            label=["found", "not_found"],
-        )
-        axs[1, 1].legend()
-
-        recall = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        axs[1, 1].text(25, 2000, f"filtration: {filtration:.3f}\n recall: {recall:.3f}")
-
-        axs[0, 0].set_ylabel("Sequences found")
-        axs[0, 1].set_ylabel("Sequences found")
-        axs[1, 0].set_ylabel("Sequences found")
-        axs[1, 1].set_ylabel("Sequences found")
-
-        axs[0, 0].set_xlabel("HMMER score")
-        axs[0, 1].set_xlabel("HMMER score")
-        axs[1, 0].set_xlabel("HMMER score")
-        axs[1, 1].set_xlabel("HMMER score")
-
         plt.savefig(
-            f"{os.path.splitext(self.hit_filename)[0]}_{self.filter_value}.png",
+            f"{os.path.splitext(self.hit_filename)[0]}_{self.distance_threshold}.png",
             bbox_inches="tight",
         )
 
-        plt.savefig(f"result_figure.png", bbox_inches="tight")
+        # plt.savefig(f"result_figure.png", bbox_inches="tight")
 
         return 0
 
@@ -584,7 +578,6 @@ class UniRefFaissEvaluator(UniRefEvaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
-        comp_func = np.greater_equal if self.normalize_embeddings else np.less_equal
 
         logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
 
@@ -611,13 +604,10 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             )
             cnt = 2
 
-            while (
-                torch.all(comp_func(D, threshold))
-                and self.n_neighbors * cnt <= qval.shape[0]
-            ):
+            while torch.all(self.comp_func(D, threshold)):
                 logger.debug(
                     "having to increase size of search for"
-                    f" each query AA to {50 * cnt}."
+                    f" each query AA to {self.n_neighbors * cnt}."
                 )
                 if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
                     logger.debug(
@@ -633,18 +623,9 @@ class UniRefFaissEvaluator(UniRefEvaluator):
                 )
                 cnt += 1
 
-            if self.normalize_embeddings:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance >= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
-            else:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance <= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
+            for distance, idx in zip(D.ravel(), I.ravel()):
+                if self.comp_func(distance, threshold):
+                    filtered_list.append((unrolled_names[int(idx)], distance.item()))
 
             qdict[query_names[i]] = filtered_list
             time_taken = time.time() - loop_begin
@@ -1067,7 +1048,6 @@ class UniRefVAEEvaluator(UniRefEvaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
-        comp_func = np.greater_equal if self.normalize_embeddings else np.less_equal
 
         logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
 
@@ -1092,15 +1072,16 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 self.index_device,
                 n_neighbors=self.n_neighbors,
             )
+
             cnt = 2
 
             while (
-                torch.all(comp_func(D, threshold))
+                torch.all(self.comp_func(D, threshold))
                 and self.n_neighbors * cnt <= qval.shape[0]
             ):
                 logger.debug(
                     "having to increase size of search for"
-                    f" each query AA to {50 * cnt}."
+                    f" each query AA to {self.n_neighbors * cnt}."
                 )
                 if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
                     logger.debug(
@@ -1116,18 +1097,11 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 )
                 cnt += 1
 
-            if self.normalize_embeddings:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance >= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
-            else:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance <= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
+            for distance, idx in zip(D.ravel(), I.ravel()):
+                if self.comp_func(distance, threshold):
+                    filtered_list.append((unrolled_names[int(idx)], distance.item()))
+
+            logger.info(f"min: {torch.min(D)}, max: {torch.max(D)}")
 
             qdict[query_names[i]] = filtered_list
             time_taken = time.time() - loop_begin
