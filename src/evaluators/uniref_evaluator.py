@@ -68,7 +68,6 @@ amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZ
 
 @numba.jit(nopython=True)
 def compute_ali_score(dot_products):
-
     scores = np.zeros_like(dot_products)
     scores[:, 0] = dot_products[:, 0]
     scores[0, :] = dot_products[0, :]
@@ -191,20 +190,6 @@ def get_hmmer_hits(file_path):
         return queries
 
 
-def union_hits(query1, query2):
-    queries = dict()
-
-    # where do the two dictionaries overlap?
-    for qkey in query1:
-        queries[qkey] = dict()
-        if qkey in query2:
-            for hit in query1[qkey]:
-                if hit in query2[qkey]:
-                    queries[qkey][hit] = True
-
-    return queries
-
-
 def compute_matches(our_hits, hmmer_hits):
     found = []
     not_found = []
@@ -223,17 +208,7 @@ def compute_matches(our_hits, hmmer_hits):
     return np.asarray(found), np.asarray(not_found)
 
 
-def all_our_scores(hits):
-    values = []
-    for qkey in hits:
-        for tkey in hits[qkey]:
-            values.append(hits[qkey][tkey])
-
-    return torch.tensor(values)
-
-
 def compute_recall(our_hits, hmmer_hits, distance_threshold, comp_func):
-
     match_count = 0
     for query in hmmer_hits:
         true_matches = hmmer_hits[query]
@@ -367,12 +342,12 @@ class UniRefEvaluator(Evaluator):
                 target_embeddings,
             ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
 
+            self._setup_target_and_query_dbs(
+                target_embeddings, query_embeddings, target_names, query_names
+            )
+
             hits, avg_it, total_t = self.filter(
-                query_embeddings,
-                target_embeddings,
-                query_names,
-                target_names,
-                threshold=self.distance_threshold,
+                query_embeddings, target_embeddings, query_names, target_names
             )
 
             with open("timings.txt", "w") as dst:
@@ -410,7 +385,7 @@ class UniRefEvaluator(Evaluator):
         )
         filtration = 1.0 - (number_of_hits(our_filtered_hits) / (2000 * 30000))
         logger.info(
-            f"Our method filtered {filtration*100:.3f}% of possible query/target pairs."
+            f"Our method filtered {filtration * 100:.3f}% of possible query/target pairs."
         )
         logger.info(f"Our method got {normal_recall:.3f}% of hmmer normal hits.")
         logger.info(f"Our method got {max_recall:.3f}% of hmmer max hits.")
@@ -437,11 +412,11 @@ class UniRefEvaluator(Evaluator):
             len(found[found > 10]) + len(not_found[not_found > 10])
         )
         ax[0, 0].set_title(
-            f"recall: {normal_recall:.3f}\n" f"filtration: {filtration*100:.5f}"
+            f"recall: {normal_recall:.3f}%\n" f"filtration: {filtration * 100:.5f}%"
         )
         ax[0, 1].set_title(
-            f"recall: {100*normal_recall_over_10:.3f}\n"
-            f"filtration: {filtration*100:.5f}"
+            f"recall: {100 * normal_recall_over_10:.3f}%\n"
+            f"filtration: {filtration * 100:.5f}%"
         )
 
         found, not_found = compute_matches(our_filtered_hits, max_hits)
@@ -462,14 +437,14 @@ class UniRefEvaluator(Evaluator):
             label=["found", "not_found"],
         )
         ax[1, 0].set_title(
-            f"recall: {max_recall:.3f}\n" f"filtration: {filtration*100:.5f}"
+            f"recall: {max_recall:.3f}%\n" f"filtration: {filtration * 100:.5f}%"
         )
         max_recall_over_10 = len(found[found > 10]) / (
             len(found[found > 10]) + len(not_found[not_found > 10])
         )
         ax[1, 1].set_title(
-            f"recall: {100*max_recall_over_10:.3f}\n"
-            f"filtration: {filtration*100:.5f}"
+            f"recall: {100 * max_recall_over_10:.3f}%\n"
+            f"filtration: {filtration * 100:.5f}%"
         )
 
         plt.suptitle(
@@ -487,26 +462,71 @@ class UniRefEvaluator(Evaluator):
 
         return 0
 
-    def filter(self, *args, **kwargs):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         raise NotImplementedError()
 
+    def search(self, query_embedding):
+        """
+        :param query_embedding: seq_lenxembedding dimension query to search against the target database.
+        :type query_embedding: torch.Tensor()
+        :return:
+        :rtype:
+        """
+        raise NotImplementedError()
 
-class UniRefFaissEvaluator(UniRefEvaluator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    @torch.no_grad()
     def filter(
         self,
         queries,
         targets,
         query_names,
         target_names,
-        threshold,
         start=0,
         end=torch.inf,
     ):
         qdict = dict()
-        # construct index.
+
+        logger.info("Beginning search.")
+
+        num_queries = min(end, len(queries))
+
+        # for query in queries
+        t_tot = 0
+        t_begin = time.time()
+
+        logger.info(f"Selecting {self.query_percent * 100}% of query aminos.")
+
+        for i in range(start, num_queries):
+            loop_begin = time.time()
+            logger.debug(f"{i / (num_queries - start):.3f}")
+
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(queries[i], dim=-1)
+            else:
+                qval = queries[i]
+
+            qval = qval[
+                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
+            ]
+            filtered_hits = self.search(qval)
+            qdict[query_names[i]] = filtered_hits
+            time_taken = time.time() - loop_begin
+            t_tot += time_taken
+
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+
+        loop_time = time.time() - t_begin
+
+        logger.info(f"Entire loop took: {loop_time}.")
+
+        return qdict, loop_time / i, loop_time
+
+
+class UniRefFaissEvaluator(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _setup_target_and_query_dbs(self):
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
@@ -556,9 +576,10 @@ class UniRefFaissEvaluator(UniRefEvaluator):
             unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
-        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+        if self.normalize_embeddings:
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-        index = create_faiss_index(
+        self.index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
             distance_metric="cosine" if self.normalize_embeddings else "l2",
@@ -571,15 +592,62 @@ class UniRefFaissEvaluator(UniRefEvaluator):
 
         index.add(unrolled_targets)
 
-        logger.info("Beginning search.")
+    def search(self, query_embedding):
+
+        filtered_list = []
+
+        D, I = search_index_device_aware(
+            self.index,
+            query_embedding.contiguous(),
+            self.index_device,
+            n_neighbors=self.n_neighbors,
+        )
+        cnt = 2
+
+        while torch.all(self.comp_func(D, threshold)):
+            logger.debug(
+                "having to increase size of search for"
+                f" each query AA to {self.n_neighbors * cnt}."
+            )
+            if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
+                logger.debug(
+                    "Breaking loop, can't search for more than 2048 neighbors on GPU."
+                )
+                break
+
+            D, I = search_index_device_aware(
+                self.index,
+                query_embedding.contiguous(),
+                self.index_device,
+                n_neighbors=self.n_neighbors * cnt,
+            )
+            cnt += 1
+
+        for distance, idx in zip(D.ravel(), I.ravel()):
+            if self.comp_func(distance, threshold):
+                filtered_list.append((unrolled_names[int(idx)], distance.item()))
+        return filtered_list
+
+    def filter(
+        self,
+        queries,
+        targets,
+        query_names,
+        target_names,
+        threshold,
+        start=0,
+        end=torch.inf,
+    ):
+        qdict = dict()
+        # construct index.
 
         num_queries = min(end, len(queries))
-
         # for query in queries
         t_tot = 0
         t_begin = time.time()
+        logger.info("Beginning search.")
 
-        logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
+        logger.info(f"Selecting {self.query_percent * 100}% of query aminos.")
 
         for i in range(start, num_queries):
             loop_begin = time.time()
@@ -596,38 +664,8 @@ class UniRefFaissEvaluator(UniRefEvaluator):
                 torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
             ]
 
-            D, I = search_index_device_aware(
-                index,
-                qval.contiguous(),
-                self.index_device,
-                n_neighbors=self.n_neighbors,
-            )
-            cnt = 2
-
-            while torch.all(self.comp_func(D, threshold)):
-                logger.debug(
-                    "having to increase size of search for"
-                    f" each query AA to {self.n_neighbors * cnt}."
-                )
-                if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
-                    logger.debug(
-                        "Breaking loop, can't search for more than 2048 neighbors on GPU."
-                    )
-                    break
-
-                D, I = search_index_device_aware(
-                    index,
-                    qval.contiguous(),
-                    self.index_device,
-                    n_neighbors=self.n_neighbors * cnt,
-                )
-                cnt += 1
-
-            for distance, idx in zip(D.ravel(), I.ravel()):
-                if self.comp_func(distance, threshold):
-                    filtered_list.append((unrolled_names[int(idx)], distance.item()))
-
-            qdict[query_names[i]] = filtered_list
+            filtered_hits = self.search(qval)
+            qdict[query_names[i]] = filtered_hits
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
@@ -644,169 +682,47 @@ class UniRefBruteForceEvaluator(UniRefEvaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @torch.no_grad()
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
-        qdict = dict()
+    def search(self, query_embedding):
+        filtered_list = []
+        val = torch.min(torch.cdist(query_embedding, target_embedding))
+        if val <= threshold:
+            filtered_list.append((target_names[j], val.item(), j))
+        return filtered_list
 
-        num_queries = min(end, len(queries))
-
-        # for query in queries
-        t_tot = 0
-        logger.info("Starting alignment-aware distances.")
-
-        for i in range(start, num_queries):
-            begin = time.time()
-
-            logger.info(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(
-                    queries[i].to(self.model_device), dim=-1
-                )
-            else:
-                qval = queries[i].to(self.model_device)
-
-            # get the minimum distance between each
-            # of the sequences in the query set and the target set
-            # if the val is less than or equal to the threshold,
-            # then record it as a hit;
-            # each query then gets a record of (target hit, distance, and index into target)
-            # this can be transformed:
-            # for each query in queries:
-            #     range_search(index_of_targets, threshold)
-            for j in range(len(targets)):
-
-                if self.normalize_embeddings:
-                    tval = torch.nn.functional.normalize(
-                        targets[j].to(self.model_device), dim=-1
-                    )
-                else:
-                    tval = targets[j].to(self.model_device)
-
-                # basically, you get the minimum distance between the query embedding
-                # and the target embedding.
-                # I wonder which one is faster: index with queries or index with targets.
-
-                val = torch.min(torch.cdist(qval, tval))
-
-                if val <= threshold:
-                    filtered_list.append((target_names[j], val.item(), j))
-
-            qdict[query_names[i]] = filtered_list
-
-            time_taken = time.time() - begin
-            t_tot += time_taken
-
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-        return qdict, t_tot / i, t_tot
+    def _setup_target_and_query_dbs(self):
+        pass
 
 
 class UniRefAlignmentEvaluator(UniRefEvaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @torch.no_grad()
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
+    def _setup_target_and_query_dbs(self):
+        pass
 
-        qdict = dict()
-        num_queries = min(end, len(queries))
-
-        # for query in queries
-        t_tot = 0
-        logger.info("Starting brute-force cdist.")
-
-        for i in range(start, num_queries):
-            begin = time.time()
-
-            logger.info(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(
-                    queries[i].to(self.model_device), dim=-1
-                )
-            else:
-                qval = queries[i].to(self.model_device)
-
-            # get the minimum distance between each
-            # of the sequences in the query set and the target set
-            # if the val is less than or equal to the threshold,
-            # then record it as a hit;
-            # each query then gets a record of (target hit, distance, and index into target)
-            # this can be transformed:
-            # for each query in queries:
-            #     range_search(index_of_targets, threshold)
-            for j in range(len(targets)):
-
-                if self.normalize_embeddings:
-                    tval = torch.nn.functional.normalize(
-                        targets[j].to(self.model_device), dim=-1
-                    )
-                else:
-                    tval = targets[j].to(self.model_device)
-
-                # divide by the minimum length.
-                dot_products = -torch.cdist(qval, tval).to("cpu").numpy()
-                ali_score = compute_ali_score(dot_products) / min(
-                    qval.shape[0], tval.shape[0]
-                )
-
-                logger.debug(f"Alignment score: {ali_score}")
-
-                if ali_score <= threshold:
-                    filtered_list.append((target_names[j], ali_score, j))
-
-            qdict[query_names[i]] = filtered_list
-
-            time_taken = time.time() - begin
-            t_tot += time_taken
-
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-        return qdict, t_tot / i, t_tot
+    def search(self, query_embedding, target_embedding):
+        filtered_list = []
+        dot_products = -torch.cdist(qval, tval).to("cpu").numpy()
+        ali_score = compute_ali_score(dot_products) / min(qval.shape[0], tval.shape[0])
+        if ali_score <= threshold:
+            filtered_list.append((target_names[j], ali_score, j))
+        return filtered_list
 
 
 class UniRefScannEvaluator(UniRefEvaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @torch.no_grad()
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
+    def search(self, query_embedding):
+        filtered_list = []
+        I, D = searcher.search_batched(query_embedding)
+        for distance, idx in zip(D.ravel(), I.ravel()):
+            if distance <= threshold:
+                filtered_list.append((unrolled_names[int(idx)], distance.item()))
+        return filtered_list
 
-        qdict = dict()
-        num_queries = min(end, len(queries))
-        # construct index.
+    def _setup_target_and_query_dbs(self):
+
         lengths = list(map(lambda s: s.shape[0], targets))
 
         if self.select_random_aminos:
@@ -848,7 +764,7 @@ class UniRefScannEvaluator(UniRefEvaluator):
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
-        searcher = (
+        self.searcher = (
             scann.scann_ops_pybind.builder(unrolled_targets, 7, "squared_l2")
             .tree(num_leaves=2000, num_leaves_to_search=3, training_sample_size=250000)
             .score_ah(2, anisotropic_quantization_threshold=0.2)
@@ -856,131 +772,18 @@ class UniRefScannEvaluator(UniRefEvaluator):
             .build()
         )
 
-        t_tot = 0
-        t_begin = time.time()
-
-        for i in range(start, num_queries):
-            loop_begin = time.time()
-            logger.debug(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
-            else:
-                qval = queries[i]
-
-            I, D = searcher.search_batched(qval)
-
-            if self.normalize_embeddings:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance >= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
-            else:
-                for distance, idx in zip(D.ravel(), I.ravel()):
-                    if distance <= threshold:
-                        filtered_list.append(
-                            (unrolled_names[int(idx)], distance.item())
-                        )
-
-            qdict[query_names[i]] = filtered_list
-            time_taken = time.time() - loop_begin
-            t_tot += time_taken
-
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-        loop_time = time.time() - t_begin
-
-        logger.info(f"Entire loop took: {loop_time}.")
-
-        return qdict, loop_time / i, loop_time
-
 
 class UniRefVAEEvaluator(UniRefEvaluator):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, seq_len, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.seq_len = seq_len
 
-    @torch.no_grad()
-    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
 
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
-            names, sequences = fasta_from_file(
-                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
-            )
-            names = list(map(lambda x: x.split(" ")[0], names))
-        else:
-            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
-            names = list(map(lambda x: x.split(" ")[0], names))
-
-        pkl_file = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
-
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa" and not os.path.isfile(
-            pkl_file
-        ):
-            embeddings = []
-            i = 0
-            for sequence in tqdm.tqdm(sequences):
-                if len(sequence) <= 127:
-                    logger.debug(
-                        f"Removing sequence {sequence} with length {len(sequence)}"
-                    )
-                    continue
-                try:
-                    # have to fix the sequence to be a certain length.
-                    slices = []
-                    encoded_seq = self.encoding_func(sequence).unsqueeze(0)
-
-                    for i in range(0, encoded_seq.shape[-1] - 128, 128):
-                        slices.append(
-                            model_class(encoded_seq[:, :, i : i + 128])
-                            .squeeze(0)
-                            .reshape(128, 8)
-                            .T
-                        )
-                    # take the end.
-                    slices.append(
-                        model_class(encoded_seq[:, :, -128:])
-                        .squeeze(0)
-                        .reshape(128, 8)
-                        .T
-                    )
-                    # if it works I'll figure that out. Right now, just take the last 128 overlapping aminos.
-                    embeddings.append(torch.cat(slices, dim=0).to("cpu"))
-
-                except KeyError:
-                    logger.debug(f"keyerror: skipping {sequence}")
-
-                i += 1
-
-            outf = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
-            logger.info(f"Saving embeddings to {outf}.")
-            with open(outf, "wb") as dst:
-                pickle.dump(embeddings, dst)
-        else:
-            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
-            with open(pkl_file, "rb") as src:
-                embeddings = pickle.load(src)
-
-        return names, sequences, embeddings
-
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
-        qdict = dict()
-        # construct index.
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
-        unrolled_names = []
+        self.unrolled_names = []
 
         if self.select_random_aminos:
             for i, (length, name, target) in enumerate(
@@ -999,7 +802,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 sampled_aminos = torch.cat(
                     [target[j].unsqueeze(0) for j in sampled_idx], dim=0
                 )
-                unrolled_names.extend([name] * len(sampled_aminos))
+                self.unrolled_names.extend([name] * len(sampled_aminos))
                 unrolled_targets.append(sampled_aminos)
 
             unrolled_targets = torch.cat(unrolled_targets, dim=0)
@@ -1020,15 +823,16 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 sampled_aminos = torch.cat(
                     [target[j].unsqueeze(0) for j in sampled_idx], dim=0
                 )
-                unrolled_names.extend([name] * len(sampled_aminos))
+                self.unrolled_names.extend([name] * len(sampled_aminos))
                 unrolled_targets.append(sampled_aminos)
 
             unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
-        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+        if self.normalize_embeddings:
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-        index = create_faiss_index(
+        self.index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
             distance_metric="cosine" if self.normalize_embeddings else "l2",
@@ -1039,78 +843,23 @@ class UniRefVAEEvaluator(UniRefEvaluator):
 
         logger.info("Adding targets to index.")
 
-        index.add(unrolled_targets)
+        self.index.add(unrolled_targets)
 
-        logger.info("Beginning search.")
+    def search(self, query_embedding):
+        filtered_list = []
 
-        num_queries = min(end, len(queries))
+        _, D, I = self.index.range_search(
+            query_embedding.contiguous(), self.distance_threshold
+        )
 
-        # for query in queries
-        t_tot = 0
-        t_begin = time.time()
+        if D.numel() > 0:
+            logger.debug(f"min: {torch.min(D)}, max: {torch.max(D)}")
 
-        logger.info(f"Selecting {self.query_percent*100}% of query aminos.")
+        logger.debug(
+            f"Number of matches at a distance threshold of {self.distance_threshold}: {D.shape}"
+        )
 
-        for i in range(start, num_queries):
-            loop_begin = time.time()
-            logger.debug(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
-            else:
-                qval = queries[i]
-
-            qval = qval[
-                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
-            ]
-
-            D, I = search_index_device_aware(
-                index,
-                qval.contiguous(),
-                self.index_device,
-                n_neighbors=self.n_neighbors,
-            )
-
-            cnt = 2
-
-            while (
-                torch.all(self.comp_func(D, threshold))
-                and self.n_neighbors * cnt <= qval.shape[0]
-            ):
-                logger.debug(
-                    "having to increase size of search for"
-                    f" each query AA to {self.n_neighbors * cnt}."
-                )
-                if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
-                    logger.debug(
-                        "Breaking loop, can't search for more than 2048 neighbors on GPU."
-                    )
-                    break
-
-                D, I = search_index_device_aware(
-                    index,
-                    qval.contiguous(),
-                    self.index_device,
-                    n_neighbors=self.n_neighbors * cnt,
-                )
-                cnt += 1
-
-            for distance, idx in zip(D.ravel(), I.ravel()):
-                if self.comp_func(distance, threshold):
-                    filtered_list.append((unrolled_names[int(idx)], distance.item()))
-
-            logger.info(f"min: {torch.min(D)}, max: {torch.max(D)}")
-
-            qdict[query_names[i]] = filtered_list
-            time_taken = time.time() - loop_begin
-            t_tot += time_taken
-
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-        loop_time = time.time() - t_begin
-
-        logger.info(f"Entire loop took: {loop_time}.")
-
-        return qdict, loop_time / i, loop_time
+        for distance, idx in zip(D.ravel(), I.ravel()):
+            if self.comp_func(distance, self.distance_threshold):
+                filtered_list.append((self.unrolled_names[int(idx)], distance.item()))
+        return filtered_list
