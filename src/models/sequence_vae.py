@@ -21,14 +21,20 @@ class SequenceVAE(pl.LightningModule):
         log_interval,
         cnn_model_state_dict,
         initial_seq_len,
+        downsample_steps,
+        pool_type,
+        apply_cnn_loss,
         training=True,
     ):
 
         super(SequenceVAE, self).__init__()
 
         self.learning_rate = learning_rate
+        self.downsample_steps = downsample_steps
         self.training = training
         self.initial_seq_len = initial_seq_len
+        self.pool_type = pool_type
+        self.apply_cnn_loss = apply_cnn_loss
 
         self.cnn_model_state_dict = cnn_model_state_dict
 
@@ -65,6 +71,7 @@ class SequenceVAE(pl.LightningModule):
         self.loss_func = SupConLoss()
         self.one_hot_dimension = 20
         self.layer_list = []
+        self.pool_type = pool_type
 
         self._setup_layers()
         self.to("cuda")
@@ -81,15 +88,20 @@ class SequenceVAE(pl.LightningModule):
         )
 
         self.layer_list.append(self.embed)
-        z = ResConv(
-            self.res_block_n_filters,
-            kernel_size=self.res_block_kernel_size,
-            padding=self.padding,
-            padding_mode=self.padding_mode,
-        )
 
-        self.layer_list.append(z)
-        self.layer_list.append(torch.nn.AvgPool1d(kernel_size=2))
+        for i in range(self.downsample_steps):
+            z = ResConv(
+                self.res_block_n_filters,
+                kernel_size=self.res_block_kernel_size,
+                padding=self.padding,
+                padding_mode=self.padding_mode,
+            )
+            self.layer_list.append(z)
+            if self.pool_type == "mean":
+                self.layer_list.append(torch.nn.AvgPool1d(kernel_size=2))
+            else:
+                self.layer_list.append(torch.nn.MaxPool1d(kernel_size=2))
+
         self.layer_list.append(
             ResConv(
                 self.res_block_n_filters,
@@ -98,16 +110,21 @@ class SequenceVAE(pl.LightningModule):
                 padding_mode=self.padding_mode,
             )
         )
+
         sigma_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * self.initial_seq_len // 2,
-                self.res_block_n_filters * self.initial_seq_len // 2,
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
         mu_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * self.initial_seq_len // 2,
-                self.res_block_n_filters * self.initial_seq_len // 2,
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
 
@@ -115,37 +132,40 @@ class SequenceVAE(pl.LightningModule):
         self.mu_mlp = torch.nn.Sequential(*mu_mlp_list)
 
         upsample = torch.nn.Upsample(scale_factor=2)
+        upsample_list = []
 
-        # more complexity on the upsampling head.
-        upsample_list = [
-            ResConv(
-                self.res_block_n_filters,
-                kernel_size=self.res_block_kernel_size,
-                padding=self.padding,
-                padding_mode=self.padding_mode,
-            ),
-            upsample,
-            ResConv(
-                self.res_block_n_filters,
-                kernel_size=self.res_block_kernel_size,
-                padding=self.padding,
-                padding_mode=self.padding_mode,
-            ),
-            ResConv(
-                self.res_block_n_filters,
-                kernel_size=self.res_block_kernel_size,
-                padding=self.padding,
-                padding_mode=self.padding_mode,
-            ),
+        for _ in range(self.downsample_steps):
+            upsample_list.extend(
+                [
+                    ResConv(
+                        self.res_block_n_filters,
+                        kernel_size=self.res_block_kernel_size,
+                        padding=self.padding,
+                        padding_mode=self.padding_mode,
+                    ),
+                    ResConv(
+                        self.res_block_n_filters,
+                        kernel_size=self.res_block_kernel_size,
+                        padding=self.padding,
+                        padding_mode=self.padding_mode,
+                    ),
+                    upsample,
+                ]
+            )
+
+        upsample_list.append(
             torch.nn.Conv1d(
                 in_channels=self.res_block_n_filters,
                 out_channels=self.one_hot_dimension,
                 kernel_size=1,
                 padding=self.padding,
                 padding_mode=self.padding_mode,
-            ),
-        ]
+            )
+        )
+
         self.upsampler = torch.nn.Sequential(*upsample_list)
+        self.downsampler = torch.nn.Sequential(*self.layer_list)
+
         self.final_conv = torch.nn.Conv1d(
             in_channels=self.one_hot_dimension,
             out_channels=self.one_hot_dimension,
@@ -155,11 +175,7 @@ class SequenceVAE(pl.LightningModule):
         )
 
     def forward(self, x):
-        for layer in self.layer_list:
-            layer = layer.to("cuda")
-            x = layer(x)
-        # flatten the embeddings,
-        # pass them into an MLP.
+        x = self.downsampler(x)
         sigma = self.sigma_mlp(x.reshape(-1, x.shape[-1] * x.shape[-2]))
         mu = self.mu_mlp(x.reshape(-1, x.shape[-1] * x.shape[-2]))
         sample = self.sample(sigma, mu).reshape(-1, x.shape[1], x.shape[2])
@@ -178,6 +194,17 @@ class SequenceVAE(pl.LightningModule):
         # reconstruction loss
         loss = self.xent(recon, features)
         loss += self.KLD
+
+        if self.apply_cnn_loss:
+            # use the CNN!
+            embeds = self.cnn_model(features)
+            recon_embeds = self.cnn_model(recon)
+            # # l2 loss on diag.
+            e1 = torch.cat(torch.unbind(embeds, dim=0))
+            e2 = torch.cat(torch.unbind(recon_embeds, dim=0))
+            dots = torch.cdist(e1, e2)
+            # minimize the difference
+            loss += (torch.diag(dots) ** 2).sum()
 
         if self.global_step % self.log_interval == 0:
 

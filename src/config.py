@@ -11,23 +11,32 @@ train_ex = Experiment()
 @train_ex.config
 def config():
 
-    description = "A contrastive model for testing."
+    description = (
+        "Seq length 128, no cnn loss, 4 downsample steps for a fina"
+        "l embedding length of 8. This model is also quite heavy in parameters on the upsampling"
+    )
+
     gpus = 1
     num_nodes = 1
-    num_workers = 0
+    num_workers = 32
     check_val_every_n_epoch = 1
-    log_dir = "model_data/sept6/"
+    log_dir = "model_data/"
     batch_size = 32
     epochs = 30
     learning_rate = 1e-4
-    seq_len = 32
+    seq_len = 128
     log_interval = 100
+    downsample_steps = 4
+    apply_cnn_loss = False
+
+    pool_type = "mean"
 
     model_name = "SequenceVAE"
     dataset_name = "SwissProtGeneratorDanielSequenceEncode"
 
     embed_msas = False
     root = "/xdisk/twheeler/colligan/"
+    # root = "/home/tc229954/prefilter_data/"
 
     cnn_model_state_dict = f"{root}/data/prefilter/model_16.sdic"
 
@@ -36,6 +45,9 @@ def config():
         "log_interval": log_interval,
         "cnn_model_state_dict": cnn_model_state_dict,
         "initial_seq_len": seq_len,
+        "apply_cnn_loss": apply_cnn_loss,
+        "downsample_steps": downsample_steps,
+        "pool_type": pool_type,
     }
 
     train_dataset_args = {
