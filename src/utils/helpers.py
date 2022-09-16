@@ -109,6 +109,23 @@ def create_faiss_index(
 
     faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
+    if index_string == "Flat":
+        if distance_metric == "cosine":
+            log.info("Normalizing embeddings for use with cosine metric.")
+            index = faiss.index_factory(
+                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
+            )
+        else:
+            index = faiss.index_factory(embed_dim, index_string)
+
+        if device == "cuda":
+            num = 0
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, int(num), index)
+
+        log.info("Returning flat index without anything in it.")
+        return index
+
     if "IVF" in index_string:
         embeddings = embeddings[torch.randperm(embeddings.shape[0])]
         log.info(f"Sampling {embeddings.shape[0]} embeddings.")

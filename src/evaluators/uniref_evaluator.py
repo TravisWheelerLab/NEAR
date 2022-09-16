@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from copy import deepcopy
 
+import faiss
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
@@ -329,7 +330,8 @@ class UniRefEvaluator(Evaluator):
         return names, sequences, embeddings
 
     def evaluate(self, model_class):
-        if not os.path.isfile(self.hit_filename):
+
+        if not os.path.isfile(self.hit_filename) or self.overwrite:
             (
                 query_names,
                 query_sequences,
@@ -774,9 +776,10 @@ class UniRefScannEvaluator(UniRefEvaluator):
 
 
 class UniRefVAEEvaluator(UniRefEvaluator):
-    def __init__(self, seq_len, *args, **kwargs):
+    def __init__(self, seq_len, overwrite, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.seq_len = seq_len
+        self.overwrite = overwrite
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
 
@@ -842,14 +845,18 @@ class UniRefVAEEvaluator(UniRefEvaluator):
         )
 
         logger.info("Adding targets to index.")
+        if self.index_device == "cpu":
+            self.index.add(unrolled_targets.to("cpu"))
+        else:
+            self.index.add(unrolled_targets)
 
-        self.index.add(unrolled_targets)
+        faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     def search(self, query_embedding):
         filtered_list = []
 
         _, D, I = self.index.range_search(
-            query_embedding.contiguous(), self.distance_threshold
+            query_embedding.contiguous().to("cpu"), self.distance_threshold
         )
 
         if D.numel() > 0:
@@ -859,7 +866,98 @@ class UniRefVAEEvaluator(UniRefEvaluator):
             f"Number of matches at a distance threshold of {self.distance_threshold}: {D.shape}"
         )
 
+        # sort distance
+        D, sorted_idx = torch.sort(D.to("cuda"), descending=True)
+        # sort indices by distance too
+        I = I[sorted_idx]
+        # get the unique indices (unique_idx returns the first occurence
+        # of the unique element). This has to be the duplicated index with the largest
+        # cosine similarity
+        unique, unique_idx = np.unique(I.to("cpu").numpy(), return_index=True)
+        D = D[unique_idx]
+        I = I[unique_idx]
+
         for distance, idx in zip(D.ravel(), I.ravel()):
-            if self.comp_func(distance, self.distance_threshold):
-                filtered_list.append((self.unrolled_names[int(idx)], distance.item()))
+            filtered_list.append((self.unrolled_names[int(idx)], distance.item()))
+
         return filtered_list
+
+    @torch.no_grad()
+    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
+
+        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
+            names, sequences = fasta_from_file(
+                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
+            )
+            names = list(map(lambda x: x.split(" ")[0], names))
+        else:
+            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
+            names = list(map(lambda x: x.split(" ")[0], names))
+
+        outf = (
+            os.path.splitext(fasta_or_pickle_file)[0]
+            + f"{model_class.apply_cnn_loss}_{model_class.initial_seq_len}_{model_class.downsample_steps}.pkl"
+        )
+
+        remove_name_idx = []
+
+        if (
+            os.path.splitext(fasta_or_pickle_file)[1] == ".fa"
+            and not os.path.isfile(outf)
+        ) or self.overwrite:
+            embeddings = []
+            i = 0
+            for j, sequence in enumerate(tqdm.tqdm(sequences)):
+                if len(sequence) < model_class.initial_seq_len:
+                    logger.debug(
+                        f"Removing sequence {sequence} with length {len(sequence)}"
+                    )
+                    remove_name_idx.append(j)
+                    continue
+                try:
+
+                    slices = []
+                    encoded = self.encoding_func(sequence).unsqueeze(0)
+                    # ok, this worked! woo-hoo!
+                    for i in range(
+                        0,
+                        len(sequence) - model_class.initial_seq_len,
+                        model_class.initial_seq_len,
+                    ):
+                        embed, _ = model_class(
+                            encoded[:, :, i : i + model_class.initial_seq_len]
+                        )
+                        slices.append(embed.squeeze().T)
+                    embed, _ = model_class(
+                        encoded[:, :, -model_class.initial_seq_len :]
+                    )
+                    slices.append(embed.squeeze().T)
+                    embed = torch.cat(slices, dim=0)
+                    embeddings.append(embed)
+
+                except KeyError:
+                    logger.debug(f"keyerror: skipping {sequence}")
+                i += 1
+
+            logger.info(f"Saving embeddings to {outf}.")
+            with open(outf, "wb") as dst:
+                pickle.dump(embeddings, dst)
+        else:
+            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
+            with open(pkl_file, "rb") as src:
+                embeddings = pickle.load(src)
+
+        _names = []
+        for j, sequence in enumerate(sequences):
+            if len(sequence) < model_class.initial_seq_len:
+                remove_name_idx.append(j)
+
+        for i, name in enumerate(names):
+            if i not in remove_name_idx:
+                _names.append(name)
+
+        names = _names
+
+        assert len(names) == len(embeddings)
+
+        return names, sequences, embeddings
