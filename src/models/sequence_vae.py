@@ -30,9 +30,9 @@ class SequenceVAE(pl.LightningModule):
         super(SequenceVAE, self).__init__()
 
         self.learning_rate = learning_rate
-        self.downsample_steps = downsample_steps
+        self.downsample_steps = int(downsample_steps)
         self.training = training
-        self.initial_seq_len = initial_seq_len
+        self.initial_seq_len = int(initial_seq_len)
         self.pool_type = pool_type
         self.apply_cnn_loss = apply_cnn_loss
 
