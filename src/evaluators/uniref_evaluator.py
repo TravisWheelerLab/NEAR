@@ -215,20 +215,22 @@ def compute_recall(our_hits, hmmer_hits, distance_threshold, comp_func):
         true_matches = hmmer_hits[query]
         if query in our_hits:
             our_matches = our_hits[query]
+            init_match_count = match_count
             for match in our_matches:
                 if match in true_matches:
                     if comp_func(our_matches[match], distance_threshold):
                         # count the matches for each query.
                         match_count += 1
-                else:
-                    logger.debug(
-                        f"Our method did not have any of the same matches as hmmer."
-                    )
+            if init_match_count == match_count:
+                logger.debug(
+                    f"Our method did not have any of the same matches as hmmer."
+                )
         else:
             logger.debug(
                 f"Our method did not find any hits for query sequence {query} (hmmer found {len(true_matches)})."
             )
 
+    # the denominator is the number of hmmer hits, which makes sense for recall.
     denominator = sum(list(map(lambda x: len(x), list(hmmer_hits.values()))))
 
     return 100 * (match_count / denominator)
@@ -515,7 +517,7 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
@@ -832,6 +834,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
             unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+
         if self.normalize_embeddings:
             unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
@@ -850,35 +853,40 @@ class UniRefVAEEvaluator(UniRefEvaluator):
         else:
             self.index.add(unrolled_targets)
 
+        self.unrolled_names = np.asarray(self.unrolled_names)
+
         faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     def search(self, query_embedding):
         filtered_list = []
 
-        _, D, I = self.index.range_search(
-            query_embedding.contiguous().to("cpu"), self.distance_threshold
+        D, I = self.index.search(query_embedding.contiguous(), k=2048)
+        # remove stuff that's under/over the threshold
+        I = I[self.comp_func(D, self.distance_threshold)]
+        D = D[self.comp_func(D, self.distance_threshold)]
+
+        # sort distance
+        # get the unique indices (unique_idx returns the first occurence
+        unique, unique_idx = np.unique(I.to("cpu").numpy().ravel(), return_index=True)
+        # now get unique names
+        # subsample D
+        unique_distances = D.to("cpu").numpy().ravel()[unique_idx]
+        unique_names, unique_name_idx = np.unique(
+            self.unrolled_names[unique], return_index=True
         )
+        unique_distances = unique_distances[unique_name_idx]
+        # I think that we're hitting _every_ single family. Not sure though.
+        # AAAUGH.
 
         if D.numel() > 0:
             logger.debug(f"min: {torch.min(D)}, max: {torch.max(D)}")
+            logger.debug(
+                f"Number of matches at a distance threshold of {self.distance_threshold}: {unique_names.shape}."
+                f" Because of faiss limitations, actual distance threshold achieved is {torch.min(D)}"
+            )
 
-        logger.debug(
-            f"Number of matches at a distance threshold of {self.distance_threshold}: {D.shape}"
-        )
-
-        # sort distance
-        D, sorted_idx = torch.sort(D.to("cuda"), descending=True)
-        # sort indices by distance too
-        I = I[sorted_idx]
-        # get the unique indices (unique_idx returns the first occurence
-        # of the unique element). This has to be the duplicated index with the largest
-        # cosine similarity
-        unique, unique_idx = np.unique(I.to("cpu").numpy(), return_index=True)
-        D = D[unique_idx]
-        I = I[unique_idx]
-
-        for distance, idx in zip(D.ravel(), I.ravel()):
-            filtered_list.append((self.unrolled_names[int(idx)], distance.item()))
+        for distance, name in zip(unique_distances.ravel(), unique_names.ravel()):
+            filtered_list.append((name, distance.item()))
 
         return filtered_list
 
@@ -944,7 +952,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 pickle.dump(embeddings, dst)
         else:
             logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
-            with open(pkl_file, "rb") as src:
+            with open(outf, "rb") as src:
                 embeddings = pickle.load(src)
 
         _names = []

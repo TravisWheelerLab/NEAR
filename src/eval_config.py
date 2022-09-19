@@ -29,23 +29,25 @@ def wraps(device):
 @evaluation_ex.config
 def config():
 
-    device = "cuda"
+    device = "cpu"
     index_device = "cuda"
+    overwrite = False
     n_neighbors = 100
     # distance threshold to use for faiss and
     # filtering
-    distance_threshold = 0.68
-    normalize_embeddings = False
-    sample_percent = 0.2
+    distance_threshold = 0.7
+    normalize_embeddings = True
+    sample_percent = 1.0
+    query_percent = 1
     nprobe = 1
     istr = "Flat"
     select_random_aminos = False
-    query_percent = 1.0
-    hit_filename = f"query_100pct_10pcttarget_db.txt"
+    hit_filename = f"vae_15_hits.txt"
     num_threads = 32
-    model_name = "ResNet"
-    evaluator_name = "UniRefFaissEvaluator"
+    model_name = "SequenceVAE"
+    evaluator_name = "UniRefVAEEvaluator"
     root = "/xdisk/twheeler/colligan/"
+    seq_len = 32
 
     query_file = (
         f"{root}/data/prefilter/uniref_benchmark/{model_name}/Q_benchmark2k30k.fa"
@@ -55,30 +57,21 @@ def config():
     )
 
     log_verbosity = logging.INFO
-
-    checkpoint_path = f"{root}/data/prefilter/model_16.sdic"
-    # checkpoint_path = f"model_data/sept6/SequenceVAE/1/checkpoints/best_loss_model.ckpt"
+    checkpoint_path = f"/xdisk/twheeler/colligan/model_data/SequenceVAE/13/checkpoints/best_loss_model.ckpt"
 
     cnn_model_state_dict = f"{root}/prefilter/model_16.sdic"
-    model_args = {
-        "emb_dim": 256,
-        "blocks": 5,
-        "block_layers": 2,
-        "first_kernel": 11,
-        "kernel_size": 5,
-        "groups": 2,
-        "padding_mode": "reflect",
-    }
 
-    # model_args = {
-    #     "learning_rate": 1e-4,
-    #     "log_interval": 100,
-    #     "cnn_model_state_dict": cnn_model_state_dict,
-    #     "cnn_model_args": cnn_model_args,
-    # }
+    model_args = {
+        "learning_rate": 1e-4,
+        "log_interval": 100,
+        "cnn_model_state_dict": cnn_model_state_dict,
+        "initial_seq_len": seq_len,
+    }
 
     evaluator_args = {
         "query_file": query_file,
+        "overwrite": overwrite,
+        "seq_len": seq_len,
         "nprobe": nprobe,
         "target_file": target_file,
         "normalize_embeddings": normalize_embeddings,
