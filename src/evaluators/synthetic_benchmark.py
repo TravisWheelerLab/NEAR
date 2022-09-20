@@ -25,7 +25,6 @@ class SyntheticEvaluator(Evaluator):
         self,
         target_sequence_fasta,
         num_queries,
-        sequence_length,
         blosum,
         device,
         sample_percent,
@@ -46,7 +45,6 @@ class SyntheticEvaluator(Evaluator):
         self.sample_percent = sample_percent
         self.distance_threshold = distance_threshold
         self.query_percent = query_percent
-        self.sequence_length = sequence_length
         self.normalize_embeddings = normalize_embeddings
         self.device = device
         self.aa_dist = src.utils.gen_utils.amino_distribution
@@ -78,6 +76,8 @@ class SyntheticEvaluator(Evaluator):
         target_names, target_sequences = fasta_from_file(self.target_sequence_fasta)
         self.num_target_sequences = len(target_sequences)
         # mutate the query templates
+        torch.manual_seed(0)
+        np.random.seed(0)
         shuf_idx = torch.randperm(len(target_names))[: self.num_queries]
         queries = []
         query_names = []
@@ -88,7 +88,7 @@ class SyntheticEvaluator(Evaluator):
             mutated = mutate_sequence_correct_probabilities(
                 sequence=encoding,
                 indels=None,
-                substitutions=int(self.sequence_length),
+                substitutions=len(target_sequences[shuffled_idx]),
                 sub_distributions=self.sub_dists,
                 aa_dist=self.aa_dist,
             )
@@ -188,7 +188,7 @@ class SyntheticEvaluator(Evaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
@@ -211,6 +211,7 @@ class SyntheticEvaluator(Evaluator):
         # this is easy.
         recall = 0
         total_hits = 0
+        # I'm satisfied with this.
         for query, hitset in hits.items():
             distances = [h[1] for h in hitset]
             hit_labels = np.asarray([h[0] for h in hitset])
@@ -224,7 +225,7 @@ class SyntheticEvaluator(Evaluator):
             f"num queries: {len(hits)}. Sequences in target DB: {self.num_target_sequences}."
         )
         logger.info(
-            f"recall {(recall/len(hits))*100}%. Filtration: {(total_hits/self.num_target_sequences)*100:.3f}%"
+            f"recall {(recall/len(hits))*100}%. Filtration: {(1-(total_hits/self.num_target_sequences))*100:.3f}%"
         )
 
     def search(self, query_embedding):
