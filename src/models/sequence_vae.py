@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 
 from src.models.dot_prod_model import ResNet
+from src.utils.gen_utils import amino_alphabet
 from src.utils.layers import PositionalEncoding, ResConv
 from src.utils.losses import SupConLoss
 
@@ -24,6 +25,8 @@ class SequenceVAE(pl.LightningModule):
         downsample_steps,
         pool_type,
         apply_cnn_loss,
+        backprop_on_near_aminos,
+        apply_contrastive_loss,
         training=True,
     ):
 
@@ -35,8 +38,10 @@ class SequenceVAE(pl.LightningModule):
         self.initial_seq_len = int(initial_seq_len)
         self.pool_type = pool_type
         self.apply_cnn_loss = apply_cnn_loss
-
+        self.backprop_on_near_aminos = backprop_on_near_aminos
+        self.apply_contrastive_loss = apply_contrastive_loss
         self.cnn_model_state_dict = cnn_model_state_dict
+        self.supcon = SupConLoss()
 
         cnn_model_args = {
             "emb_dim": 256,
@@ -189,27 +194,46 @@ class SequenceVAE(pl.LightningModule):
         return (eps * sigma) + mu
 
     def _shared_step(self, batch):
-        features, masks, labelvecs = batch
-        sampled, recon = self.forward(features)
+        original_features, mutated_features, _ = batch
+        sampled, recon = self.forward(original_features)
         # reconstruction loss
-        loss = self.xent(recon, features)
+        loss = self.xent(recon, original_features)
+        # KLD is quite large.
         loss += self.KLD
 
         if self.apply_cnn_loss:
             # use the CNN!
-            embeds = self.cnn_model(features)
-            recon_embeds = self.cnn_model(recon)
+            embeds = self.cnn_model(original_features)
+            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
             # # l2 loss on diag.
             e1 = torch.cat(torch.unbind(embeds, dim=0))
             e2 = torch.cat(torch.unbind(recon_embeds, dim=0))
             dots = torch.cdist(e1, e2)
-            # minimize the difference
-            loss += (torch.diag(dots) ** 2).sum()
+            # minimize the difference b/t the diagonal elements
+            # TODO: add distance thresholding
+            # this _should_ be 0 if the embeddings are the same.
+            # not really sure where thhe majority of the loss is coming from
+            # is it here?
+            if self.backprop_on_near_aminos:
+                loss += (torch.diag(dots)[torch.diag(dots) <= 1] ** 2).sum()
+            else:
+                loss += (torch.diag(dots) ** 2).sum()
+
+        if self.apply_contrastive_loss:
+            sampled_mutated, _ = self.forward(mutated_features)
+            sampled_mutated = torch.nn.functional.normalize(sampled_mutated, dim=1)
+            original = torch.nn.functional.normalize(sampled, dim=1)
+            mutated = sampled_mutated.transpose(-1, -2)
+            original = original.transpose(-1, -2)
+            loss += self.supcon(
+                torch.cat((mutated, original), dim=1),
+                labels=torch.arange(mutated.shape[0]),
+            )
 
         if self.global_step % self.log_interval == 0:
 
             e1 = torch.cat(torch.unbind(recon, dim=0))
-            e2 = torch.cat(torch.unbind(features, dim=0))
+            e2 = torch.cat(torch.unbind(original_features, dim=0))
             with torch.no_grad():
                 fig, ax = plt.subplots(ncols=2)
                 ax[0].imshow(

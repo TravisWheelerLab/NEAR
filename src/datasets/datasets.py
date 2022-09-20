@@ -23,48 +23,16 @@ import src
 import src.models as models
 import src.utils as utils
 from src.datasets import DataModule
-from src.evaluators.uniref_evaluator import tensor_for_sequence
 
 DECOY_FLAG = -1
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = ["MSAGenerator", "SwissProtGenerator", "ClusterIterator", "ProfmarkDataset"]
-
-
-class MSAGenerator(DataModule):
-    def __init__(self, afa_files):
-
-        self.msa_to_seqs = defaultdict(list)
-        for f in afa_files:
-            bs = os.path.basename(f)
-            for header, seq in esm.data.read_fasta(f):
-                # replace the dang gap character.
-                seq = seq.replace(".", "-")[:128]
-                if len(seq):
-                    self.msa_to_seqs[bs].append((header, seq.upper()))
-
-        self.names = list(self.msa_to_seqs.keys())
-
-    def __len__(self):
-        return len(self.names)
-
-    def __getitem__(self, idx):
-        name = self.names[idx % len(self.names)]
-        return self.msa_to_seqs[name][:10], 0, self.msa_to_seqs[name][0], 0, idx
-
-    def collate_fn(self):
-        return None
+__all__ = ["SwissProtGenerator", "ClusterIterator", "ProfmarkDataset"]
 
 
 def sanitize_sequence(sequence):
-    """
-    Remove bad/unknown/ambiguous characters from sequences.
-    :param sequence:
-    :type sequence:
-    :return:
-    :rtype:
-    """
+
     sanitized = []
     for char in sequence:
         char = char.upper()
@@ -101,7 +69,7 @@ class SwissProtGenerator(DataModule):
         labels, seqs = utils.fasta_from_file(fa_file)
         self.seqs = [s[:minlen] for s in seqs if len(s) >= minlen]
         self.training = training
-        self.sub_dists = utils.generate_correct_substitution_distributions()
+        self.sub_dists = utils.create_substituion_distribution(62)
         self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
         shuffle(self.seqs)
 
@@ -127,17 +95,12 @@ class SwissProtGenerator(DataModule):
 
         s1 = sanitize_sequence(self.seqs[idx])
 
-        s1 = torch.as_tensor([utils.char_to_index[c] for c in s1])
+        s1 = torch.as_tensor([utils.amino_char_to_index[c] for c in s1])
         n_subs = int(
             len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
-
-        s2 = utils.mutate_sequence_correct_probabilities(
-            sequence=s1,
-            indels=None,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
-            aa_dist=utils.amino_distribution,
+        s2 = utils.mutate_sequence(
+            sequence=s1, substitutions=n_subs, sub_distributions=self.sub_dists
         )
         return s1, s2, idx % len(self.seqs)
 
@@ -163,280 +126,26 @@ class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
 
             idx = np.random.randint(0, len(self.seqs))
 
-        s1 = sanitize_sequence(self.seqs[idx])
+        sequence = sanitize_sequence(self.seqs[idx])
+        # ok, it's fine if it's different.
 
-        s1 = torch.as_tensor([utils.char_to_index[c] for c in s1])
+        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+
         n_subs = int(
-            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
-        s2 = utils.mutate_sequence_correct_probabilities(
-            sequence=s1,
-            indels=None,
+        s2 = utils.mutate_sequence(
+            sequence=sequence,
             substitutions=n_subs,
             sub_distributions=self.sub_dists,
-            aa_dist=utils.amino_distribution,
         )
-        # now convert _back_ to character space and then to daniel's encoding.
-        s2 = [utils.amino_alphabet[n] for n in s2]
-        # now convert with Daniel's thing.
-        s2 = tensor_for_sequence(s2)
-        return s2, idx % len(self.seqs)
+        # this creates a fuzzy tensor.
+        s2 = utils.encode_tensor_sequence(s2)
+        return utils.encode_tensor_sequence(sequence), s2, idx % len(self.seqs)
 
     def __getitem__(self, idx):
         return self._sample(idx)
 
     def collate_fn(self):
-        return utils.pad_contrastive_batches_daniel
-
-
-class ClusterIterator(DataModule):
-    """
-    I'm going to add in alignments here so we can easily look
-    at them without grepping or anything.
-    """
-
-    def __init__(
-        self,
-        afa_files,
-        min_seq_len,
-        representative_index,
-        include_all_families,
-        n_seq_per_target_family,
-    ):
-
-        self.train_afa_files = [f for f in afa_files]
-        self.min_seq_len = min_seq_len
-        self.representative_index = representative_index
-        self.n_seq_per_target_family = n_seq_per_target_family
-        self.include_all_families = include_all_families
-
-        self.valid_afa_path = "/home/u4/colligan/data/prefilter/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/afa"
-        self.valid_fa_path = "/home/u4/colligan/data/prefilter/20piddata/valid_set_subsampled_by_what_hmmer_gets_right/fasta"
-
-        self.seed_sequences = []
-        self.seed_labels = []
-
-        self.query_sequences = []
-        self.query_labels = []
-        # dictionary to map train files to validation files.
-        self.train_to_valid = {}
-        self.train_to_valid_afa = {}
-
-        train_files_to_remove = []
-
-        for file in self.train_afa_files:
-            # get corresponding validation file
-            valid_file = os.path.basename(file)
-            if "-1" in os.path.basename(file):
-                valid_file = valid_file.replace("-1", "-2") + ".fa"
-            else:
-                valid_file = valid_file.replace("-2", "-1") + ".fa"
-
-            valid_afa = os.path.join(self.valid_afa_path, valid_file).replace(".fa", "")
-            valid_fa = os.path.join(self.valid_fa_path, valid_file)
-            if os.path.isfile(valid_fa):
-                self.train_to_valid[file] = valid_fa
-                self.train_to_valid_afa[file] = valid_afa
-            else:
-                # print(f"Couldn't find valid file for {file}")
-                if not include_all_families:
-                    train_files_to_remove.append(file)
-
-        for file in train_files_to_remove:
-            self.train_afa_files.remove(file)
-
-        self._build_clustered_dataset()
-
-    def collate_fn(self):
-        return None
-
-    def _build_clustered_dataset(self):
-
-        label_index = 0
-        self.seed_alignments = []
-        self.query_alignments = []
-        self.label_to_seed_alignment = {}
-
-        for train_file in self.train_afa_files:
-            # first, grab representative sequences
-            _, train_seqs = utils.fasta_from_file(train_file)
-            train_alignments = deepcopy(train_seqs)
-            # no gaps here, forget about headers.
-            _train_seqs = []
-            _train_alignments = []
-
-            for train_seq, train_ali in zip(train_seqs, train_alignments):
-                if len(train_seq.replace(".", "")) > self.min_seq_len:
-                    _train_seqs.append(train_seq.replace(".", "")[: self.min_seq_len])
-                    _train_alignments.append(train_ali[: self.min_seq_len])
-
-            train_seqs = _train_seqs
-            train_alignments = _train_alignments
-
-            if not (len(train_seqs)):
-                continue
-
-            # shuffle train seqs...?
-            self.seed_sequences.extend(train_seqs[: self.n_seq_per_target_family])
-            self.seed_alignments.extend(
-                train_alignments[: self.n_seq_per_target_family]
-            )
-            self.seed_labels.extend(
-                [label_index] * len(train_seqs[: self.n_seq_per_target_family])
-            )
-            self.label_to_seed_alignment[label_index] = train_alignments[
-                : self.n_seq_per_target_family
-            ]
-
-            if train_file in self.train_to_valid:
-                # add them into the validation set;
-                valid_file = self.train_to_valid[train_file]
-                valid_alignment_file = self.train_to_valid_afa[train_file]
-                _, valid_seqs = utils.fasta_from_file(valid_file)
-                _, valid_alignments = utils.fasta_from_file(valid_alignment_file)
-
-                _valid_seqs = []
-                _valid_alignments = []
-
-                for valid_seq, valid_ali in zip(valid_seqs, valid_alignments):
-                    if len(valid_seq.replace(".", "")) > self.min_seq_len:
-                        _valid_seqs.append(
-                            valid_seq.replace(".", "")[: self.min_seq_len]
-                        )
-                        _valid_alignments.append(valid_ali[: self.min_seq_len])
-
-                valid_seqs = _valid_seqs
-                valid_alignments = _valid_alignments
-
-                if not (len(valid_seqs)):
-                    # print(
-                    #     f"No sequence > {self.min_seq_len} in {valid_file}. Skipping."
-                    # )
-                    pass
-                else:
-                    if len(valid_seqs) != len(valid_alignments):
-                        pdb.set_trace()
-
-                    self.query_sequences.extend(valid_seqs)
-                    self.query_alignments.extend(valid_alignments)
-                    self.query_labels.extend([label_index] * len(valid_seqs))
-
-            label_index += 1
-
-        if len(self.seed_sequences) == 0 or len(self.query_sequences) == 0:
-            print(
-                f"No seed or query seqs over {self.min_seq_len}. Lengths of seed and query sequences: {len(self.seed_sequences)}, "
-                f"{len(self.query_sequences)}"
-            )
-            exit()
-
-    def get_cluster_representatives(self):
-        seeds = []
-        for seed in self.seed_sequences:
-            santitized = sanitize_sequence(seed)
-            seeds.append(
-                torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
-            )
-
-        return seeds, self.seed_labels
-
-    def __len__(self):
-        return len(self.query_sequences)
-
-    def __getitem__(self, idx):
-
-        qseq = self.query_sequences[idx][: self.min_seq_len]
-        label = self.query_labels[idx]
-        sanitized = sanitize_sequence(qseq)
-        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
-
-        return seq, label, self.query_sequences[idx]
-
-
-class ProfmarkDataset(DataModule):
-    def __init__(self, basename, profmark_dir, n_seq_per_target_family=1, seq_len=-1):
-        msa_files = glob(os.path.join(profmark_dir, "msas/afa/*"))
-        self.seq_len = seq_len
-        # now load the query sequences
-        # i need to clip the bits of the query sequences out of the
-        # test.fa file by looking at test.pos
-        target_sequence_db = os.path.join(profmark_dir, basename + ".fa")
-        headers, seqs = utils.fasta_from_file(target_sequence_db)
-        target_msa_name_to_sequence = defaultdict(list)
-
-        for header, seq in zip(headers, seqs):
-            if "decoy" in header:
-                break
-            # parse header:
-            # is there an issue with counting?
-            name, _, first_domain, second_domain = header.split(" domain")[0].split("/")
-            d1, d2 = first_domain.split("-")
-
-            if (int(d2) - int(d1)) > seq_len:
-                target_msa_name_to_sequence[name].append(seq[int(d1) : int(d2)])
-
-            d3, d4 = second_domain.split("-")
-
-            if (int(d4) - int(d3)) > seq_len:
-                target_msa_name_to_sequence[name].append(seq[int(d3) : int(d4)])
-
-        # read the msa files:
-        self.cluster_representatives = []
-        self.cluster_rep_labels = []
-        self.query_sequences = []
-        self.query_labels = []
-        label_index = 0
-
-        for msa_file in msa_files:
-            # filter by inclusion in validation set.
-            if (
-                os.path.basename(msa_file).replace(".msa.afa", "")
-                in target_msa_name_to_sequence
-            ):
-                headers, seqs = utils.fasta_from_file(msa_file)
-                for i, s in enumerate(seqs):
-                    if i == n_seq_per_target_family:
-                        break
-                    s = s.replace("-", "")
-                    if len(s) > seq_len:
-                        self.cluster_representatives.append(s)
-                        self.cluster_rep_labels.append(label_index)
-
-                qseqs = target_msa_name_to_sequence[
-                    os.path.basename(msa_file).replace(".msa.afa", "")
-                ]
-                self.query_sequences.extend(qseqs)
-                self.query_labels.extend([label_index] * len(qseqs))
-                label_index += 1
-
-        self.seed_alignments = self.cluster_representatives
-
-    def get_cluster_representatives(self):
-        seeds = []
-        for seed in self.cluster_representatives:
-            santitized = sanitize_sequence(seed)[: self.seq_len]
-            seeds.append(
-                torch.as_tensor([utils.char_to_index[s.upper()] for s in santitized])
-            )
-
-        return seeds, self.cluster_rep_labels
-
-    def collate_fn(self):
-        return None
-
-    def __len__(self):
-        return len(self.query_sequences)
-
-    def __getitem__(self, idx):
-        qseq = self.query_sequences[idx][: self.seq_len]
-        label = self.query_labels[idx]
-        sanitized = sanitize_sequence(qseq)
-        seq = torch.as_tensor([utils.char_to_index[i.upper()] for i in sanitized])
-
-        return seq, label, self.query_sequences[idx]
-
-
-if __name__ == "__main__":
-
-    dset = ProfmarkDataset("test", "/home/tc229954/data/src/pfam/seed/profmark")
+        return utils.pad_contrastive_batches

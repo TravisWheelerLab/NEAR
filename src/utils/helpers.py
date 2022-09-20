@@ -33,6 +33,7 @@ __all__ = [
     "fasta_from_file",
     "pad_contrastive_batches_daniel",
     "pad_contrastive_batches_with_labelvecs",
+    "to_dict",
     "pad_contrastive_batches",
     "mask_mask",
     "load_model",
@@ -80,6 +81,10 @@ esm_toks = [
     ".",
     "-",
 ]
+
+
+def to_dict(obj):
+    return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
 
 
 def load_model(model_path, hyperparams, device):
@@ -303,10 +308,10 @@ def pad_contrastive_batches(batch):
     member1 = [b[0] for b in batch]
     member2 = [b[1] for b in batch]
     labels = [b[2] for b in batch]
-    data = member1 + member2
+
     return (
-        torch.stack(data),
-        None,
+        torch.stack(member1),
+        torch.stack(member2),
         torch.as_tensor(labels),
     )
 

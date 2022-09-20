@@ -2,6 +2,8 @@ import logging
 
 from sacred import Experiment
 
+from src.utils import to_dict
+
 logger = logging.getLogger("train")
 logger.setLevel(logging.WARNING)
 
@@ -11,32 +13,31 @@ train_ex = Experiment()
 @train_ex.config
 def config():
 
-    description = (
-        "Seq length 128, no cnn loss, 4 downsample steps for a fina"
-        "l embedding length of 8. This model is also quite heavy in parameters on the upsampling"
-    )
+    description = "Add in the softmax on the reconstructed embeddings."
 
     gpus = 1
     num_nodes = 1
     num_workers = 32
     check_val_every_n_epoch = 1
-    log_dir = "model_data/"
-    batch_size = 32
+    log_dir = "/xdisk/twheeler/colligan/model_data/"
+    batch_size = 12
     epochs = 30
     learning_rate = 1e-4
-    seq_len = 128
+    seq_len = 256
     log_interval = 100
-    downsample_steps = 4
-    apply_cnn_loss = False
+    downsample_steps = 5
+    apply_cnn_loss = True
+    apply_contrastive_loss = False
+    backprop_on_near_aminos = False
 
     pool_type = "mean"
 
     model_name = "SequenceVAE"
     dataset_name = "SwissProtGeneratorDanielSequenceEncode"
 
+    log_verbosity = logging.DEBUG
     embed_msas = False
     root = "/xdisk/twheeler/colligan/"
-    # root = "/home/tc229954/prefilter_data/"
 
     cnn_model_state_dict = f"{root}/data/prefilter/model_16.sdic"
 
@@ -44,6 +45,8 @@ def config():
         "learning_rate": learning_rate,
         "log_interval": log_interval,
         "cnn_model_state_dict": cnn_model_state_dict,
+        "apply_contrastive_loss": apply_contrastive_loss,
+        "backprop_on_near_aminos": backprop_on_near_aminos,
         "initial_seq_len": seq_len,
         "apply_cnn_loss": apply_cnn_loss,
         "downsample_steps": downsample_steps,
