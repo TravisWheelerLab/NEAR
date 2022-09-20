@@ -26,63 +26,33 @@ def wraps(device):
     return encode
 
 
+# convert a class to a dictionary with a decorator
+def to_dict(obj):
+    return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+
+
 @evaluation_ex.config
 def config():
 
-    device = "cpu"
-    index_device = "cuda"
-    overwrite = False
-    n_neighbors = 100
-    # distance threshold to use for faiss and
-    # filtering
-    distance_threshold = 0.7
-    normalize_embeddings = True
-    sample_percent = 1.0
-    query_percent = 1
-    nprobe = 1
-    istr = "Flat"
-    select_random_aminos = False
-    hit_filename = f"vae_15_hits.txt"
-    num_threads = 32
+    device = "cuda"
     model_name = "SequenceVAE"
-    evaluator_name = "UniRefVAEEvaluator"
-    root = "/xdisk/twheeler/colligan/"
-    seq_len = 32
+    evaluator_name = "SyntheticVAEEvaluator"
 
-    query_file = (
-        f"{root}/data/prefilter/uniref_benchmark/{model_name}/Q_benchmark2k30k.fa"
-    )
-    target_file = (
-        f"{root}/data/prefilter/uniref_benchmark/{model_name}/T_benchmark2k30k.fa"
-    )
+    @to_dict
+    class evaluator_args:
+        target_sequence_fasta = f"/xdisk/twheeler/colligan/targets.fa"
+        blosum = 62
+        num_queries = 20
+        sequence_length = 32
+        device = "cuda"
+        sample_percent = 1.0
+        normalize_embeddings = True
+        index_string = "Flat"
+        index_device = "cuda"
+        query_percent = 1.0
+        distance_threshold = 0.5
+
+    num_threads = 12
 
     log_verbosity = logging.INFO
-    checkpoint_path = f"/xdisk/twheeler/colligan/model_data/SequenceVAE/13/checkpoints/best_loss_model.ckpt"
-
-    cnn_model_state_dict = f"{root}/prefilter/model_16.sdic"
-
-    model_args = {
-        "learning_rate": 1e-4,
-        "log_interval": 100,
-        "cnn_model_state_dict": cnn_model_state_dict,
-        "initial_seq_len": seq_len,
-    }
-
-    evaluator_args = {
-        "query_file": query_file,
-        "overwrite": overwrite,
-        "seq_len": seq_len,
-        "nprobe": nprobe,
-        "target_file": target_file,
-        "normalize_embeddings": normalize_embeddings,
-        "encoding_func": None,
-        "index_device": index_device,
-        "index_string": istr,
-        "n_neighbors": n_neighbors,
-        "distance_threshold": distance_threshold,
-        "hit_filename": hit_filename,
-        "sample_percent": sample_percent,
-        "model_device": device,
-        "select_random_aminos": select_random_aminos,
-        "query_percent": query_percent,
-    }
+    checkpoint_path = f"/xdisk/twheeler/colligan/model_data/SequenceVAE/1/checkpoints/best_loss_model.ckpt"

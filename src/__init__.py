@@ -45,6 +45,7 @@ def _trainer_args(trainer_args):
     # set fairly permanent trainer args here.
     if trainer_args["gpus"] > 0:
         trainer_args["precision"] = 16
+    # trainer_args["detect_anomaly"] = True
 
 
 @train_ex.config
@@ -106,6 +107,7 @@ def train(_config):
     shutil.copy2(
         Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.ckpt",
         "model_data/",
+        "best_loss_model.ckpt",
     )
     # and the hparams file.
     shutil.copy2(Path(logger.experiment.log_dir) / "hparams.yaml", "model_data/")
@@ -135,17 +137,9 @@ def evaluate(_config):
 
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
 
-    if hasattr(params, "model_args"):
-        # required with loading from state dict
-        model = params.model_class(**params.model_args)
-        success = model.load_state_dict(
-            torch.load(params.checkpoint_path, map_location=torch.device(params.device))
-        )
-        model.eval().to(params.device)
-    else:
-        model = params.model_class.load_from_checkpoint(
-            params.checkpoint_path, map_location=torch.device(params.device)
-        ).to(params.device)
+    model = params.model_class.load_from_checkpoint(
+        params.checkpoint_path, map_location=torch.device(params.device)
+    ).to(params.device)
 
     evaluator = params.evaluator_class(**params.evaluator_args)
     result = evaluator.evaluate(model_class=model)
