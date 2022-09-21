@@ -15,7 +15,7 @@ __all__ = [
     "amino_alphabet",
     "encode_string_sequence",
     "encode_tensor_sequence",
-    "create_substituion_distribution",
+    "create_substitution_distribution",
 ]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
@@ -57,6 +57,7 @@ def encode_string_sequence(sequence):
     """Encode a string sequence as a tensor."""
     data = torch.zeros(20, len(sequence))
     for i, c in enumerate(sequence):
+        # put a vector in.
         data[:, i] = amino_a_to_v[c]
     return data
 
@@ -64,12 +65,13 @@ def encode_string_sequence(sequence):
 def encode_tensor_sequence(sequence):
     """Encode a tensor of 1, 2, 3, etc as a fuzzy tensor."""
     data = torch.zeros(20, len(sequence))
+
     for i, c in enumerate(sequence):
         data[:, i] = amino_n_to_v[c]
     return data
 
 
-def create_substituion_distribution(blosum):
+def create_substitution_distribution(blosum):
     if blosum not in [62, 80, 90]:
         raise ValueError("blosum should be one of <62, 80, 90>")
 
@@ -77,9 +79,16 @@ def create_substituion_distribution(blosum):
         f"src/resources/blosum{blosum}.probs", delim_whitespace=True
     )
     substitution_distributions = {}
-
+    print("FIXME.")
     for amino_acid in sub_dists.keys():
         # fmt: off
+        # reordered = []
+        # for character in amino_alphabet:
+        #     if character not in sub_dists.keys():
+        #         continue
+        #     reordered.append(sub_dists.loc[amino_acid][character])
+
+        # substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
         substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(sub_dists.loc[amino_acid]))
         # fmt: on
 
@@ -94,9 +103,9 @@ def mutate_sequence(sequence, substitutions, sub_distributions):
         # replace amino at position i
         # with the sampled amino from the substitution dist. at amino i
         try:
-            seq[sub_indices[i]] = sub_distributions[
-                amino_alphabet[seq[sub_indices[i]].item()]
-            ].sample()
+            # fmt: off
+            seq[sub_indices[i]] = sub_distributions[amino_alphabet[seq[sub_indices[i]].item()]].sample()
+            # fmt: on
         except KeyError as e:
             logger.debug(e)
 

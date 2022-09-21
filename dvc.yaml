@@ -9,14 +9,14 @@ stages:
     outs:
       - model_data/best_loss_model.ckpt
       - model_data/hparams.yaml
-  evaluate:
-    cmd: evaluate
-    deps:
-      - model_data/best_loss_model.ckpt
-      - model_data/hparams.yaml
-      - src/evaluators/
-      - src/eval_config.py
-      - src/utils/
-    outs:
-      - timings.txt
-      - result_figure.png
+  # evaluate:
+  #   cmd: evaluate
+  #   deps:
+  #     - model_data/best_loss_model.ckpt
+  #     - model_data/hparams.yaml
+  #     - src/evaluators/
+  #     - src/eval_config.py
+  #     - src/utils/
+  #   outs:
+  #     - timings.txt
+  #     - result_figure.png

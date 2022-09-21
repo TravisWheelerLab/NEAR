@@ -1,5 +1,6 @@
 # pylint: disable=no-member
 import json
+import logging
 import os
 import pdb
 import string
@@ -24,6 +25,8 @@ import src.models as models
 import src.utils as utils
 from src.datasets import DataModule
 
+logger = logging.getLogger(__name__)
+
 DECOY_FLAG = -1
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -41,11 +44,13 @@ def sanitize_sequence(sequence):
                 utils.amino_distribution.sample().item()
             ]
             sanitized.append(sampled_char)
+            logger.debug(f"Replacing <X, U, O> with {sampled_char}")
         elif char == "B":
             if int(2 * np.random.rand()) == 1:
                 sanitized.append("D")
             else:
                 sanitized.append("N")
+            logger.debug(f"Replacing <X, U, O> with {sampled_char}")
         elif char == "Z":
             if int(2 * np.random.rand()) == 1:
                 sanitized.append("E")

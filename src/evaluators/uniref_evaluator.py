@@ -11,7 +11,8 @@ import faiss
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-import scann
+
+# import scann
 import torch
 import tqdm
 

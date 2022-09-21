@@ -11,7 +11,7 @@ from src.utils.losses import SupConLoss
 
 
 class ResNetSparseAttention(pl.LightningModule):
-    def __init__(self, learning_rate, log_interval, training=True):
+    def __init__(self, learning_rate, log_interval, training=True, **kwargs):
 
         super(ResNetSparseAttention, self).__init__()
 
@@ -37,7 +37,9 @@ class ResNetSparseAttention(pl.LightningModule):
 
     def _setup_layers(self):
 
-        self.embed = nn.Embedding(27, self.res_block_n_filters)
+        self.embed = nn.Conv1d(
+            in_channels=20, out_channels=self.res_block_n_filters, kernel_size=1
+        )
 
         _list = []
 
@@ -62,7 +64,7 @@ class ResNetSparseAttention(pl.LightningModule):
             )
             _transformer_list.append(transformer)
 
-        self.pos_unc = PositionalEncoding(self.res_block_n_filters)
+        # self.pos_unc = PositionalEncoding(self.res_block_n_filters * 2)
 
         mlp_list = [
             torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
@@ -74,11 +76,8 @@ class ResNetSparseAttention(pl.LightningModule):
         self.transformer = torch.nn.Sequential(*_transformer_list)
 
     def _forward(self, x):
-        if not isinstance(x, torch.LongTensor):
-            x = x.long()
         x = self.embed(x)
-        x = self.pos_unc(x)
-        x = self.embedding_trunk(x.transpose(-1, -2))
+        x = self.embedding_trunk(x)
         x = x.transpose(1, 0).transpose(0, -1)
         x = self.transformer(x)
         x = x.transpose(1, 0).transpose(-1, -2)
@@ -90,8 +89,8 @@ class ResNetSparseAttention(pl.LightningModule):
         return embeddings
 
     def _shared_step(self, batch):
-        features, masks, labelvecs = batch
-        embeddings = self.forward(features)
+        features, mutated_features, _ = batch
+        embeddings = self.forward(torch.cat((features, mutated_features), dim=0))
 
         e1, e2 = torch.split(
             embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0

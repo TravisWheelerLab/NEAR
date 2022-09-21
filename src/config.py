@@ -17,22 +17,22 @@ def config():
 
     gpus = 1
     num_nodes = 1
-    num_workers = 32
+    num_workers = 12
     check_val_every_n_epoch = 1
     log_dir = "/xdisk/twheeler/colligan/model_data/"
-    batch_size = 12
-    epochs = 30
+    batch_size = 32
+    epochs = 100
     learning_rate = 1e-4
     seq_len = 256
     log_interval = 100
     downsample_steps = 5
     apply_cnn_loss = True
-    apply_contrastive_loss = False
+    apply_contrastive_loss = True
     backprop_on_near_aminos = False
 
     pool_type = "mean"
 
-    model_name = "SequenceVAE"
+    model_name = "ResNetSparseAttention"
     dataset_name = "SwissProtGeneratorDanielSequenceEncode"
 
     log_verbosity = logging.DEBUG

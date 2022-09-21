@@ -41,6 +41,12 @@ def _cls_loader(model_name, dataset_name):
 
 
 @train_ex.config
+def _log_verbosity(log_verbosity):
+    logger = logging.getLogger("train")
+    logger.setLevel(log_verbosity)
+
+
+@train_ex.config
 def _trainer_args(trainer_args):
     # set fairly permanent trainer args here.
     if trainer_args["gpus"] > 0:
@@ -102,15 +108,6 @@ def train(_config):
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
     )
-
-    # copy best model checkpoint
-    shutil.copy2(
-        Path(logger.experiment.log_dir) / "checkpoints" / "best_loss_model.ckpt",
-        "model_data/",
-        "best_loss_model.ckpt",
-    )
-    # and the hparams file.
-    shutil.copy2(Path(logger.experiment.log_dir) / "hparams.yaml", "model_data/")
 
 
 # test whether or not I'm interactive

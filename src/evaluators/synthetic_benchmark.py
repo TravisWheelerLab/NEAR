@@ -1,15 +1,20 @@
 import logging
 import pdb
 import time
+import warnings
 
 import numpy as np
 import pandas as pd
 import torch
 
+warnings.filterwarnings("ignore")
+
+from src.datasets.datasets import sanitize_sequence
 from src.evaluators import Evaluator
 from src.utils import (
     amino_distribution,
     amino_n_to_a,
+    create_substitution_distribution,
     encode_string_sequence,
     encode_tensor_sequence,
     fasta_from_file,
@@ -34,6 +39,7 @@ class SyntheticEvaluator(Evaluator):
         query_percent,
         distance_threshold,
     ):
+        self.blosum = blosum
         if blosum not in [62, 80, 90]:
             raise ValueError("blosum must be one of <62, 80, 90>")
 
@@ -58,15 +64,7 @@ class SyntheticEvaluator(Evaluator):
             self.comp_func = torch.less_equal
 
     def _sub_dists(self):
-        sub_dists = pd.read_csv(self.blosum_file, delim_whitespace=True)
-        substitution_distributions = {}
-        for amino_acid in sub_dists.keys():
-            substitution_distributions[
-                amino_acid
-            ] = torch.distributions.categorical.Categorical(
-                torch.as_tensor(sub_dists.loc[amino_acid])
-            )
-        return substitution_distributions
+        return create_substitution_distribution(self.blosum)
 
     def compute_embedding(self, sequence, model_class):
         raise NotImplementedError()
@@ -83,14 +81,16 @@ class SyntheticEvaluator(Evaluator):
         query_names = []
         logger.debug("Starting computation of databases.")
         target_names = torch.arange(len(target_names))
-        logger.info("selecting 1/3 of target sequence to mutate")
+
         for shuffled_idx in shuf_idx:
-            encoding = encode_string_sequence(target_sequences[shuffled_idx]).argmax(
-                dim=0
-            )
+            # target_sequence = sanitize_sequence(target_sequences[shuffled_idx])
+            target_sequence = target_sequences[shuffled_idx]
+            encoding = encode_string_sequence(target_sequence).argmax(dim=0)
+            # ok, the encoding is working to reconstruct.
+            # found the issue.
             mutated = mutate_sequence(
                 sequence=encoding,
-                substitutions=len(target_sequences[shuffled_idx]) // 2,
+                substitutions=len(target_sequences[shuffled_idx]),
                 sub_distributions=self.sub_dists,
             )
             queries.append([amino_alphabet[i.item()] for i in mutated])
@@ -224,7 +224,18 @@ class SyntheticEvaluator(Evaluator):
         logger.info(
             f"num queries: {len(hits)}. Sequences in target DB: {self.num_target_sequences}."
         )
-        logger.info(
+        desc = f"blosum {self.blosum}/"
+        if model_class.apply_cnn_loss:
+            desc += "cnn loss/"
+        if model_class.backprop_on_near_aminos:
+            desc += "threshold loss distance/"
+        if model_class.apply_contrastive_loss:
+            desc += "supcon loss/"
+        desc += f"{model_class.downsample_steps}/"
+        desc += f"{self.distance_threshold}"
+
+        print("model description:", desc)
+        print(
             f"recall {(recall/len(hits))*100}%. Filtration: {(1-(total_hits/(self.num_queries*self.num_target_sequences)))*100:.3f}%"
         )
 
