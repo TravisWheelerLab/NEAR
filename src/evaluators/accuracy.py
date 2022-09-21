@@ -4,7 +4,8 @@ from collections import defaultdict
 import numpy as np
 import torch
 
-from src.datasets.datasets import ClusterIterator
+# TODO: insert this again
+# from src.datasets.datasets import ClusterIterator
 from src.evaluators import Evaluator
 from src.utils import (
     compute_cluster_representative_embeddings,

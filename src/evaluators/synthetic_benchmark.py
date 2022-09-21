@@ -6,15 +6,15 @@ import numpy as np
 import pandas as pd
 import torch
 
-import src.utils.gen_utils
-from src.datasets.datasets import tensor_for_sequence
 from src.evaluators import Evaluator
-from src.utils import amino_n_to_a, fasta_from_file
-from src.utils.gen_utils import (
-    generate_correct_substitution_distributions,
-    generate_sequences,
-    mutate_sequence_correct_probabilities,
+from src.utils import (
+    amino_distribution,
+    amino_n_to_a,
+    encode_string_sequence,
+    encode_tensor_sequence,
+    fasta_from_file,
 )
+from src.utils.gen_utils import amino_alphabet, mutate_sequence
 from src.utils.helpers import create_faiss_index
 
 logger = logging.getLogger("evaluate")
@@ -47,7 +47,7 @@ class SyntheticEvaluator(Evaluator):
         self.query_percent = query_percent
         self.normalize_embeddings = normalize_embeddings
         self.device = device
-        self.aa_dist = src.utils.gen_utils.amino_distribution
+        self.aa_dist = amino_distribution
         self.sub_dists = self._sub_dists()
 
         if self.normalize_embeddings:
@@ -81,19 +81,19 @@ class SyntheticEvaluator(Evaluator):
         shuf_idx = torch.randperm(len(target_names))[: self.num_queries]
         queries = []
         query_names = []
+        logger.debug("Starting computation of databases.")
         target_names = torch.arange(len(target_names))
+        logger.info("selecting 1/3 of target sequence to mutate")
         for shuffled_idx in shuf_idx:
-            # TODO: make sure this mapping is correct
-            encoding = tensor_for_sequence(target_sequences[shuffled_idx]).argmax(dim=0)
-            mutated = mutate_sequence_correct_probabilities(
-                sequence=encoding,
-                indels=None,
-                substitutions=len(target_sequences[shuffled_idx]),
-                sub_distributions=self.sub_dists,
-                aa_dist=self.aa_dist,
+            encoding = encode_string_sequence(target_sequences[shuffled_idx]).argmax(
+                dim=0
             )
-            # TODO: make sure this mapping is correct
-            queries.append([amino_n_to_a[i.item()] for i in mutated])
+            mutated = mutate_sequence(
+                sequence=encoding,
+                substitutions=len(target_sequences[shuffled_idx]) // 2,
+                sub_distributions=self.sub_dists,
+            )
+            queries.append([amino_alphabet[i.item()] for i in mutated])
             query_names.append(target_names[shuffled_idx])
 
         # compute embeddings
@@ -225,7 +225,7 @@ class SyntheticEvaluator(Evaluator):
             f"num queries: {len(hits)}. Sequences in target DB: {self.num_target_sequences}."
         )
         logger.info(
-            f"recall {(recall/len(hits))*100}%. Filtration: {(1-(total_hits/self.num_target_sequences))*100:.3f}%"
+            f"recall {(recall/len(hits))*100}%. Filtration: {(1-(total_hits/(self.num_queries*self.num_target_sequences)))*100:.3f}%"
         )
 
     def search(self, query_embedding):
@@ -239,7 +239,7 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
             0, len(sequence) - model_class.initial_seq_len, model_class.initial_seq_len
         ):
             embedding, _ = model_class(
-                tensor_for_sequence(sequence[i : i + model_class.initial_seq_len])
+                encode_string_sequence(sequence[i : i + model_class.initial_seq_len])
                 .to(self.device)
                 .unsqueeze(0)
             )
@@ -247,7 +247,7 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
 
         if len(sequence) % model_class.initial_seq_len != 0:
             embedding, _ = model_class(
-                tensor_for_sequence(sequence[-model_class.initial_seq_len :])
+                encode_string_sequence(sequence[-model_class.initial_seq_len :])
                 .to(self.device)
                 .unsqueeze(0)
             )
@@ -255,7 +255,7 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
 
         if len(sequence) == model_class.initial_seq_len:
             embedding, _ = model_class(
-                tensor_for_sequence(sequence).to(self.device).unsqueeze(0)
+                encode_string_sequence(sequence).to(self.device).unsqueeze(0)
             )
             slices.append(embedding)
 

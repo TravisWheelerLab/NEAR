@@ -16,57 +16,16 @@ import torch
 import tqdm
 
 from src.evaluators import Evaluator
-from src.utils import create_faiss_index, fasta_from_file, search_index_device_aware
+from src.utils import (
+    create_faiss_index,
+    encode_tensor_sequence,
+    fasta_from_file,
+    search_index_device_aware,
+)
 
 logger = logging.getLogger("evaluate")
 
-amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
-amino_a_to_n = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
-amino_frequencies = torch.tensor(
-    [
-        0.074,
-        0.042,
-        0.044,
-        0.059,
-        0.033,
-        0.058,
-        0.037,
-        0.074,
-        0.029,
-        0.038,
-        0.076,
-        0.072,
-        0.018,
-        0.040,
-        0.050,
-        0.081,
-        0.062,
-        0.013,
-        0.033,
-        0.068,
-    ]
-)
-
-amino_n_to_v = torch.zeros(len(amino_n_to_a), 20)
-for i in range(20):
-    amino_n_to_v[i, i] = 1.0
-
-amino_n_to_v[amino_a_to_n["B"], amino_a_to_n["D"]] = 0.5
-amino_n_to_v[amino_a_to_n["B"], amino_a_to_n["N"]] = 0.5
-
-amino_n_to_v[amino_a_to_n["Z"], amino_a_to_n["Q"]] = 0.5
-amino_n_to_v[amino_a_to_n["Z"], amino_a_to_n["E"]] = 0.5
-
-amino_n_to_v[amino_a_to_n["J"], amino_a_to_n["I"]] = 0.5
-amino_n_to_v[amino_a_to_n["J"], amino_a_to_n["L"]] = 0.5
-
-amino_n_to_v[amino_a_to_n["X"]] = amino_frequencies
-amino_n_to_v[amino_a_to_n["*"]] = amino_frequencies
-amino_n_to_v[amino_a_to_n["U"]] = amino_frequencies
-
-amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
-
-
+# fmt: off
 @numba.jit(nopython=True)
 def compute_ali_score(dot_products):
     scores = np.zeros_like(dot_products)
@@ -112,24 +71,6 @@ def compute_ali_score(dot_products):
         row_idx, col_idx = best_path[row_idx, col_idx]
 
     return np.abs(total_score)
-
-
-def tensor_for_sequence(sequence):
-    data = torch.zeros(20, len(sequence))
-    for i, c in enumerate(sequence):
-        data[:, i] = amino_a_to_v[c]
-    return data
-
-
-def wraps_tensor_for_sequence(device):
-    def tensor_for_sequence(sequence):
-        data = torch.zeros(20, len(sequence))
-        for i, c in enumerate(sequence):
-            data[:, i] = amino_a_to_v[c]
-        return data.to(device)
-
-    return tensor_for_sequence
-
 
 def filter_hits(queries, threshold, comp_func):
     filtered_queries = dict()
