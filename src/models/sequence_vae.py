@@ -220,20 +220,28 @@ class SequenceVAE(pl.LightningModule):
                 loss += (torch.diag(dots) ** 2).sum()
 
         if self.apply_contrastive_loss:
-            sampled_mutated, _ = self.forward(mutated_features)
-            sampled_mutated = torch.nn.functional.normalize(sampled_mutated, dim=1)
-            original = torch.nn.functional.normalize(sampled, dim=1)
-            mutated = sampled_mutated.transpose(-1, -2)
-            original = original.transpose(-1, -2)
-            loss += self.supcon(
-                torch.cat((mutated, original), dim=1),
-                labels=torch.arange(mutated.shape[0]),
-            )
+            sampled_mutated, recon_mutated = self.forward(mutated_features)
+
+            recon = torch.cat(torch.unbind(recon, dim=0))
+            recon_mutated = torch.cat(torch.unbind(recon_mutated, dim=0))
+
+            recon = torch.nn.functional.normalize(recon, dim=-1)
+
+            recon_mutated = torch.nn.functional.normalize(recon_mutated, dim=-1)
+
+            # fmt: off
+            loss += self.supcon(torch.cat((recon_mutated.unsqueeze(1), recon.unsqueeze(1)), dim=1))
+            # fmt: on
 
         if self.global_step % self.log_interval == 0:
 
-            e1 = torch.cat(torch.unbind(recon, dim=0))
-            e2 = torch.cat(torch.unbind(original_features, dim=0))
+            if self.apply_contrastive_loss:
+                e1 = recon
+                e2 = torch.cat(torch.unbind(original_features, dim=0))
+            else:
+                e1 = torch.cat(torch.unbind(recon, dim=0))
+                e2 = torch.cat(torch.unbind(original_features, dim=0))
+
             with torch.no_grad():
                 fig, ax = plt.subplots(ncols=2)
                 ax[0].imshow(
