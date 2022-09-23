@@ -72,22 +72,25 @@ def encode_tensor_sequence(sequence):
 
 
 def create_substitution_distribution(blosum):
-    if blosum not in [45, 62, 80, 90]:
-        raise ValueError("blosum should be one of <45, 62, 80, 90>")
+    if blosum not in [62, 80, 90]:
+        raise ValueError("blosum should be one of <62, 80, 90>")
 
     sub_dists = pd.read_csv(
         f"src/resources/blosum{blosum}.probs", delim_whitespace=True
     )
     substitution_distributions = {}
+    print("FIXME.")
     for amino_acid in sub_dists.keys():
         # fmt: off
-        reordered = []
-        for character in amino_alphabet:
-            if character not in sub_dists.keys():
-                continue
-            reordered.append(sub_dists.loc[amino_acid][character])
+        # reordered = []
+        # for character in amino_alphabet:
+        #     if character not in sub_dists.keys():
+        #         continue
+        #     reordered.append(sub_dists.loc[amino_acid][character])
 
-        substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
+        # substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
+        substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(sub_dists.loc[amino_acid]))
+        # fmt: on
 
     return substitution_distributions
 
