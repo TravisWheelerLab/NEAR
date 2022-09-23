@@ -40,8 +40,8 @@ class SyntheticEvaluator(Evaluator):
         distance_threshold,
     ):
         self.blosum = blosum
-        if blosum not in [62, 80, 90]:
-            raise ValueError("blosum must be one of <62, 80, 90>")
+        if blosum not in [45, 62, 80, 90]:
+            raise ValueError("blosum must be one of <45, 62, 80, 90>")
 
         self.blosum_file = f"src/resources/blosum{blosum}.probs"
         self.target_sequence_fasta = target_sequence_fasta
@@ -80,6 +80,7 @@ class SyntheticEvaluator(Evaluator):
         queries = []
         query_names = []
         logger.debug("Starting computation of databases.")
+
         target_names = torch.arange(len(target_names))
 
         for shuffled_idx in shuf_idx:
@@ -88,6 +89,8 @@ class SyntheticEvaluator(Evaluator):
             encoding = encode_string_sequence(target_sequence).argmax(dim=0)
             # ok, the encoding is working to reconstruct.
             # found the issue.
+            # tensor clone goes in here to create the mutated sequence.
+            # is there an issue here?
             mutated = mutate_sequence(
                 sequence=encoding,
                 substitutions=len(target_sequences[shuffled_idx]),
@@ -100,6 +103,13 @@ class SyntheticEvaluator(Evaluator):
         # forget about batching
         target_embeddings = self.calc_embeddings(target_sequences, model_class)
         query_embeddings = self.calc_embeddings(queries, model_class)
+
+        # the target and query embeddings are _not_ the same.
+        # for t in target_embeddings:
+        #     for q in query_embeddings:
+        #         if torch.all(q == t):
+        #             pdb.set_trace()
+        # the loop above does not enter pdb.
         # unroll target embeddings
 
         lengths = list(map(lambda s: s.shape[0], target_embeddings))
@@ -132,6 +142,7 @@ class SyntheticEvaluator(Evaluator):
             )
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
+        assert len(unrolled_targets) == len(self.unrolled_names)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
@@ -150,6 +161,7 @@ class SyntheticEvaluator(Evaluator):
 
         logger.info("Adding targets to index.")
         self.index.add(unrolled_targets)
+
         return query_embeddings, query_names
 
     def filter(
@@ -236,7 +248,7 @@ class SyntheticEvaluator(Evaluator):
 
         print("model description:", desc)
         print(
-            f"recall {(recall/len(hits))*100}%. Filtration: {(1-(total_hits/(self.num_queries*self.num_target_sequences)))*100:.3f}%"
+            f"recall {(recall / len(hits)) * 100}%. Filtration: {(1 - (total_hits / (self.num_queries * self.num_target_sequences))) * 100:.3f}%"
         )
 
     def search(self, query_embedding):
@@ -270,7 +282,7 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
             )
             slices.append(embedding)
 
-        return torch.cat(slices, dim=-1).T.squeeze()
+        return torch.cat(slices, dim=-1).squeeze().T
 
     def search(self, query_embedding):
         filtered_list = []
@@ -286,13 +298,12 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
         # now get unique names
         # subsample D
         unique_distances = D.to("cpu").numpy().ravel()[unique_idx]
+
         unique_names, unique_name_idx = np.unique(
             self.unrolled_names[unique], return_index=True
         )
 
         unique_distances = unique_distances[unique_name_idx]
-        # I think that we're hitting _every_ single family. Not sure though.
-        # AAAUGH.
 
         if D.numel() > 0:
             logger.debug(f"min: {torch.min(D)}, max: {torch.max(D)}")

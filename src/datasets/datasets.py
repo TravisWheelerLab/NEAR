@@ -50,7 +50,6 @@ def sanitize_sequence(sequence):
                 sanitized.append("D")
             else:
                 sanitized.append("N")
-            logger.debug(f"Replacing <X, U, O> with {sampled_char}")
         elif char == "Z":
             if int(2 * np.random.rand()) == 1:
                 sanitized.append("E")
@@ -74,7 +73,7 @@ class SwissProtGenerator(DataModule):
         labels, seqs = utils.fasta_from_file(fa_file)
         self.seqs = [s[:minlen] for s in seqs if len(s) >= minlen]
         self.training = training
-        self.sub_dists = utils.create_substituion_distribution(62)
+        self.sub_dists = utils.create_substitution_distribution(62)
         self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
         shuffle(self.seqs)
 
