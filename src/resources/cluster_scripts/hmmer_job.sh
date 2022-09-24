@@ -4,13 +4,12 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=phmmer_benchmark
+#SBATCH --job-name=phmmer
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=/home/u4/colligan/data/prefilter/uniref_benchmark/phmmer-run-%x-%j.out
+#SBATCH --output=phmmer.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
-### REQUIRED. Set the partition for your job. Four partitions are available in
 ### the arizona cluster system: standard (uses group's monthly allocation of
 ### resources), windfall (does NOT use up your monthly quota, but jobs run in
 ### this partition can be interrupted), high_priority (requires purchasing
@@ -24,36 +23,10 @@
 ### REQUIRED. Set the memory required for this job.
 #SBATCH --mem-per-cpu=5gb
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
-#SBATCH --time=3:01:00
-### any other slurm options are supported, but not required.
+#SBATCH --time=12:01:00
+### any other slurm options are supported, but not required
 
-module load hmmer
+queries=/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa
+targets=/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa
 
-cd /home/u4/colligan/data/prefilter/uniref_benchmark
-
-echo "Time benchmarking 2k30k"
-for i in {1..5};
-do
-  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k30k.fa
-done
-
-echo "================"
-echo "Time benchmarking 1k30k"
-for i in {1..5};
-do
-  time phmmer --cpu 31 -o /dev/null Q_benchmark1k30k.fa T_benchmark2k30k.fa
-done
-
-echo "================"
-echo "Time benchmarking 2k15k"
-for i in {1..5};
-do
-  time phmmer --cpu 31 -o /dev/null Q_benchmark2k30k.fa T_benchmark2k15k.fa
-done
-
-echo "================"
-echo "Time benchmarking 1k15k"
-for i in {1..5};
-do
-  time phmmer --cpu 31 -o /dev/null Q_benchmark1k30k.fa T_benchmark2k15k.fa
-done
+phmmer --cpu 32 --max --tblout /xdisk/twheeler/colligan/phmmer_hits.tblout $queries $targets
