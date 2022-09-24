@@ -19,6 +19,7 @@ import tqdm
 from src.evaluators import Evaluator
 from src.utils import (
     create_faiss_index,
+    encode_string_sequence,
     encode_tensor_sequence,
     fasta_from_file,
     search_index_device_aware,
@@ -83,7 +84,7 @@ def filter_hits(queries, threshold, comp_func):
     return filtered_queries
 
 
-def get_model_hits(file_path):
+def load_model_hits(file_path):
     queries = dict()
     with open(file_path, "r") as file:
         lines = file.readlines()
@@ -157,16 +158,11 @@ def compute_recall(our_hits, hmmer_hits, distance_threshold, comp_func):
         true_matches = hmmer_hits[query]
         if query in our_hits:
             our_matches = our_hits[query]
-            init_match_count = match_count
             for match in our_matches:
                 if match in true_matches:
                     if comp_func(our_matches[match], distance_threshold):
                         # count the matches for each query.
                         match_count += 1
-            if init_match_count == match_count:
-                logger.debug(
-                    f"Our method did not have any of the same matches as hmmer."
-                )
         else:
             logger.debug(
                 f"Our method did not find any hits for query sequence {query} (hmmer found {len(true_matches)})."
@@ -191,6 +187,7 @@ class UniRefEvaluator(Evaluator):
         hit_filename,
         select_random_aminos,
         query_percent,
+        minimum_seq_length,
         distance_threshold=100,
         normalize_embeddings=False,
         index_string=False,
@@ -201,21 +198,22 @@ class UniRefEvaluator(Evaluator):
         self.target_file = deepcopy(target_file)
 
         self.encoding_func = (
-            wraps_tensor_for_sequence(model_device)
+            encode_string_sequence
             if encoding_func is None
             else encoding_func
         )
         self.nprobe = nprobe
         self.model_device = model_device
         self.sample_percent = sample_percent
+        self.minimum_seq_length = minimum_seq_length
         self.normalize_embeddings = normalize_embeddings
-        self.hit_filename = hit_filename
+        self.hit_filename = os.path.splitext(hit_filename)[0] + f"_{distance_threshold}.txt"
         self.select_random_aminos = select_random_aminos
         self.index_string = index_string
         self.index_device = index_device
         self.n_neighbors = n_neighbors
         self.query_percent = query_percent
-        self.distance_threshold = distance_threshold
+        self.distance_threshold = float(distance_threshold)
 
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -241,35 +239,45 @@ class UniRefEvaluator(Evaluator):
             names = list(map(lambda x: x.split(" ")[0], names))
 
         pkl_file = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
+        idx_to_keep = []
 
         if os.path.splitext(fasta_or_pickle_file)[1] == ".fa" and not os.path.isfile(
             pkl_file
-        ):
+        ) or self.overwrite:
             embeddings = []
-            i = 0
-            for sequence in tqdm.tqdm(sequences):
-                if len(sequence) <= 10:
+            for j, sequence in enumerate(tqdm.tqdm(sequences)):
+                if self.minimum_seq_length <= len(sequence) <= 300:
+                    embed = self.compute_embedding(sequence, model_class)
+                    embeddings.append(embed.transpose(-1, -2).to("cpu"))
+                    idx_to_keep.append(j)
+                else:
                     logger.debug(
                         f"Removing sequence {sequence} with length {len(sequence)}"
                     )
-                    continue
-                try:
-                    embed = model_class(
-                        self.encoding_func(sequence).unsqueeze(0)
-                    ).squeeze(0)
-                except KeyError:
-                    logger.debug(f"keyerror: skipping {sequence}")
-                embeddings.append(embed.transpose(-1, -2).to("cpu"))
-                i += 1
 
-            outf = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
-            logger.info(f"Saving embeddings to {outf}.")
-            with open(outf, "wb") as dst:
+            logger.info(f"Saving embeddings to {pkl_file}.")
+            with open(pkl_file, "wb") as dst:
                 pickle.dump(embeddings, dst)
         else:
             logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
+
+            for j, sequence in enumerate(tqdm.tqdm(sequences)):
+                if self.minimum_seq_length <= len(sequence) <= 300:
+                    idx_to_keep.append(j)
+
             with open(pkl_file, "rb") as src:
                 embeddings = pickle.load(src)
+
+        _names = []
+        _sequences = []
+        for idx in idx_to_keep:
+            _names.append(names[idx])
+            _sequences.append(sequences[idx])
+
+        names = _names
+        sequences = _sequences
+        assert len(names) == len(sequences)
+        assert len(names) == len(embeddings)
 
         return names, sequences, embeddings
 
@@ -292,13 +300,22 @@ class UniRefEvaluator(Evaluator):
                 target_embeddings, query_embeddings, target_names, query_names
             )
 
+            with open(os.path.splitext(self.hit_filename)[0] + "_query_names.txt", "w") as dst:
+                for name in query_names:
+                    dst.write(f"{name}\n")
+
+            # and the target names.
+            with open(os.path.splitext(self.hit_filename)[0] + "_target_names.txt", "w") as dst:
+                for name in target_names:
+                    dst.write(f"{name}\n")
+
             hits, avg_it, total_t = self.filter(
                 query_embeddings, target_embeddings, query_names, target_names
             )
 
-            with open("timings.txt", "w") as dst:
-                dst.write(f"avg.time/it:{avg_it}, total_time:{total_t}")
+            # save the query names
 
+            # save the names (pre-filtration!) of the sequences in the target and query databases.
             with open(self.hit_filename, "w") as file:
                 for key in hits:
                     for entry in range(len(hits[key])):
@@ -308,9 +325,60 @@ class UniRefEvaluator(Evaluator):
                         file.write(query + " " + target + " " + str(distance) + "\n")
         else:
             logger.info(f"Loading hits from {self.hit_filename}.")
+            # load the query names
+            with open(os.path.splitext(self.hit_filename)[0] + "_query_names.txt", "r") as src:
+                query_names = src.read().splitlines()
+            with open(os.path.splitext(self.hit_filename)[0] + "_target_names.txt", "r") as src:
+                target_names = src.read().splitlines()
 
-        our_hits = get_model_hits(self.hit_filename)
+        our_hits = load_model_hits(self.hit_filename)
+        logger.info(f"Removing {len(our_hits)} entries from hmmer --max and hmmer --normal hits.")
+        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
+
+        max_intersection = set(query_names).intersection(set(self.max_hmmer_hits.keys()))
+        normal_intersection = set(query_names).intersection(set(self.normal_hmmer_hits.keys()))
+        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
+
+        max = {}
+        normal = {}
+        for query_name in max_intersection:
+            max[query_name] = self.max_hmmer_hits[query_name]
+        for query_name in normal_intersection:
+            normal[query_name] = self.normal_hmmer_hits[query_name]
+
+        self.max_hmmer_hits = max
+        self.normal_hmmer_hits = normal
+        # now remove target matches
+        # keys in the keys of dicts that aren't in the target_names set
+
+        max = {}
+        for query_name in self.max_hmmer_hits:
+            subdict = {}
+            for hit in self.max_hmmer_hits[query_name]:
+                if hit in target_names:
+                    subdict[hit] = self.max_hmmer_hits[query_name][hit]
+            max[query_name] = subdict
+
+        normal = {}
+        for query_name in self.normal_hmmer_hits:
+            subdict = {}
+            for hit in self.normal_hmmer_hits[query_name]:
+                if hit in target_names:
+                    subdict[hit] = self.normal_hmmer_hits[query_name][hit]
+            normal[query_name] = subdict
+        # TODO:
+        # get the number of hits we remove.
+        logger.info(f"Number of target database entries removed: {30000 - len(target_names)}")
+
+        self.max_hmmer_hits = max
+        self.normal_hmmer_hits = normal
+        self.denom = len(query_names)*len(target_names)
+
         self._plot(our_hits, self.max_hmmer_hits, self.normal_hmmer_hits)
+        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
+
+    def compute_embedding(self, sequence, model_class):
+        raise NotImplementedError()
 
     def _plot(self, our_hits, max_hits, normal_hits):
 
@@ -325,16 +393,17 @@ class UniRefEvaluator(Evaluator):
             our_hits, max_hits, self.distance_threshold, self.comp_func
         )
 
-        logger.info("Using 2000*30000 as the total number of possible matches.")
+        logger.info(f"Using {self.denom} as the denominator for filtration")
         our_filtered_hits = filter_hits(
             our_hits, self.distance_threshold, self.comp_func
         )
-        filtration = 1.0 - (number_of_hits(our_filtered_hits) / (2000 * 30000))
+        filtration = 1.0 - (number_of_hits(our_filtered_hits) / self.denom)
         logger.info(
             f"Our method filtered {filtration * 100:.3f}% of possible query/target pairs."
         )
         logger.info(f"Our method got {normal_recall:.3f}% of hmmer normal hits.")
         logger.info(f"Our method got {max_recall:.3f}% of hmmer max hits.")
+        print(f"{normal_recall} : {filtration*100}")
         # now, get the hmmer hits at different e-values
         # and compute whether or not we got them.
         found, not_found = compute_matches(our_filtered_hits, normal_hits)
@@ -399,10 +468,10 @@ class UniRefEvaluator(Evaluator):
             fontsize=20,
         )
 
-        plt.savefig(
-            f"{os.path.splitext(self.hit_filename)[0]}_{self.distance_threshold}.png",
-            bbox_inches="tight",
-        )
+        # plt.savefig(
+        #     f"{os.path.splitext(self.hit_filename)[0]}_{self.distance_threshold}.png",
+        #     bbox_inches="tight",
+        # )
 
         # plt.savefig(f"result_figure.png", bbox_inches="tight")
 
@@ -459,7 +528,7 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.info(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
@@ -467,8 +536,10 @@ class UniRefEvaluator(Evaluator):
 
         return qdict, loop_time / i, loop_time
 
-
 class UniRefFaissEvaluator(UniRefEvaluator):
+    def compute_embedding(self, sequence, model_class):
+        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -574,57 +645,10 @@ class UniRefFaissEvaluator(UniRefEvaluator):
                 filtered_list.append((unrolled_names[int(idx)], distance.item()))
         return filtered_list
 
-    def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        threshold,
-        start=0,
-        end=torch.inf,
-    ):
-        qdict = dict()
-        # construct index.
-
-        num_queries = min(end, len(queries))
-        # for query in queries
-        t_tot = 0
-        t_begin = time.time()
-        logger.info("Beginning search.")
-
-        logger.info(f"Selecting {self.query_percent * 100}% of query aminos.")
-
-        for i in range(start, num_queries):
-            loop_begin = time.time()
-            logger.debug(f"{i / (num_queries - start):.3f}")
-
-            filtered_list = []
-
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
-            else:
-                qval = queries[i]
-
-            qval = qval[
-                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
-            ]
-
-            filtered_hits = self.search(qval)
-            qdict[query_names[i]] = filtered_hits
-            time_taken = time.time() - loop_begin
-            t_tot += time_taken
-
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
-        loop_time = time.time() - t_begin
-
-        logger.info(f"Entire loop took: {loop_time}.")
-
-        return qdict, loop_time / i, loop_time
-
-
 class UniRefBruteForceEvaluator(UniRefEvaluator):
+    def compute_embedding(self, sequence, model_class):
+        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -640,6 +664,9 @@ class UniRefBruteForceEvaluator(UniRefEvaluator):
 
 
 class UniRefAlignmentEvaluator(UniRefEvaluator):
+    def compute_embedding(self, sequence, model_class):
+        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -656,6 +683,9 @@ class UniRefAlignmentEvaluator(UniRefEvaluator):
 
 
 class UniRefScannEvaluator(UniRefEvaluator):
+    def compute_embedding(self, sequence, model_class):
+        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -802,17 +832,18 @@ class UniRefVAEEvaluator(UniRefEvaluator):
     def search(self, query_embedding):
         filtered_list = []
 
-        D, I = self.index.search(query_embedding.contiguous(), k=2048)
+        # _, D, I = self.index.range_search(query_embedding.contiguous(), self.distance_threshold)
+        D, I = self.index.search(query_embedding.contiguous(), 100)
         # remove stuff that's under/over the threshold
-        I = I[self.comp_func(D, self.distance_threshold)]
-        D = D[self.comp_func(D, self.distance_threshold)]
+        I = I.to("cpu").numpy()[self.comp_func(D.to("cpu").numpy(), self.distance_threshold)]
+        D = D.to("cpu").numpy()[self.comp_func(D.to("cpu").numpy(), self.distance_threshold)]
 
         # sort distance
         # get the unique indices (unique_idx returns the first occurence
-        unique, unique_idx = np.unique(I.to("cpu").numpy().ravel(), return_index=True)
+        unique, unique_idx = np.unique(I, return_index=True)
         # now get unique names
         # subsample D
-        unique_distances = D.to("cpu").numpy().ravel()[unique_idx]
+        unique_distances = D[unique_idx]
         unique_names, unique_name_idx = np.unique(
             self.unrolled_names[unique], return_index=True
         )
@@ -820,94 +851,43 @@ class UniRefVAEEvaluator(UniRefEvaluator):
         # I think that we're hitting _every_ single family. Not sure though.
         # AAAUGH.
 
-        if D.numel() > 0:
-            logger.debug(f"min: {torch.min(D)}, max: {torch.max(D)}")
+        if D.ravel().shape[0] > 0:
+            logger.debug(f"min: {np.min(D)}, max: {np.max(D)}")
             logger.debug(
                 f"Number of matches at a distance threshold of {self.distance_threshold}: {unique_names.shape}."
-                f" Because of faiss limitations, actual distance threshold achieved is {torch.min(D)}"
+                f" Because of faiss limitations, actual distance threshold achieved is {np.min(D)}"
             )
 
         for distance, name in zip(unique_distances.ravel(), unique_names.ravel()):
-            filtered_list.append((name, distance.item()))
+            filtered_list.append((name, distance))
 
         return filtered_list
 
-    @torch.no_grad()
-    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
+    def compute_embedding(self, sequence, model_class):
 
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
-            names, sequences = fasta_from_file(
-                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
+        slices = []
+        for i in range(
+                0, len(sequence) - model_class.initial_seq_len, model_class.initial_seq_len
+        ):
+            embedding, _ = model_class(
+                encode_string_sequence(sequence[i : i + model_class.initial_seq_len])
+                    .to(self.model_device)
+                    .unsqueeze(0)
             )
-            names = list(map(lambda x: x.split(" ")[0], names))
-        else:
-            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
-            names = list(map(lambda x: x.split(" ")[0], names))
+            slices.append(embedding)
 
-        outf = (
-            os.path.splitext(fasta_or_pickle_file)[0]
-            + f"{model_class.apply_cnn_loss}_{model_class.initial_seq_len}_{model_class.downsample_steps}.pkl"
-        )
+        if len(sequence) % model_class.initial_seq_len != 0:
+            embedding, _ = model_class(
+                encode_string_sequence(sequence[-model_class.initial_seq_len :])
+                    .to(self.model_device)
+                    .unsqueeze(0)
+            )
+            slices.append(embedding)
 
-        remove_name_idx = []
+        if len(sequence) == model_class.initial_seq_len:
+            embedding, _ = model_class(
+                encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
+            )
+            slices.append(embedding)
 
-        if (
-            os.path.splitext(fasta_or_pickle_file)[1] == ".fa"
-            and not os.path.isfile(outf)
-        ) or self.overwrite:
-            embeddings = []
-            i = 0
-            for j, sequence in enumerate(tqdm.tqdm(sequences)):
-                if len(sequence) < model_class.initial_seq_len:
-                    logger.debug(
-                        f"Removing sequence {sequence} with length {len(sequence)}"
-                    )
-                    remove_name_idx.append(j)
-                    continue
-                try:
-
-                    slices = []
-                    encoded = self.encoding_func(sequence).unsqueeze(0)
-                    # ok, this worked! woo-hoo!
-                    for i in range(
-                        0,
-                        len(sequence) - model_class.initial_seq_len,
-                        model_class.initial_seq_len,
-                    ):
-                        embed, _ = model_class(
-                            encoded[:, :, i : i + model_class.initial_seq_len]
-                        )
-                        slices.append(embed.squeeze().T)
-                    embed, _ = model_class(
-                        encoded[:, :, -model_class.initial_seq_len :]
-                    )
-                    slices.append(embed.squeeze().T)
-                    embed = torch.cat(slices, dim=0)
-                    embeddings.append(embed)
-
-                except KeyError:
-                    logger.debug(f"keyerror: skipping {sequence}")
-                i += 1
-
-            logger.info(f"Saving embeddings to {outf}.")
-            with open(outf, "wb") as dst:
-                pickle.dump(embeddings, dst)
-        else:
-            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
-            with open(outf, "rb") as src:
-                embeddings = pickle.load(src)
-
-        _names = []
-        for j, sequence in enumerate(sequences):
-            if len(sequence) < model_class.initial_seq_len:
-                remove_name_idx.append(j)
-
-        for i, name in enumerate(names):
-            if i not in remove_name_idx:
-                _names.append(name)
-
-        names = _names
-
-        assert len(names) == len(embeddings)
-
-        return names, sequences, embeddings
+        return torch.cat(slices, dim=-1).squeeze()
