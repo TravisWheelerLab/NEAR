@@ -2,7 +2,9 @@ import logging
 import pdb
 import time
 import warnings
+from collections import defaultdict
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
@@ -215,44 +217,67 @@ class SyntheticEvaluator(Evaluator):
             embeddings.append(embed)
         return embeddings
 
+    def search(self, query_embedding):
+        raise NotImplementedError()
+
     @torch.no_grad()
     def evaluate(self, model_class):
         query_embeddings, query_names = self.create_target_and_query_dbs(model_class)
         hits, avg_it, total_t = self.filter(query_embeddings, query_names)
+
         # now just compute recall.
         # this is easy.
-        recall = 0
-        total_hits = 0
-        # I'm satisfied with this.
-        for query, hitset in hits.items():
-            distances = [h[1] for h in hitset]
-            hit_labels = np.asarray([h[0] for h in hitset])
-            hit_labels = hit_labels[np.argsort(distances)[::-1]]
-            # recall and filtration.
-            if query.item() in hit_labels:
-                recall += 1
-            total_hits += len(hit_labels)
+
+        threshold_to_recall = {}
+        threshold_to_total_hits = {}
+
+        for threshold in np.linspace(self.distance_threshold, 1.0, num=30):
+            logger.debug(f"threshold: {threshold}")
+            recall = 0
+            total_hits = 0
+
+            for query, hitset in hits.items():
+                distances = np.array([h[1] for h in hitset])
+                hit_labels = np.asarray([h[0] for h in hitset])
+                # remove labels under/over the threshold
+                if self.normalize_embeddings:
+                    hit_labels_filtered = hit_labels[
+                        np.where(distances >= threshold)[0]
+                    ]
+                else:
+                    hit_labels_filtered = hit_labels[
+                        np.where(distances <= threshold)[0]
+                    ]
+                # recall and filtration.
+                if query.item() in hit_labels_filtered:
+                    recall += 1
+
+                # only get uniques
+                total_hits += len(set(hit_labels_filtered))
+
+            threshold_to_total_hits[threshold] = total_hits
+            threshold_to_recall[threshold] = recall
 
         logger.info(
             f"num queries: {len(hits)}. Sequences in target DB: {self.num_target_sequences}."
         )
-        desc = f"blosum {self.blosum}/"
-        if model_class.apply_cnn_loss:
-            desc += "cnn loss/"
-        if model_class.backprop_on_near_aminos:
-            desc += "threshold loss distance/"
-        if model_class.apply_contrastive_loss:
-            desc += "supcon loss/"
-        desc += f"{model_class.downsample_steps}/"
-        desc += f"{self.distance_threshold}"
 
-        print("model description:", desc)
-        print(
-            f"recall {(recall / len(hits)) * 100}%. Filtration: {(1 - (total_hits / (self.num_queries * self.num_target_sequences))) * 100:.3f}%"
-        )
+        recalls = list(threshold_to_recall.values())
+        total_hits = list(threshold_to_total_hits.values())
+        filtrations = [
+            100 * (1 - (t / (self.num_queries * self.num_target_sequences)))
+            for t in total_hits
+        ]
+        recalls = [100 * (r / len(hits)) for r in recalls]
 
-    def search(self, query_embedding):
-        raise NotImplementedError()
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.set_title("test.png")
+        ax.scatter(filtrations, recalls, c="r", marker="o")
+        ax.plot(filtrations, recalls, "r--", linewidth=2)
+        ax.set_ylim([0, 101])
+        ax.set_xlim([0, 101])
+        plt.savefig("testing_blosum45.png")
+        plt.close()
 
 
 class SyntheticVAEEvaluator(SyntheticEvaluator):
@@ -292,27 +317,10 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
         I = I[self.comp_func(D, self.distance_threshold)]
         D = D[self.comp_func(D, self.distance_threshold)]
 
-        # sort distance
-        # get the unique indices (unique_idx returns the first occurence
-        unique, unique_idx = np.unique(I.to("cpu").numpy().ravel(), return_index=True)
-        # now get unique names
-        # subsample D
-        unique_distances = D.to("cpu").numpy().ravel()[unique_idx]
-
-        unique_names, unique_name_idx = np.unique(
-            self.unrolled_names[unique], return_index=True
-        )
-
-        unique_distances = unique_distances[unique_name_idx]
-
-        if D.numel() > 0:
-            logger.debug(f"min: {torch.min(D)}, max: {torch.max(D)}")
-            logger.debug(
-                f"Number of matches at a distance threshold of {self.distance_threshold}: {unique_names.shape}."
-                f" Because of faiss limitations, actual distance threshold achieved is {torch.min(D)}"
-            )
-
-        for distance, name in zip(unique_distances.ravel(), unique_names.ravel()):
-            filtered_list.append((name, distance.item()))
+        for distance, name in zip(
+            D.ravel().to("cpu").numpy(),
+            self.unrolled_names[I.ravel().to("cpu").numpy()],
+        ):
+            filtered_list.append((name, distance))
 
         return filtered_list

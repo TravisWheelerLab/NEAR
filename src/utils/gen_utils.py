@@ -1,4 +1,5 @@
 import logging
+import os
 import pdb
 from typing import Dict, Union
 
@@ -24,9 +25,9 @@ amino_char_to_index = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 # the background distribution
 
 # fmt: off
-amino_frequencies = torch.tensor([ 0.074, 0.042, 0.044, 0.059, 0.033, 0.058, 0.037, 0.074,
-                                   0.029, 0.038, 0.076, 0.072, 0.018, 0.040, 0.050, 0.081,
-                                   0.062, 0.013, 0.033, 0.068])
+amino_frequencies = torch.tensor([0.074, 0.042, 0.044, 0.059, 0.033, 0.058, 0.037, 0.074,
+                                  0.029, 0.038, 0.076, 0.072, 0.018, 0.040, 0.050, 0.081,
+                                  0.062, 0.013, 0.033, 0.068])
 
 amino_distribution = torch.distributions.categorical.Categorical(amino_frequencies)
 # fmt: on
@@ -72,24 +73,23 @@ def encode_tensor_sequence(sequence):
 
 
 def create_substitution_distribution(blosum):
-    if blosum not in [62, 80, 90]:
-        raise ValueError("blosum should be one of <62, 80, 90>")
+    if blosum not in [45, 62, 80, 90]:
+        raise ValueError("blosum should be one of <45, 62, 80, 90>")
 
     sub_dists = pd.read_csv(
         f"src/resources/blosum{blosum}.probs", delim_whitespace=True
     )
     substitution_distributions = {}
-    print("FIXME.")
+
     for amino_acid in sub_dists.keys():
         # fmt: off
-        # reordered = []
-        # for character in amino_alphabet:
-        #     if character not in sub_dists.keys():
-        #         continue
-        #     reordered.append(sub_dists.loc[amino_acid][character])
+        reordered = []
+        for character in amino_alphabet:
+            if character not in sub_dists.keys():
+                continue
+            reordered.append(sub_dists.loc[amino_acid][character])
 
-        # substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
-        substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(sub_dists.loc[amino_acid]))
+        substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
         # fmt: on
 
     return substitution_distributions

@@ -19,6 +19,9 @@ out_root = "/xdisk/twheeler/colligan/data/prefilter/ungapped_alignments"
 query_ungapped = []
 target_ungapped = []
 
+already_seen_queries = set()
+already_seen_targets = set()
+
 for f in tqdm.tqdm(glob(tst)):
     # this thing is concatenating
     # the different aligned bits
@@ -41,11 +44,7 @@ for f in tqdm.tqdm(glob(tst)):
         continue
 
     query_gapped_sequence = query_gapped_sequence[0]
-
     names_and_sequences = []
-    already_seen_queries = set()
-    already_seen_targets = set()
-
     for k, target_sequence in enumerate(target_gapped_sequences):
         keep_idx = []
         for i in range(len(target_sequence)):
@@ -63,8 +62,12 @@ for f in tqdm.tqdm(glob(tst)):
             tname = target_sequence.name
             while qname in already_seen_queries:
                 qname += f"_{cnt}"
-            while tname in already_seen_queries:
+                cnt += 1
+
+            cnt = 0
+            while tname in already_seen_targets:
                 tname += f"_{cnt}"
+                cnt += 1
 
             already_seen_targets.add(tname)
             already_seen_queries.add(qname)
@@ -81,3 +84,7 @@ print("Writing targets.")
 with open("/xdisk/twheeler/colligan/targets.fa", "w") as dst:
     for name, sequence in target_ungapped:
         dst.write(f">{name}\n{sequence}\n")
+
+with open("/xdisk/twheeler/colligan/hits.txt", "w") as dst:
+    for (n1, _), (n2, _) in zip(query_ungapped, target_ungapped):
+        dst.write(f"{n1} {n2}\n")

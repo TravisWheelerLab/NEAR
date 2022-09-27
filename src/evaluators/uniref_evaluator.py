@@ -11,107 +11,19 @@ import faiss
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-
 # import scann
 import torch
 import tqdm
 
 from src.evaluators import Evaluator
-from src.utils import (
-    create_faiss_index,
-    encode_string_sequence,
-    encode_tensor_sequence,
-    fasta_from_file,
-    search_index_device_aware,
-)
+from src.utils import (create_faiss_index, encode_string_sequence,
+                       encode_tensor_sequence, fasta_from_file,
+                       search_index_device_aware)
 
 logger = logging.getLogger("evaluate")
 
-# fmt: off
-@numba.jit(nopython=True)
-def compute_ali_score(dot_products):
-    scores = np.zeros_like(dot_products)
-    scores[:, 0] = dot_products[:, 0]
-    scores[0, :] = dot_products[0, :]
-
-    best_path = np.zeros((scores.shape[0], scores.shape[1], 2), dtype=numba.int64)
-    # for each row
-    for i in range(1, scores.shape[0]):
-        # for each column
-        for j in range(1, scores.shape[1]):
-            vals = np.array(
-                [
-                    scores[i - 1, j],
-                    scores[i, j - 1],
-                    scores[i - 1, j - 1] + dot_products[i, j],
-                ]
-            )
-            idxs = np.array([[i - 1, j], [i, j - 1], [i - 1, j - 1]])
-            amax = np.argmax(vals)
-
-            scores[i, j] = vals[amax]
-            best_path[i, j] = idxs[amax]
-
-    # best column:
-    best_col = np.argmax(scores[-1, :])
-    best_row = np.argmax(scores[:, -1])
-    if scores[-1, best_col] > scores[best_row, -1]:
-        starting_point = best_path[-1, best_col]
-    else:
-        starting_point = best_path[best_row, -1]
-
-    row_idx = starting_point[0]
-    col_idx = starting_point[1]
-    # while we haven't reached a side:
-    path_log = [starting_point]
-    total_score = 0
-
-    while row_idx != 0 and col_idx != 0:
-        next_best = best_path[row_idx, col_idx]
-        total_score += dot_products[row_idx, col_idx]
-        path_log.append(next_best)
-        row_idx, col_idx = best_path[row_idx, col_idx]
-
-    return np.abs(total_score)
-
-def filter_hits(queries, threshold, comp_func):
-    filtered_queries = dict()
-    for query in queries:
-        filtered_queries[query] = dict()
-        for hit in queries[query]:
-            if comp_func(queries[query][hit], threshold):
-                filtered_queries[query][hit] = True
-    return filtered_queries
-
-
-def load_model_hits(file_path):
-    queries = dict()
-    with open(file_path, "r") as file:
-        lines = file.readlines()
-        for line in lines:
-
-            line = line.strip()
-            line = line.split(" ")
-            query = line[0]
-            hit_name = line[1]
-            distance = float(line[2])
-
-            if query not in queries:
-                queries[query] = dict()
-
-            queries[query][hit_name] = distance
-    return queries
-
-
-def number_of_hits(queries):
-    num = 0
-    for key in queries:
-        num += len(queries[key])
-    return num
-
-
 # load hits from the hmmer file.
-def get_hmmer_hits(file_path):
+def get_hmmer_hits(file_path, evalue_threshold):
     queries = dict()
     with open(file_path, "r") as file:
         for line in file:
@@ -126,72 +38,57 @@ def get_hmmer_hits(file_path):
             e_value = float(line[4])
             score = float(line[6])
 
-            if query not in queries:
+            if query not in queries and e_value <= evalue_threshold:
                 queries[query] = dict()
 
-            queries[query][target] = (e_value, score)
+            if e_value <= evalue_threshold:
+                queries[query][target] = (e_value, score)
 
         return queries
 
 
-def compute_matches(our_hits, hmmer_hits):
-    found = []
-    not_found = []
-    for query in hmmer_hits:
-        hmmer_query_hits = hmmer_hits[query]
-        if query in our_hits:
-            for hit in hmmer_query_hits.keys():
-                if hit in our_hits[query]:
-                    found.append(hmmer_query_hits[hit][1])
-                else:
-                    not_found.append(hmmer_query_hits[hit][1])
-        else:
-            for hit, e_value in hmmer_query_hits.items():
-                not_found.append(e_value[1])
-
-    return np.asarray(found), np.asarray(not_found)
-
-
-def compute_recall(our_hits, hmmer_hits, distance_threshold, comp_func):
+def recall_and_filtration(our_hits, hmmer_hits,
+                          distance_threshold, comp_func):
     match_count = 0
-    for query in hmmer_hits:
+    our_total_hits = 0
+    hmmer_hits_for_our_queries = 0
+    # since we sometimes don't have
+    # all queries, iterate over the DB in this fashion.
+    for query in our_hits:
         true_matches = hmmer_hits[query]
-        if query in our_hits:
-            our_matches = our_hits[query]
-            for match in our_matches:
+        hmmer_hits_for_our_queries += len(true_matches)
+        our_matches = our_hits[query]
+        for match in our_matches:
+            if comp_func(our_matches[match], distance_threshold):
                 if match in true_matches:
-                    if comp_func(our_matches[match], distance_threshold):
-                        # count the matches for each query.
-                        match_count += 1
-        else:
-            logger.debug(
-                f"Our method did not find any hits for query sequence {query} (hmmer found {len(true_matches)})."
-            )
+                    # count the matches for each query.
+                    match_count += 1
+                our_total_hits += 1
 
-    # the denominator is the number of hmmer hits, which makes sense for recall.
-    denominator = sum(list(map(lambda x: len(x), list(hmmer_hits.values()))))
-
-    return 100 * (match_count / denominator)
+    # total hmmer hits
+    denom = hmmer_hits_for_our_queries
+    return 100 * (match_count / denom), our_total_hits
 
 
 class UniRefEvaluator(Evaluator):
     def __init__(
-        self,
-        query_file,
-        target_file,
-        nprobe,
-        encoding_func,
-        model_device,
-        sample_percent,
-        n_neighbors,
-        hit_filename,
-        select_random_aminos,
-        query_percent,
-        minimum_seq_length,
-        distance_threshold=100,
-        normalize_embeddings=False,
-        index_string=False,
-        index_device="cpu",
+            self,
+            query_file,
+            target_file,
+            encoding_func,
+            model_device,
+            n_neighbors,
+            hit_filename,
+            select_random_aminos,
+            minimum_seq_length,
+            max_seq_length,
+            figure_path,
+            evalue_threshold,
+            nprobe=1,
+            distance_threshold=100,
+            normalize_embeddings=False,
+            index_string=False,
+            index_device="cpu",
     ):
 
         self.query_file = deepcopy(query_file)
@@ -202,17 +99,18 @@ class UniRefEvaluator(Evaluator):
             if encoding_func is None
             else encoding_func
         )
+        self.figure_path = figure_path
         self.nprobe = nprobe
         self.model_device = model_device
-        self.sample_percent = sample_percent
         self.minimum_seq_length = minimum_seq_length
+        self.max_seq_length = max_seq_length
         self.normalize_embeddings = normalize_embeddings
         self.hit_filename = os.path.splitext(hit_filename)[0] + f"_{distance_threshold}.txt"
         self.select_random_aminos = select_random_aminos
         self.index_string = index_string
         self.index_device = index_device
+        self.denom = None
         self.n_neighbors = n_neighbors
-        self.query_percent = query_percent
         self.distance_threshold = float(distance_threshold)
 
         if self.normalize_embeddings:
@@ -223,50 +121,26 @@ class UniRefEvaluator(Evaluator):
             self.comp_func = np.less_equal
 
         root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
-        self.normal_hmmer_hits = get_hmmer_hits(f"{root}/normal_hmmer_hits.txt")
-        self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
+        self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt", evalue_threshold=evalue_threshold)
 
     @torch.no_grad()
-    def _calc_or_load_embeddings(self, fasta_or_pickle_file, model_class):
+    def _calc_embeddings(self, fasta_or_pickle_file, model_class):
 
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".pkl":
-            names, sequences = fasta_from_file(
-                fasta_file=os.path.splitext(fasta_or_pickle_file)[0] + ".fa"
-            )
-            names = list(map(lambda x: x.split(" ")[0], names))
-        else:
-            names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
-            names = list(map(lambda x: x.split(" ")[0], names))
+        names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
+        names = list(map(lambda x: x.split(" ")[0], names))
 
-        pkl_file = os.path.splitext(fasta_or_pickle_file)[0] + ".pkl"
         idx_to_keep = []
 
-        if os.path.splitext(fasta_or_pickle_file)[1] == ".fa" and not os.path.isfile(
-            pkl_file
-        ) or self.overwrite:
-            embeddings = []
-            for j, sequence in enumerate(tqdm.tqdm(sequences)):
-                if self.minimum_seq_length <= len(sequence) <= 300:
-                    embed = self.compute_embedding(sequence, model_class)
-                    embeddings.append(embed.transpose(-1, -2).to("cpu"))
-                    idx_to_keep.append(j)
-                else:
-                    logger.debug(
-                        f"Removing sequence {sequence} with length {len(sequence)}"
-                    )
-
-            logger.info(f"Saving embeddings to {pkl_file}.")
-            with open(pkl_file, "wb") as dst:
-                pickle.dump(embeddings, dst)
-        else:
-            logger.info(f"Loading embeddings from {fasta_or_pickle_file}.")
-
-            for j, sequence in enumerate(tqdm.tqdm(sequences)):
-                if self.minimum_seq_length <= len(sequence) <= 300:
-                    idx_to_keep.append(j)
-
-            with open(pkl_file, "rb") as src:
-                embeddings = pickle.load(src)
+        embeddings = []
+        for j, sequence in enumerate(tqdm.tqdm(sequences)):
+            if self.max_seq_length >= len(sequence) >= model_class.initial_seq_len:
+                embed = self.compute_embedding(sequence, model_class)
+                embeddings.append(embed.transpose(-1, -2).to("cpu"))
+                idx_to_keep.append(j)
+            else:
+                logger.debug(
+                    f"Removing sequence {sequence} with length {len(sequence)}"
+                )
 
         _names = []
         _sequences = []
@@ -282,200 +156,70 @@ class UniRefEvaluator(Evaluator):
         return names, sequences, embeddings
 
     def evaluate(self, model_class):
-
-        if not os.path.isfile(self.hit_filename) or self.overwrite:
-            (
-                query_names,
-                query_sequences,
-                query_embeddings,
-            ) = self._calc_or_load_embeddings(self.query_file, model_class=model_class)
-
-            (
-                target_names,
-                target_sequences,
-                target_embeddings,
-            ) = self._calc_or_load_embeddings(self.target_file, model_class=model_class)
-
-            self._setup_target_and_query_dbs(
-                target_embeddings, query_embeddings, target_names, query_names
-            )
-
-            with open(os.path.splitext(self.hit_filename)[0] + "_query_names.txt", "w") as dst:
-                for name in query_names:
-                    dst.write(f"{name}\n")
-
-            # and the target names.
-            with open(os.path.splitext(self.hit_filename)[0] + "_target_names.txt", "w") as dst:
-                for name in target_names:
-                    dst.write(f"{name}\n")
-
-            hits, avg_it, total_t = self.filter(
-                query_embeddings, target_embeddings, query_names, target_names
-            )
-
-            # save the query names
-
-            # save the names (pre-filtration!) of the sequences in the target and query databases.
-            with open(self.hit_filename, "w") as file:
-                for key in hits:
-                    for entry in range(len(hits[key])):
-                        query = key
-                        target = hits[key][entry][0]
-                        distance = hits[key][entry][1]
-                        file.write(query + " " + target + " " + str(distance) + "\n")
-        else:
-            logger.info(f"Loading hits from {self.hit_filename}.")
-            # load the query names
-            with open(os.path.splitext(self.hit_filename)[0] + "_query_names.txt", "r") as src:
-                query_names = src.read().splitlines()
-            with open(os.path.splitext(self.hit_filename)[0] + "_target_names.txt", "r") as src:
-                target_names = src.read().splitlines()
-
-        our_hits = load_model_hits(self.hit_filename)
-        logger.info(f"Removing {len(our_hits)} entries from hmmer --max and hmmer --normal hits.")
-        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
-
-        max_intersection = set(query_names).intersection(set(self.max_hmmer_hits.keys()))
-        normal_intersection = set(query_names).intersection(set(self.normal_hmmer_hits.keys()))
-        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
-
-        max = {}
-        normal = {}
-        for query_name in max_intersection:
-            max[query_name] = self.max_hmmer_hits[query_name]
-        for query_name in normal_intersection:
-            normal[query_name] = self.normal_hmmer_hits[query_name]
-
-        self.max_hmmer_hits = max
-        self.normal_hmmer_hits = normal
-        # now remove target matches
-        # keys in the keys of dicts that aren't in the target_names set
-
-        max = {}
-        for query_name in self.max_hmmer_hits:
-            subdict = {}
-            for hit in self.max_hmmer_hits[query_name]:
+        # fmt: off
+        query_names, query_sequences, query_embeddings = self._calc_embeddings(self.query_file,
+                                                                               model_class=model_class)
+        target_names, target_sequences, target_embeddings = self._calc_embeddings(self.target_file,
+                                                                                  model_class=model_class)
+        # now, remove elements from hmmer --max if the target name is not in
+        # target names.
+        init_len = sum(map(lambda x: len(x), self.max_hmmer_hits.values()))
+        new_max = {}
+        for query in self.max_hmmer_hits:
+            new_dict = {}
+            for hit in self.max_hmmer_hits[query]:
                 if hit in target_names:
-                    subdict[hit] = self.max_hmmer_hits[query_name][hit]
-            max[query_name] = subdict
+                    new_dict[hit] = self.max_hmmer_hits[query][hit]
+            new_max[query] = new_dict
 
-        normal = {}
-        for query_name in self.normal_hmmer_hits:
-            subdict = {}
-            for hit in self.normal_hmmer_hits[query_name]:
-                if hit in target_names:
-                    subdict[hit] = self.normal_hmmer_hits[query_name][hit]
-            normal[query_name] = subdict
-        # TODO:
-        # get the number of hits we remove.
-        logger.info(f"Number of target database entries removed: {30000 - len(target_names)}")
+        self.max_hmmer_hits = new_max
+        new_len = sum(map(lambda x: len(x), self.max_hmmer_hits.values()))
+        logger.info(f"Removed {init_len - new_len} entries from the target database"
+                    f" since they didn't pass length thresholding.")
 
-        self.max_hmmer_hits = max
-        self.normal_hmmer_hits = normal
-        self.denom = len(query_names)*len(target_names)
+        self._setup_target_and_query_dbs(target_embeddings, query_embeddings, target_names, query_names)
+        # fmt: on
 
-        self._plot(our_hits, self.max_hmmer_hits, self.normal_hmmer_hits)
-        logger.info(f"len(max): {len(self.max_hmmer_hits)}. len(normal): {len(self.normal_hmmer_hits)}")
+        hits, avg_it, total_t = self.filter(query_embeddings, query_names)
+        our_hits = defaultdict(dict)
+        # stop writing and stuff to file.
+        # just process the dang dictionary.
+        for query in hits:
+            for hit in hits[query]:
+                our_hits[query][hit[0]] = hit[1]
+
+        self.denom = (len(query_names) * len(target_names)) - len(query_names)
+
+        self._roc_plot(our_hits, self.max_hmmer_hits)
 
     def compute_embedding(self, sequence, model_class):
         raise NotImplementedError()
 
-    def _plot(self, our_hits, max_hits, normal_hits):
+    def _roc_plot(self, our_hits, max_hits):
+        filtrations = []
+        recalls = []
+        for threshold in tqdm.tqdm(np.linspace(self.distance_threshold, 1.0, num=10)):
+            recall, total_hits = recall_and_filtration(our_hits,
+                                                       max_hits,
+                                                       threshold,
+                                                       self.comp_func)
 
-        logger.info(f"Max hit num: {number_of_hits(max_hits)}")
-        logger.info(f"Normal hit num: {number_of_hits(normal_hits)}")
-        logger.info(f"Our hit num: {number_of_hits(our_hits)}")
+            filtration = 100 * (1.0 - (total_hits / self.denom))
+            filtrations.append(filtration)
+            recalls.append(recall)
 
-        normal_recall = compute_recall(
-            our_hits, normal_hits, self.distance_threshold, self.comp_func
-        )
-        max_recall = compute_recall(
-            our_hits, max_hits, self.distance_threshold, self.comp_func
-        )
-
-        logger.info(f"Using {self.denom} as the denominator for filtration")
-        our_filtered_hits = filter_hits(
-            our_hits, self.distance_threshold, self.comp_func
-        )
-        filtration = 1.0 - (number_of_hits(our_filtered_hits) / self.denom)
-        logger.info(
-            f"Our method filtered {filtration * 100:.3f}% of possible query/target pairs."
-        )
-        logger.info(f"Our method got {normal_recall:.3f}% of hmmer normal hits.")
-        logger.info(f"Our method got {max_recall:.3f}% of hmmer max hits.")
-        print(f"{normal_recall} : {filtration*100}")
-        # now, get the hmmer hits at different e-values
-        # and compute whether or not we got them.
-        found, not_found = compute_matches(our_filtered_hits, normal_hits)
-
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(13, 13))
-        ax[0, 0].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(0, 40),
-            label=["found", "not_found"],
-        )
-        ax[0, 1].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(10, 40),
-            label=["found", "not_found"],
-        )
-        normal_recall_over_10 = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        ax[0, 0].set_title(
-            f"recall: {normal_recall:.3f}%\n" f"filtration: {filtration * 100:.5f}%"
-        )
-        ax[0, 1].set_title(
-            f"recall: {100 * normal_recall_over_10:.3f}%\n"
-            f"filtration: {filtration * 100:.5f}%"
-        )
-
-        found, not_found = compute_matches(our_filtered_hits, max_hits)
-
-        ax[1, 0].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(0, 40),
-            label=["found", "not_found"],
-        )
-
-        ax[1, 1].hist(
-            [found, not_found],
-            stacked=True,
-            bins=10,
-            range=(10, 40),
-            label=["found", "not_found"],
-        )
-        ax[1, 0].set_title(
-            f"recall: {max_recall:.3f}%\n" f"filtration: {filtration * 100:.5f}%"
-        )
-        max_recall_over_10 = len(found[found > 10]) / (
-            len(found[found > 10]) + len(not_found[not_found > 10])
-        )
-        ax[1, 1].set_title(
-            f"recall: {100 * max_recall_over_10:.3f}%\n"
-            f"filtration: {filtration * 100:.5f}%"
-        )
-
-        plt.suptitle(
-            f"distance threshold: {self.distance_threshold}"
-            f"\nhit file: {os.path.basename(os.path.splitext(self.hit_filename)[0])}",
-            fontsize=20,
-        )
-
-        # plt.savefig(
-        #     f"{os.path.splitext(self.hit_filename)[0]}_{self.distance_threshold}.png",
-        #     bbox_inches="tight",
-        # )
-
-        # plt.savefig(f"result_figure.png", bbox_inches="tight")
-
-        return 0
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.set_title(f"{os.path.splitext(os.path.basename(self.figure_path))[0]}")
+        # add a 50/50 line
+        ax.plot([0, 101], [101, 0], 'k--', linewidth=2)
+        ax.scatter(filtrations, recalls, c="r", marker="o")
+        ax.plot(filtrations, recalls, "r--", linewidth=2)
+        ax.set_ylim([0, 101])
+        ax.set_xlim([0, 101])
+        ax.set_xlabel("filtration")
+        ax.set_ylabel("recall")
+        plt.savefig(f"{self.figure_path}", bbox_inches="tight")
+        plt.close()
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         raise NotImplementedError()
@@ -491,39 +235,47 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def filter(
-        self,
-        queries,
-        targets,
-        query_names,
-        target_names,
-        start=0,
-        end=torch.inf,
+            self,
+            queries,
+            query_names,
     ):
         qdict = dict()
 
         logger.info("Beginning search.")
-
-        num_queries = min(end, len(queries))
-
         # for query in queries
         t_tot = 0
         t_begin = time.time()
 
-        logger.info(f"Selecting {self.query_percent * 100}% of query aminos.")
-
-        for i in range(start, num_queries):
+        for i in range(len(queries)):
             loop_begin = time.time()
-            logger.debug(f"{i / (num_queries - start):.3f}")
+            logger.debug(f"{i / (len(queries)):.3f}")
 
             if self.normalize_embeddings:
                 qval = torch.nn.functional.normalize(queries[i], dim=-1)
             else:
                 qval = queries[i]
 
-            qval = qval[
-                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
-            ]
             filtered_hits = self.search(qval)
+            names = np.array([f[0] for f in filtered_hits])
+            distances = np.array([f[1] for f in filtered_hits])
+            sorted_idx = np.argsort(distances)[::-1]
+
+            names = names[sorted_idx]
+            # wait, I wasn't sorting the distances?
+            # that means that the ordering was all wrong.
+            distances = distances[sorted_idx]
+            # because the unique call below returns the unique name positions
+            # if the distances array wasn't sorted in the same way as the name
+            # array, then we would have basically random distances
+            # associated with the names.
+            logger.debug(f"len names: {len(names)}")
+            names, name_idx = np.unique(names, return_index=True)
+
+            filtered_hits = []
+            for name, distance in zip(names, distances[name_idx]):
+                filtered_hits.append((name, distance))
+
+            logger.debug(f"len unique names: {len(filtered_hits)}")
             qdict[query_names[i]] = filtered_hits
             time_taken = time.time() - loop_begin
             t_tot += time_taken
@@ -536,274 +288,32 @@ class UniRefEvaluator(Evaluator):
 
         return qdict, loop_time / i, loop_time
 
-class UniRefFaissEvaluator(UniRefEvaluator):
-    def compute_embedding(self, sequence, model_class):
-        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def _setup_target_and_query_dbs(self):
-        lengths = list(map(lambda s: s.shape[0], targets))
-        logger.info(f"Original DB size: {sum(lengths)}")
-        unrolled_targets = []
-        unrolled_names = []
-
-        if self.select_random_aminos:
-            for i, (length, name, target) in enumerate(
-                zip(lengths, target_names, targets)
-            ):
-                # sample N% of aminos from each sequence randomly.
-                n_sample = length * self.sample_percent
-                sampled_idx = torch.randperm(length)[: int(n_sample)]
-                logger.debug(
-                    f"random sampling: sampled_index length: {len(sampled_idx)}. original length: {length}"
-                )
-
-                if len(sampled_idx) == 0:
-                    sampled_idx = [0]
-
-                sampled_aminos = torch.cat(
-                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
-                )
-                unrolled_names.extend([name] * len(sampled_aminos))
-                unrolled_targets.append(sampled_aminos)
-
-            unrolled_targets = torch.cat(unrolled_targets, dim=0)
-        else:
-            for i, (length, name, target) in enumerate(
-                zip(lengths, target_names, targets)
-            ):
-                n_sample = length * self.sample_percent
-                # sample every N amino.
-                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
-                logger.debug(
-                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
-                )
-
-                if len(sampled_idx) == 0:
-                    sampled_idx = [0]
-
-                sampled_aminos = torch.cat(
-                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
-                )
-                unrolled_names.extend([name] * len(sampled_aminos))
-                unrolled_targets.append(sampled_aminos)
-
-            unrolled_targets = torch.cat(unrolled_targets, dim=0)
-
-        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
-        if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
-
-        self.index = create_faiss_index(
-            embeddings=unrolled_targets,
-            embed_dim=unrolled_targets.shape[-1],
-            distance_metric="cosine" if self.normalize_embeddings else "l2",
-            index_string=self.index_string,
-            nprobe=self.nprobe,
-            device=self.index_device,
-        )
-
-        logger.info("Adding targets to index.")
-
-        index.add(unrolled_targets)
-
-    def search(self, query_embedding):
-
-        filtered_list = []
-
-        D, I = search_index_device_aware(
-            self.index,
-            query_embedding.contiguous(),
-            self.index_device,
-            n_neighbors=self.n_neighbors,
-        )
-        cnt = 2
-
-        while torch.all(self.comp_func(D, threshold)):
-            logger.debug(
-                "having to increase size of search for"
-                f" each query AA to {self.n_neighbors * cnt}."
-            )
-            if (self.n_neighbors * cnt) >= 2048 and "cuda" in self.index_device:
-                logger.debug(
-                    "Breaking loop, can't search for more than 2048 neighbors on GPU."
-                )
-                break
-
-            D, I = search_index_device_aware(
-                self.index,
-                query_embedding.contiguous(),
-                self.index_device,
-                n_neighbors=self.n_neighbors * cnt,
-            )
-            cnt += 1
-
-        for distance, idx in zip(D.ravel(), I.ravel()):
-            if self.comp_func(distance, threshold):
-                filtered_list.append((unrolled_names[int(idx)], distance.item()))
-        return filtered_list
-
-class UniRefBruteForceEvaluator(UniRefEvaluator):
-    def compute_embedding(self, sequence, model_class):
-        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def search(self, query_embedding):
-        filtered_list = []
-        val = torch.min(torch.cdist(query_embedding, target_embedding))
-        if val <= threshold:
-            filtered_list.append((target_names[j], val.item(), j))
-        return filtered_list
-
-    def _setup_target_and_query_dbs(self):
-        pass
-
-
-class UniRefAlignmentEvaluator(UniRefEvaluator):
-    def compute_embedding(self, sequence, model_class):
-        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def _setup_target_and_query_dbs(self):
-        pass
-
-    def search(self, query_embedding, target_embedding):
-        filtered_list = []
-        dot_products = -torch.cdist(qval, tval).to("cpu").numpy()
-        ali_score = compute_ali_score(dot_products) / min(qval.shape[0], tval.shape[0])
-        if ali_score <= threshold:
-            filtered_list.append((target_names[j], ali_score, j))
-        return filtered_list
-
-
-class UniRefScannEvaluator(UniRefEvaluator):
-    def compute_embedding(self, sequence, model_class):
-        return model_class(encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)).squeeze()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def search(self, query_embedding):
-        filtered_list = []
-        I, D = searcher.search_batched(query_embedding)
-        for distance, idx in zip(D.ravel(), I.ravel()):
-            if distance <= threshold:
-                filtered_list.append((unrolled_names[int(idx)], distance.item()))
-        return filtered_list
-
-    def _setup_target_and_query_dbs(self):
-
-        lengths = list(map(lambda s: s.shape[0], targets))
-
-        if self.select_random_aminos:
-            unrolled_targets = torch.cat(targets, dim=0)
-            unrolled_names = []
-            # create a new device for getting the name of the
-            # target sequence (this could actually be _way_ easier and faster; but it's fine for now.
-            for i, (length, name) in enumerate(zip(lengths, target_names)):
-                unrolled_names.extend([name] * length)
-
-            assert len(unrolled_names) > 0
-        else:
-            # ko
-            # do something clever.
-            unrolled_targets = []
-            unrolled_names = []
-            logger.info(f"Original DB size: {sum(lengths)}")
-            for i, (length, name, target) in enumerate(
-                zip(lengths, target_names, targets)
-            ):
-                # sample N% of aminos from each sequence
-                n_sample = length * self.sample_percent
-                # sample every N amino.
-                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
-                logger.debug(
-                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
-                )
-
-                if len(sampled_idx) == 0:
-                    sampled_idx = [0]
-
-                sampled_aminos = torch.cat(
-                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
-                )
-                unrolled_names.extend([name] * len(sampled_aminos))
-                unrolled_targets.append(sampled_aminos)
-
-            unrolled_targets = torch.cat(unrolled_targets, dim=0)
-
-        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
-
-        self.searcher = (
-            scann.scann_ops_pybind.builder(unrolled_targets, 7, "squared_l2")
-            .tree(num_leaves=2000, num_leaves_to_search=3, training_sample_size=250000)
-            .score_ah(2, anisotropic_quantization_threshold=0.2)
-            .reorder(20)
-            .build()
-        )
-
 
 class UniRefVAEEvaluator(UniRefEvaluator):
-    def __init__(self, seq_len, overwrite, *args, **kwargs):
+    def __init__(self, seq_len, overwrite,
+                 n_vae_samples,
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.seq_len = seq_len
         self.overwrite = overwrite
+        self.n_vae_samples = n_vae_samples
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
-
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
         self.unrolled_names = []
 
-        if self.select_random_aminos:
-            for i, (length, name, target) in enumerate(
-                zip(lengths, target_names, targets)
-            ):
-                # sample N% of aminos from each sequence randomly.
-                n_sample = length * self.sample_percent
-                sampled_idx = torch.randperm(length)[: int(n_sample)]
-                logger.debug(
-                    f"random sampling: sampled_index length: {len(sampled_idx)}. original length: {length}"
-                )
+        # fmt: off
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
+            # fmt: on
+            # sample every N amino.
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
 
-                if len(sampled_idx) == 0:
-                    sampled_idx = [0]
+            self.unrolled_names.extend([name] * length)
+            unrolled_targets.append(aminos)
 
-                sampled_aminos = torch.cat(
-                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
-                )
-                self.unrolled_names.extend([name] * len(sampled_aminos))
-                unrolled_targets.append(sampled_aminos)
-
-            unrolled_targets = torch.cat(unrolled_targets, dim=0)
-        else:
-            for i, (length, name, target) in enumerate(
-                zip(lengths, target_names, targets)
-            ):
-                n_sample = length * self.sample_percent
-                # sample every N amino.
-                sampled_idx = torch.arange(length)[:: int(length / n_sample)]
-                logger.debug(
-                    f"sampled_index length: {len(sampled_idx)}. original length: {length}"
-                )
-
-                if len(sampled_idx) == 0:
-                    sampled_idx = [0]
-
-                sampled_aminos = torch.cat(
-                    [target[j].unsqueeze(0) for j in sampled_idx], dim=0
-                )
-                self.unrolled_names.extend([name] * len(sampled_aminos))
-                unrolled_targets.append(sampled_aminos)
-
-            unrolled_targets = torch.cat(unrolled_targets, dim=0)
+        unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
@@ -832,62 +342,96 @@ class UniRefVAEEvaluator(UniRefEvaluator):
     def search(self, query_embedding):
         filtered_list = []
 
-        # _, D, I = self.index.range_search(query_embedding.contiguous(), self.distance_threshold)
-        D, I = self.index.search(query_embedding.contiguous(), 100)
+        D, I = self.index.search(query_embedding.contiguous(), k=2048)
         # remove stuff that's under/over the threshold
-        I = I.to("cpu").numpy()[self.comp_func(D.to("cpu").numpy(), self.distance_threshold)]
-        D = D.to("cpu").numpy()[self.comp_func(D.to("cpu").numpy(), self.distance_threshold)]
+        I = I[self.comp_func(D, self.distance_threshold)]
+        D = D[self.comp_func(D, self.distance_threshold)]
 
-        # sort distance
-        # get the unique indices (unique_idx returns the first occurence
-        unique, unique_idx = np.unique(I, return_index=True)
-        # now get unique names
-        # subsample D
-        unique_distances = D[unique_idx]
-        unique_names, unique_name_idx = np.unique(
-            self.unrolled_names[unique], return_index=True
-        )
-        unique_distances = unique_distances[unique_name_idx]
-        # I think that we're hitting _every_ single family. Not sure though.
-        # AAAUGH.
-
-        if D.ravel().shape[0] > 0:
-            logger.debug(f"min: {np.min(D)}, max: {np.max(D)}")
-            logger.debug(
-                f"Number of matches at a distance threshold of {self.distance_threshold}: {unique_names.shape}."
-                f" Because of faiss limitations, actual distance threshold achieved is {np.min(D)}"
-            )
-
-        for distance, name in zip(unique_distances.ravel(), unique_names.ravel()):
+        for distance, name in zip(D.ravel().to("cpu").numpy(), self.unrolled_names[I.ravel().to("cpu").numpy()]):
             filtered_list.append((name, distance))
 
         return filtered_list
 
     def compute_embedding(self, sequence, model_class):
-
         slices = []
-        for i in range(
-                0, len(sequence) - model_class.initial_seq_len, model_class.initial_seq_len
-        ):
-            embedding, _ = model_class(
-                encode_string_sequence(sequence[i : i + model_class.initial_seq_len])
-                    .to(self.model_device)
-                    .unsqueeze(0)
-            )
-            slices.append(embedding)
+        for _ in range(self.n_vae_samples):
+            for i in range(
+                    0, len(sequence) - model_class.initial_seq_len, model_class.initial_seq_len
+            ):
+                embedding, _ = model_class(
+                    encode_string_sequence(sequence[i: i + model_class.initial_seq_len])
+                        .to(self.model_device)
+                        .unsqueeze(0)
+                )
+                slices.append(embedding)
 
-        if len(sequence) % model_class.initial_seq_len != 0:
-            embedding, _ = model_class(
-                encode_string_sequence(sequence[-model_class.initial_seq_len :])
-                    .to(self.model_device)
-                    .unsqueeze(0)
-            )
-            slices.append(embedding)
+            if len(sequence) % model_class.initial_seq_len != 0:
+                embedding, _ = model_class(
+                    encode_string_sequence(sequence[-model_class.initial_seq_len:])
+                        .to(self.model_device)
+                        .unsqueeze(0)
+                )
+                slices.append(embedding)
 
-        if len(sequence) == model_class.initial_seq_len:
-            embedding, _ = model_class(
-                encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
-            )
-            slices.append(embedding)
+            if len(sequence) == model_class.initial_seq_len:
+                embedding, _ = model_class(
+                    encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
+                )
+                slices.append(embedding)
+
+        return torch.cat(slices, dim=-1).squeeze()
+
+
+class UniRefUngappedVAEEvaluator(UniRefVAEEvaluator):
+    """
+    Data for true hits is different.
+    """
+
+    def __init__(self, hit_file, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        queries = defaultdict(dict)
+        with open(hit_file, "r") as src:
+            for line in src.readlines():
+                query, target = line.strip().split()
+                queries[query][target] = (0.0, 0.0)
+
+        self.max_hmmer_hits = queries
+
+
+class UniRefTiledVAEEvaluator(UniRefVAEEvaluator):
+
+    def __init__(self, tile_size, tile_step, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tile_size = tile_size
+        self.tile_step = tile_step
+
+    @torch.no_grad()
+    def compute_embedding(self, sequence, model_class):
+        slices = []
+        encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
+        for _ in range(self.n_vae_samples):
+            if len(sequence) == model_class.initial_seq_len:
+                encoding, _ = model_class(encoded)
+                slices.append(encoding)
+            else:
+                # no padding, just overlapping evaluation steps.
+                # i think this makes more sense than padding with stuff.
+                # just pad the end with reflected sequence.
+                # i need to get how much to pad
+                # this will be len(sequence) - self.tile_size * (len(sequence)//self.tile_size)
+                for begin_idx in range(0, len(sequence), self.tile_step):
+                    if begin_idx + self.tile_size >= len(sequence):
+                        # we can't go over the end, so break
+                        break
+                    encoded_slice = encoded[:, :, begin_idx: begin_idx + self.tile_size]
+                    encoding, _ = model_class(encoded_slice)
+                    slices.append(encoding)
+                # now take care of the end
+                # this might result in duplication but since we're VAE'ing it
+                # i think it's OK
+                encoded_slice = encoded[:, :, -model_class.initial_seq_len:]
+                encoding, _ = model_class(encoded_slice)
+                slices.append(encoding)
 
         return torch.cat(slices, dim=-1).squeeze()

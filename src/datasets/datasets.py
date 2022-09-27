@@ -31,8 +31,6 @@ DECOY_FLAG = -1
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-__all__ = ["SwissProtGenerator", "ClusterIterator", "ProfmarkDataset"]
-
 
 def sanitize_sequence(sequence):
 
@@ -59,6 +57,29 @@ def sanitize_sequence(sequence):
             sanitized.append(char)
 
     return sanitized
+
+
+class SequenceIterator(DataModule):
+    def __init__(self, fa_file, length):
+
+        self.fa_file = fa_file
+        labels, seqs = utils.fasta_from_file(fa_file)
+        self.labels = []
+        self.seqs = []
+        for label, seq in zip(labels, seqs):
+            if len(seq) >= length:
+                self.labels.append(label)
+                self.seqs.append(seq[:length])
+
+    def __len__(self):
+        return len(self.seqs)
+
+    def collate_fn(self):
+        return utils.pad_contrastive_batches_daniel
+
+    def __getitem__(self, idx):
+        s1 = sanitize_sequence(self.seqs[idx])
+        return utils.encode_string_sequence(s1), self.labels[idx]
 
 
 class SwissProtGenerator(DataModule):
