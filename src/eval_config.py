@@ -24,33 +24,63 @@ def config():
 
     device = "cuda"
     model_name = "SequenceVAE"
-    evaluator_name = "UniRefTiledVAEEvaluator"
+    evaluator_name = "UniRefRandomUngappedVAEEvaluator"
 
     @to_dict
     class evaluator_args:
         overwrite = True
-        seq_len = 256
-        hit_filename = "test.txt"
         model_device = "cuda"
         index_device = "cuda"
+        figure_path = f"random_test_tile_step100.png"
+        normalize_embeddings = True
+        select_random_aminos = False
+        encoding_func = None
+        index_string = "Flat"
+        hit_filename = "none.txt"
         tile_size = 256
         tile_step = 100
-        evalue_threshold = 10
-        figure_path = f"only_contrastive_tilestep100_vae1_evalue10_larger_sequences.png"
-        normalize_embeddings = True
-        index_string = "Flat"
-        distance_threshold = 0.3
-        max_seq_length = 512
-        query_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
-        target_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
-        # query_file = "/xdisk/twheeler/colligan/queries.fa"
-        # target_file = "/xdisk/twheeler/colligan/targets.fa"
-        # hit_file = "/xdisk/twheeler/colligan/hits.txt"
+        # query_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
+        # target_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
+        query_file = (
+            "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/queries.fa"
+        )
+        target_file = (
+            "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/targets.fa"
+        )
+        hit_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/hits.txt"
         n_vae_samples = 1
-        select_random_aminos = False
+        distance_threshold = 0.5
+        evalue_threshold = 10
+        max_seq_length = 512
+        random_length = 200
         minimum_seq_length = 256
-        encoding_func = None
         n_neighbors = 100
+
+    # @to_dict
+    # class evaluator_args:
+    #     overwrite = True
+    #     seq_len = 256
+    #     hit_filename = "test.txt"
+    #     model_device = "cuda"
+    #     index_device = "cuda"
+    #     tile_size = 256
+    #     tile_step = 100
+    #     evalue_threshold = 10
+    #     figure_path = f"only_contrastive_tilestep100_vae1_evalue10_larger_sequences.png"
+    #     normalize_embeddings = True
+    #     index_string = "Flat"
+    #     distance_threshold = 0.3
+    #     max_seq_length = 512
+    #     query_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
+    #     target_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
+    #     # query_file = "/xdisk/twheeler/colligan/queries.fa"
+    #     # target_file = "/xdisk/twheeler/colligan/targets.fa"
+    #     # hit_file = "/xdisk/twheeler/colligan/hits.txt"
+    #     n_vae_samples = 1
+    #     select_random_aminos = False
+    #     minimum_seq_length = 256
+    #     encoding_func = None
+    #     n_neighbors = 100
 
     # @to_dict
     # this is for SyntheticEvaluator
@@ -71,4 +101,4 @@ def config():
     num_threads = 12
 
     log_verbosity = logging.INFO
-    checkpoint_path = f"model_data/SequenceVAE/3/checkpoints/best_loss_model.ckpt"
+    checkpoint_path = f"model_data/SequenceVAE/1/checkpoints/best_loss_model.ckpt"

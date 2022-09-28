@@ -95,6 +95,13 @@ def create_substitution_distribution(blosum):
     return substitution_distributions
 
 
+def generate_string_sequence(length):
+
+    sequence = amino_distribution.sample(sample_shape=(1, length)).squeeze()
+    sequence = "".join([amino_alphabet[i] for i in sequence])
+    return sequence
+
+
 def mutate_sequence(sequence, substitutions, sub_distributions):
     seq = sequence.clone()
     sub_indices = torch.randperm(len(seq))[:substitutions]

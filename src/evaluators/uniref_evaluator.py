@@ -19,6 +19,7 @@ from src.evaluators import Evaluator
 from src.utils import (create_faiss_index, encode_string_sequence,
                        encode_tensor_sequence, fasta_from_file,
                        search_index_device_aware)
+from src.utils.gen_utils import generate_string_sequence
 
 logger = logging.getLogger("evaluate")
 
@@ -157,10 +158,10 @@ class UniRefEvaluator(Evaluator):
 
     def evaluate(self, model_class):
         # fmt: off
-        query_names, query_sequences, query_embeddings = self._calc_embeddings(self.query_file,
-                                                                               model_class=model_class)
         target_names, target_sequences, target_embeddings = self._calc_embeddings(self.target_file,
                                                                                   model_class=model_class)
+        query_names, query_sequences, query_embeddings = self._calc_embeddings(self.query_file,
+                                                                               model_class=model_class)
         # now, remove elements from hmmer --max if the target name is not in
         # target names.
         init_len = sum(map(lambda x: len(x), self.max_hmmer_hits.values()))
@@ -290,11 +291,10 @@ class UniRefEvaluator(Evaluator):
 
 
 class UniRefVAEEvaluator(UniRefEvaluator):
-    def __init__(self, seq_len, overwrite,
+    def __init__(self, overwrite,
                  n_vae_samples,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.seq_len = seq_len
         self.overwrite = overwrite
         self.n_vae_samples = n_vae_samples
 
@@ -435,3 +435,64 @@ class UniRefTiledVAEEvaluator(UniRefVAEEvaluator):
                 slices.append(encoding)
 
         return torch.cat(slices, dim=-1).squeeze()
+
+class UniRefRandomUngappedVAEEvaluator(UniRefTiledVAEEvaluator):
+    """
+    Only inject random sequences into the target database.
+    """
+
+    def __init__(self, hit_file, random_length,
+                 *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # embed my target sequences within random sequence.
+
+        self.random_length = random_length
+
+        queries = defaultdict(dict)
+        with open(hit_file, "r") as src:
+            for line in src.readlines():
+                query, target = line.strip().split()
+                queries[query][target] = (0.0, 0.0)
+
+        self.max_hmmer_hits = queries
+
+    @torch.no_grad()
+    def _calc_embeddings(self, fasta_file, model_class):
+
+        names, sequences = fasta_from_file(fasta_file=fasta_file)
+        names = list(map(lambda x: x.split(" ")[0], names))
+        is_target_db = "target" in os.path.basename(fasta_file)
+        if is_target_db:
+            logger.info("Only injecting random sequence onto start/end of target sequences. ")
+
+        idx_to_keep = []
+
+        embeddings = []
+        for j, sequence in enumerate(tqdm.tqdm(sequences)):
+            if len(sequence) >= model_class.initial_seq_len:
+                if is_target_db and self.random_length != 0:
+                    generated = generate_string_sequence(2*self.random_length)
+                    init_len = len(sequence)
+                    sequence = generated[:self.random_length] + sequence + generated[self.random_length:]
+                    logger.debug(f"Added {len(sequence) - init_len} characters onto sequence.")
+                    # add bits on to the beginning and end of sequence.
+                embed = self.compute_embedding(sequence, model_class)
+                embeddings.append(embed.transpose(-1, -2).to("cpu"))
+                idx_to_keep.append(j)
+            else:
+                logger.debug(
+                    f"Removing sequence {sequence} with length {len(sequence)}"
+                )
+
+        _names = []
+        _sequences = []
+        for idx in idx_to_keep:
+            _names.append(names[idx])
+            _sequences.append(sequences[idx])
+
+        names = _names
+        sequences = _sequences
+        assert len(names) == len(sequences)
+        assert len(names) == len(embeddings)
+
+        return names, sequences, embeddings

@@ -4,10 +4,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=evaluate-model-%j.out
+#SBATCH --job-name=new-model-%j.out
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=outfiles/evaluate-model-%j.out
+#SBATCH --output=outfiles/new/evaluate-model-%j.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### the arizona cluster system: standard (uses group's monthly allocation of
@@ -33,7 +33,7 @@ cd /home/u4/colligan/share/prefilter
 source $HOME/miniconda3/bin/activate
 conda activate faiss
 export LD_LIBRARY_PATH=$HOME/miniconda3/lib/:$LD_LIBRARY_PATH
-cmd=$(sed -n "$SLURM_ARRAY_TASK_ID"p eval_cmds.txt)
+cmd=$(sed -n "$SLURM_ARRAY_TASK_ID"p eval_new_model_cmds.txt)
 echo "running command: $cmd"
 evaluate with $cmd
 
