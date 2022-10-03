@@ -20,17 +20,17 @@ def config():
 
     gpus = 1
     num_nodes = 1
-    num_workers = 32
+    num_workers = 12
     check_val_every_n_epoch = 1
-    log_dir = "model_data/"
+    log_dir = "/xdisk/twheeler/colligan/indel_model_data/smaller_field_generated/"
     batch_size = 32
-    epochs = 3000
+    epochs = 100
     learning_rate = 1e-4
-    seq_len = 128
+    seq_len = 32
     log_interval = 100
-    downsample_steps = 6
+    downsample_steps = 2
     apply_cnn_loss = False
-    apply_contrastive_loss = True
+    apply_contrastive_loss = False
     backprop_on_near_aminos = False
     log_verbosity = logging.INFO
 
@@ -58,14 +58,14 @@ def config():
     }
 
     train_dataset_args = {
-        "fa_file": f"{root}/data/prefilter/uniprot_sprot.fasta",
+        "fa_file": f"{root}/uniprot_sprot.fasta",
         "minlen": seq_len,
     }
 
     val_dataset_args = {
-        "fa_file": f"{root}/data/prefilter/uniprot_sprot.fasta",
-        "minlen": seq_len,
+        "fa_file": f"{root}/uniprot_sprot.fasta",
         "training": False,
+        "minlen": seq_len,
     }
 
     dataloader_args = {

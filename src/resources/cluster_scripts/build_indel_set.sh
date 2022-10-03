@@ -4,10 +4,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=phmmer-%a
+#SBATCH --job-name=hmmbuild-%a
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=phmmer-%a.out
+#SBATCH --output=outfiles/hmmbuild-%a.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### the arizona cluster system: standard (uses group's monthly allocation of
@@ -25,7 +25,7 @@
 ### REQUIRED. Specify the time required for this job, hhh:mm:ss
 #SBATCH --time=12:01:00
 ### any other slurm options are supported, but not required
-#SBATCH --array=[1-12]%12
+#SBATCH --array=[1-23]%23
 
 
 cd /home/u4/colligan/share/prefilter/src/resources
@@ -33,6 +33,6 @@ source $HOME/miniconda3/bin/activate
 conda activate faiss
 export LD_LIBRARY_PATH=$HOME/miniconda3/lib/:$LD_LIBRARY_PATH
 # final query_seq len of 16
-name=$(sed -n "$SLURM_ARRAY_TASK_ID"p names.txt)
+name=$(sed -n "$SLURM_ARRAY_TASK_ID"p split_fasta_names.txt)
 echo "running with name: $name"
-python generate_phmmer_hits.py "$name"
+python build_indel_set.py "$name"
