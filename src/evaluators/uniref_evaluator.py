@@ -157,6 +157,8 @@ class UniRefEvaluator(Evaluator):
         return names, sequences, embeddings
 
     def evaluate(self, model_class):
+        if hasattr(self, "tile_size"):
+            self.tile_size = model_class.initial_seq_len
         # fmt: off
         target_names, target_sequences, target_embeddings = self._calc_embeddings(self.target_file,
                                                                                   model_class=model_class)
@@ -175,7 +177,7 @@ class UniRefEvaluator(Evaluator):
 
         self.max_hmmer_hits = new_max
         new_len = sum(map(lambda x: len(x), self.max_hmmer_hits.values()))
-        logger.info(f"Removed {init_len - new_len} entries from the target database"
+        logger.info(f"Removed {init_len - new_len} entries from the target hit dictionary"
                     f" since they didn't pass length thresholding.")
 
         self._setup_target_and_query_dbs(target_embeddings, query_embeddings, target_names, query_names)
@@ -208,6 +210,7 @@ class UniRefEvaluator(Evaluator):
             filtration = 100 * (1.0 - (total_hits / self.denom))
             filtrations.append(filtration)
             recalls.append(recall)
+            print(recall, filtration, threshold)
 
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.set_title(f"{os.path.splitext(os.path.basename(self.figure_path))[0]}")
@@ -462,8 +465,9 @@ class UniRefRandomUngappedVAEEvaluator(UniRefTiledVAEEvaluator):
         names, sequences = fasta_from_file(fasta_file=fasta_file)
         names = list(map(lambda x: x.split(" ")[0], names))
         is_target_db = "target" in os.path.basename(fasta_file)
+
         if is_target_db:
-            logger.info("Only injecting random sequence onto start/end of target sequences. ")
+            logger.info("Only injecting random sequence onto start/end of target sequences.")
 
         idx_to_keep = []
 

@@ -37,6 +37,7 @@ class SyntheticEvaluator(Evaluator):
         sample_percent,
         normalize_embeddings,
         index_string,
+        figure_path,
         index_device,
         query_percent,
         distance_threshold,
@@ -54,6 +55,7 @@ class SyntheticEvaluator(Evaluator):
         self.distance_threshold = distance_threshold
         self.query_percent = query_percent
         self.normalize_embeddings = normalize_embeddings
+        self.figure_path = figure_path
         self.device = device
         self.aa_dist = amino_distribution
         self.sub_dists = self._sub_dists()
@@ -271,12 +273,12 @@ class SyntheticEvaluator(Evaluator):
         recalls = [100 * (r / len(hits)) for r in recalls]
 
         fig, ax = plt.subplots(figsize=(10, 10))
-        ax.set_title("test.png")
+        ax.set_title(self.figure_path)
         ax.scatter(filtrations, recalls, c="r", marker="o")
         ax.plot(filtrations, recalls, "r--", linewidth=2)
         ax.set_ylim([0, 101])
         ax.set_xlim([0, 101])
-        plt.savefig("testing_blosum45.png")
+        plt.savefig(self.figure_path)
         plt.close()
 
 

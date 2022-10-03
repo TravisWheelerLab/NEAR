@@ -19,11 +19,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
+from Bio import AlignIO
+from tqdm import tqdm
 
 import src
 import src.models as models
 import src.utils as utils
 from src.datasets import DataModule
+from src.utils.gen_utils import generate_string_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,7 @@ def sanitize_sequence(sequence):
         else:
             sanitized.append(char)
 
-    return sanitized
+    return "".join(sanitized)
 
 
 class SequenceIterator(DataModule):
@@ -80,6 +83,99 @@ class SequenceIterator(DataModule):
     def __getitem__(self, idx):
         s1 = sanitize_sequence(self.seqs[idx])
         return utils.encode_string_sequence(s1), self.labels[idx]
+
+
+class AlignmentGenerator(DataModule):
+    def collate_fn(self):
+        return None
+
+    def __init__(self, ali_path, seq_len, training=True):
+        self.alignment_files = glob(os.path.join(ali_path, "*.sto"))
+        # also put a classification loss on there.
+        # so i can see accuracy numbers
+        self.training = training
+        if len(self.alignment_files) == 0:
+            raise ValueError(f"No alignment files found at {ali_path}.")
+        self.mx = 0
+        self.seq_len = seq_len
+
+    def __len__(self):
+        if self.training:
+            return 10000
+        else:
+            return 500
+
+    def __getitem__(self, idx):
+        ali = AlignIO.read(self.alignment_files[idx], "stockholm")._records
+        # aligned index with gaps: aligned index without gaps
+        seq1 = ali[0].upper()
+        seq2 = ali[1].upper()
+        seq1 = sanitize_sequence(seq1)
+        seq2 = sanitize_sequence(seq2)
+        seq_a_aligned_labels = list(range(self.mx, self.mx + len(seq1)))
+        seq_b_aligned_labels = list(range(self.mx, self.mx + len(seq2)))
+        # just remove elements from the labels above
+        # that are gap characters in either sequence.
+        # then labels that are the same will be aligned characters
+        seq_a_to_keep = []
+        for j, amino in enumerate(seq1):
+            if amino not in ("-", "."):
+                seq_a_to_keep.append(j)
+
+        seq_a_aligned_labels = [seq_a_aligned_labels[s] for s in seq_a_to_keep]
+        seq_b_to_keep = []
+        for j, amino in enumerate(seq2):
+            if amino not in ("-", "."):
+                seq_b_to_keep.append(j)
+
+        seq_b_aligned_labels = [seq_b_aligned_labels[s] for s in seq_b_to_keep]
+        seq1 = seq1.replace(".", "").replace("-", "")
+        seq2 = seq2.replace(".", "").replace("-", "")
+
+        seq1_chop = len(seq1) - self.seq_len
+        seq2_chop = len(seq2) - self.seq_len
+
+        if seq1_chop > 0:
+            seq1 = seq1[seq1_chop // 2 : -seq1_chop // 2]
+            seq_a_aligned_labels = seq_a_aligned_labels[
+                seq1_chop // 2 : -seq1_chop // 2
+            ]
+        elif seq1_chop == 0:
+            pass
+        else:
+            # add characters to the front
+            addition = generate_string_sequence(-seq1_chop)
+            # now add bullshit to the labels at the beginning
+            mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
+            seq1 = addition + seq1
+            for _ in range(len(addition)):
+                seq_a_aligned_labels.insert(0, mx)
+                mx += 1
+
+        if seq2_chop > 0:
+            seq2 = seq2[seq2_chop // 2 : -seq2_chop // 2]
+            seq_b_aligned_labels = seq_b_aligned_labels[
+                seq2_chop // 2 : -seq2_chop // 2
+            ]
+        elif seq2_chop == 0:
+            pass
+        else:
+            # add characters to the front
+            addition = generate_string_sequence(-seq2_chop)
+            # now add bullshit to the labels at the beginning
+            mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
+            seq2 = addition + seq2
+            for _ in range(len(addition)):
+                seq_b_aligned_labels.insert(0, mx)
+                mx += 1
+        # brutally chop off the ends?
+        self.mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
+        return (
+            utils.encode_string_sequence(seq1),
+            torch.as_tensor(seq_a_aligned_labels),
+            utils.encode_string_sequence(seq2),
+            torch.as_tensor(seq_b_aligned_labels),
+        )
 
 
 class SwissProtGenerator(DataModule):
