@@ -96,8 +96,7 @@ def create_substitution_distribution(blosum):
 
 
 def generate_string_sequence(length):
-
-    sequence = amino_distribution.sample(sample_shape=(1, length)).squeeze()
+    sequence = amino_distribution.sample(sample_shape=(length,))
     sequence = "".join([amino_alphabet[i] for i in sequence])
     return sequence
 
