@@ -43,7 +43,7 @@ class SequenceVAE(pl.LightningModule):
         self.cnn_model_state_dict = cnn_model_state_dict
         self.supcon = SupConLoss()
 
-        cnn_model_args = {
+        self.cnn_model_args = {
             "emb_dim": 256,
             "blocks": 5,
             "block_layers": 2,
@@ -53,7 +53,8 @@ class SequenceVAE(pl.LightningModule):
             "padding_mode": "reflect",
         }
 
-        self.cnn_model = ResNet(**cnn_model_args)
+        self.cnn_model = ResNet(**self.cnn_model_args)
+        self.cnn_model_state_dict = cnn_model_state_dict
 
         success = self.cnn_model.load_state_dict(
             torch.load(cnn_model_state_dict, map_location=torch.device(self.device))
@@ -79,7 +80,7 @@ class SequenceVAE(pl.LightningModule):
         self.pool_type = pool_type
 
         self._setup_layers()
-        self.to("cuda")
+        self.to(self.device)
         self.save_hyperparameters()
         self.KLD = 0
         self.xent = torch.nn.CrossEntropyLoss()
@@ -197,6 +198,8 @@ class SequenceVAE(pl.LightningModule):
         original_features, mutated_features, _ = batch
         sampled, recon = self.forward(original_features)
         # reconstruction loss
+        # DISCUSS:
+        # does the reconstructed vector match known dirichlet mixtures?
         loss = self.xent(recon, original_features)
         # KLD is quite large.
         loss += self.KLD
@@ -210,7 +213,6 @@ class SequenceVAE(pl.LightningModule):
             e2 = torch.cat(torch.unbind(recon_embeds, dim=0))
             dots = torch.cdist(e1, e2)
             # minimize the difference b/t the diagonal elements
-            # TODO: add distance thresholding
             # this _should_ be 0 if the embeddings are the same.
             # not really sure where thhe majority of the loss is coming from
             # is it here?
@@ -288,3 +290,99 @@ class SequenceVAE(pl.LightningModule):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
         self.log("val_loss", val_loss)
+
+
+class SequenceVAEWithIndels(SequenceVAE):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _shared_step(self, batch):
+        sequence1, labels1, sequence2, labels2 = batch
+        concat_features = torch.cat((sequence1, sequence2), dim=0)
+        sampled, recon = self.forward(concat_features)
+        loss = self.xent(recon, concat_features)
+        loss += self.KLD
+        # now comes the weird part.
+        # I only want to backpropagate on the aminos that are aligned.
+        # this will require masking parts of the loss.
+        # this is weird.
+        # what if i use a binary cross entropy?
+
+        if self.apply_cnn_loss:
+            embeds = self.cnn_model(concat_features)
+            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
+            # recall this is on concatenated features for performance
+            embeds1, embeds2 = torch.split(embeds, embeds.shape[0] // 2)
+            recon_embeds1, recon_embeds2 = torch.split(
+                recon_embeds, embeds.shape[0] // 2
+            )
+            #
+            # i have to split these guys in two again
+            # # l2 loss on diag.
+            e1 = torch.cat(torch.unbind(embeds1, dim=-1))
+            e2 = torch.cat(torch.unbind(recon_embeds2, dim=-1))
+
+            l1 = torch.cat(torch.unbind(labels1, dim=0))
+            l2 = torch.cat(torch.unbind(labels2, dim=0))
+            labelmat = torch.eq(l1.unsqueeze(1), l2.unsqueeze(0))
+            # dists[dists > 1] = 0
+            dists = torch.cdist(e1, e2)
+            loss += dists[labelmat].sum()
+
+        if self.apply_contrastive_loss:
+            features1, features2 = torch.split(
+                concat_features, concat_features.shape[0] // 2
+            )
+            recon1, recon2 = torch.split(recon, concat_features.shape[0] // 2)
+            e1 = torch.cat(torch.unbind(features1, dim=-1))
+            e2 = torch.cat(torch.unbind(recon2, dim=-1))
+            # don't normalize e1
+            e2 = torch.nn.functional.normalize(e2, dim=0)
+            l1 = torch.cat(torch.unbind(labels1, dim=0))
+            l2 = torch.cat(torch.unbind(labels2, dim=0))
+            labelmat = torch.eq(l1.unsqueeze(1), l2.unsqueeze(0)).float()
+            all_dots = torch.matmul(e1, e2.T)
+            loss += torch.nn.functional.binary_cross_entropy_with_logits(
+                all_dots.ravel(), labelmat.ravel()
+            )
+
+        if self.global_step % self.log_interval == 0:
+
+            e1 = torch.cat(
+                torch.unbind(torch.nn.functional.softmax(recon, dim=1), dim=-1)
+            )[:200]
+            e2 = torch.cat(torch.unbind(concat_features, dim=-1))[:200]
+
+            with torch.no_grad():
+                fig, ax = plt.subplots(ncols=2)
+                if self.apply_contrastive_loss:
+                    acc = (
+                        torch.round(torch.sigmoid(all_dots)) == labelmat
+                    ).sum() / labelmat.numel()
+                    ax[0].set_title(f"accuracy: {acc.item():.5f}")
+                ax[0].imshow(
+                    e1.to("cpu").numpy().astype(float),
+                    interpolation="nearest",
+                )
+                ax[1].imshow(
+                    e2.to("cpu").numpy().astype(float), interpolation="nearest"
+                )
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
+
+        return loss
+
+
+class SequenceVAETrainCNN(SequenceVAEWithIndels):
+    def __init__(self, pretrained_cnn, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.cnn_model = ResNet(**self.cnn_model_args)
+        if pretrained_cnn:
+            success = self.cnn_model.load_state_dict(
+                torch.load(
+                    self.cnn_model_state_dict, map_location=torch.device(self.device)
+                )
+            )
+            logger.info(f"{success} for {self.cnn_model_state_dict}")
