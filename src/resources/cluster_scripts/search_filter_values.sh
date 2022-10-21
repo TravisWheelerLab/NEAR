@@ -43,4 +43,3 @@ do
     evaluate with hit_filename="/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/""$hf" filter_value="$filter_value"
   done
 done
-

@@ -4,15 +4,9 @@ Date: May 07, 2020
 """
 from __future__ import print_function
 
-import os.path
-import pdb
-
-import matplotlib
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from pytorch_metric_learning.losses import NTXentLoss
 
 
 def _save(fpath, arr):

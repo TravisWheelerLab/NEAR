@@ -1,6 +1,4 @@
 import logging
-import os
-import pdb
 
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
@@ -8,8 +6,7 @@ import torch
 import torch.nn as nn
 
 from src.models.dot_prod_model import ResNet
-from src.utils.gen_utils import amino_alphabet
-from src.utils.layers import PositionalEncoding, ResConv
+from src.utils.layers import ResConv
 from src.utils.losses import SupConLoss
 
 logger = logging.getLogger("train")

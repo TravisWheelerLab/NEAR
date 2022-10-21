@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 import logging
 import os
-import pdb
 import subprocess
 import time
 from glob import glob
 from typing import List
 
-import numpy as np
 import pandas as pd
 import yaml
 

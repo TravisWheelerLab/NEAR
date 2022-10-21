@@ -1,17 +1,11 @@
 # pylint: disable=no-member
-import json
 import logging
 import os
-import pdb
-import re
-from random import seed, shuffle
+from random import seed
 from typing import List, Tuple, Union
 
-import esm
 import faiss
 import faiss.contrib.torch_utils
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import torch
 
@@ -28,19 +22,16 @@ __all__ = [
     "parse_tblout",
     "esm_toks",
     "parse_labels",
+    "pad_sequences",
     "create_faiss_index",
     "handle_figure_path",
     "fasta_from_file",
-    "pad_contrastive_batches_daniel",
-    "pad_contrastive_batches_with_labelvecs",
     "to_dict",
     "pad_contrastive_batches",
     "mask_mask",
+    "stack_contrastive_batch",
     "load_model",
-    "process_with_esm_batch_converter",
     "non_default_collate",
-    "msa_transformer_collate",
-    "daniel_sequence_encode",
 ]
 
 TBLOUT_COL_NAMES = [
@@ -274,16 +265,16 @@ def fasta_from_file(fasta_file: str) -> Union[None, List[Tuple[str, str]]]:
     return sequence_labels, sequence_strs
 
 
-def _pad_sequences(sequences):
-    mxlen = np.max([s.shape[-1] for s in sequences])
-    padded_batch = np.zeros((len(sequences), mxlen))
+def pad_sequences(sequences):
+    mxlen = torch.max(torch.tensor([s.shape[-1] for s in sequences]))
+    padded_batch = torch.zeros((len(sequences), sequences[0].shape[0], mxlen))
     masks = []
-    for i, s in enumerate(sequences):
-        padded_batch[i, : s.shape[-1]] = s
-        mask = np.ones(mxlen)
-        mask[: s.shape[-1]] = 0
+    for i, sequence in enumerate(sequences):
+        padded_batch[i, :, : sequence.shape[-1]] = sequence
+        mask = torch.ones(mxlen)
+        mask[: sequence.shape[-1]] = 0
         masks.append(mask)
-    masks = np.stack(masks)
+    masks = torch.stack(masks).unsqueeze(1)
     return torch.as_tensor(padded_batch).float(), torch.as_tensor(masks).bool()
 
 
@@ -316,110 +307,22 @@ def pad_contrastive_batches(batch):
     )
 
 
+def stack_contrastive_batch(batch):
+    member1 = [b[0] for b in batch]
+    member2 = [b[1] for b in batch]
+    labels = [b[2] for b in batch]
+
+    return (
+        torch.stack(member1 + member2),
+        torch.as_tensor(labels),
+    )
+
+
 def non_default_collate(batch):
     return (
         torch.stack([b[0] for b in batch]),
         torch.stack([torch.tensor(b[1]) for b in batch]),
         [b[2] for b in batch],
-    )
-
-
-def msa_transformer_collate(just_sequences=False, with_labelvectors=False):
-    _, msa_transformer_alphabet = esm.pretrained.esm_msa1b_t12_100M_UR50S()
-    batch_converter = msa_transformer_alphabet.get_batch_converter()
-
-    def collate_fn(batch):
-        if just_sequences:
-            _, _, seq_embeddings = batch_converter([b[0] for b in batch])
-            return (
-                torch.as_tensor(seq_embeddings[:, :, 1:].squeeze()),
-                [b[1] for b in batch],
-                [b[2] for b in batch],
-            )
-        elif with_labelvectors:
-            _, _, msa_embeds = batch_converter([b[0] for b in batch])
-            _, _, seq_embeddings = batch_converter([[b[2]] for b in batch])
-            # remove dummy dim and 0 begin-of-seq token.
-            # seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
-            return (
-                torch.as_tensor(msa_embeds),
-                [torch.as_tensor(b[1]) for b in batch],
-                torch.as_tensor(seq_embeddings),
-                [torch.as_tensor(b[3]) for b in batch],
-                [b[4] for b in batch],
-            )
-
-        else:
-            _, _, msa_embeds = batch_converter([b[0] for b in batch])
-            _, _, seq_embeddings = batch_converter([b[1] for b in batch])
-            # remove dummy dim and 0 begin-of-seq token.
-            seq_embeddings = seq_embeddings[:, :, 1:].squeeze()
-            return (
-                torch.as_tensor(msa_embeds),
-                torch.as_tensor(seq_embeddings),
-                [b[2] for b in batch],
-            )
-
-    return collate_fn
-
-
-def daniel_sequence_encode(batch):
-    seqs = []
-
-    for seq in [b[0] for b in batch]:
-        seqs.append(
-            torch.stack(
-                [models.amino_n_to_v[models.amino_a_to_n[s.upper()]] for s in seq]
-            ).T
-        )
-
-    return (
-        torch.cat([s.unsqueeze(0) for s in seqs]),
-        [b[1] for b in batch],
-        [b[2] for b in batch],
-    )
-
-
-def process_with_esm_batch_converter(return_alignments=False):
-    _, alphabet = esm.pretrained.esm1b_t33_650M_UR50S()
-    batch_converter = alphabet.get_batch_converter()
-
-    def process(batch):
-        seqs = [("sd", "".join(b[0])) for b in batch]
-        embeddings = [b[1] for b in batch]
-        if return_alignments:
-            return (
-                batch_converter(seqs)[-1][:, 1:-1],
-                [b[1] for b in batch],
-                [b[2] for b in batch],
-                [b[3] for b in batch],
-            )
-
-        else:
-            return batch_converter(seqs)[-1][:, 1:-1], embeddings, [b[2] for b in batch]
-
-    return process
-
-
-def pad_contrastive_batches_with_labelvecs(batch):
-    """
-    Pad batches that consist of a 3-tuple: seq, logo, and label
-    :param batch: list of np.ndarrays encoding protein sequences/logos
-    :type batch: List[np.ndarray]
-    :return: torch.tensor
-    :rtype: torch.tensor
-    """
-
-    pair1 = [b[0] for b in batch]
-    pair2 = [b[1] for b in batch]
-    lvec1 = [b[2] for b in batch]
-    lvec2 = [b[3] for b in batch]
-    data = pair1 + pair2
-    labelvecs = lvec1 + lvec2
-    return (
-        torch.stack(data),
-        None,
-        labelvecs,
     )
 
 

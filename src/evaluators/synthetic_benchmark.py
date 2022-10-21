@@ -1,24 +1,18 @@
 import logging
-import pdb
 import time
 import warnings
-from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 
 warnings.filterwarnings("ignore")
 
-from src.datasets.datasets import sanitize_sequence
 from src.evaluators import Evaluator
 from src.utils import (
     amino_distribution,
-    amino_n_to_a,
     create_substitution_distribution,
     encode_string_sequence,
-    encode_tensor_sequence,
     fasta_from_file,
 )
 from src.utils.gen_utils import amino_alphabet, mutate_sequence

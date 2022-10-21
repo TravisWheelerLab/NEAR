@@ -24,8 +24,8 @@ from pytorch_lightning.plugins import DDPPlugin
 from sacred.observers import FileStorageObserver
 
 from src.callbacks import CallbackSet
-from src.config import train_ex
 from src.eval_config import evaluation_ex
+from src.train_config import train_ex
 from src.utils.util import load_dataset_class, load_evaluator_class, load_model_class
 
 
@@ -56,17 +56,15 @@ def _trainer_args(trainer_args):
 
 @train_ex.config
 def _ensure_description(description):
-
     if description == "":
         if sys.stdout.isatty():
             description = input("Describe your experiment.")
         else:
-            raise ValueError("Describe your experiment by editing config.py.")
+            raise ValueError("Describe your experiment by editing train_config.py.")
 
 
 @train_ex.main
 def train(_config):
-
     seed_everything(_config["seed"])
     params = SimpleNamespace(**_config)
     model = params.model_class(**params.model_args)
@@ -134,9 +132,14 @@ def evaluate(_config):
 
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
 
-    model = params.model_class.load_from_checkpoint(
-        params.checkpoint_path, map_location=torch.device(params.device)
-    ).to(params.device)
+    model = (
+        params.model_class()
+        .load_from_checkpoint(
+            checkpoint_path=params.checkpoint_path,
+            map_location=torch.device(params.device),
+        )
+        .to(params.device)
+    )
 
     evaluator = params.evaluator_class(**params.evaluator_args)
     result = evaluator.evaluate(model_class=model)

@@ -1,29 +1,13 @@
 # pylint: disable=no-member
-import json
 import logging
 import os
-import pdb
-import string
-import time
-import warnings
-from abc import ABC
-from collections import defaultdict
-from copy import deepcopy
 from glob import glob
 from random import shuffle
-from sys import stdout
-from typing import Dict, List, Optional, Tuple, Union
 
-import esm as esm
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import yaml
 from Bio import AlignIO
-from tqdm import tqdm
 
-import src
-import src.models as models
 import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
@@ -269,4 +253,76 @@ class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
         return self._sample(idx)
 
     def collate_fn(self):
-        return utils.pad_contrastive_batches
+        return utils.stack_contrastive_batch
+
+
+class FastaSampler:
+    def __init__(self, train_fasta, valid_fasta):
+        _, self.train_sequences = utils.fasta_from_file(train_fasta)
+        _, self.valid_sequences = utils.fasta_from_file(valid_fasta)
+
+    def sample(self):
+        # grab a random pair
+        train_idx = int(np.random.rand() * len(self.train_sequences))
+        valid_idx = int(np.random.rand() * len(self.valid_sequences))
+        return self.train_sequences[train_idx], self.valid_sequences[valid_idx]
+
+
+class PfamDataset(DataModule):
+    def __init__(self, train_files, valid_files, training=True, **kwargs):
+
+        super(PfamDataset, self).__init__(**kwargs)
+
+        self.training = training
+
+        if len(train_files) == 0 or len(valid_files) == 0:
+            raise ValueError("Didn't receive any train/valid files.")
+
+        self.training_pairs = []
+        for i, train in enumerate(train_files):
+            valid_name = train.replace("-train", "-valid")
+            if valid_name in valid_files:
+                valid_file = valid_files[valid_files.index(valid_name)]
+                self.training_pairs.append((i, FastaSampler(train, valid_file)))
+            else:
+                self.training_pairs.append((i, FastaSampler(train, train)))
+
+    def collate_fn(self):
+        def pad_view_batches(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            seqs, seqs_mask = utils.pad_sequences(data)
+            return (
+                torch.as_tensor(seqs),
+                torch.as_tensor(seqs_mask),
+                torch.as_tensor(labels),
+            )
+
+        return pad_view_batches
+
+    def __len__(self):
+        return 10000
+
+    def __getitem__(self, index):
+        label, sampler = self.training_pairs[index // len(self.training_pairs)]
+        s1, s2 = sampler.sample()
+        if len(s1) < 128:
+            s1 = s1 + "".join(["A"] * 128)
+        # same size sequences, will this fit?
+        s1 = s1[:128]
+        return (
+            utils.encode_string_sequence(sanitize_sequence(s1)),
+            utils.encode_string_sequence(sanitize_sequence(s1)),
+            label,
+        )

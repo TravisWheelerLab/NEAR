@@ -1,6 +1,5 @@
 import pdb
 from argparse import ArgumentParser
-from random import shuffle
 from sys import stdout
 
 import esm

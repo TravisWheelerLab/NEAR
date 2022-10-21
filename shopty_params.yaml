@@ -82,5 +82,3 @@ slurm_directives:
 environment_commands:
   - 'source ~/anaconda/bin/activate'
   - 'conda activate beetles'
-
-

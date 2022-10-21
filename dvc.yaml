@@ -5,7 +5,7 @@ stages:
       - src/models/
       - src/datasets/
       - src/utils/
-      - src/config.py
+      - src/train_config.py
     outs:
       - model_data/best_loss_model.ckpt
       - model_data/hparams.yaml

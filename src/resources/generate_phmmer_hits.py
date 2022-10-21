@@ -1,12 +1,9 @@
 #!/home/u4/colligan//miniconda3/envs/faiss/bin/python
 import os
-import pdb
-import subprocess
 from argparse import ArgumentParser
 from collections import defaultdict
 from subprocess import check_output
 
-import numpy as np
 import tqdm
 
 

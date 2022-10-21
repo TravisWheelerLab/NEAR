@@ -1,9 +1,7 @@
 import logging
 import os
-import pdb
 import subprocess
 from argparse import ArgumentParser
-from logging import getLogger
 from subprocess import check_output
 
 from tqdm import tqdm

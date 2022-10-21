@@ -1,9 +1,6 @@
-import json
 import os
 from argparse import ArgumentParser
 from collections import defaultdict
-from glob import glob
-from sys import stdout
 from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
@@ -13,7 +10,6 @@ import yaml
 from src.utils import (
     fasta_from_file,
     handle_figure_path,
-    label_fasta,
     load_sequences_and_labels,
     parse_labels,
 )

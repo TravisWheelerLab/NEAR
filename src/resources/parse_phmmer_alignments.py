@@ -1,8 +1,6 @@
 #!/home/u4/colligan//miniconda3/envs/faiss/bin/python
 import logging
 import os
-import pdb
-import subprocess
 from glob import glob
 
 import tqdm
