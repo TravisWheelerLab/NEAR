@@ -172,10 +172,11 @@ class SwissProtGenerator(DataModule):
 
         self.fa_file = fa_file
         labels, seqs = utils.fasta_from_file(fa_file)
-        self.seqs = [s[:minlen] for s in seqs if len(s) >= minlen]
+        self.seqs = [s for s in seqs if len(s) >= minlen]
         self.training = training
         self.sub_dists = utils.create_substitution_distribution(62)
         self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+        self.minlen = minlen
         shuffle(self.seqs)
 
     def __len__(self):
@@ -198,7 +199,12 @@ class SwissProtGenerator(DataModule):
 
             idx = np.random.randint(0, len(self.seqs))
 
-        s1 = sanitize_sequence(self.seqs[idx])
+        seq = self.seqs[idx]
+        # subsample sequence;
+        start_idx = np.random.randint(0, len(seq) - self.minlen)
+        seq = seq[start_idx : start_idx + self.minlen]
+
+        s1 = sanitize_sequence(seq)
 
         s1 = torch.as_tensor([utils.amino_char_to_index[c] for c in s1])
         n_subs = int(
@@ -226,13 +232,20 @@ class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
     def _sample(self, idx):
         if not self.training:
             if idx == 0:
-                print("shuffling.")
+                logger.info("shuffling.")
                 self.shuffle()
 
             idx = np.random.randint(0, len(self.seqs))
 
-        sequence = sanitize_sequence(self.seqs[idx])
-        # ok, it's fine if it's different.
+        seq = self.seqs[idx]
+        # subsample sequence;
+        if len(seq) != self.minlen:
+            start_idx = np.random.randint(0, len(seq) - self.minlen)
+        else:
+            start_idx = 0
+        seq = seq[start_idx : start_idx + self.minlen]
+
+        sequence = sanitize_sequence(seq)
 
         sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
 

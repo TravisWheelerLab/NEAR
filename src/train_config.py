@@ -1,5 +1,4 @@
 import logging
-from glob import glob
 
 from sacred import Experiment
 
@@ -16,36 +15,32 @@ def config():
 
     description = "None"
 
-    log_dir = "/xdisk/twheeler/colligan/model_data/resnet_meanpool"
+    log_dir = "/xdisk/twheeler/colligan/model_data/contrastive_2_layers"
     log_verbosity = logging.INFO
 
-    model_name = "ResNet1dSequencePool"
-    dataset_name = "PfamDataset"
+    model_name = "ResNet1d"
+    dataset_name = "SwissProtGeneratorDanielSequenceEncode"
 
     global root
     root = "/xdisk/twheeler/colligan/"
     global seq_len
     seq_len = 256
     global batch_size
-    batch_size = 512
-
-    # root = "/home/tc229954/prefilter_data/"
+    batch_size = 64
 
     @to_dict
     class model_args:
         learning_rate = 1e-3
-        log_interval = 100
+        log_interval = 300
 
     @to_dict
     class train_dataset_args:
-        train_files = glob("/xdisk/twheeler/colligan/1000_file_subset/*train*")
-        valid_files = glob("/xdisk/twheeler/colligan/1000_file_subset/*valid*")
+        fa_file = "/xdisk/twheeler/colligan/uniprot_sprot.fasta"
         minlen = seq_len
 
     @to_dict
     class val_dataset_args:
-        train_files = glob("/xdisk/twheeler/colligan/1000_file_subset/*train*")
-        valid_files = glob("/xdisk/twheeler/colligan/1000_file_subset/*valid*")
+        fa_file = "/xdisk/twheeler/colligan/uniprot_sprot.fasta"
         training = False
         minlen = seq_len
 
@@ -57,8 +52,9 @@ def config():
 
     @to_dict
     class trainer_args:
-        gpus = 1
+        accelerator = "gpu"
+        devices = 1
         num_nodes = 1
-        max_epochs = 1000
+        max_epochs = 15
         check_val_every_n_epoch = 1
         log_every_n_steps = 10

@@ -25,9 +25,9 @@
 #SBATCH --time=12:01:00
 ### any other slurm options are supported, but not required.
 #SBATCH --gres=gpu:1
-#SBATCH --array=[1-8]%8
+#SBATCH --array=[1-3]%3
 
-cd /home/u4/colligan/share/prefilter/
+cd /home/u4/colligan/share/prefilter/src/resources/cluster_scripts/
 source $HOME/miniconda3/bin/activate
 conda activate faiss
 export LD_LIBRARY_PATH=$HOME/miniconda3/lib/:$LD_LIBRARY_PATH

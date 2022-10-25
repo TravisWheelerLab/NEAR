@@ -17,8 +17,8 @@ class ResNet1d(pl.LightningModule):
 
         self.res_block_n_filters = 128
 
-        self.res_block_kernel_size = 5
-        self.n_res_blocks = 18
+        self.res_block_kernel_size = 3
+        self.n_res_blocks = 2
         self.res_bottleneck_factor = 1
         self.padding = "same"
         self.padding_mode = "circular"
@@ -33,7 +33,9 @@ class ResNet1d(pl.LightningModule):
 
     def _setup_layers(self):
 
-        self.embed = nn.Embedding(27, self.res_block_n_filters)
+        self.embed = nn.Conv1d(
+            in_channels=20, out_channels=self.res_block_n_filters, kernel_size=1
+        )
 
         _list = []
         for _ in range(self.n_res_blocks):
@@ -57,7 +59,7 @@ class ResNet1d(pl.LightningModule):
 
     def _forward(self, x):
         x = self.embed(x)
-        x = self.embedding_trunk(x.transpose(-1, -2))
+        x = self.embedding_trunk(x)
         x = self.mlp(x)
         return x
 
@@ -80,12 +82,9 @@ class ResNet1d(pl.LightningModule):
             return embeddings
 
     def _shared_step(self, batch):
-        features, masks, labelvecs = batch
+        features, labels = batch
 
-        if masks is not None:
-            embeddings, masks = self.forward(features, masks)
-        else:
-            embeddings = self.forward(features)
+        embeddings = self.forward(features)
 
         e1, e2 = torch.split(
             embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
@@ -96,7 +95,6 @@ class ResNet1d(pl.LightningModule):
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
         if self.global_step % self.log_interval == 0:
-
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
                 arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()

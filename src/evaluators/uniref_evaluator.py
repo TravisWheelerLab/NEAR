@@ -131,7 +131,8 @@ class UniRefEvaluator(Evaluator):
         embeddings = []
         for j, sequence in enumerate(tqdm.tqdm(sequences)):
             if self.max_seq_length >= len(sequence) >= self.minimum_seq_length:
-                embed = self.compute_embedding(sequence, model_class).squeeze()
+                embed = self.compute_embedding(sequence, model_class)
+                # return: seq_lenxembed_dim shape
                 embeddings.append(embed.to("cpu"))
                 idx_to_keep.append(j)
             else:
@@ -196,12 +197,26 @@ class UniRefEvaluator(Evaluator):
         self._roc_plot(our_hits, self.max_hmmer_hits)
 
     def compute_embedding(self, sequence, model_class):
+        """
+        :param sequence:
+        :type sequence:
+        :param model_class:
+        :type model_class:
+        :return: An embedding, seq_lenxembed dim.
+        :rtype:
+        """
         raise NotImplementedError()
 
     def _roc_plot(self, our_hits, max_hits):
         filtrations = []
         recalls = []
-        for threshold in tqdm.tqdm(np.linspace(self.distance_threshold, 1.0, num=10)):
+
+        if self.normalize_embeddings:
+            distances = np.linspace(self.distance_threshold, 0.999, num=20)
+        else:
+            distances = np.linspace(0.001, self.distance_threshold, num=20)
+
+        for threshold in tqdm.tqdm(distances):
             recall, total_hits = recall_and_filtration(
                 our_hits, max_hits, threshold, self.comp_func
             )
@@ -213,12 +228,11 @@ class UniRefEvaluator(Evaluator):
 
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.set_title(f"{os.path.splitext(os.path.basename(self.figure_path))[0]}")
-        # add a 50/50 line
-        ax.plot([0, 101], [101, 0], "k--", linewidth=2)
+        ax.plot([0, 100], [100, 0], "k--", linewidth=2)
         ax.scatter(filtrations, recalls, c="r", marker="o")
         ax.plot(filtrations, recalls, "r--", linewidth=2)
-        ax.set_ylim([0, 101])
-        ax.set_xlim([0, 101])
+        ax.set_ylim([-1, 101])
+        ax.set_xlim([-1, 101])
         ax.set_xlabel("filtration")
         ax.set_ylabel("recall")
         plt.savefig(f"{self.figure_path}", bbox_inches="tight")
@@ -249,7 +263,7 @@ class UniRefEvaluator(Evaluator):
         t_tot = 0
         t_begin = time.time()
 
-        for i in range(len(queries)):
+        for i in tqdm.tqdm(range(len(queries))):
             loop_begin = time.time()
             logger.debug(f"{i / (len(queries)):.3f}")
 
@@ -492,7 +506,7 @@ class UniRefRandomUngappedVAEEvaluator(UniRefTiledVAEEvaluator):
                     )
                     # add bits on to the beginning and end of sequence.
                 embed = self.compute_embedding(sequence, model_class)
-                embeddings.append(embed.transpose(-1, -2).to("cpu"))
+                embeddings.append(embed.to("cpu"))
                 idx_to_keep.append(j)
             else:
                 logger.debug(
@@ -518,15 +532,16 @@ class UniRefMeanPoolEvaluator(UniRefEvaluator):
         super().__init__(*args, **kwargs)
 
         queries = defaultdict(dict)
-        with open(hmmer_hit_file, "r") as src:
-            for line in src.readlines():
-                query, target = line.strip().split()
-                queries[query][target] = (0.0, 0.0)
-        self.max_hmmer_hits = queries
+        if hmmer_hit_file is not None:
+            with open(hmmer_hit_file, "r") as src:
+                for line in src.readlines():
+                    query, target = line.strip().split()
+                    queries[query][target] = (0.0, 0.0)
+            self.max_hmmer_hits = queries
 
     def compute_embedding(self, sequence, model_class):
         encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
-        embedding = model_class(encoded)
+        embedding = model_class(encoded).squeeze().mean(dim=1).unsqueeze(0)
         return embedding
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
@@ -599,8 +614,8 @@ class UniRefCARPEvaluator(UniRefEvaluator):
 
     def compute_embedding(self, sequence, model_class):
         encoded = self.collater([[sequence]])[0].to(self.model_device)
-        embedding = model_class(encoded)["representations"][32]
-        return embedding
+        embedding = model_class(encoded)["representations"][56]
+        return embedding.mean(dim=1)
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         lengths = list(map(lambda s: s.shape[0], targets))
@@ -678,7 +693,7 @@ class UniRefESMEvaluator(UniRefEvaluator):
         embedding = model_class(
             encoded.to(self.model_device), repr_layers=[33], return_contacts=True
         )
-        embedding = embedding["representations"][33]
+        embedding = embedding["representations"][33].mean(dim=1)
         return embedding
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):

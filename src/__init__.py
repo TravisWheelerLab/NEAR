@@ -49,7 +49,7 @@ def _log_verbosity(log_verbosity):
 @train_ex.config
 def _trainer_args(trainer_args):
     # set fairly permanent trainer args here.
-    if trainer_args["gpus"] > 0:
+    if trainer_args["accelerator"] == "gpu":
         trainer_args["precision"] = 16
     # trainer_args["detect_anomaly"] = True
 
@@ -132,14 +132,10 @@ def evaluate(_config):
 
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
 
-    model = (
-        params.model_class()
-        .load_from_checkpoint(
-            checkpoint_path=params.checkpoint_path,
-            map_location=torch.device(params.device),
-        )
-        .to(params.device)
-    )
+    model = params.model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
 
     evaluator = params.evaluator_class(**params.evaluator_args)
     result = evaluator.evaluate(model_class=model)
