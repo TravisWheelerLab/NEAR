@@ -43,34 +43,30 @@ def temporal():
 def config():
 
     device = "cuda"
-    model_name = "ResNet1d"
-    evaluator_name = "UniRefMeanPoolEvaluator"
+    model_name = "ResNet1dKmerSampler"
+    evaluator_name = "KMerEmbedEvaluator"
     global figure_path
-    figure_path = f"contrastive_all_sequences_2_layers_mean_pool.png"
+
+    figure_path = f"length_100_15mer_10k_targets_4_res_blocks.png"
 
     num_threads = 12
     log_verbosity = logging.INFO
-    root = "/xdisk/twheeler/colligan/model_data/contrastive_2_layers/ResNet1d/1/"
+    root = "/xdisk/twheeler/colligan/model_data/ResNet1dKmerSampler/8/"
     checkpoint_path = f"{root}/checkpoints/best_loss_model.ckpt"
-
-    with open(f"{root}/hparams.yaml", "r") as src:
-        hparams = yaml.safe_load(src)
 
     @to_dict
     class evaluator_args:
-        model_device = "cuda"
+        target_sequence_fasta = None
+        blosum = 62
         index_device = "cuda"
+        device = "cuda"
+        sample_percent = 1.0
+        num_queries = 100
         normalize_embeddings = True
-        select_random_aminos = False
-        figure_path = figure_path
-        encoding_func = None
+        num_targets = 10000
         index_string = "Flat"
-        hmmer_hit_file = None  # "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/hits.txt"
-        query_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/Q_benchmark2k30k.fa"
-        target_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
-        # query_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/queries.fa"
-        # target_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/targets.fa"
-        distance_threshold = 0.5
-        evalue_threshold = 10
-        minimum_seq_length = 0
-        max_seq_length = 100000
+        figure_path = figure_path
+        query_percent = 1.0
+        distance_threshold = 0.0
+        kmer_length = 15
+        seq_len = 200
