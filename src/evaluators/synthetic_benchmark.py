@@ -5,6 +5,7 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import tqdm
 
 warnings.filterwarnings("ignore")
 
@@ -15,7 +16,11 @@ from src.utils import (
     encode_string_sequence,
     fasta_from_file,
 )
-from src.utils.gen_utils import amino_alphabet, mutate_sequence
+from src.utils.gen_utils import (
+    amino_alphabet,
+    generate_string_sequence,
+    mutate_sequence,
+)
 from src.utils.helpers import create_faiss_index
 
 logger = logging.getLogger("evaluate")
@@ -181,7 +186,7 @@ class SyntheticEvaluator(Evaluator):
 
         logger.info(f"Selecting {self.query_percent * 100}% of query aminos.")
 
-        for i in range(start, num_queries):
+        for i in tqdm.tqdm(range(start, num_queries)):
             loop_begin = time.time()
             logger.debug(f"{i / (num_queries - start):.3f}")
 
@@ -208,7 +213,7 @@ class SyntheticEvaluator(Evaluator):
 
     def calc_embeddings(self, sequences, model_class):
         embeddings = []
-        for sequence in sequences:
+        for sequence in tqdm.tqdm(sequences):
             embed = self.compute_embedding(sequence, model_class)
             embeddings.append(embed)
         return embeddings
@@ -245,8 +250,12 @@ class SyntheticEvaluator(Evaluator):
                         np.where(distances <= threshold)[0]
                     ]
                 # recall and filtration.
-                if query.item() in hit_labels_filtered:
-                    recall += 1
+                if isinstance(query, int):
+                    if query in hit_labels_filtered:
+                        recall += 1
+                else:
+                    if query.item() in hit_labels_filtered:
+                        recall += 1
 
                 # only get uniques
                 total_hits += len(set(hit_labels_filtered))
@@ -261,7 +270,7 @@ class SyntheticEvaluator(Evaluator):
         recalls = list(threshold_to_recall.values())
         total_hits = list(threshold_to_total_hits.values())
         filtrations = [
-            100 * (1 - (t / (self.num_queries * self.num_target_sequences)))
+            100 * (1 - (t / (self.num_target_sequences * self.num_target_sequences)))
             for t in total_hits
         ]
         recalls = [100 * (r / len(hits)) for r in recalls]
@@ -320,3 +329,100 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
             filtered_list.append((name, distance))
 
         return filtered_list
+
+
+class KMerEmbedEvaluator(SyntheticEvaluator):
+    def __init__(self, num_targets, kmer_length, *args, seq_len=128, **kwargs):
+        super(KMerEmbedEvaluator, self).__init__(*args, **kwargs)
+        self.seq_len = seq_len
+        self.num_targets = num_targets
+        self.num_target_sequences = num_targets
+        self.kmer_length = kmer_length
+        self.index = None
+
+    def compute_embedding(self, sequence, model_class):
+        return model_class(
+            encode_string_sequence(sequence).to(self.device).unsqueeze(0)
+        ).mean(dim=-1)
+
+    def search(self, query_embedding):
+        filtered_list = []
+
+        D, I = self.index.search(query_embedding.contiguous(), k=2048)
+        # remove stuff that's under/over the threshold
+        I = I[self.comp_func(D, self.distance_threshold)]
+        D = D[self.comp_func(D, self.distance_threshold)]
+
+        for distance, name in zip(
+            D.ravel().to("cpu").numpy(),
+            self.unrolled_names[I.ravel().to("cpu").numpy()],
+        ):
+            filtered_list.append((name, distance))
+
+        return filtered_list
+
+    def create_target_and_query_dbs(self, model_class):
+        torch.manual_seed(0)
+        np.random.seed(0)
+        queries = []
+        query_names = []
+        target_names = []
+        target_sequences = []
+        logger.debug("Starting computation of databases.")
+
+        for i in range(self.num_targets):
+            target_sequence = generate_string_sequence(self.seq_len)
+            start_idx = int(np.random.rand() * (self.seq_len - self.kmer_length))
+            # make a kmer seed
+            kmer_seed = target_sequence[start_idx : start_idx + self.kmer_length]
+            random_seq = generate_string_sequence(self.seq_len)
+            start_idx = int(np.random.rand() * (self.seq_len - self.kmer_length))
+            seeded_seq = (
+                random_seq[:start_idx]
+                + kmer_seed
+                + random_seq[start_idx + self.kmer_length :]
+            )
+
+            queries.append(seeded_seq)
+            target_sequences.append(target_sequence)
+
+            query_names.append(i)
+            target_names.append(i)
+
+        target_embeddings = self.calc_embeddings(target_sequences, model_class)
+        query_embeddings = self.calc_embeddings(queries, model_class)
+
+        lengths = list(map(lambda s: s.shape[0], target_embeddings))
+        logger.info(f"Original DB size: {sum(lengths)}")
+
+        unrolled_targets = []
+        self.unrolled_names = []
+
+        for i, (length, name, target) in enumerate(
+            zip(lengths, target_names, target_embeddings)
+        ):
+            self.unrolled_names.extend([name] * len(target))
+            unrolled_targets.append(target)
+
+        unrolled_targets = torch.cat(unrolled_targets, dim=0)
+        assert len(unrolled_targets) == len(self.unrolled_names)
+
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+
+        if self.normalize_embeddings:
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+
+        self.index = create_faiss_index(
+            embeddings=unrolled_targets,
+            embed_dim=unrolled_targets.shape[-1],
+            distance_metric="cosine" if self.normalize_embeddings else "l2",
+            index_string=self.index_string,
+            nprobe=1,
+            device=self.index_device,
+        )
+        self.unrolled_names = np.asarray(self.unrolled_names)
+
+        logger.info("Adding targets to index.")
+        self.index.add(unrolled_targets)
+
+        return query_embeddings, query_names

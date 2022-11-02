@@ -6,11 +6,12 @@ from random import shuffle
 
 import numpy as np
 import torch
-from Bio import AlignIO
+from torchaudio.transforms import MelSpectrogram
 
 import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
+from src.utils.helpers import AAIndexFFT
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ class AlignmentGenerator(DataModule):
         return None
 
     def __init__(self, ali_path, seq_len, training=True):
+        from Bio import AlignIO
+
         self.alignment_files = glob(os.path.join(ali_path, "*.sto"))
         # also put a classification loss on there.
         # so i can see accuracy numbers
@@ -266,7 +269,7 @@ class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
         return self._sample(idx)
 
     def collate_fn(self):
-        return utils.stack_contrastive_batch
+        return utils.stack_vae_batch
 
 
 class FastaSampler:
@@ -314,18 +317,16 @@ class PfamDataset(DataModule):
             seqs = [b[0] for b in batch]
             logos = [b[1] for b in batch]
             labels = [b[2] for b in batch]
-            data = seqs + logos
-            seqs, seqs_mask = utils.pad_sequences(data)
             return (
-                torch.as_tensor(seqs),
-                torch.as_tensor(seqs_mask),
+                torch.stack(seqs),
+                torch.stack(logos),
                 torch.as_tensor(labels),
             )
 
         return pad_view_batches
 
     def __len__(self):
-        return 10000
+        return 1000000
 
     def __getitem__(self, index):
         label, sampler = self.training_pairs[index // len(self.training_pairs)]
@@ -339,3 +340,318 @@ class PfamDataset(DataModule):
             utils.encode_string_sequence(sanitize_sequence(s1)),
             label,
         )
+
+
+class KMerSampler(DataModule):
+    def __init__(self, training, n_pairs, kmer_length, minlen=32):
+        super(kmersampler, self).__init__()
+        self.training = training
+        self.minlen = minlen
+        self.n_pairs = n_pairs
+        self.kmer_length = kmer_length
+        self.idx_cnt = 0
+
+    def collate_fn(self):
+        def pad_view_batches(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            return (
+                torch.stack(data),
+                torch.as_tensor(labels),
+            )
+
+        return pad_view_batches
+
+    def __len__(self) -> int:
+        if self.training:
+            return 200000
+        else:
+            return 10000
+
+    def __getitem__(self, index: int):
+        # make a new sequence:
+        seed_sequence = generate_string_sequence(self.minlen)
+        # grab a random kmer from the seed sequence
+        kmer_length = self.kmer_length  # int(np.random.rand()*self.kmer_length)
+        # kmer_length = max(kmer_length, 5)
+        start_idx = int(np.random.rand() * (self.minlen - kmer_length))
+        # make a kmer seed
+        kmer_seed = seed_sequence[start_idx : start_idx + kmer_length]
+        random_seq = generate_string_sequence(self.minlen)
+        start_idx = int(np.random.rand() * (self.minlen - kmer_length))
+        seeded_seq = (
+            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
+        )
+        self.idx_cnt += 1
+        # just do pairs for now.
+        return (
+            utils.encode_string_sequence(sanitize_sequence(seed_sequence)),
+            utils.encode_string_sequence(sanitize_sequence(seeded_seq)),
+            self.idx_cnt,
+        )
+
+
+class SpectrogramDataset(DataModule):
+    def __init__(self, training, minlen, kmer_length, n_pairs):
+        super(SpectrogramDataset, self).__init__()
+        self.mel = MelSpectrogram(win_length=32, hop_length=16)
+        self.training = training
+        self.minlen = minlen
+        self.kmer_length = kmer_length
+        self.idx_cnt = 0
+
+    def collate_fn(self):
+        def pad_view_batches(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            return (
+                torch.stack(data),
+                torch.as_tensor(labels),
+            )
+
+        return pad_view_batches
+
+    def __len__(self) -> int:
+        if self.training:
+            return 200000
+        else:
+            return 10000
+
+    def __getitem__(self, index: int):
+        # make a new sequence:
+        seed_sequence = generate_string_sequence(self.minlen)
+        # grab a random kmer from the seed sequence
+        kmer_length = self.kmer_length
+        # kmer_length = max(kmer_length, 5)
+        start_idx = int(np.random.rand() * (self.minlen - kmer_length))
+        # make a kmer seed
+        kmer_seed = seed_sequence[start_idx : start_idx + kmer_length]
+        random_seq = generate_string_sequence(self.minlen)
+        start_idx = int(np.random.rand() * (self.minlen - kmer_length))
+        seeded_seq = (
+            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
+        )
+        # take the Mel
+        self.idx_cnt += 1
+        # just do pairs for now.
+        return (
+            torch.log(
+                1
+                + self.mel(
+                    torch.as_tensor(
+                        [
+                            utils.amino_char_to_index[c]
+                            for c in sanitize_sequence(seed_sequence)
+                        ]
+                    ).float()
+                )
+            ),
+            torch.log(
+                1
+                + self.mel(
+                    torch.as_tensor(
+                        [
+                            utils.amino_char_to_index[c]
+                            for c in sanitize_sequence(seeded_seq)
+                        ]
+                    ).float()
+                )
+            ),
+            self.idx_cnt,
+        )
+
+
+class AAIndexDataset(DataModule):
+    def __init__(self, fa_file, minlen, training):
+        _, seqs = utils.fasta_from_file(fa_file)
+        self.seqs = [s for s in seqs if len(s) > minlen]
+        self.minlen = minlen
+        self.training = training
+
+        self.sub_dists = utils.create_substitution_distribution(62)
+        self.sub_probs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+
+        with open("src/resources/indices.txt") as f:
+            data = f.read()
+        split = data.split("//")
+        indices = [s[s.find("I") :].replace("\n", "").split() for s in split]
+
+        aas = [
+            "A",
+            "R",
+            "N",
+            "D",
+            "C",
+            "Q",
+            "E",
+            "G",
+            "H",
+            "I",
+            "L",
+            "K",
+            "M",
+            "F",
+            "P",
+            "S",
+            "T",
+            "W",
+            "Y",
+            "V",
+        ]
+
+        self.indices = []
+
+        for index in indices:
+            if len(index) <= 20:
+                logger.debug("Skipping index.")
+                continue
+
+            mapping = AAIndexFFT()
+            broke = False
+            for i, aa in enumerate(aas):
+                try:
+                    mapping[aa] = float(index[-(20 - i)])
+                except ValueError:
+                    broke = True
+                    break
+            if not broke:
+                self.indices.append(mapping)
+
+    def collate_fn(self):
+        def pad_view_batches(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            return (
+                torch.stack(data),
+                torch.as_tensor(labels),
+            )
+
+        return pad_view_batches
+
+    def __len__(self) -> int:
+        if self.training:
+            return len(self.seqs)
+        else:
+            return 10000
+
+    def __getitem__(self, idx):
+        seq = self.seqs[idx]
+        # subsample sequence;
+        if len(seq) != self.minlen:
+            start_idx = np.random.randint(0, len(seq) - self.minlen)
+        else:
+            start_idx = 0
+        seq = seq[start_idx : start_idx + self.minlen]
+
+        sequence = sanitize_sequence(seq)
+
+        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+
+        n_subs = int(
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        )
+
+        s2 = utils.mutate_sequence(
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+        )
+        # this creates a fuzzy tensor.
+        # map back to character space;
+        s1 = torch.log(1 + self.mel(sequence).float())
+        s2 = torch.log(1 + self.mel(s2).float())
+
+        return s1, s2, idx % len(self.seqs)
+
+
+class UniProtSpectDataset(SwissProtGeneratorDanielSequenceEncode):
+    def __init__(self, *args, **kwargs):
+        super(UniProtSpectDataset, self).__init__(*args, **kwargs)
+        self.mel = MelSpectrogram(win_length=32, hop_length=16, n_mels=50)
+
+    def __getitem__(self, idx):
+        seq = self.seqs[idx]
+        # subsample sequence;
+        if len(seq) != self.minlen:
+            start_idx = np.random.randint(0, len(seq) - self.minlen)
+        else:
+            start_idx = 0
+        seq = seq[start_idx : start_idx + self.minlen]
+
+        sequence = sanitize_sequence(seq)
+
+        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+
+        n_subs = int(
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        )
+
+        s2 = utils.mutate_sequence(
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
+        )
+
+        s1 = self.mel(sequence.float())
+        s1 = s1 / torch.max(s1)
+        s2 = self.mel(s2.float())
+        s2 = s2 / torch.max(s2)
+        s1[torch.isnan(s1)] = 0
+        s2[torch.isnan(s2)] = 0
+
+        return s1, s2, idx % len(self.seqs)
+
+    def collate_fn(self):
+        def pad_view_batches(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            return (
+                torch.stack(data),
+                torch.as_tensor(labels),
+            )
+
+        return pad_view_batches

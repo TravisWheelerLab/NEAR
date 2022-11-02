@@ -14,9 +14,15 @@ import numpy as np
 import torch
 import tqdm
 from sequence_models.pretrained import load_model_and_alphabet
+from torchaudio.transforms import MelSpectrogram
 
 from src.evaluators import Evaluator
-from src.utils import create_faiss_index, encode_string_sequence, fasta_from_file
+from src.utils import (
+    amino_char_to_index,
+    create_faiss_index,
+    encode_string_sequence,
+    fasta_from_file,
+)
 from src.utils.gen_utils import generate_string_sequence
 
 logger = logging.getLogger("evaluate")
@@ -53,8 +59,9 @@ def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func):
     # since we sometimes don't have
     # all queries, iterate over the DB in this fashion.
     for query in our_hits:
-        # need to figure this one out.
         if query not in hmmer_hits:
+            # we've set an e-value threshold, meaning
+            # that this query was never picked up
             pdb.set_trace()
         true_matches = hmmer_hits[query]
         hmmer_hits_for_our_queries += len(true_matches)
@@ -154,8 +161,9 @@ class UniRefEvaluator(Evaluator):
         return names, sequences, embeddings
 
     def evaluate(self, model_class):
-        if hasattr(self, "tile_size"):
+        if hasattr(model_class, "initial_seq_len"):
             self.tile_size = model_class.initial_seq_len
+
         target_names, target_sequences, target_embeddings = self._calc_embeddings(
             self.target_file, model_class=model_class
         )
@@ -166,6 +174,7 @@ class UniRefEvaluator(Evaluator):
         # target names.
         init_len = sum(map(lambda x: len(x), self.max_hmmer_hits.values()))
         new_max = {}
+
         for query in self.max_hmmer_hits:
             new_dict = {}
             for hit in self.max_hmmer_hits[query]:
@@ -192,7 +201,10 @@ class UniRefEvaluator(Evaluator):
             for hit in hits[query]:
                 our_hits[query][hit[0]] = hit[1]
 
-        self.denom = (len(query_names) * len(target_names)) - len(query_names)
+        self.denom = (
+            (len(query_names) * len(target_names)) - len(query_names) - len(query_names)
+        )
+        self.num_queries = len(query_names)
 
         self._roc_plot(our_hits, self.max_hmmer_hits)
 
@@ -212,9 +224,9 @@ class UniRefEvaluator(Evaluator):
         recalls = []
 
         if self.normalize_embeddings:
-            distances = np.linspace(self.distance_threshold, 0.999, num=20)
+            distances = np.linspace(self.distance_threshold, 0.999, num=10)
         else:
-            distances = np.linspace(0.001, self.distance_threshold, num=20)
+            distances = np.linspace(0.001, self.distance_threshold, num=10)
 
         for threshold in tqdm.tqdm(distances):
             recall, total_hits = recall_and_filtration(
@@ -278,13 +290,7 @@ class UniRefEvaluator(Evaluator):
             sorted_idx = np.argsort(distances)[::-1]
 
             names = names[sorted_idx]
-            # wait, I wasn't sorting the distances?
-            # that means that the ordering was all wrong.
             distances = distances[sorted_idx]
-            # because the unique call below returns the unique name positions
-            # if the distances array wasn't sorted in the same way as the name
-            # array, then we would have basically random distances
-            # associated with the names.
             logger.debug(f"len names: {len(names)}")
             names, name_idx = np.unique(names, return_index=True)
 
@@ -552,9 +558,8 @@ class UniRefMeanPoolEvaluator(UniRefEvaluator):
 
         for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
             # sample every N amino.
-            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
             self.unrolled_names.extend([name] * length)
-            unrolled_targets.append(aminos)
+            unrolled_targets.append(target)
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
@@ -597,6 +602,54 @@ class UniRefMeanPoolEvaluator(UniRefEvaluator):
             filtered_list.append((name, distance))
 
         return filtered_list
+
+
+class UniRefTiledMeanPoolEvaluator(UniRefMeanPoolEvaluator):
+    def __init__(self, tile_size, tile_step, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tile_size = tile_size
+        self.tile_step = tile_step
+
+    def helper(self, encoded, model_class):
+        embedding = model_class(encoded).squeeze().mean(dim=1).unsqueeze(0)
+        return embedding
+
+    @torch.no_grad()
+    def compute_embedding(self, sequence, model_class):
+        slices = []
+        encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
+        if len(sequence) <= self.tile_size:
+            encoding = self.helper(encoded, model_class)
+            slices.append(encoding)
+        else:
+
+            for begin_idx in range(0, len(sequence), self.tile_step):
+                if begin_idx + self.tile_size >= len(sequence):
+                    # we can't go over the end, so break
+                    break
+
+                encoded_slice = encoded[:, :, begin_idx : begin_idx + self.tile_size]
+                encoding = self.helper(encoded_slice, model_class)
+                slices.append(encoding)
+            encoded_slice = encoded[:, :, -self.tile_size :]
+            encoding = self.helper(encoded_slice, model_class)
+            slices.append(encoding)
+
+        return torch.cat(slices, dim=0)
+
+
+class UniRefSpectrogramEvaluator(UniRefMeanPoolEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mel = MelSpectrogram(win_length=32, hop_length=16, n_mels=50)
+
+    @torch.no_grad()
+    def compute_embedding(self, sequence, model_class):
+        encoded = torch.as_tensor([amino_char_to_index[c] for c in sequence])
+        encoded = self.mel(encoded.float()).unsqueeze(0).to(self.model_device)
+        encoded = encoded / torch.max(encoded)
+        encoding = model_class(encoded).mean(dim=-1)
+        return encoding
 
 
 class UniRefCARPEvaluator(UniRefEvaluator):

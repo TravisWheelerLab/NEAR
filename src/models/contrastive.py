@@ -8,17 +8,25 @@ from src.utils.losses import SupConLoss
 
 
 class ResNet1d(pl.LightningModule):
-    def __init__(self, learning_rate, log_interval, training=True):
+    def __init__(
+        self,
+        learning_rate,
+        log_interval,
+        res_block_n_filters=256,
+        res_block_kernel_size=3,
+        in_channels=128,
+        n_res_blocks=8,
+        training=True,
+    ):
 
         super(ResNet1d, self).__init__()
 
+        self.in_channels = in_channels
         self.learning_rate = learning_rate
         self.training = training
-
-        self.res_block_n_filters = 128
-
-        self.res_block_kernel_size = 3
-        self.n_res_blocks = 2
+        self.res_block_n_filters = res_block_n_filters
+        self.res_block_kernel_size = res_block_kernel_size
+        self.n_res_blocks = n_res_blocks
         self.res_bottleneck_factor = 1
         self.padding = "same"
         self.padding_mode = "circular"
@@ -34,7 +42,9 @@ class ResNet1d(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=20, out_channels=self.res_block_n_filters, kernel_size=1
+            in_channels=self.in_channels,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         _list = []
@@ -47,20 +57,19 @@ class ResNet1d(pl.LightningModule):
                     padding_mode=self.padding_mode,
                 )
             )
+        self.final = nn.Conv1d(
+            # what k-mer information is the most informative?
+            in_channels=self.res_block_n_filters,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
+        )
 
         self.embedding_trunk = torch.nn.Sequential(*_list)
-
-        mlp_list = [
-            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
-        ]
-        self.mlp = torch.nn.Sequential(*mlp_list)
 
     def _forward(self, x):
         x = self.embed(x)
         x = self.embedding_trunk(x)
-        x = self.mlp(x)
+        x = self.final(x)
         return x
 
     def _masked_forward(self, x, mask):
@@ -118,10 +127,7 @@ class ResNet1d(pl.LightningModule):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate
-        )
-        # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
+        optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optim
 
     def training_epoch_end(self, outputs):
@@ -137,3 +143,61 @@ class ResNet1d(pl.LightningModule):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
         self.log("val_loss", val_loss)
+
+
+class ResNet1dKmerSampler(ResNet1d):
+    def __init__(self, *args, **kwargs):
+        super(ResNet1dKmerSampler, self).__init__(*args, **kwargs)
+
+    def _shared_step(self, batch):
+        features, labels = batch
+
+        embeddings = self.forward(features)
+
+        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
+        e1 = torch.nn.functional.normalize(e1, dim=-1)
+        e2 = torch.nn.functional.normalize(e2, dim=-1)
+
+        if self.global_step % self.log_interval == 0:
+            with torch.no_grad():
+                fig = plt.figure(figsize=(10, 10))
+                arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()
+                arr = arr.astype(float)
+                plt.imshow(arr)
+                plt.colorbar()
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
+
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+
+        return loss
+
+
+class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
+    def __init__(self, *args, **kwargs):
+        super(ResNet1dKmerSamplerWithLabelVectors, self).__init__(*args, **kwargs)
+
+    def _shared_step(self, batch):
+        features, labels = batch
+
+        embeddings = self.forward(features)
+
+        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
+        e1 = torch.nn.functional.normalize(e1, dim=-1)
+        e2 = torch.nn.functional.normalize(e2, dim=-1)
+
+        if self.global_step % self.log_interval == 0:
+            with torch.no_grad():
+                fig = plt.figure(figsize=(10, 10))
+                arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()
+                arr = arr.astype(float)
+                plt.imshow(arr)
+                plt.colorbar()
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
+
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+
+        return loss

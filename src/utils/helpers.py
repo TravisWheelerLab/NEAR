@@ -20,8 +20,11 @@ seed(1)
 
 __all__ = [
     "parse_tblout",
+    "stack_vae_batch",
     "esm_toks",
     "parse_labels",
+    "AAIndexFFT",
+    "encode_with_aaindex",
     "pad_sequences",
     "create_faiss_index",
     "handle_figure_path",
@@ -307,6 +310,18 @@ def pad_contrastive_batches(batch):
     )
 
 
+def stack_vae_batch(batch):
+    member1 = [b[0] for b in batch]
+    member2 = [b[1] for b in batch]
+    labels = [b[2] for b in batch]
+
+    return (
+        torch.stack(member1),
+        torch.stack(member2),
+        torch.as_tensor(labels),
+    )
+
+
 def stack_contrastive_batch(batch):
     member1 = [b[0] for b in batch]
     member2 = [b[1] for b in batch]
@@ -357,3 +372,74 @@ def parse_tblout(tbl):
     )
 
     return df
+
+
+class AAIndexFFT:
+    def __init__(self):
+        self.mapping = {}
+
+    def __setitem__(self, key, value):
+        self.mapping[key] = value
+
+    def __getitem__(self, protein):
+        encoded = torch.fft.fft(torch.as_tensor([self.mapping[p] for p in protein]))
+        return encoded
+
+
+def encode_with_aaindex():
+
+    with open("src/resources/indices.txt") as f:
+        data = f.read()
+    split = data.split("//")
+    indices = [s[s.find("I") :].replace("\n", "").split() for s in split]
+
+    aas = [
+        "A",
+        "R",
+        "N",
+        "D",
+        "C",
+        "Q",
+        "E",
+        "G",
+        "H",
+        "I",
+        "L",
+        "K",
+        "M",
+        "F",
+        "P",
+        "S",
+        "T",
+        "W",
+        "Y",
+        "V",
+    ]
+
+    indices = []
+
+    for index in indices:
+        if len(index) <= 20:
+            logger.debug("Skipping index.")
+            continue
+
+        mapping = AAIndexFFT()
+        broke = False
+        for i, aa in enumerate(aas):
+            try:
+                mapping[aa] = float(index[-(20 - i)])
+            except ValueError:
+                broke = True
+                break
+        if not broke:
+            indices.append(mapping)
+
+    def enc(sequence):
+        s1_fft = []
+        for i in range(20):
+            fft1 = torch.abs(indices[i][sequence])
+            s1_fft.append(fft1)
+        s1 = torch.stack(s1_fft, dim=0).squeeze()
+        return s1
+
+    return enc
