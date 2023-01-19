@@ -165,7 +165,7 @@ class AlignmentGenerator(DataModule):
         )
 
 
-class SwissProtGenerator(DataModule):
+class SwissProtLoader(DataModule):
     """
     Grab a sequence from swiss-prot, mutate it, then
     feed it to the model as a contrastive pair.
@@ -189,48 +189,46 @@ class SwissProtGenerator(DataModule):
             return 10000
 
     def collate_fn(self):
-        return utils.pad_contrastive_batches
+        return None
 
     def shuffle(self):
         shuffle(self.seqs)
-
-    def _sample(self, idx):
-        if not self.training:
-            if idx == 0:
-                print("shuffling.")
-                self.shuffle()
-
-            idx = np.random.randint(0, len(self.seqs))
-
-        seq = self.seqs[idx]
-        # subsample sequence;
-        start_idx = np.random.randint(0, len(seq) - self.minlen)
-        seq = seq[start_idx : start_idx + self.minlen]
-
-        s1 = sanitize_sequence(seq)
-
-        s1 = torch.as_tensor([utils.amino_char_to_index[c] for c in s1])
-        n_subs = int(
-            len(s1) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
-        )
-        s2 = utils.mutate_sequence(
-            sequence=s1, substitutions=n_subs, sub_distributions=self.sub_dists
-        )
-        return s1, s2, idx % len(self.seqs)
 
     def __getitem__(self, idx):
         s1, s2, label = self._sample(idx)
         return s1, s2, label
 
 
-class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
+class SwissProtGenerator(SwissProtLoader):
     """
     Grab a sequence from swiss-prot, mutate it, then
     feed it to the model as a contrastive pair.
     """
 
     def __init__(self, fa_file, minlen, training=True):
-        super().__init__(fa_file, minlen, training)
+        super(SwissProtGenerator, self).__init__(fa_file, minlen, training)
+
+    def collate_fn(self):
+        def pad(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seqs = [b[0] for b in batch]
+            logos = [b[1] for b in batch]
+            labels = [b[2] for b in batch]
+            data = seqs + logos
+            return (
+                torch.stack(data),
+                torch.as_tensor(labels),
+            )
+
+        return pad
 
     def _sample(self, idx):
         if not self.training:
@@ -267,9 +265,6 @@ class SwissProtGeneratorDanielSequenceEncode(SwissProtGenerator):
 
     def __getitem__(self, idx):
         return self._sample(idx)
-
-    def collate_fn(self):
-        return utils.stack_vae_batch
 
 
 class FastaSampler:
@@ -318,37 +313,43 @@ class PfamDataset(DataModule):
             logos = [b[1] for b in batch]
             labels = [b[2] for b in batch]
             return (
-                torch.stack(seqs),
-                torch.stack(logos),
+                torch.stack(seqs + logos),
                 torch.as_tensor(labels),
             )
 
         return pad_view_batches
 
     def __len__(self):
-        return 1000000
+        if self.training:
+            return 100000
+        else:
+            return 10000
 
     def __getitem__(self, index):
         label, sampler = self.training_pairs[index // len(self.training_pairs)]
         s1, s2 = sampler.sample()
-        if len(s1) < 128:
-            s1 = s1 + "".join(["A"] * 128)
+
+        while len(s1) < 128:
+            s1 = s1 + s1
+        while len(s2) < 128:
+            s2 = s2 + s2
         # same size sequences, will this fit?
         s1 = s1[:128]
+        s2 = s2[:128]
         return (
             utils.encode_string_sequence(sanitize_sequence(s1)),
-            utils.encode_string_sequence(sanitize_sequence(s1)),
+            utils.encode_string_sequence(sanitize_sequence(s2)),
             label,
         )
 
 
 class KMerSampler(DataModule):
-    def __init__(self, training, n_pairs, kmer_length, minlen=32):
-        super(kmersampler, self).__init__()
+    def __init__(self, training, min_kmer_length, max_kmer_length, minlen=32):
+        super(KMerSampler, self).__init__()
         self.training = training
         self.minlen = minlen
-        self.n_pairs = n_pairs
-        self.kmer_length = kmer_length
+        self.max_kmer_length = max_kmer_length
+        self.min_kmer_length = min_kmer_length
         self.idx_cnt = 0
 
     def collate_fn(self):
@@ -383,7 +384,9 @@ class KMerSampler(DataModule):
         # make a new sequence:
         seed_sequence = generate_string_sequence(self.minlen)
         # grab a random kmer from the seed sequence
-        kmer_length = self.kmer_length  # int(np.random.rand()*self.kmer_length)
+        kmer_length = np.random.randint(
+            low=self.min_kmer_length, high=self.max_kmer_length, size=1
+        )[0]
         # kmer_length = max(kmer_length, 5)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
         # make a kmer seed
@@ -403,7 +406,7 @@ class KMerSampler(DataModule):
 
 
 class SpectrogramDataset(DataModule):
-    def __init__(self, training, minlen, kmer_length, n_pairs):
+    def __init__(self, training, minlen, kmer_length):
         super(SpectrogramDataset, self).__init__()
         self.mel = MelSpectrogram(win_length=32, hop_length=16)
         self.training = training
@@ -597,7 +600,7 @@ class AAIndexDataset(DataModule):
         return s1, s2, idx % len(self.seqs)
 
 
-class UniProtSpectDataset(SwissProtGeneratorDanielSequenceEncode):
+class UniProtSpectDataset(SwissProtGenerator):
     def __init__(self, *args, **kwargs):
         super(UniProtSpectDataset, self).__init__(*args, **kwargs)
         self.mel = MelSpectrogram(win_length=32, hop_length=16, n_mels=50)

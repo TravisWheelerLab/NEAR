@@ -28,8 +28,8 @@ from src.utils.gen_utils import generate_string_sequence
 logger = logging.getLogger("evaluate")
 
 # load hits from the hmmer file.
-def get_hmmer_hits(file_path, evalue_threshold):
-    queries = dict()
+def get_hmmer_hits(file_path):
+    queries = defaultdict(dict)
     with open(file_path, "r") as file:
         for line in file:
             line = line.strip()
@@ -43,16 +43,14 @@ def get_hmmer_hits(file_path, evalue_threshold):
             e_value = float(line[4])
             score = float(line[6])
 
-            if query not in queries and e_value <= evalue_threshold:
-                queries[query] = dict()
-
-            if e_value <= evalue_threshold:
-                queries[query][target] = (e_value, score)
+            queries[query][target] = (e_value, score)
 
         return queries
 
 
-def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func):
+def recall_and_filtration(
+    our_hits, hmmer_hits, distance_threshold, comp_func, evalue_threshold
+):
     match_count = 0
     our_total_hits = 0
     hmmer_hits_for_our_queries = 0
@@ -63,13 +61,22 @@ def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func):
             # we've set an e-value threshold, meaning
             # that this query was never picked up
             pdb.set_trace()
-        true_matches = hmmer_hits[query]
+
+        matches = hmmer_hits[query]
+        filtered = {}
+        for match, evalue in matches.items():
+            evalue = float(evalue[0])
+            if evalue <= evalue_threshold:
+                filtered[match] = evalue
+
+        true_matches = filtered
         hmmer_hits_for_our_queries += len(true_matches)
         our_matches = our_hits[query]
         for match in our_matches:
             if comp_func(our_matches[match], distance_threshold):
                 if match in true_matches:
                     # count the matches for each query.
+                    # pdb.set_trace()
                     match_count += 1
                 our_total_hits += 1
 
@@ -90,6 +97,7 @@ class UniRefEvaluator(Evaluator):
         max_seq_length,
         figure_path,
         evalue_threshold,
+        add_random_sequence=False,
         nprobe=1,
         distance_threshold=100,
         normalize_embeddings=False,
@@ -103,6 +111,7 @@ class UniRefEvaluator(Evaluator):
         self.encoding_func = (
             encode_string_sequence if encoding_func is None else encoding_func
         )
+        self.add_random_sequence = add_random_sequence
         self.figure_path = figure_path
         self.nprobe = nprobe
         self.model_device = model_device
@@ -114,6 +123,7 @@ class UniRefEvaluator(Evaluator):
         self.index_device = index_device
         self.denom = None
         self.distance_threshold = float(distance_threshold)
+        self.evalue_threshold = evalue_threshold
 
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -123,12 +133,12 @@ class UniRefEvaluator(Evaluator):
             self.comp_func = np.less_equal
 
         root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
-        self.max_hmmer_hits = get_hmmer_hits(
-            f"{root}/max_hmmer_hits.txt", evalue_threshold=evalue_threshold
-        )
+        self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
     @torch.no_grad()
-    def _calc_embeddings(self, fasta_or_pickle_file, model_class):
+    def _calc_embeddings(
+        self, fasta_or_pickle_file, model_class, apply_random_sequence
+    ):
 
         names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
         names = list(map(lambda x: x.split(" ")[0], names))
@@ -138,7 +148,12 @@ class UniRefEvaluator(Evaluator):
         embeddings = []
         for j, sequence in enumerate(tqdm.tqdm(sequences)):
             if self.max_seq_length >= len(sequence) >= self.minimum_seq_length:
-                embed = self.compute_embedding(sequence, model_class)
+                if apply_random_sequence:
+                    # add 100 aminos on to the beginning
+                    random_seq = generate_string_sequence(100)
+                    embed = self.compute_embedding(random_seq + sequence, model_class)
+                else:
+                    embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
                 embeddings.append(embed.to("cpu"))
                 idx_to_keep.append(j)
@@ -165,10 +180,14 @@ class UniRefEvaluator(Evaluator):
             self.tile_size = model_class.initial_seq_len
 
         target_names, target_sequences, target_embeddings = self._calc_embeddings(
-            self.target_file, model_class=model_class
+            self.target_file,
+            model_class=model_class,
+            apply_random_sequence=False,
         )
         query_names, query_sequences, query_embeddings = self._calc_embeddings(
-            self.query_file, model_class=model_class
+            self.query_file,
+            model_class=model_class,
+            apply_random_sequence=self.add_random_sequence,
         )
         # now, remove elements from hmmer --max if the target name is not in
         # target names.
@@ -220,29 +239,36 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     def _roc_plot(self, our_hits, max_hits):
-        filtrations = []
-        recalls = []
 
         if self.normalize_embeddings:
             distances = np.linspace(self.distance_threshold, 0.999, num=10)
         else:
             distances = np.linspace(0.001, self.distance_threshold, num=10)
 
-        for threshold in tqdm.tqdm(distances):
-            recall, total_hits = recall_and_filtration(
-                our_hits, max_hits, threshold, self.comp_func
-            )
-
-            filtration = 100 * (1.0 - (total_hits / self.denom))
-            filtrations.append(filtration)
-            recalls.append(recall)
-            print(f"{recall:.3f}, {filtration:.3f}, {threshold:.3f}")
-
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.set_title(f"{os.path.splitext(os.path.basename(self.figure_path))[0]}")
+
+        for color, evalue_threshold in zip(["r", "c", "g", "k"], [1e-10, 1e-1, 1, 10]):
+            filtrations = []
+            recalls = []
+            for threshold in tqdm.tqdm(distances):
+                recall, total_hits = recall_and_filtration(
+                    our_hits,
+                    max_hits,
+                    threshold,
+                    self.comp_func,
+                    evalue_threshold,
+                )
+
+                filtration = 100 * (1.0 - (total_hits / self.denom))
+                filtrations.append(filtration)
+                recalls.append(recall)
+                print(f"{recall:.3f}, {filtration:.3f}, {threshold:.3f}")
+
+            ax.scatter(filtrations, recalls, c=color, marker="o")
+            ax.plot(filtrations, recalls, f"{color}--", linewidth=2)
+
         ax.plot([0, 100], [100, 0], "k--", linewidth=2)
-        ax.scatter(filtrations, recalls, c="r", marker="o")
-        ax.plot(filtrations, recalls, "r--", linewidth=2)
         ax.set_ylim([-1, 101])
         ax.set_xlim([-1, 101])
         ax.set_xlabel("filtration")
@@ -638,6 +664,13 @@ class UniRefTiledMeanPoolEvaluator(UniRefMeanPoolEvaluator):
         return torch.cat(slices, dim=0)
 
 
+class UniRefTiledKmerEvaluator(UniRefTiledMeanPoolEvaluator):
+    def helper(self, encoded, model_class):
+        embedding = model_class(encoded).mean(dim=2)
+        embedding = torch.cat(torch.unbind(embedding, dim=-1), dim=-1)
+        return embedding
+
+
 class UniRefSpectrogramEvaluator(UniRefMeanPoolEvaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -667,7 +700,7 @@ class UniRefCARPEvaluator(UniRefEvaluator):
 
     def compute_embedding(self, sequence, model_class):
         encoded = self.collater([[sequence]])[0].to(self.model_device)
-        embedding = model_class(encoded)["representations"][56]
+        embedding = model_class(encoded)["representations"][32]
         return embedding.mean(dim=1)
 
     def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):

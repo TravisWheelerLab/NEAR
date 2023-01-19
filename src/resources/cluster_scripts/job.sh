@@ -3,10 +3,10 @@
 ### PART 1: Requests resources to run your job.
 # --------------------------------------------------------------
 ### Optional. Set the job name
-#SBATCH --job-name=train-%a.out
+#SBATCH --job-name=train-kmer.out
 ### Optional. Set the output filename.
 ### SLURM reads %x as the job name and %j as the job ID
-#SBATCH --output=outfiles/train-%a.out
+#SBATCH --output=outfiles/range-of-kmers-15resblocks.out
 ### REQUIRED. Specify the PI group for this job (twheeler).
 #SBATCH --account=twheeler
 ### the arizona cluster system: standard (uses group's monthly allocation of

@@ -94,12 +94,16 @@ class ResNet1d(pl.LightningModule):
         features, labels = batch
 
         embeddings = self.forward(features)
+        # batch_size x sequence_length x embedding_dimension
+        # 32x200x768
 
         e1, e2 = torch.split(
             embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
         )
         e1 = torch.cat(torch.unbind(e1, dim=0))
         e2 = torch.cat(torch.unbind(e2, dim=0))
+        # (batch_size*sequence_length) x embedding_dimension
+
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
@@ -115,6 +119,7 @@ class ResNet1d(pl.LightningModule):
                 )
 
         loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+        #
 
         return loss
 

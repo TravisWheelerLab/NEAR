@@ -4,7 +4,7 @@ import yaml
 from sacred import Experiment
 
 # from src.datasets.datasets import sanitize_sequence
-from src.utils.helpers import encode_with_aaindex, to_dict
+from src.utils.helpers import to_dict
 
 logger = logging.getLogger("evaluate")
 logger.setLevel(logging.WARNING)
@@ -75,17 +75,17 @@ def config():
 def config():
 
     device = "cuda"
-    model_name = "ResNet1dKmerSampler"
-    evaluator_name = "UniRefSpectrogramEvaluator"
+    model_name = "ResNet2d"
+    evaluator_name = "UniRefTiledKmerEvaluator"
     global figure_path
     global encoding_func
-    encoding_func = encode_with_aaindex()
+    encoding_func = None
 
-    figure_path = f"mel_max_normed_0_to_512.png"
+    figure_path = f"kmer_contains_untrained.png"
 
     num_threads = 12
     log_verbosity = logging.INFO
-    root = "/xdisk/twheeler/colligan/model_data/spectrogram_real_data/ResNet1dKmerSampler/1/"
+    root = "/xdisk/twheeler/colligan/model_data/kmer_2d_range_of_kmers/ResNet2d/1/"
     checkpoint_path = f"{root}/checkpoints/best_loss_model.ckpt"
 
     @to_dict
@@ -95,7 +95,6 @@ def config():
         normalize_embeddings = True
         select_random_aminos = False
         figure_path = figure_path
-        encoding_func = None
         encoding_func = encoding_func
         index_string = "Flat"
         # "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/hits.txt"
@@ -104,7 +103,10 @@ def config():
         target_file = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/T_benchmark2k30k.fa"
         # query_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/queries.fa"
         # target_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/targets.fa"
-        distance_threshold = -1.0
+        distance_threshold = 0.0
         evalue_threshold = 10
-        minimum_seq_length = 201
-        max_seq_length = 512
+        minimum_seq_length = 0
+        max_seq_length = 256
+        tile_size = 128
+        tile_step = 32
+        add_random_sequence = False

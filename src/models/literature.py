@@ -9,7 +9,7 @@ from sequence_models.pretrained import load_model_and_alphabet
 class CARP(pl.LightningModule):
     def __init__(self):
         super(CARP, self).__init__()
-        self.carp_model, self.collater = load_model_and_alphabet("carp_640M")
+        self.carp_model, self.collater = load_model_and_alphabet("carp_76M")
 
     def forward(self, x):
         """Ingests already-collated string sequences."""
