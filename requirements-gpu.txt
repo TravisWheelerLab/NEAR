@@ -11,7 +11,7 @@ cycler
 docopt
 docutils
 fair-esm
-faiss-cpu
+faiss-gpu
 flit
 flit_core
 fonttools
