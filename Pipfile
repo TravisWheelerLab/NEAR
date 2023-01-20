@@ -4,6 +4,20 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+faiss-cpu = "*"
+numpy = "*"
+scipy = "*"
+matplotlib = "*"
+pandas = "*"
+fair-esm = "*"
+sequence-models = "*"
+flit = "*"
+pytorch-lightning = "*"
+sacred = "*"
+torchaudio = "*"
+biopython = "*"
+tqdm = "*"
+pyyaml = "*"
 
 [dev-packages]
 

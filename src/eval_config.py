@@ -81,7 +81,7 @@ def config():
     global encoding_func
     encoding_func = None
 
-    figure_path = f"kmer_contains_untrained.png"
+    figure_path = f"kmer_contains_untrained_0_to_512.png"
 
     num_threads = 12
     log_verbosity = logging.INFO
@@ -106,7 +106,7 @@ def config():
         distance_threshold = 0.0
         evalue_threshold = 10
         minimum_seq_length = 0
-        max_seq_length = 256
+        max_seq_length = 512
         tile_size = 128
         tile_step = 32
         add_random_sequence = False

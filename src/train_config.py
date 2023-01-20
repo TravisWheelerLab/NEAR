@@ -16,7 +16,7 @@ def config():
     description = "None"
 
     # log_dir = "/home/tc229954/model_data"
-    log_dir = "/xdisk/twheeler/colligan/model_data/kmer_2d_range_of_kmers"
+    log_dir = "/xdisk/twheeler/colligan/prefilter_handoff/kmer_model"
     log_verbosity = logging.INFO
 
     model_name = "ResNet2d"
