@@ -126,13 +126,3 @@ class HmmerHits:
             target_query_hits[target_dirnum][query_dirnum] = hits
 
         return target_query_hits
-
-
-hits_dir = "uniref/phmmer_normal_results"
-
-hmmer_hits = HmmerHits(hits_dir)
-
-all_hits = hmmer_hits.get_all_hits()
-
-
-pdb.set_trace()
