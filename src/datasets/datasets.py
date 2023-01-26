@@ -12,6 +12,7 @@ import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
+from Bio import AlignIO
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +22,26 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def sanitize_sequence(sequence):
-
+    # TODO: can make this faster (do it once with data)
     sanitized = []
     for char in sequence:
         char = char.upper()
-        if char in ("X", "U", "O"):
+        if char in (
+            "X",
+            "U",
+            "O",
+        ):  # ambiguous aminos -- replacing them with some other amino from backgorund distribution
             sampled_char = utils.amino_alphabet[
                 utils.amino_distribution.sample().item()
             ]
             sanitized.append(sampled_char)
             logger.debug(f"Replacing <X, U, O> with {sampled_char}")
-        elif char == "B":
+        elif char == "B":  # can be either D or N
             if int(2 * np.random.rand()) == 1:
                 sanitized.append("D")
             else:
                 sanitized.append("N")
-        elif char == "Z":
+        elif char == "Z":  # can be either E or Q
             if int(2 * np.random.rand()) == 1:
                 sanitized.append("E")
             else:
@@ -78,19 +83,21 @@ class AlignmentGenerator(DataModule):
         from Bio import AlignIO
 
         self.alignment_files = glob(os.path.join(ali_path, "*.sto"))
+        self.training = training
+
+        if self.training:
+            self.alignment_files = self.alignment_files[:-100]
+        else:
+            self.alignment_files = self.alignment_files[:100]
         # also put a classification loss on there.
         # so i can see accuracy numbers
-        self.training = training
         if len(self.alignment_files) == 0:
             raise ValueError(f"No alignment files found at {ali_path}.")
         self.mx = 0
         self.seq_len = seq_len
 
     def __len__(self):
-        if self.training:
-            return 10000
-        else:
-            return 500
+        return len(self.alignment_files)
 
     def __getitem__(self, idx):
         ali = AlignIO.read(self.alignment_files[idx], "stockholm")._records
@@ -183,10 +190,7 @@ class SwissProtLoader(DataModule):
         shuffle(self.seqs)
 
     def __len__(self):
-        if self.training:
-            return len(self.seqs) // 10
-        else:
-            return 10000
+        return len(self.seqs)
 
     def collate_fn(self):
         return None
@@ -220,9 +224,9 @@ class SwissProtGenerator(SwissProtLoader):
             """
 
             seqs = [b[0] for b in batch]
-            logos = [b[1] for b in batch]
+            mutated_seqs = [b[1] for b in batch]
             labels = [b[2] for b in batch]
-            data = seqs + logos
+            data = seqs + mutated_seqs
             return (
                 torch.stack(data),
                 torch.as_tensor(labels),
@@ -248,10 +252,13 @@ class SwissProtGenerator(SwissProtLoader):
 
         sequence = sanitize_sequence(seq)
 
-        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+        sequence = torch.as_tensor(
+            [utils.amino_char_to_index[c] for c in sequence]
+        )  # map amino to int identity
 
-        n_subs = int(
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+        n_subs = int(  # NOte: we are potentially replacing with the same thing
+            len(sequence)
+            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(
@@ -260,7 +267,7 @@ class SwissProtGenerator(SwissProtLoader):
             sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
-        s2 = utils.encode_tensor_sequence(s2)
+        s2 = utils.encode_tensor_sequence(s2)  # 20x256
         return utils.encode_tensor_sequence(sequence), s2, idx % len(self.seqs)
 
     def __getitem__(self, idx):
@@ -294,7 +301,9 @@ class PfamDataset(DataModule):
             valid_name = train.replace("-train", "-valid")
             if valid_name in valid_files:
                 valid_file = valid_files[valid_files.index(valid_name)]
-                self.training_pairs.append((i, FastaSampler(train, valid_file)))
+                self.training_pairs.append(
+                    (i, FastaSampler(train, valid_file))
+                )
             else:
                 self.training_pairs.append((i, FastaSampler(train, train)))
 
@@ -394,7 +403,9 @@ class KMerSampler(DataModule):
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
         seeded_seq = (
-            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
+            random_seq[:start_idx]
+            + kmer_seed
+            + random_seq[start_idx + kmer_length :]
         )
         self.idx_cnt += 1
         # just do pairs for now.
@@ -454,7 +465,9 @@ class SpectrogramDataset(DataModule):
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
         seeded_seq = (
-            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
+            random_seq[:start_idx]
+            + kmer_seed
+            + random_seq[start_idx + kmer_length :]
         )
         # take the Mel
         self.idx_cnt += 1
@@ -581,10 +594,13 @@ class AAIndexDataset(DataModule):
 
         sequence = sanitize_sequence(seq)
 
-        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+        sequence = torch.as_tensor(
+            [utils.amino_char_to_index[c] for c in sequence]
+        )
 
         n_subs = int(
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence)
+            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(
@@ -616,10 +632,13 @@ class UniProtSpectDataset(SwissProtGenerator):
 
         sequence = sanitize_sequence(seq)
 
-        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
+        sequence = torch.as_tensor(
+            [utils.amino_char_to_index[c] for c in sequence]
+        )
 
         n_subs = int(
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence)
+            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(

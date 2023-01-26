@@ -60,10 +60,14 @@ class SyntheticEvaluator(Evaluator):
         self.sub_dists = self._sub_dists()
 
         if self.normalize_embeddings:
-            logger.info("Using comparison function >= threshold for filtration.")
+            logger.info(
+                "Using comparison function >= threshold for filtration."
+            )
             self.comp_func = torch.greater_equal
         else:
-            logger.info("Using comparison function <= threshold for filtration.")
+            logger.info(
+                "Using comparison function <= threshold for filtration."
+            )
             self.comp_func = torch.less_equal
 
     def _sub_dists(self):
@@ -74,7 +78,9 @@ class SyntheticEvaluator(Evaluator):
 
     def create_target_and_query_dbs(self, model_class):
         # now go through and mutate a random selection of target sequences
-        target_names, target_sequences = fasta_from_file(self.target_sequence_fasta)
+        target_names, target_sequences = fasta_from_file(
+            self.target_sequence_fasta
+        )
         self.num_target_sequences = len(target_sequences)
         # mutate the query templates
         torch.manual_seed(0)
@@ -147,10 +153,14 @@ class SyntheticEvaluator(Evaluator):
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
         assert len(unrolled_targets) == len(self.unrolled_names)
 
-        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+        logger.info(
+            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
+        )
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+            unrolled_targets = torch.nn.functional.normalize(
+                unrolled_targets, dim=-1
+            )
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -168,11 +178,7 @@ class SyntheticEvaluator(Evaluator):
         return query_embeddings, query_names
 
     def filter(
-        self,
-        queries,
-        query_names,
-        start=0,
-        end=torch.inf,
+        self, queries, query_names, start=0, end=torch.inf,
     ):
         qdict = dict()
 
@@ -196,14 +202,18 @@ class SyntheticEvaluator(Evaluator):
                 qval = queries[i]
 
             qval = qval[
-                torch.randperm(qval.shape[0])[: int(self.query_percent * qval.shape[0])]
+                torch.randperm(qval.shape[0])[
+                    : int(self.query_percent * qval.shape[0])
+                ]
             ]
             filtered_hits = self.search(qval)
             qdict[query_names[i]] = filtered_hits
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            logger.debug(
+                f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}"
+            )
 
         loop_time = time.time() - t_begin
 
@@ -223,7 +233,9 @@ class SyntheticEvaluator(Evaluator):
 
     @torch.no_grad()
     def evaluate(self, model_class):
-        query_embeddings, query_names = self.create_target_and_query_dbs(model_class)
+        query_embeddings, query_names = self.create_target_and_query_dbs(
+            model_class
+        )
         hits, avg_it, total_t = self.filter(query_embeddings, query_names)
 
         # now just compute recall.
@@ -270,7 +282,11 @@ class SyntheticEvaluator(Evaluator):
         recalls = list(threshold_to_recall.values())
         total_hits = list(threshold_to_total_hits.values())
         filtrations = [
-            100 * (1 - (t / (self.num_target_sequences * self.num_target_sequences)))
+            100
+            * (
+                1
+                - (t / (self.num_target_sequences * self.num_target_sequences))
+            )
             for t in total_hits
         ]
         recalls = [100 * (r / len(hits)) for r in recalls]
@@ -289,10 +305,14 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
     def compute_embedding(self, sequence, model_class):
         slices = []
         for i in range(
-            0, len(sequence) - model_class.initial_seq_len, model_class.initial_seq_len
+            0,
+            len(sequence) - model_class.initial_seq_len,
+            model_class.initial_seq_len,
         ):
             embedding, _ = model_class(
-                encode_string_sequence(sequence[i : i + model_class.initial_seq_len])
+                encode_string_sequence(
+                    sequence[i : i + model_class.initial_seq_len]
+                )
                 .to(self.device)
                 .unsqueeze(0)
             )
@@ -300,7 +320,9 @@ class SyntheticVAEEvaluator(SyntheticEvaluator):
 
         if len(sequence) % model_class.initial_seq_len != 0:
             embedding, _ = model_class(
-                encode_string_sequence(sequence[-model_class.initial_seq_len :])
+                encode_string_sequence(
+                    sequence[-model_class.initial_seq_len :]
+                )
                 .to(self.device)
                 .unsqueeze(0)
             )
@@ -372,11 +394,17 @@ class KMerEmbedEvaluator(SyntheticEvaluator):
 
         for i in range(self.num_targets):
             target_sequence = generate_string_sequence(self.seq_len)
-            start_idx = int(np.random.rand() * (self.seq_len - self.kmer_length))
+            start_idx = int(
+                np.random.rand() * (self.seq_len - self.kmer_length)
+            )
             # make a kmer seed
-            kmer_seed = target_sequence[start_idx : start_idx + self.kmer_length]
+            kmer_seed = target_sequence[
+                start_idx : start_idx + self.kmer_length
+            ]
             random_seq = generate_string_sequence(self.seq_len)
-            start_idx = int(np.random.rand() * (self.seq_len - self.kmer_length))
+            start_idx = int(
+                np.random.rand() * (self.seq_len - self.kmer_length)
+            )
             seeded_seq = (
                 random_seq[:start_idx]
                 + kmer_seed
@@ -407,10 +435,14 @@ class KMerEmbedEvaluator(SyntheticEvaluator):
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
         assert len(unrolled_targets) == len(self.unrolled_names)
 
-        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+        logger.info(
+            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
+        )
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+            unrolled_targets = torch.nn.functional.normalize(
+                unrolled_targets, dim=-1
+            )
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,

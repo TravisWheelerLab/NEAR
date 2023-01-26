@@ -73,12 +73,14 @@ class TemporalBenchmark(Evaluator):
         begin = time.time()
         cnt = 1
         for i in range(0, self.num_queries, self.batch_size):
-            query_input = torch.randn((self.batch_size, 20, self.sequence_length)).to(
-                self.model_device
-            )
+            query_input = torch.randn(
+                (self.batch_size, 20, self.sequence_length)
+            ).to(self.model_device)
             model_begin = time.time()
             embeddings = self.resnet(query_input)
-            logger.debug(f"it: {cnt}, model time/it: {(time.time()-model_begin)}")
+            logger.debug(
+                f"it: {cnt}, model time/it: {(time.time()-model_begin)}"
+            )
             # should be batch size x 128
             # need to do range search
             _, _ = index.search(embeddings, self.n_neighbors)

@@ -54,13 +54,13 @@ for name, sequence in tqdm(zip(names, sequences), total=len(sequences)):
             with open(sequence_file, "w") as dst:
                 dst.write(f">{name}\n{sequence}\n")
 
-            hmmfile = (
-                f"{root}/hmms/{name.replace(' ', '_').replace('/', '')}_{splt}.hmm"
-            )
+            hmmfile = f"{root}/hmms/{name.replace(' ', '_').replace('/', '')}_{splt}.hmm"
             hmmbuild(sequence_file, hmmfile)
             emitted_sequence = "".join(hmmemit(hmmfile).split("\n")[1:])
             # dump emitted sequence into file
-            sequence_and_emission_file = f"{root}/sequence_and_emission_{splt}.fa"
+            sequence_and_emission_file = (
+                f"{root}/sequence_and_emission_{splt}.fa"
+            )
 
             with open(sequence_and_emission_file, "w") as dst:
                 dst.write(f">{name}\n{sequence}\n")

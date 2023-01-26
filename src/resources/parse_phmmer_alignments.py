@@ -31,7 +31,9 @@ for f in tqdm.tqdm(glob(tst)):
     target_name = "_".join([t1, t2])
 
     query_gapped_sequence = [s for s in align._records if s.name == query_name]
-    target_gapped_sequences = [s for s in align._records if s.name != query_name]
+    target_gapped_sequences = [
+        s for s in align._records if s.name != query_name
+    ]
 
     if len(query_gapped_sequence) > 1:
         raise ValueError(f"something is wrong, for f {f}")

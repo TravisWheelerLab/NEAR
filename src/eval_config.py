@@ -2,6 +2,7 @@ import logging
 
 import yaml
 from sacred import Experiment
+import os
 
 # from src.datasets.datasets import sanitize_sequence
 from src.utils.helpers import to_dict
@@ -10,18 +11,22 @@ logger = logging.getLogger("evaluate")
 logger.setLevel(logging.WARNING)
 
 evaluation_ex = Experiment()
+"""Config file for running evaluation code
+Evaluation code is in src/__init__.py"""
+
+HOME = os.environ["HOME"]
 # convert a class to a dictionary with a decorator
 
-
+# @evaluation_ex.config
 def temporal():
     device = "cuda"
-    model_name = "ResNet100M"
-    evaluator_name = "TemporalBenchmark"
+    model_name = "ResNet1d"
+    evaluator_name = "ContrastiveEvaluator"
     print(model_name)
 
     num_threads = 12
-    log_verbosity = logging.DEBUG
-    root = "/xdisk/twheeler/colligan/model_data/resnet_meanpool/ResNet1dSequencePool/1"
+    log_verbosity = logging.INFO
+    root = f"{HOME}/prefilter/ResNet1d/4"
     checkpoint_path = f"{root}/checkpoints/best_loss_model.ckpt"
 
     with open(f"{root}/hparams.yaml", "r") as src:
@@ -29,14 +34,47 @@ def temporal():
 
     @to_dict
     class evaluator_args:
+        query_file = f"{HOME}/Q_benchmark2k30k.fa"
+        target_file = f"{HOME}/T_benchmark2k30k.fa"
+        encoding_func = None
+        model_device = "cuda"
+        index_device = "cpu"
+        figure_path = f"{HOME}/prefilter/ResNet1d/5/test.png"
+        normalize_embeddings = True
+        minimum_seq_length = 0
+        max_seq_length = 10000
+
+
+@evaluation_ex.config
+def vae():
+    device = "cuda"
+    model_name = "VAEIndels"
+    evaluator_name = "UniRefTiledVAEEvaluator"
+    print(model_name)
+
+    num_threads = 12
+    log_verbosity = logging.INFO
+    root = f"{HOME}/prefilter/VAEIndels/6"
+    checkpoint_path = f"{root}/checkpoints/best_loss_model.ckpt"
+
+    with open(f"{root}/hparams.yaml", "r") as src:
+        hparams = yaml.safe_load(src)
+
+    @to_dict
+    class evaluator_args:
+        query_file = f"{HOME}/Q_benchmark2k30k.fa"
+        target_file = f"{HOME}/T_benchmark2k30k.fa"
+        encoding_func = None
         model_device = "cuda"
         index_device = "cuda"
-        n_neighbors = 2048
-        embedding_dimension = 256
-        num_queries = 6370
-        batch_size = 512
-        target_db_size = 30e6
-        resnet_n_params = "10M"
+        figure_path = f"{HOME}/prefilter/VAEIndels/6/test.png"
+        normalize_embeddings = True
+        minimum_seq_length = 256
+        max_seq_length = 512
+        overwrite = True
+        n_vae_samples = 1
+        tile_size = 256
+        tile_step = 128
 
 
 def config():
@@ -71,7 +109,7 @@ def config():
         seq_len = 200
 
 
-@evaluation_ex.config
+# @evaluation_ex.config
 def config():
 
     device = "cuda"
@@ -105,8 +143,8 @@ def config():
         # target_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/targets.fa"
         distance_threshold = 0.0
         evalue_threshold = 10
-        minimum_seq_length = 0
-        max_seq_length = 512
+        minimum_seq_length = 256
+        max_seq_length = 256
         tile_size = 128
         tile_step = 32
         add_random_sequence = False

@@ -2,6 +2,7 @@ import logging
 
 import pandas as pd
 import torch
+import os
 
 logger = logging.getLogger("train")
 
@@ -16,7 +17,9 @@ __all__ = [
 ]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
-amino_char_to_index = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
+amino_char_to_index = {
+    c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")
+}
 
 # the background distribution
 
@@ -47,7 +50,9 @@ amino_n_to_v[amino_char_to_index["*"]] = amino_frequencies
 amino_n_to_v[amino_char_to_index["U"]] = amino_frequencies
 
 # create vectors.
-amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
+amino_a_to_v = {
+    c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")
+}
 
 
 def encode_string_sequence(sequence):
@@ -73,7 +78,7 @@ def create_substitution_distribution(blosum):
         raise ValueError("blosum should be one of <45, 62, 80, 90>")
 
     sub_dists = pd.read_csv(
-        f"/home/u4/colligan/share/prefilter/src/resources/blosum{blosum}.probs",
+        f"{os.environ['HOME']}/prefilter/src/resources/blosum{blosum}.probs",
         delim_whitespace=True,
     )
     substitution_distributions = {}

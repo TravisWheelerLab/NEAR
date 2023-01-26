@@ -52,7 +52,10 @@ class AccuracyComputer(Evaluator):
         rep_gapped_seqs = self.iterator.seed_alignments
         index_device = "cpu"
         # stack the seed sequences.
-        rep_embeddings, cluster_rep_labels = compute_cluster_representative_embeddings(
+        (
+            rep_embeddings,
+            cluster_rep_labels,
+        ) = compute_cluster_representative_embeddings(
             rep_seqs,
             rep_labels,
             model_class,
@@ -82,7 +85,9 @@ class AccuracyComputer(Evaluator):
         for j, (features, labels, sequences) in enumerate(query_dataset):
             if features.shape[0] == 128:
                 features = features.unsqueeze(0)
-            embeddings = model_class(features.to(self.device)).transpose(-1, -2)
+            embeddings = model_class(features.to(self.device)).transpose(
+                -1, -2
+            )
 
             print(f"{j / len(query_dataset):.3f}", end="\r")
             # searching each sequence separately against the index is probably slow.
@@ -121,6 +126,7 @@ class AccuracyComputer(Evaluator):
 
         print(
             f"{thresholds}\n",
-            f"{percent_correct}\n" f"Total families searched: {len(total_families)}",
+            f"{percent_correct}\n"
+            f"Total families searched: {len(total_families)}",
             f"Total sequences: {total_sequences}",
         )

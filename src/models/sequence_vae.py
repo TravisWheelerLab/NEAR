@@ -17,13 +17,13 @@ class SequenceVAE(pl.LightningModule):
         self,
         learning_rate,
         log_interval,
-        cnn_model_state_dict,
-        initial_seq_len,
-        downsample_steps,
-        pool_type,
-        apply_cnn_loss,
-        backprop_on_near_aminos,
-        apply_contrastive_loss,
+        cnn_model_state_dict=None,
+        initial_seq_len=256,
+        downsample_steps=6,
+        pool_type="mean",
+        apply_cnn_loss=False,
+        backprop_on_near_aminos=False,
+        apply_contrastive_loss=False,
         training=True,
     ):
 
@@ -50,18 +50,18 @@ class SequenceVAE(pl.LightningModule):
             "padding_mode": "reflect",
         }
 
-        self.cnn_model = ResNet(**self.cnn_model_args)
-        self.cnn_model_state_dict = cnn_model_state_dict
+        # self.cnn_model = ResNet(**self.cnn_model_args)
+        # self.cnn_model_state_dict = cnn_model_state_dict
 
-        success = self.cnn_model.load_state_dict(
-            torch.load(cnn_model_state_dict, map_location=torch.device(self.device))
-        )
-        logger.info(f"{success} for {self.cnn_model_state_dict}")
+        # success = self.cnn_model.load_state_dict(
+        #     torch.load(cnn_model_state_dict, map_location=torch.device(self.device))
+        # )
+        # logger.info(f"{success} for {self.cnn_model_state_dict}")
 
-        self.cnn_model.eval()
-        # now freeze it:
-        for param in self.cnn_model.parameters():
-            param.requires_grad = False
+        # self.cnn_model.eval()
+        # # now freeze it:
+        # for param in self.cnn_model.parameters():
+        #     param.requires_grad = False
 
         self.res_block_kernel_size = 3
         self.res_block_n_filters = 256
@@ -117,17 +117,17 @@ class SequenceVAE(pl.LightningModule):
         sigma_mlp_list = [
             torch.nn.Linear(
                 self.res_block_n_filters
-                * (self.initial_seq_len // 2**self.downsample_steps),
+                * (self.initial_seq_len // 2 ** self.downsample_steps),
                 self.res_block_n_filters
-                * (self.initial_seq_len // 2**self.downsample_steps),
+                * (self.initial_seq_len // 2 ** self.downsample_steps),
             ),
         ]
         mu_mlp_list = [
             torch.nn.Linear(
                 self.res_block_n_filters
-                * (self.initial_seq_len // 2**self.downsample_steps),
+                * (self.initial_seq_len // 2 ** self.downsample_steps),
                 self.res_block_n_filters
-                * (self.initial_seq_len // 2**self.downsample_steps),
+                * (self.initial_seq_len // 2 ** self.downsample_steps),
             ),
         ]
 
@@ -188,6 +188,8 @@ class SequenceVAE(pl.LightningModule):
     def sample(self, sigma, mu):
         sigma = torch.exp(0.5 * sigma)
         eps = torch.randn_like(sigma)
+        # measure of similarity between our normal distribution and the unit normal distributoin N(0,1)
+        # in order to make the latent space more well behaved (since we add thsi value to loss on 204)
         self.KLD = -0.5 * torch.sum(1 + sigma - mu.pow(2) - sigma.exp())
         return (eps * sigma) + mu
 
@@ -204,7 +206,9 @@ class SequenceVAE(pl.LightningModule):
         if self.apply_cnn_loss:
             # use the CNN!
             embeds = self.cnn_model(original_features)
-            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
+            recon_embeds = self.cnn_model(
+                torch.nn.functional.softmax(recon, dim=1)
+            )
             # # l2 loss on diag.
             e1 = torch.cat(torch.unbind(embeds, dim=0))
             e2 = torch.cat(torch.unbind(recon_embeds, dim=0))
@@ -226,7 +230,9 @@ class SequenceVAE(pl.LightningModule):
 
             recon = torch.nn.functional.normalize(recon, dim=-1)
 
-            recon_mutated = torch.nn.functional.normalize(recon_mutated, dim=-1)
+            recon_mutated = torch.nn.functional.normalize(
+                recon_mutated, dim=-1
+            )
 
             # fmt: off
             loss += self.supcon(torch.cat((recon_mutated.unsqueeze(1), recon.unsqueeze(1)), dim=1))
@@ -269,7 +275,8 @@ class SequenceVAE(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim
@@ -294,7 +301,12 @@ class SequenceVAEWithIndels(SequenceVAE):
         super().__init__(*args, **kwargs)
 
     def _shared_step(self, batch):
-        sequence1, labels1, sequence2, labels2 = batch
+        (
+            sequence1,
+            labels1,
+            sequence2,
+            labels2,
+        ) = batch  # 32 pairs of sequences, each amino has a label
         concat_features = torch.cat((sequence1, sequence2), dim=0)
         sampled, recon = self.forward(concat_features)
         loss = self.xent(recon, concat_features)
@@ -307,7 +319,9 @@ class SequenceVAEWithIndels(SequenceVAE):
 
         if self.apply_cnn_loss:
             embeds = self.cnn_model(concat_features)
-            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
+            recon_embeds = self.cnn_model(
+                torch.nn.functional.softmax(recon, dim=1)
+            )
             # recall this is on concatenated features for performance
             embeds1, embeds2 = torch.split(embeds, embeds.shape[0] // 2)
             recon_embeds1, recon_embeds2 = torch.split(
@@ -379,7 +393,8 @@ class SequenceVAETrainCNN(SequenceVAEWithIndels):
         if pretrained_cnn:
             success = self.cnn_model.load_state_dict(
                 torch.load(
-                    self.cnn_model_state_dict, map_location=torch.device(self.device)
+                    self.cnn_model_state_dict,
+                    map_location=torch.device(self.device),
                 )
             )
             logger.info(f"{success} for {self.cnn_model_state_dict}")

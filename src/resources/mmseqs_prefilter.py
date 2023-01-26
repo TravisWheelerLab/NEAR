@@ -3,7 +3,10 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.evaluators.uniref_evaluator import get_hmmer_hits, recall_and_filtration
+from src.evaluators.uniref_evaluator import (
+    get_hmmer_hits,
+    recall_and_filtration,
+)
 
 
 def get_mmseqs_hits(mmseqs_filename):

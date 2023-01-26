@@ -38,7 +38,9 @@ class SequencePairClassifier(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=40, out_channels=self.res_block_n_filters, kernel_size=1
+            in_channels=40,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         _list = []
@@ -99,7 +101,9 @@ class SequencePairClassifier(pl.LightningModule):
             torch.cat((f1, torch.flip(f2, dims=(0,))), dim=1)
         ).mean(dim=-1)
 
-        classified = self.linear(torch.cat((true_embeddings, false_embeddings), dim=0))
+        classified = self.linear(
+            torch.cat((true_embeddings, false_embeddings), dim=0)
+        )
         labels = torch.ones_like(classified)
         labels[true_embeddings.shape[0] :] = 0
         loss = self.loss_func(classified, labels)

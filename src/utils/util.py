@@ -16,14 +16,18 @@ def load_models() -> Dict[str, Type[pl.LightningModule]]:
 def load_datasets() -> Dict[str, Type[datasets.DataModule]]:
     return {
         m.__name__: m
-        for m in pluginloader.load_plugin_classes(datasets, datasets.DataModule)
+        for m in pluginloader.load_plugin_classes(
+            datasets, datasets.DataModule
+        )
     }
 
 
 def load_evaluators() -> Dict[str, Type[evaluators.Evaluator]]:
     return {
         m.__name__: m
-        for m in pluginloader.load_plugin_classes(evaluators, evaluators.Evaluator)
+        for m in pluginloader.load_plugin_classes(
+            evaluators, evaluators.Evaluator
+        )
     }
 
 

@@ -26,7 +26,11 @@ from sacred.observers import FileStorageObserver
 from src.callbacks import CallbackSet
 from src.eval_config import evaluation_ex
 from src.train_config import train_ex
-from src.utils.util import load_dataset_class, load_evaluator_class, load_model_class
+from src.utils.util import (
+    load_dataset_class,
+    load_evaluator_class,
+    load_model_class,
+)
 
 
 @train_ex.config
@@ -60,7 +64,9 @@ def _ensure_description(description):
         if sys.stdout.isatty():
             description = input("Describe your experiment.")
         else:
-            raise ValueError("Describe your experiment by editing train_config.py.")
+            raise ValueError(
+                "Describe your experiment by editing train_config.py."
+            )
 
 
 @train_ex.main
@@ -75,14 +81,20 @@ def train(_config):
     else:
         val_dataset = None
 
-    print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
+    print(
+        f"Training model {params.model_name} with dataset {params.dataset_name}."
+    )
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args
+        train_dataset,
+        collate_fn=train_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
     if val_dataset is not None:
         val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args
+            val_dataset,
+            collate_fn=val_dataset.collate_fn(),
+            **params.dataloader_args,
         )
     else:
         val_dataloader = None

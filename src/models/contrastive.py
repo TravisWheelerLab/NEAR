@@ -10,13 +10,13 @@ from src.utils.losses import SupConLoss
 class ResNet1d(pl.LightningModule):
     def __init__(
         self,
-        learning_rate,
+        learning_rate: float,
         log_interval,
-        res_block_n_filters=256,
-        res_block_kernel_size=3,
-        in_channels=128,
-        n_res_blocks=8,
-        training=True,
+        res_block_n_filters: int = 256,
+        res_block_kernel_size: int = 3,
+        in_channels: int = 128,
+        n_res_blocks: int = 8,
+        training: bool = True,
     ):
 
         super(ResNet1d, self).__init__()
@@ -95,14 +95,23 @@ class ResNet1d(pl.LightningModule):
 
         embeddings = self.forward(features)
         # batch_size x sequence_length x embedding_dimension
-        # 32x200x768
+        # 32x768x200
+
+        # here we are getting on diagonal and off diagonal elements
+        # e1 is a positive sample and e2 is a negative sample
+        embeddings_transposed = embeddings.transpose(
+            -1, -2
+        )  # batch_size x sequence_length x embedding_dimension
 
         e1, e2 = torch.split(
-            embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
-        )
-        e1 = torch.cat(torch.unbind(e1, dim=0))
-        e2 = torch.cat(torch.unbind(e2, dim=0))
-        # (batch_size*sequence_length) x embedding_dimension
+            embeddings_transposed,
+            embeddings.shape[0] // 2,
+            dim=0,  # both are (batch_size /2 , sequence_length, embedding_dimension)
+        )  # -- see datasets collate_fn
+
+        e1 = torch.cat(torch.unbind(e1, dim=0))  # original seq embeddings
+        e2 = torch.cat(torch.unbind(e2, dim=0))  # mutated seq embeddings
+        # ((batch_size/2) * sequence_length) x embedding_dimension
 
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
@@ -118,8 +127,9 @@ class ResNet1d(pl.LightningModule):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
-        #
+        loss = self.loss_func(
+            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
+        )  # input is ((batch_size/2) x 2 x embedding_dimension)
 
         return loss
 
@@ -159,7 +169,9 @@ class ResNet1dKmerSampler(ResNet1d):
 
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
+        e1, e2 = torch.split(
+            embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0
+        )
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
@@ -174,21 +186,27 @@ class ResNet1dKmerSampler(ResNet1d):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+        loss = self.loss_func(
+            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
+        )
 
         return loss
 
 
 class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
     def __init__(self, *args, **kwargs):
-        super(ResNet1dKmerSamplerWithLabelVectors, self).__init__(*args, **kwargs)
+        super(ResNet1dKmerSamplerWithLabelVectors, self).__init__(
+            *args, **kwargs
+        )
 
     def _shared_step(self, batch):
         features, labels = batch
 
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
+        e1, e2 = torch.split(
+            embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0
+        )
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
@@ -203,6 +221,8 @@ class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+        loss = self.loss_func(
+            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
+        )
 
         return loss

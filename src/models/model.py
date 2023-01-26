@@ -4,7 +4,13 @@ import torch.nn as nn
 amino_n_to_a = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
 amino_a_to_n = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
-__all__ = ["amino_n_to_v", "ResidualBlock", "DotProdModel", "ResNet", "amino_a_to_n"]
+__all__ = [
+    "amino_n_to_v",
+    "ResidualBlock",
+    "DotProdModel",
+    "ResNet",
+    "amino_a_to_n",
+]
 
 amino_frequencies = torch.tensor(
     [
@@ -149,11 +155,15 @@ class ResNet(DotProdModel):
             # layers.append(nn.Dropout(0.1))
 
         layers.append(
-            nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode)
+            nn.Conv1d(
+                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
+            )
         )
         layers.append(activation())
         layers.append(
-            nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode)
+            nn.Conv1d(
+                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
+            )
         )
 
         self.layers = nn.Sequential(*layers)
