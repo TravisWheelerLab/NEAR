@@ -1,6 +1,68 @@
-def recall_and_filtration(
-    our_hits, hmmer_hits, distance_threshold, comp_func, evalue_threshold
+""" Metrics: module for evaluation metrics and plotting functions """
+
+import os
+import tqdm
+import numpy as np
+import matplotlib.pyplot as plt
+
+COLORS = ["r", "c", "g", "k"]
+
+
+def plot_roc_curve(
+    our_hits,
+    max_hmmer_hits,
+    normalize_embeddings,
+    distance_threshold,
+    denom,
+    figure_path,
+    comp_func,
+    evalue_thresholds=[1e-10, 1e-1, 1, 10],
 ):
+    """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
+    if normalize_embeddings:
+        distances = np.linspace(distance_threshold, 0.999, num=10)
+    else:
+        distances = np.linspace(0.001, distance_threshold, num=10)
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.set_title(f"{os.path.splitext(os.path.basename(figure_path))[0]}")
+
+    # for color, evalue_threshold in zip(["r", "c", "g", "k"], [1e-10, 1e-1, 1, 10]):
+    for i, evalue_threshold in enumerate(evalue_thresholds):
+
+        filtrations = []
+        recalls = []
+        for threshold in tqdm.tqdm(distances):
+            recall, total_hits = recall_and_filtration(
+                our_hits,
+                max_hmmer_hits,
+                threshold,
+                comp_func,
+                evalue_threshold,
+            )
+
+            filtration = 100 * (1.0 - (total_hits / denom))
+            filtrations.append(filtration)
+            recalls.append(recall)
+            print(
+                f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}"
+            )
+
+        ax.scatter(filtrations, recalls, c=COLORS[i], marker="o")
+        ax.plot(filtrations, recalls, f"{COLORS[i]}--", linewidth=2)
+
+    ax.plot([0, 100], [100, 0], "k--", linewidth=2)
+    ax.set_ylim([-1, 101])
+    ax.set_xlim([-1, 101])
+    ax.set_xlabel("filtration")
+    ax.set_ylabel("recall")
+    plt.savefig(f"{figure_path}", bbox_inches="tight")
+    plt.close()
+
+
+def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func, evalue_threshold):
+    """Function to calculate recall and filtration for a given
+    disance threshold"""
     match_count = 0
     our_total_hits = 0
     hmmer_hits_for_our_queries = 0

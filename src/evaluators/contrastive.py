@@ -1,22 +1,22 @@
-import logging
-import torch
-import faiss
-from src.utils import create_faiss_index, encode_string_sequence
-import numpy as np
+"""" Evaluator class for the contrastive CNN model """
+
 import os
-import pdb
-import tqdm
-from src.evaluators.uniref_evaluator import UniRefEvaluator
+import logging
+import faiss
+import numpy as np
 from typing import List, Tuple
+import torch
+from src.evaluators.uniref_evaluator import UniRefEvaluator
+from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 
-
 class ContrastiveEvaluator(UniRefEvaluator):
-    """Evaluator for the Contrastive Loss CNN model"""
-
+    """ Evaluator for the Contrastive Loss CNN model """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.unrolled_names = []
+        self.index: faiss.Index = None
 
     def compute_embedding(self, sequence: str, model_class) -> torch.Tensor:
         """Encodes the input sequence as a tensor and then passes
@@ -29,30 +29,29 @@ class ContrastiveEvaluator(UniRefEvaluator):
             .T
         )
 
-    def _setup_target_and_query_dbs(
+    def _setup_targets_for_faiss(
         self,
         target_embeddings: List[torch.Tensor],
-        query_embeddings: List[torch.Tensor],
         target_names: List[str],
-        query_names: List[str],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
 
-        # TODO: this doesn't include queries, this needs to change
+        #TODO: this doesn't include queries, this needs to change
 
         lengths: List[int] = list(map(lambda s: s.shape[0], target_embeddings))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
-        self.unrolled_names = []
 
-        for length, name, target in zip(lengths, target_names, target_embeddings):
+        for length, name, target in zip(lengths, target_names, target_embeddings
+        ):
             # sample every N amino.
             aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
 
             self.unrolled_names.extend(
                 [name] * length
-            )  # record keeping (num targets x amino per target) - every given amino in a sequence has the same name
+            )  # record keeping (num targets x amino per target)
+                #- every given amino in a sequence has the same name
             unrolled_targets.append(aminos)
 
         unrolled_targets = torch.cat(
@@ -83,22 +82,21 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
-    def search(self, query_embedding: torch.tensor) -> List[Tuple[str, float]]:
+    def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
         filtered_list = []
 
-        D, I = self.index.search(query_embedding.contiguous(), k=1000)  # top 2048 hits
+        distances, indices = self.index.search(query_embedding.contiguous(), k=1000)
         # remove stuff that's under/over the threshold
-        I = I[self.comp_func(D, self.distance_threshold)]
-        D = D[self.comp_func(D, self.distance_threshold)]
+        indices = indices[self.comp_func(distances, self.distance_threshold)]
+        distances = distances[self.comp_func(distances, self.distance_threshold)]
 
         for distance, name in zip(
-            D.ravel().to("cpu").numpy(),
-            self.unrolled_names[I.ravel().to("cpu").numpy()],
+            distances.ravel().to("cpu").numpy(),
+            self.unrolled_names[indices.ravel().to("cpu").numpy()],
         ):
             filtered_list.append((name, distance))
-        # TODO: use a torch.cat instead
-        # see line 313 in uniref_evaluator
+
         return filtered_list
