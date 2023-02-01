@@ -51,7 +51,7 @@ amino_n_to_v[amino_char_to_index["U"]] = amino_frequencies
 amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
 
-def encode_string_sequence(sequence):
+def encode_string_sequence(sequence: str) -> torch.Tensor:
     """Encode a string sequence as a tensor."""
     data = torch.zeros(20, len(sequence))
     for i, c in enumerate(sequence):

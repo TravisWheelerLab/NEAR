@@ -14,6 +14,7 @@ import cv2
 from typing import Tuple
 import pytorch_lightning as pl
 from tqdm import tqdm
+from typing import List
 
 
 def get_data_from_subset(
@@ -23,7 +24,7 @@ def get_data_from_subset(
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
     queries in the input query id file and all target sequences in all of num_files"""
 
-    queryfile = f"uniref/split_subset/queries/queries_{query_id}.fa"
+    queryfile = f"{HOME}/prefilter/uniref/split_subset/queries/queries_{query_id}.fa"
     queryfasta = FastaFile(queryfile)
     hmmerhits = HmmerHits(dir_path=dirpath)
 
@@ -110,63 +111,6 @@ def get_embeddings(targetsequences: dict, querysequences: dict):
     return target_embeddings, query_embeddings
 
 
-# activation maps
-
-
-def get_actmaps(embeddings: list, function="sum", p=2, show=True, title=None):
-    num_embeds = 500
-    if len(embeddings) > num_embeds:
-        embeddings = random.sample(embeddings, num_embeds)
-
-    else:
-        print(f"Have {len(embeddings)} embeddings ")
-        num_embeds = len(embeddings)
-
-    seq_dim = np.max([len(s) for s in embeddings])
-
-    all_actmaps = np.zeros((num_embeds, seq_dim, 1, 3))
-
-    # embeddings shape (num_embeddings, seq_len, 256)
-
-    for idx, sample in enumerate(embeddings):
-        if function == "sum":
-            outputs = (sample**p).sum(1)
-        elif function == "max":
-            outputs = (sample**p).max(1)
-        outputs_n = outputs.reshape(1, outputs.shape[0])
-        outputs_n = outputs_n / outputs_n.sum(axis=1)
-        am = outputs_n[0, ...]
-        am = 255 * (am - np.min(am)) / (np.max(am) - np.min(am) + 1e-12)
-        am = np.uint8(np.floor(am))
-        am = cv2.applyColorMap(am, cv2.COLORMAP_JET)
-        seqlen = am.shape[0]
-        all_actmaps[idx, :seqlen, :, :] = am
-    if show:
-        all_actmaps = all_actmaps.reshape(seq_dim, num_embeds, 3)
-        plt.imshow(all_actmaps, aspect=0.2)
-        if title:
-            plt.title(title)
-
-        figname = f"activationmaps_{np.random.randint(0,5000)}.png"
-        print(f"Saving figure as {figname}")
-        plt.savefig(figname)
-        # sliced_actmaps = all_actmaps[:,:512, :]
-        # plt.clf()
-        # plt.imshow(sliced_actmaps, aspect = 3)
-        # if title:
-        #     plt.title(title + ', sliced to 512')
-
-        # figname = f'activationmaps_sliced_{np.random.randint(0,5000)}.png'
-        # print(f'Saving figure as {figname}')
-        # plt.savefig(figname)
-    return all_actmaps
-
-
-#
-
-# do the above but when we have small e evalues
-
-
 def get_subsets(hits_data: dict, score_threshold_high=100, score_threshold_low=3):
     pos_samples = []
     neg_samples = []
@@ -187,61 +131,90 @@ def get_subsets(hits_data: dict, score_threshold_high=100, score_threshold_low=3
     return pos_samples, neg_samples
 
 
-def actmap_pipeline():
-    _, targetsequences, all_hits_normal = get_data_from_subset(
-        "uniref/phmmer_normal_results", 1
-    )
+def get_actmaps(embeddings: list, function="sum", p=2, show=True, title=None):
+    num_embeds = 500
+    if len(embeddings) > num_embeds:
+        embeddings = random.sample(embeddings, num_embeds)
 
-    target_embeddings, _ = get_embeddings(targetsequences, None)
+    else:
+        print(f"Have {len(embeddings)} embeddings ")
+        num_embeds = len(embeddings)
 
-    embeddings = list(target_embeddings.values())
+    seq_dim = np.max([len(s) for s in embeddings])
 
-    # pos_samples, neg_samples = get_subsets(all_hits_normal)
+    all_actmaps = np.zeros((num_embeds, seq_dim, 1, 3))
 
-    # similar_embeddings = []
-
-    # diff_embeddings = []
-
-    # for pair in pos_samples:
-    #     seq = target_embeddings[pair]
-
-    #     similar_embeddings.append(seq)
-
-    # print(f'Got {len(pos_samples)}  similar embeddings')
-
-    # for pair in neg_samples:
-    #     seq = target_embeddings[pair]
-
-    #     diff_embeddings.append(seq)
-
-    # print(f'Got {len(neg_samples)}  dissimilar embeddings')
-    actmaps = []
-    for i in range(5):
-        key = list(target_embeddings.keys())[i]
-        print(key)
-        print(targetsequences[key])
-        # actmap = get_actmaps([embeddings[i]], function = 'max',title = f'Amino {i} activation map')
-        outputs = (embeddings[i] ** 2).max(1)
-
-        outputs_n = outputs.reshape(1, outputs.shape[0])
-        outputs_n = outputs_n / outputs_n.sum(axis=1)
+    # embeddings shape (num_embeddings, seq_len, 256)
+    for idx in range(num_embeds):
+        sample = embeddings[idx]
+        if function == "sum":
+            outputs = (sample**p).sum(1)
+        elif function == "max":
+            outputs = (sample**p).max(1)
+        try:
+            outputs_n = outputs.reshape(1, outputs.shape[0])
+            outputs_n = outputs_n / outputs_n.sum(axis=1)
+        except AttributeError:
+            pdb.set_trace()
         am = outputs_n[0, ...]
+        am = am.numpy()
         am = 255 * (am - np.min(am)) / (np.max(am) - np.min(am) + 1e-12)
         am = np.uint8(np.floor(am))
         am = cv2.applyColorMap(am, cv2.COLORMAP_JET)
-        actmaps.append(am)
-    seq1 = "MAKPVPPPRPVQPPLSRTAHWRRAHRMTILLLLLWLFTGFGAAFFARELAGLSVFGWPLSFYLAAQGASLVYLGIIVFYAWRMRQLDRAAAQATVPEPHA"
-    seq2 = "MKKGCKIALVGGLAVVVGAVACWKWMIRMPLGEFTRCALYMAVMDDEICRNELEGNRIGDEVITFPPKEESLQYRYHLFLQMNLRKTSAQLQEEIADMEQRLQESRQYIGQPKEQLEVEFVEQGAE"
+        seqlen = am.shape[0]
+        all_actmaps[idx, :seqlen, :, :] = am
+    if show:
+        figname1 = f"activationmaps_{np.random.randint(0,5000)}.png"
 
-    fig = plt.figure(figsize=(20, 100))
-    plt.imshow(actmaps[0], aspect=0.2)
-    plt.yticks(range(100), labels=seq1, fontsize=60, rotation=90)
-    plt.savefig("0.png")
+        np.save(figname1, all_actmaps, allow_pickle=True)
 
-    fig = plt.figure(figsize=(20, 120))
-    plt.imshow(actmaps[1], aspect=0.2)
-    plt.yticks(range(126), labels=seq2, fontsize=60, rotation=90)
-    plt.savefig("1.png")
-    pdb.set_trace()
-    # get_actmaps(similar_embeddings, function = 'max', title = 'Similar embedding activation map')
-    # get_actmaps(diff_embeddings,  function = 'max', title = 'Different embedding activation map')
+        all_actmaps = all_actmaps.reshape(num_embeds, seq_dim, 3)
+        plt.imshow(all_actmaps, aspect=4)
+        if title:
+            plt.title(title)
+
+        print(f"Saving figure as {figname1}")
+        plt.savefig(figname1)
+        # sliced_actmaps = all_actmaps[:,:512, :]
+        # plt.clf()
+        # plt.imshow(sliced_actmaps, aspect = 3)
+        # if title:
+        #     plt.title(title + ', sliced to 512')
+
+        # figname2 = f'activationmaps_sliced_{np.random.randint(0,5000)}.png'
+        # print(f'Saving figure as {figname2}')
+        # plt.savefig(figname2)
+    return all_actmaps
+
+
+def actmap_pipeline(
+    names: List[str], embeddings: List[torch.Tensor], max_hmmer_hits: dict
+):
+
+    pos_samples, neg_samples = get_subsets(max_hmmer_hits)  # names of sequences
+
+    similar_embeddings = []
+
+    diff_embeddings = []
+
+    for seq_name in pos_samples:
+        try:
+            idx = names.index(seq_name)
+            emb = embeddings[idx]
+
+            similar_embeddings.append(emb)
+        except ValueError as e:
+            print(e)
+
+    print(f"Got {len(similar_embeddings)}  similar embeddings")
+
+    for seq_name in neg_samples:
+        idx = names.index(seq_name)
+        emb = embeddings[idx]
+        diff_embeddings.append(emb)
+
+    print(f"Got {len(diff_embeddings)}  dissimilar embeddings")
+
+    get_actmaps(embeddings, title="Amino activation maps")
+    get_actmaps(similar_embeddings, title="Similar embedding activation map")
+    get_actmaps(diff_embeddings, title="Different embedding activation map")

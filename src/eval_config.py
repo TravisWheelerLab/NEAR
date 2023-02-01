@@ -18,7 +18,7 @@ Evaluation code is in src/__init__.py"""
 HOME = os.environ["HOME"]
 # convert a class to a dictionary with a decorator
 querysequences, targetsequences, all_hits = get_data_from_subset(
-    "uniref/phmmer_results", num_files=1
+    "uniref/phmmer_results", num_files=2
 )
 
 
