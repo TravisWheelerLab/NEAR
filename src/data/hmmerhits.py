@@ -1,7 +1,8 @@
-import os
 import glob
-import numpy as np
+import os
 import pdb
+
+import numpy as np
 
 
 def dict_of_dicts(keys: list):
@@ -73,14 +74,7 @@ class HmmerHits:
                 continue
             target_name = row_info[0]
             query_name = row_info[2]
-            (
-                e_value_full,
-                score_full,
-                bias_full,
-                e_value_best,
-                score_best,
-                bias_best,
-            ) = (
+            (e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,) = (
                 row_info[4],
                 row_info[5],
                 row_info[6],
