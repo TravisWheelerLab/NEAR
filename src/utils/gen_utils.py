@@ -17,9 +17,7 @@ __all__ = [
 ]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
-amino_char_to_index = {
-    c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")
-}
+amino_char_to_index = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
 # the background distribution
 
@@ -50,9 +48,7 @@ amino_n_to_v[amino_char_to_index["*"]] = amino_frequencies
 amino_n_to_v[amino_char_to_index["U"]] = amino_frequencies
 
 # create vectors.
-amino_a_to_v = {
-    c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")
-}
+amino_a_to_v = {c: amino_n_to_v[i] for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}
 
 
 def encode_string_sequence(sequence):

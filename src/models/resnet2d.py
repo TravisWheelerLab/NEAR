@@ -112,9 +112,7 @@ class ResNet2d(pl.LightningModule):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
-        )
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss
 
@@ -215,8 +213,6 @@ class ResNet2dFFT(ResNet2d):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
-        )
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss

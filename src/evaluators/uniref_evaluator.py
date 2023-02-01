@@ -126,14 +126,10 @@ class UniRefEvaluator(Evaluator):
         self.evalue_threshold = evalue_threshold
 
         if self.normalize_embeddings:
-            logger.info(
-                "Using comparison function >= threshold for filtration."
-            )
+            logger.info("Using comparison function >= threshold for filtration.")
             self.comp_func = np.greater_equal
         else:
-            logger.info(
-                "Using comparison function <= threshold for filtration."
-            )
+            logger.info("Using comparison function <= threshold for filtration.")
             self.comp_func = np.less_equal
 
         root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
@@ -141,8 +137,9 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def _calc_embeddings(
-        self, fasta_or_pickle_file, model_class, apply_random_sequence
+        self, fasta_or_pickle_file: str, model_class, apply_random_sequence: bool
     ):
+        """Returns [names], [sequences], [embeddings]"""
 
         names, sequences = fasta_from_file(fasta_file=fasta_or_pickle_file)
         names = list(map(lambda x: x.split(" ")[0], names))
@@ -155,18 +152,14 @@ class UniRefEvaluator(Evaluator):
                 if apply_random_sequence:
                     # add 100 aminos on to the beginning
                     random_seq = generate_string_sequence(100)
-                    embed = self.compute_embedding(
-                        random_seq + sequence, model_class
-                    )
+                    embed = self.compute_embedding(random_seq + sequence, model_class)
                 else:
                     embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
                 embeddings.append(embed.to("cpu"))
                 idx_to_keep.append(j)
             else:
-                logger.debug(
-                    f"Removing sequence {sequence} with length {len(sequence)}"
-                )
+                logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
 
         _names = []
         _sequences = []
@@ -185,11 +178,7 @@ class UniRefEvaluator(Evaluator):
         if hasattr(model_class, "initial_seq_len"):
             self.tile_size = model_class.initial_seq_len
 
-        (
-            target_names,
-            target_sequences,
-            target_embeddings,
-        ) = self._calc_embeddings(
+        (target_names, target_sequences, target_embeddings,) = self._calc_embeddings(
             self.target_file,
             model_class=model_class,
             apply_random_sequence=False,
@@ -254,9 +243,7 @@ class UniRefEvaluator(Evaluator):
             distances = np.linspace(0.001, self.distance_threshold, num=10)
 
         fig, ax = plt.subplots(figsize=(10, 10))
-        ax.set_title(
-            f"{os.path.splitext(os.path.basename(self.figure_path))[0]}"
-        )
+        ax.set_title(f"{os.path.splitext(os.path.basename(self.figure_path))[0]}")
 
         # for color, evalue_threshold in zip(["r", "c", "g", "k"], [1e-10, 1e-1, 1, 10]):
         for color, evalue_threshold in zip(["c"], [1e-1]):
@@ -288,9 +275,7 @@ class UniRefEvaluator(Evaluator):
         plt.savefig(f"{self.figure_path}", bbox_inches="tight")
         plt.close()
 
-    def _setup_target_and_query_dbs(
-        self, targets, queries, target_names, query_names
-    ):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         raise NotImplementedError()
 
     def search(self, query_embedding):
@@ -304,7 +289,9 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def filter(
-        self, queries, query_names,
+        self,
+        queries,
+        query_names,
     ):
         qdict = dict()
 
@@ -341,9 +328,7 @@ class UniRefEvaluator(Evaluator):
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
-            logger.debug(
-                f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}"
-            )
+            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
 
         loop_time = time.time() - t_begin
 
@@ -352,40 +337,105 @@ class UniRefEvaluator(Evaluator):
         return qdict, loop_time / i, loop_time
 
 
+class ContrastiveEvaluatorFile(UniRefEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compute_embedding(self, sequence: str, model_class) -> torch.Tensor:
+        return (
+            model_class(
+                encode_string_sequence(sequence).unsqueeze(0).to(self.model_device)
+            )
+            .squeeze()
+            .T
+        )
+
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
+        # no queries?
+        lengths = list(map(lambda s: s.shape[0], targets))
+        logger.info(f"Original DB size: {sum(lengths)}")
+        unrolled_targets = []
+        self.unrolled_names = []
+
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
+            # sample every N amino.
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
+
+            self.unrolled_names.extend(
+                [name] * length
+            )  # record keeping (num targets x amino per target) - every given amino in a sequence has the same name
+            unrolled_targets.append(aminos)
+
+        unrolled_targets = torch.cat(
+            unrolled_targets, dim=0
+        )  # 128 x (num targets x amino per target)
+
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
+
+        if self.normalize_embeddings:
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
+
+        self.index: faiss.Index = create_faiss_index(
+            embeddings=unrolled_targets,
+            embed_dim=unrolled_targets.shape[-1],
+            distance_metric="cosine" if self.normalize_embeddings else "l2",
+            index_string=self.index_string,
+            nprobe=self.nprobe,
+            device=self.index_device,
+        )
+
+        logger.info("Adding targets to index.")
+        if self.index_device == "cpu":
+            self.index.add(unrolled_targets.to("cpu"))
+        else:
+            self.index.add(unrolled_targets)
+
+        self.unrolled_names = np.asarray(self.unrolled_names)
+
+        faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
+
+    def search(self, query_embedding):
+        filtered_list = []
+
+        D, I = self.index.search(query_embedding.contiguous(), k=1000)  # top 2048 hits
+        # remove stuff that's under/over the threshold
+        I = I[self.comp_func(D, self.distance_threshold)]
+        D = D[self.comp_func(D, self.distance_threshold)]
+
+        for distance, name in zip(
+            D.ravel().to("cpu").numpy(),
+            self.unrolled_names[I.ravel().to("cpu").numpy()],
+        ):
+            filtered_list.append((name, distance))
+        # TODO: use a torch.cat instead
+        # see line 313 in uniref_evaluator
+        return filtered_list
+
+
 class UniRefVAEEvaluator(UniRefEvaluator):
     def __init__(self, overwrite, n_vae_samples, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.overwrite = overwrite
         self.n_vae_samples = n_vae_samples
 
-    def _setup_target_and_query_dbs(
-        self, targets, queries, target_names, query_names
-    ):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
         self.unrolled_names = []
 
-        for i, (length, name, target) in enumerate(
-            zip(lengths, target_names, targets)
-        ):
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
             # sample every N amino.
-            aminos = torch.cat(
-                [target[j].unsqueeze(0) for j in range(length)], dim=0
-            )
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
             self.unrolled_names.extend([name] * length)
             unrolled_targets.append(aminos)
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
-        logger.info(
-            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
-        )
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(
-                unrolled_targets, dim=-1
-            )
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -431,9 +481,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
                 model_class.initial_seq_len,
             ):
                 embedding, _ = model_class(
-                    encode_string_sequence(
-                        sequence[i : i + model_class.initial_seq_len]
-                    )
+                    encode_string_sequence(sequence[i : i + model_class.initial_seq_len])
                     .to(self.model_device)
                     .unsqueeze(0)
                 )
@@ -441,9 +489,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
 
             if len(sequence) % model_class.initial_seq_len != 0:
                 embedding, _ = model_class(
-                    encode_string_sequence(
-                        sequence[-model_class.initial_seq_len :]
-                    )
+                    encode_string_sequence(sequence[-model_class.initial_seq_len :])
                     .to(self.model_device)
                     .unsqueeze(0)
                 )
@@ -451,9 +497,7 @@ class UniRefVAEEvaluator(UniRefEvaluator):
 
             if len(sequence) == model_class.initial_seq_len:
                 embedding, _ = model_class(
-                    encode_string_sequence(sequence)
-                    .to(self.model_device)
-                    .unsqueeze(0)
+                    encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
                 )
                 slices.append(embedding)
 
@@ -486,9 +530,7 @@ class UniRefTiledVAEEvaluator(UniRefVAEEvaluator):
     @torch.no_grad()
     def compute_embedding(self, sequence, model_class):
         slices = []
-        encoded = (
-            encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
-        )
+        encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
         for _ in range(self.n_vae_samples):
             if len(sequence) == model_class.initial_seq_len:
                 encoding, _ = model_class(encoded)
@@ -505,9 +547,7 @@ class UniRefTiledVAEEvaluator(UniRefVAEEvaluator):
                     if begin_idx + self.tile_size >= len(sequence):
                         # we can't go over the end, so break
                         break
-                    encoded_slice = encoded[
-                        :, :, begin_idx : begin_idx + self.tile_size
-                    ]
+                    encoded_slice = encoded[:, :, begin_idx : begin_idx + self.tile_size]
                     encoding, _ = model_class(encoded_slice)
                     encoding = encoding.reshape(1, -1)
                     slices.append(encoding)
@@ -559,9 +599,7 @@ class UniRefRandomUngappedVAEEvaluator(UniRefTiledVAEEvaluator):
         for j, sequence in enumerate(tqdm.tqdm(sequences)):
             if len(sequence) >= model_class.initial_seq_len:
                 if is_target_db and self.random_length != 0:
-                    generated = generate_string_sequence(
-                        2 * self.random_length
-                    )
+                    generated = generate_string_sequence(2 * self.random_length)
                     init_len = len(sequence)
                     sequence = (
                         generated[: self.random_length]
@@ -576,9 +614,7 @@ class UniRefRandomUngappedVAEEvaluator(UniRefTiledVAEEvaluator):
                 embeddings.append(embed.to("cpu"))
                 idx_to_keep.append(j)
             else:
-                logger.debug(
-                    f"Removing sequence {sequence} with length {len(sequence)}"
-                )
+                logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
 
         _names = []
         _sequences = []
@@ -607,37 +643,27 @@ class UniRefMeanPoolEvaluator(UniRefEvaluator):
             self.max_hmmer_hits = queries
 
     def compute_embedding(self, sequence, model_class):
-        encoded = (
-            encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
-        )
+        encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
         embedding = model_class(encoded).squeeze().mean(dim=1).unsqueeze(0)
         return embedding
 
-    def _setup_target_and_query_dbs(
-        self, targets, queries, target_names, query_names
-    ):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
         self.unrolled_names = []
 
-        for i, (length, name, target) in enumerate(
-            zip(lengths, target_names, targets)
-        ):
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
             # sample every N amino.
             self.unrolled_names.extend([name] * length)
             unrolled_targets.append(target)
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
-        logger.info(
-            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
-        )
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(
-                unrolled_targets, dim=-1
-            )
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -688,9 +714,7 @@ class UniRefTiledMeanPoolEvaluator(UniRefMeanPoolEvaluator):
     @torch.no_grad()
     def compute_embedding(self, sequence, model_class):
         slices = []
-        encoded = (
-            encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
-        )
+        encoded = encode_string_sequence(sequence).to(self.model_device).unsqueeze(0)
         if len(sequence) <= self.tile_size:
             encoding = self.helper(encoded, model_class)
             slices.append(encoding)
@@ -701,9 +725,7 @@ class UniRefTiledMeanPoolEvaluator(UniRefMeanPoolEvaluator):
                     # we can't go over the end, so break
                     break
 
-                encoded_slice = encoded[
-                    :, :, begin_idx : begin_idx + self.tile_size
-                ]
+                encoded_slice = encoded[:, :, begin_idx : begin_idx + self.tile_size]
                 encoding = self.helper(encoded_slice, model_class)
                 slices.append(encoding)
             encoded_slice = encoded[:, :, -self.tile_size :]
@@ -752,34 +774,24 @@ class UniRefCARPEvaluator(UniRefEvaluator):
         embedding = model_class(encoded)["representations"][32]
         return embedding.mean(dim=1)
 
-    def _setup_target_and_query_dbs(
-        self, targets, queries, target_names, query_names
-    ):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
         self.unrolled_names = []
 
-        for i, (length, name, target) in enumerate(
-            zip(lengths, target_names, targets)
-        ):
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
             # sample every N amino.
-            aminos = torch.cat(
-                [target[j].unsqueeze(0) for j in range(length)], dim=0
-            )
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
             self.unrolled_names.extend([name] * length)
             unrolled_targets.append(aminos)
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
-        logger.info(
-            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
-        )
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(
-                unrolled_targets, dim=-1
-            )
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,
@@ -843,34 +855,24 @@ class UniRefESMEvaluator(UniRefEvaluator):
         embedding = embedding["representations"][33].mean(dim=1)
         return embedding
 
-    def _setup_target_and_query_dbs(
-        self, targets, queries, target_names, query_names
-    ):
+    def _setup_target_and_query_dbs(self, targets, queries, target_names, query_names):
         lengths = list(map(lambda s: s.shape[0], targets))
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
         self.unrolled_names = []
 
-        for i, (length, name, target) in enumerate(
-            zip(lengths, target_names, targets)
-        ):
+        for i, (length, name, target) in enumerate(zip(lengths, target_names, targets)):
             # sample every N amino.
-            aminos = torch.cat(
-                [target[j].unsqueeze(0) for j in range(length)], dim=0
-            )
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
             self.unrolled_names.extend([name] * length)
             unrolled_targets.append(aminos)
 
         unrolled_targets = torch.cat(unrolled_targets, dim=0)
 
-        logger.info(
-            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
-        )
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(
-                unrolled_targets, dim=-1
-            )
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         self.index = create_faiss_index(
             embeddings=unrolled_targets,

@@ -31,9 +31,7 @@ def sanitize_sequence(sequence):
             "U",
             "O",
         ):  # ambiguous aminos -- replacing them with some other amino from backgorund distribution
-            sampled_char = utils.amino_alphabet[
-                utils.amino_distribution.sample().item()
-            ]
+            sampled_char = utils.amino_alphabet[utils.amino_distribution.sample().item()]
             sanitized.append(sampled_char)
             logger.debug(f"Replacing <X, U, O> with {sampled_char}")
         elif char == "B":  # can be either D or N
@@ -131,9 +129,7 @@ class AlignmentGenerator(DataModule):
 
         if seq1_chop > 0:
             seq1 = seq1[seq1_chop // 2 : -seq1_chop // 2]
-            seq_a_aligned_labels = seq_a_aligned_labels[
-                seq1_chop // 2 : -seq1_chop // 2
-            ]
+            seq_a_aligned_labels = seq_a_aligned_labels[seq1_chop // 2 : -seq1_chop // 2]
         elif seq1_chop == 0:
             pass
         else:
@@ -148,9 +144,7 @@ class AlignmentGenerator(DataModule):
 
         if seq2_chop > 0:
             seq2 = seq2[seq2_chop // 2 : -seq2_chop // 2]
-            seq_b_aligned_labels = seq_b_aligned_labels[
-                seq2_chop // 2 : -seq2_chop // 2
-            ]
+            seq_b_aligned_labels = seq_b_aligned_labels[seq2_chop // 2 : -seq2_chop // 2]
         elif seq2_chop == 0:
             pass
         else:
@@ -257,8 +251,7 @@ class SwissProtGenerator(SwissProtLoader):
         )  # map amino to int identity
 
         n_subs = int(  # NOte: we are potentially replacing with the same thing
-            len(sequence)
-            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(
@@ -301,9 +294,7 @@ class PfamDataset(DataModule):
             valid_name = train.replace("-train", "-valid")
             if valid_name in valid_files:
                 valid_file = valid_files[valid_files.index(valid_name)]
-                self.training_pairs.append(
-                    (i, FastaSampler(train, valid_file))
-                )
+                self.training_pairs.append((i, FastaSampler(train, valid_file)))
             else:
                 self.training_pairs.append((i, FastaSampler(train, train)))
 
@@ -403,9 +394,7 @@ class KMerSampler(DataModule):
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
         seeded_seq = (
-            random_seq[:start_idx]
-            + kmer_seed
-            + random_seq[start_idx + kmer_length :]
+            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
         )
         self.idx_cnt += 1
         # just do pairs for now.
@@ -465,9 +454,7 @@ class SpectrogramDataset(DataModule):
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
         seeded_seq = (
-            random_seq[:start_idx]
-            + kmer_seed
-            + random_seq[start_idx + kmer_length :]
+            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
         )
         # take the Mel
         self.idx_cnt += 1
@@ -594,13 +581,10 @@ class AAIndexDataset(DataModule):
 
         sequence = sanitize_sequence(seq)
 
-        sequence = torch.as_tensor(
-            [utils.amino_char_to_index[c] for c in sequence]
-        )
+        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
 
         n_subs = int(
-            len(sequence)
-            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(
@@ -632,13 +616,10 @@ class UniProtSpectDataset(SwissProtGenerator):
 
         sequence = sanitize_sequence(seq)
 
-        sequence = torch.as_tensor(
-            [utils.amino_char_to_index[c] for c in sequence]
-        )
+        sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
 
         n_subs = int(
-            len(sequence)
-            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         s2 = utils.mutate_sequence(

@@ -47,7 +47,9 @@ def run(phmmer_file_subset):
             ).decode("utf-8")
             target_seq = target_seq[target_seq.find("\n") + 1 :]
 
-            target_out_file = f"targets_{os.path.splitext(os.path.basename(phmmer_file_subset))[1]}.fa"
+            target_out_file = (
+                f"targets_{os.path.splitext(os.path.basename(phmmer_file_subset))[1]}.fa"
+            )
 
             with open(f"{target_out_file}", "w") as dst:
                 dst.write(f">{query}\n{query_seq}\n")

@@ -94,20 +94,12 @@ def neighborhood_labels(fasta_files: List[str], figure_path: str) -> None:
     family_membership = []
     multi_label_membership = []
     for n_seq in sorted_n_seqs:
-        multi_label_membership.append(
-            n_seq_per_family_to_number_multilabel[n_seq]
-        )
-        family_membership.append(
-            n_seq_per_family_to_total_number_sequences[n_seq]
-        )
+        multi_label_membership.append(n_seq_per_family_to_number_multilabel[n_seq])
+        family_membership.append(n_seq_per_family_to_total_number_sequences[n_seq])
 
     fig, ax = plt.subplots(nrows=3, figsize=(13, 10))
-    first_bar = np.array(
-        [x[0] for x in family_to_multilabel_membership.values()]
-    )
-    second_bar = np.array(
-        [x[1] for x in family_to_multilabel_membership.values()]
-    )
+    first_bar = np.array([x[0] for x in family_to_multilabel_membership.values()])
+    second_bar = np.array([x[1] for x in family_to_multilabel_membership.values()])
     percent_bar = np.array(
         [x[1] / x[0] for x in family_to_multilabel_membership.values()]
     )
@@ -132,9 +124,7 @@ def neighborhood_labels(fasta_files: List[str], figure_path: str) -> None:
         np.log(second_bar),
         label="num sequences in family with multiple labels",
     )
-    ax[1].set_title(
-        "sequences with and without multiple labels per family (log scale)"
-    )
+    ax[1].set_title("sequences with and without multiple labels per family (log scale)")
     ax[1].set_xlabel("unique family (sorted by membership)")
     ax[1].legend()
 
@@ -148,9 +138,7 @@ def neighborhood_labels(fasta_files: List[str], figure_path: str) -> None:
     plt.close()
 
 
-def n_seq_per_family(
-    seq_and_labels: List[Tuple[List[str], str]]
-) -> Dict[str, int]:
+def n_seq_per_family(seq_and_labels: List[Tuple[List[str], str]]) -> Dict[str, int]:
 
     family_to_n_seq_per_family = defaultdict(int)
     for labelset, sequence in seq_and_labels:
@@ -202,12 +190,8 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
 
     for unique_validation_label in set_val_labels:
         # this will FAIL if unique_validation_label is not present in train
-        num_train_labels.append(
-            train_family_to_membership[unique_validation_label]
-        )
-        num_val_labels.append(
-            val_family_to_membership[unique_validation_label]
-        )
+        num_train_labels.append(train_family_to_membership[unique_validation_label])
+        num_val_labels.append(val_family_to_membership[unique_validation_label])
 
     num_train_labels = np.array(num_train_labels)
     num_val_labels = np.array(num_val_labels)
@@ -221,9 +205,7 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
         num_train_labels,
         label="train labels",
     )
-    ax[0].bar(
-        np.arange(len(num_val_labels)), num_val_labels, label="val labels"
-    )
+    ax[0].bar(np.arange(len(num_val_labels)), num_val_labels, label="val labels")
     ax[0].set_title("number of training and validation labels per family")
     ax0 = ax[0].twinx()
     ax0.plot(
@@ -253,9 +235,7 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
         np.log(num_val_labels),
         label="val labels",
     )
-    ax[1].set_title(
-        "number of training and validation labels per family (log scale)"
-    )
+    ax[1].set_title("number of training and validation labels per family (log scale)")
     ax[1].legend()
 
     # plot the cumulative number of labels
@@ -345,9 +325,7 @@ def number_of_sequences_per_unique_label_combination(
     )
     ax0.legend()
 
-    ax[1].bar(
-        np.arange(len(train_counts)), np.log(train_counts + 1), label="train"
-    )
+    ax[1].bar(np.arange(len(train_counts)), np.log(train_counts + 1), label="train")
     ax[1].bar(np.arange(len(val_counts)), np.log(val_counts + 1), label="val")
     ax[1].legend()
 
@@ -368,9 +346,7 @@ def parser():
         name="histogram_sequences",
         description="Histogram the number of sequences per family in the ingested fasta_files.",
     )
-    spf.add_argument(
-        "fasta_files", nargs="+", help="fasta files(s) to histogram."
-    )
+    spf.add_argument("fasta_files", nargs="+", help="fasta files(s) to histogram.")
     spf.add_argument("save_fig", type=str, help="where to save the figure")
 
     neighbor = sp.add_parser(
@@ -385,9 +361,7 @@ def parser():
         nargs="+",
         help="list of files or a .yaml file containing train/val_file keys",
     )
-    neighbor.add_argument(
-        "save_fig", type=str, help="where to save the figure"
-    )
+    neighbor.add_argument("save_fig", type=str, help="where to save the figure")
     neighbor.add_argument(
         "--key",
         default="val_files",
@@ -438,9 +412,7 @@ if __name__ == "__main__":
             elif os.path.splitext(file)[1] == ".fa":
                 files = args.files
             else:
-                raise ValueError(
-                    f"only accepts <.yaml, .fa>, got {args.files[0]}"
-                )
+                raise ValueError(f"only accepts <.yaml, .fa>, got {args.files[0]}")
         else:
             files = args.files
         neighborhood_labels(files, args.save_fig)
@@ -451,9 +423,7 @@ if __name__ == "__main__":
     elif args.command == "unique_label_combinations":
         with open(args.yaml_file, "r") as src:
             hparams = yaml.safe_load(src)
-        number_of_sequences_per_unique_label_combination(
-            hparams, args.save_fig
-        )
+        number_of_sequences_per_unique_label_combination(hparams, args.save_fig)
 
     else:
         p.print_help()

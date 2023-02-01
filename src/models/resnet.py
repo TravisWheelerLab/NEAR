@@ -9,7 +9,9 @@ from src.models.mean_pool import ResidualBlock
 
 class ResNetParamFactory(pl.LightningModule):
     def __init__(
-        self, n_res_blocks=10, res_block_n_filters=128,
+        self,
+        n_res_blocks=10,
+        res_block_n_filters=128,
     ):
 
         super(ResNetParamFactory, self).__init__()

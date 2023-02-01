@@ -101,9 +101,7 @@ class SequencePairClassifier(pl.LightningModule):
             torch.cat((f1, torch.flip(f2, dims=(0,))), dim=1)
         ).mean(dim=-1)
 
-        classified = self.linear(
-            torch.cat((true_embeddings, false_embeddings), dim=0)
-        )
+        classified = self.linear(torch.cat((true_embeddings, false_embeddings), dim=0))
         labels = torch.ones_like(classified)
         labels[true_embeddings.shape[0] :] = 0
         loss = self.loss_func(classified, labels)

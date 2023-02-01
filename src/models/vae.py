@@ -9,9 +9,9 @@ class VAEIndels(SequenceVAEWithIndels):
         super().__init__(*args, **kwargs)
 
     def image_log(self, recon, concat_features, all_dots, labelmat):
-        e1 = torch.cat(
-            torch.unbind(torch.nn.functional.softmax(recon, dim=1), dim=-1)
-        )[:200]
+        e1 = torch.cat(torch.unbind(torch.nn.functional.softmax(recon, dim=1), dim=-1))[
+            :200
+        ]
         e2 = torch.cat(torch.unbind(concat_features, dim=-1))[:200]
 
         with torch.no_grad():
@@ -22,11 +22,10 @@ class VAEIndels(SequenceVAEWithIndels):
                 ).sum() / labelmat.numel()
                 ax[0].set_title(f"accuracy: {acc.item():.5f}")
             ax[0].imshow(
-                e1.to("cpu").numpy().astype(float), interpolation="nearest",
+                e1.to("cpu").numpy().astype(float),
+                interpolation="nearest",
             )
-            ax[1].imshow(
-                e2.to("cpu").numpy().astype(float), interpolation="nearest"
-            )
+            ax[1].imshow(e2.to("cpu").numpy().astype(float), interpolation="nearest")
             self.logger.experiment.add_figure(
                 f"image", plt.gcf(), global_step=self.global_step
             )
@@ -46,9 +45,7 @@ class VAEIndels(SequenceVAEWithIndels):
         #        loss += self.KLD
 
         # TODO: supervised contrastive loss
-        recon_original, recon_mutated = torch.split(
-            recon, concat_features.shape[0] // 2
-        )
+        recon_original, recon_mutated = torch.split(recon, concat_features.shape[0] // 2)
         original_features = torch.cat(torch.unbind(seq, dim=-1))
         recon_features = torch.cat(torch.unbind(recon_mutated, dim=-1))
         recon_normalized = torch.nn.functional.softmax(recon_features, dim=0)
@@ -69,16 +66,10 @@ class VAEIndels(SequenceVAEWithIndels):
         embeddings_original = torch.cat(
             torch.unbind(embeddings_original, dim=-1), dim=-1
         )
-        embeddings_mutated = torch.cat(
-            torch.unbind(embeddings_mutated, dim=-1), dim=-1
-        )
+        embeddings_mutated = torch.cat(torch.unbind(embeddings_mutated, dim=-1), dim=-1)
 
-        embeddings_original = torch.nn.functional.normalize(
-            embeddings_original, dim=-1
-        )
-        embeddings_mutated = torch.nn.functional.normalize(
-            embeddings_mutated, dim=-1
-        )
+        embeddings_original = torch.nn.functional.normalize(embeddings_original, dim=-1)
+        embeddings_mutated = torch.nn.functional.normalize(embeddings_mutated, dim=-1)
 
         # fmt: off
         loss = self.supcon(torch.cat((embeddings_mutated.unsqueeze(1), embeddings_original.unsqueeze(1)), dim=1))

@@ -19,9 +19,7 @@ def _save(fpath, arr):
 
 def calc_unique(x, dim=-1):
     unique, inverse = torch.unique(x, return_inverse=True, dim=dim)
-    perm = torch.arange(
-        inverse.size(dim), dtype=inverse.dtype, device=inverse.device
-    )
+    perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return (
         unique,
@@ -33,9 +31,7 @@ class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
 
-    def __init__(
-        self, temperature=0.07, contrast_mode="all", base_temperature=0.07
-    ):
+    def __init__(self, temperature=0.07, contrast_mode="all", base_temperature=0.07):
         super().__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -53,9 +49,7 @@ class SupConLoss(nn.Module):
         Returns:
             A loss scalar.
         """
-        device = (
-            torch.device("cuda") if features.is_cuda else torch.device("cpu")
-        )
+        device = torch.device("cuda") if features.is_cuda else torch.device("cpu")
 
         if len(features.shape) < 3:
             raise ValueError(
@@ -73,9 +67,7 @@ class SupConLoss(nn.Module):
         elif labels is not None:
             labels = labels.contiguous().view(-1, 1)
             if labels.shape[0] != batch_size:
-                raise ValueError(
-                    "Num of labels does not match num of features"
-                )
+                raise ValueError("Num of labels does not match num of features")
             mask = torch.eq(labels, labels.T).float().to(device)
         else:
             mask = mask.float().to(device)

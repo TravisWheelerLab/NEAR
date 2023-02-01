@@ -169,9 +169,7 @@ class ResNet1dKmerSampler(ResNet1d):
 
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(
-            embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0
-        )
+        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
@@ -186,27 +184,21 @@ class ResNet1dKmerSampler(ResNet1d):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
-        )
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss
 
 
 class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
     def __init__(self, *args, **kwargs):
-        super(ResNet1dKmerSamplerWithLabelVectors, self).__init__(
-            *args, **kwargs
-        )
+        super(ResNet1dKmerSamplerWithLabelVectors, self).__init__(*args, **kwargs)
 
     def _shared_step(self, batch):
         features, labels = batch
 
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(
-            embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0
-        )
+        e1, e2 = torch.split(embeddings.mean(dim=-1), embeddings.shape[0] // 2, dim=0)
         e1 = torch.nn.functional.normalize(e1, dim=-1)
         e2 = torch.nn.functional.normalize(e2, dim=-1)
 
@@ -221,8 +213,6 @@ class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
                     f"image", plt.gcf(), global_step=self.global_step
                 )
 
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
-        )
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
         return loss
