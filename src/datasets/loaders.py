@@ -6,14 +6,14 @@ from random import shuffle
 
 import numpy as np
 import torch
+from Bio import AlignIO
 from torchaudio.transforms import MelSpectrogram
 
 import src.utils as utils
 from src.datasets import DataModule
+from src.datasets.dataset import sanitize_sequence
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
-from Bio import AlignIO
-from src.datasets.dataset import sanitize_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,7 @@ class SwissProtLoaderGeneralInput(DataModule):
     """
 
     def __init__(
-        self,
-        minlen,
-        labels: list = None,
-        seqs: list = None,
-        fa_file: str = None,
-        training=True,
+        self, minlen, labels: list = None, seqs: list = None, fa_file: str = None, training=True,
     ):
 
         if fa_file:
@@ -123,9 +118,7 @@ class SwissProtGenerator(SwissProtLoaderGeneralInput):
         )
 
         s2 = utils.mutate_sequence(
-            sequence=sequence,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
+            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         s2 = utils.encode_tensor_sequence(s2)  # 20x256

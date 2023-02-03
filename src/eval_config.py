@@ -1,8 +1,9 @@
 import logging
+import os
 
 import yaml
 from sacred import Experiment
-import os
+
 from src.data.utils import get_data_from_subset
 
 # from src.datasets.datasets import sanitize_sequence
@@ -17,9 +18,6 @@ Evaluation code is in src/__init__.py"""
 
 HOME = os.environ["HOME"]
 # convert a class to a dictionary with a decorator
-querysequences, targetsequences, all_hits = get_data_from_subset(
-    "uniref/phmmer_results", num_files=2
-)
 
 
 @evaluation_ex.config
@@ -27,7 +25,14 @@ def contrastive():
     device = "cuda"
     model_name = "ResNet1d"
     evaluator_name = "ContrastiveEvaluator"
+    task_id = 0
     print(model_name)
+    logger.info(f"Task ID: {task_id}")
+    task_id = int(task_id)
+
+    target_filenum = (task_id - 1) % 45
+
+    query_filenum = ((task_id - 1) - 40) % 5
 
     num_threads = 12
     log_verbosity = logging.INFO
@@ -37,20 +42,22 @@ def contrastive():
     with open(f"{root}/hparams.yaml", "r") as src:
         hparams = yaml.safe_load(src)
 
-    @to_dict
-    class evaluator_args:
-        # query_file = f"{HOME}/Q_benchmark2k30k.fa"
-        # target_file = f"{HOME}/T_benchmark2k30k.fa"
-        query_seqs = querysequences
-        target_seqs = targetsequences
-        hmmer_hits_max = all_hits
-        encoding_func = None
-        model_device = "cuda"
-        index_device = "cuda"
-        figure_path = f"{HOME}/prefilter/roc_test.png"
-        normalize_embeddings = True
-        minimum_seq_length = 0
-        max_seq_length = 1000
+    querysequences, targetsequences, all_hits = get_data_from_subset(
+        "uniref/phmmer_results", query_id=query_filenum, file_num=target_filenum
+    )
+
+    evaluator_args = {
+        "query_seqs": querysequences,
+        "target_seqs": targetsequences,
+        "hmmer_hits_max": all_hits,
+        "encoding_func": None,
+        "model_device": device,
+        "index_device": device,
+        "figure_path": f"{HOME}/prefilter/ResNet1d/eval/{query_filenum}/{target_filenum}/roc_test.png",
+        "normalize_embeddings": True,
+        "minimum_seq_length": 0,
+        "max_seq_length": 10000,
+    }
 
 
 def temporal():
@@ -77,7 +84,7 @@ def temporal():
         figure_path = f"{HOME}/prefilter/ResNet1d/6/test.png"
         normalize_embeddings = True
         minimum_seq_length = 0
-        max_seq_length = 10000
+        max_seq_length = 1000
 
 
 # @evaluation_ex.config

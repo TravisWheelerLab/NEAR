@@ -42,9 +42,9 @@ def run(phmmer_file_subset):
             dst.write(f">{query}\n{query_seq}\n")
 
         for hit, e_value in list_of_hits:
-            target_seq = check_output(
-                f"esl-sfetch T_benchmark2k30k.fa {hit}".split()
-            ).decode("utf-8")
+            target_seq = check_output(f"esl-sfetch T_benchmark2k30k.fa {hit}".split()).decode(
+                "utf-8"
+            )
             target_seq = target_seq[target_seq.find("\n") + 1 :]
 
             target_out_file = (

@@ -42,9 +42,7 @@ class ResNet1d(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=self.in_channels,
-            out_channels=self.res_block_n_filters,
-            kernel_size=1,
+            in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
         )
 
         _list = []
@@ -123,9 +121,7 @@ class ResNet1d(pl.LightningModule):
                 arr = arr.astype(float)
                 plt.imshow(arr)
                 plt.colorbar()
-                self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
-                )
+                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
 
         loss = self.loss_func(
             torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
@@ -180,9 +176,7 @@ class ResNet1dKmerSampler(ResNet1d):
                 arr = arr.astype(float)
                 plt.imshow(arr)
                 plt.colorbar()
-                self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
-                )
+                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
 
         loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 
@@ -209,9 +203,7 @@ class ResNet1dKmerSamplerWithLabelVectors(ResNet1d):
                 arr = arr.astype(float)
                 plt.imshow(arr)
                 plt.colorbar()
-                self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
-                )
+                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
 
         loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
 

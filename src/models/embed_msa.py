@@ -101,9 +101,9 @@ class MSAEmbedder(pl.LightningModule):
 
         # each msa gets an _entire_ embedding
         # is there something weird about this?
-        msa_embeddings = self.msa_transformer(
-            msas, repr_layers=[12], return_contacts=False
-        )["representations"][12].detach()
+        msa_embeddings = self.msa_transformer(msas, repr_layers=[12], return_contacts=False)[
+            "representations"
+        ][12].detach()
         # remove begin-of-sequence token.
         # msa_embeddings = msa_embeddings[:, :, 1:, :]
         # mean pool sequence embeddings across
@@ -112,9 +112,9 @@ class MSAEmbedder(pl.LightningModule):
         msa_embeddings = msa_embeddings[:, 0]
         # now apply two mlps.
         sequence_embeddings = (
-            self.msa_transformer(seqs, repr_layers=[12], return_contacts=False)[
-                "representations"
-            ][12]
+            self.msa_transformer(seqs, repr_layers=[12], return_contacts=False)["representations"][
+                12
+            ]
             .detach()
             .squeeze()
         )
@@ -157,8 +157,7 @@ class MSAEmbedder(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim

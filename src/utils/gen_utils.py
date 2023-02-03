@@ -1,8 +1,8 @@
 import logging
+import os
 
 import pandas as pd
 import torch
-import os
 
 logger = logging.getLogger("train")
 
@@ -74,8 +74,7 @@ def create_substitution_distribution(blosum):
         raise ValueError("blosum should be one of <45, 62, 80, 90>")
 
     sub_dists = pd.read_csv(
-        f"{os.environ['HOME']}/prefilter/src/resources/blosum{blosum}.probs",
-        delim_whitespace=True,
+        f"{os.environ['HOME']}/prefilter/src/resources/blosum{blosum}.probs", delim_whitespace=True,
     )
     substitution_distributions = {}
 

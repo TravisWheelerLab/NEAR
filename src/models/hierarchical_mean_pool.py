@@ -9,11 +9,7 @@ from src.utils.losses import SupConLoss
 
 class HierarchicalMeanPool(pl.LightningModule):
     def __init__(
-        self,
-        learning_rate,
-        log_interval,
-        pool_factors=[2, 2, 2, 2],
-        training=True,
+        self, learning_rate, log_interval, pool_factors=[2, 2, 2, 2], training=True,
     ):
 
         super(HierarchicalMeanPool, self).__init__()
@@ -82,9 +78,7 @@ class HierarchicalMeanPool(pl.LightningModule):
         features, masks, labelvecs = batch
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(
-            embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
-        )
+        e1, e2 = torch.split(embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0)
         e1 = torch.cat(torch.unbind(e1, dim=0))
         e2 = torch.cat(torch.unbind(e2, dim=0))
         e1 = torch.nn.functional.normalize(e1, dim=-1)
@@ -101,9 +95,7 @@ class HierarchicalMeanPool(pl.LightningModule):
                     vmax=1,
                 )
                 plt.colorbar()
-                self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
-                )
+                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
 
         loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
         return loss
@@ -118,8 +110,7 @@ class HierarchicalMeanPool(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim

@@ -83,14 +83,7 @@ class HmmerHits:
                 row_info[9],
             )
             data = np.array(
-                [
-                    e_value_full,
-                    score_full,
-                    bias_full,
-                    e_value_best,
-                    score_best,
-                    bias_best,
-                ]
+                [e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,]
             ).astype("float64")
             data_array.append(data)
 
@@ -106,11 +99,11 @@ class HmmerHits:
     def get_hits(self, target_dir: str, query_num=None) -> dict:
         hits_files = glob.glob(target_dir + "/*")
         target_dirnum = target_dir.split("/")[-1]
+        query_dirnums = [h.split("_")[-1][0] for h in hits_files]
 
         if query_num:
             hits_files = [f"{target_dir}/queries_{query_num}.fa.tblout"]
-
-        query_dirnums = [h.split("_")[-1][0] for h in hits_files]
+            query_dirnums = [query_num]
 
         target_query_hits = {target_dirnum: {}}
 

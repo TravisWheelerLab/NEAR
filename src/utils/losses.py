@@ -53,8 +53,7 @@ class SupConLoss(nn.Module):
 
         if len(features.shape) < 3:
             raise ValueError(
-                "`features` needs to be [bsz, n_views, ...],"
-                "at least 3 dimensions are required"
+                "`features` needs to be [bsz, n_views, ...]," "at least 3 dimensions are required"
             )
         if len(features.shape) > 3:
             features = features.view(features.shape[0], features.shape[1], -1)

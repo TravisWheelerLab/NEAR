@@ -6,13 +6,13 @@ from random import shuffle
 
 import numpy as np
 import torch
+from Bio import AlignIO
 from torchaudio.transforms import MelSpectrogram
 
 import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
-from Bio import AlignIO
 
 logger = logging.getLogger(__name__)
 
@@ -255,9 +255,7 @@ class SwissProtGenerator(SwissProtLoader):
         )
 
         s2 = utils.mutate_sequence(
-            sequence=sequence,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
+            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         s2 = utils.encode_tensor_sequence(s2)  # 20x256
@@ -393,9 +391,7 @@ class KMerSampler(DataModule):
         kmer_seed = seed_sequence[start_idx : start_idx + kmer_length]
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
-        seeded_seq = (
-            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
-        )
+        seeded_seq = random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
         self.idx_cnt += 1
         # just do pairs for now.
         return (
@@ -453,9 +449,7 @@ class SpectrogramDataset(DataModule):
         kmer_seed = seed_sequence[start_idx : start_idx + kmer_length]
         random_seq = generate_string_sequence(self.minlen)
         start_idx = int(np.random.rand() * (self.minlen - kmer_length))
-        seeded_seq = (
-            random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
-        )
+        seeded_seq = random_seq[:start_idx] + kmer_seed + random_seq[start_idx + kmer_length :]
         # take the Mel
         self.idx_cnt += 1
         # just do pairs for now.
@@ -464,10 +458,7 @@ class SpectrogramDataset(DataModule):
                 1
                 + self.mel(
                     torch.as_tensor(
-                        [
-                            utils.amino_char_to_index[c]
-                            for c in sanitize_sequence(seed_sequence)
-                        ]
+                        [utils.amino_char_to_index[c] for c in sanitize_sequence(seed_sequence)]
                     ).float()
                 )
             ),
@@ -475,10 +466,7 @@ class SpectrogramDataset(DataModule):
                 1
                 + self.mel(
                     torch.as_tensor(
-                        [
-                            utils.amino_char_to_index[c]
-                            for c in sanitize_sequence(seeded_seq)
-                        ]
+                        [utils.amino_char_to_index[c] for c in sanitize_sequence(seeded_seq)]
                     ).float()
                 )
             ),
@@ -583,14 +571,10 @@ class AAIndexDataset(DataModule):
 
         sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
 
-        n_subs = int(
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
-        )
+        n_subs = int(len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))])
 
         s2 = utils.mutate_sequence(
-            sequence=sequence,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
+            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         # map back to character space;
@@ -618,14 +602,10 @@ class UniProtSpectDataset(SwissProtGenerator):
 
         sequence = torch.as_tensor([utils.amino_char_to_index[c] for c in sequence])
 
-        n_subs = int(
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
-        )
+        n_subs = int(len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))])
 
         s2 = utils.mutate_sequence(
-            sequence=sequence,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
+            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
         )
 
         s1 = self.mel(sequence.float())

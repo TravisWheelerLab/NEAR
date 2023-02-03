@@ -5,14 +5,16 @@ import random
 import matplotlib.pyplot as plt
 import cv2
 from typing import Tuple
-import pytorch_lightning as pl
+
+# import pytorch_lightning as pl
 from tqdm import tqdm
 from typing import List
 import torch
 import torch.nn as nn
 
 from src.data.hmmerhits import HmmerHits, FastaFile
-from src.utils import pluginloader, encode_string_sequence
+
+# from src.utils import pluginloader, encode_string_sequence
 from src import models
 
 HOME = os.environ["HOME"]
@@ -28,57 +30,58 @@ def strobemer_representation(embeddings: List[torch.Tensor]):
 
     outputs = []
     for embedding in embeddings:
-        matrix_prod = torch.mm(
-            embedding.float(), random.choice(random_matrices).float()
-        ).unsqueeze(0)
+        matrix_prod = torch.mm(embedding.float(), random.choice(random_matrices).float()).unsqueeze(
+            0
+        )
         output = maxpoollayer(matrix_prod)
         outputs.append(output)
     return outputs
 
 
 def get_data_from_subset(
-    dirpath: str = "uniref/phmmer_results", query_id: str = "0", num_files: int = 1
+    dirpath: str = "uniref/phmmer_results", query_id=0, file_num=1
 ) -> Tuple[dict, dict, dict]:
     """Taking advantage of our current data structure of nested directories
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
     queries in the input query id file and all target sequences in all of num_files"""
 
+    query_id = str(query_id)
+    t = str(file_num)
+
     queryfile = f"{HOME}/prefilter/uniref/split_subset/queries/queries_{query_id}.fa"
     queryfasta = FastaFile(queryfile)
     hmmerhits = HmmerHits(dir_path=dirpath)
 
-    all_hits = {}
+    # all_hits = {}
     querysequences = queryfasta.data
     targetsequences = {}
 
-    for t in range(num_files):
-        t = str(t)
-        targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
-        targetdata = targetfasta.data
-        targetsequences.update(targetdata)
+    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
+    targetdata = targetfasta.data
+    targetsequences.update(targetdata)
 
-        target_dir = os.path.join(hmmerhits.dir_path, t)
+    target_dir = os.path.join(hmmerhits.dir_path, t)
 
-        target_query_hits, _ = hmmerhits.get_hits(
-            target_dir, query_num=query_id
-        )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
+    print(f"getting hits from target directory: {target_dir} and query id {query_id}")
 
-        qnames = list(target_query_hits[t][query_id].keys())
+    target_query_hits, _ = hmmerhits.get_hits(
+        target_dir, query_num=query_id
+    )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
 
-        target_hits = target_query_hits[t][query_id]  # {queryname: {targetname : [data]}}
-        for qname in qnames:
-            if qname in all_hits.keys():
-                qdict = all_hits[qname]
-                qdict.update(target_hits[qname])
-                all_hits[qname] = qdict
-            else:
-                all_hits.update({qname: target_hits[qname]})
+    # qnames = list(target_query_hits[t][query_id].keys())
+
+    target_hits = target_query_hits[t][query_id]  # {queryname: {targetname : [data]}}
+
+    for queryname, targethits in target_hits.items():
+        for idx, targetname in enumerate(targethits.keys()):
+            assert targetname in targetsequences.keys(), f"Target {idx} not in target sequences"
+        assert queryname in querysequences.keys()
 
     print(
-        f"Got {np.sum([len(all_hits[q]) for q in list(all_hits.keys())])} total hits from {dirpath}"
+        f"Got {np.sum([len(target_hits[q]) for q in list(target_hits.keys())])} total hits from {dirpath}, target_id {file_num}, query_id {query_id}"
     )
 
-    return querysequences, targetsequences, all_hits
+    return querysequences, targetsequences, target_hits
 
 
 # LOCALLY -- make some distributions of e values?
@@ -96,8 +99,7 @@ def get_embeddings(targetsequences: dict, querysequences: dict):
     device = "cuda"
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=checkpoint_path,
-        map_location=torch.device(device),
+        checkpoint_path=checkpoint_path, map_location=torch.device(device),
     ).to(device)
     print("Loaded model")
 
@@ -167,9 +169,9 @@ def get_actmaps(embeddings: list, function="sum", p=2, show=False, title=None):
     for idx in range(num_embeds):
         sample = embeddings[idx]
         if function == "sum":
-            outputs = (sample**p).sum(1)
+            outputs = (sample ** p).sum(1)
         elif function == "max":
-            outputs = (sample**p).max(1)
+            outputs = (sample ** p).max(1)
         try:
             outputs_n = outputs.reshape(1, outputs.shape[0])
             outputs_n = outputs_n / outputs_n.sum(axis=1)

@@ -68,9 +68,7 @@ def load_plugin_classes(
 
         # Now we check if the module is a package, and if so, recursively call this method
         if ispkg:
-            plugins = plugins | load_plugin_classes(
-                sub_module, plugin_metaclass, do_reload
-            )
+            plugins = plugins | load_plugin_classes(sub_module, plugin_metaclass, do_reload)
         else:
             # Otherwise we begin looking for plugin classes
             for item in dir(sub_module):
