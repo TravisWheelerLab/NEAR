@@ -157,7 +157,8 @@ class MSAEmbedder(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim

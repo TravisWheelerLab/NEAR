@@ -16,12 +16,12 @@ logger.setLevel(logging.WARNING)
 train_ex = Experiment()
 
 
-# @train_ex.config
-def config():
+@train_ex.config
+def contrastive_alignment_generator():
 
-    description = "None"
+    description = "Training on alignment data"
     model_name = "ResNet1d"
-    dataset_name = "SwissProtGenerator"
+    dataset_name = "AlignmentGenerator"
     log_dir = f"{HOME}/prefilter"
     log_verbosity = logging.INFO
 
@@ -33,8 +33,8 @@ def config():
 
     @to_dict
     class train_dataset_args:
-        minlen = 256
-        fa_file = f"{HOME}/T_benchmark2k30k.fa"
+        ali_path = "/xdisk/twheeler/daphnedemekas/stk_alignments"
+        seq_len = 256
 
     @to_dict
     class dataloader_args:
@@ -50,8 +50,9 @@ def config():
 
     @to_dict
     class val_dataset_args:
-        minlen = 256
-        fa_file = f"{HOME}/Q_benchmark2k30k.fa"
+        ali_path = "/xdisk/twheeler/daphnedemekas/stk_alignments"
+        seq_len = 256
+        training = False
 
 
 @train_ex.config

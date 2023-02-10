@@ -85,7 +85,13 @@ class ResNet(DotProdModel):
 
         layers = []
         layers.append(
-            nn.Conv1d(start_emb, emb_dim, first_kernel, padding=padding, padding_mode=padding_mode,)
+            nn.Conv1d(
+                start_emb,
+                emb_dim,
+                first_kernel,
+                padding=padding,
+                padding_mode=padding_mode,
+            )
         )
         layers.append(activation())
         for i in range(blocks):

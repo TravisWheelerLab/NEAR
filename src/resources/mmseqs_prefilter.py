@@ -41,7 +41,11 @@ for color, evalue_threshold in zip(["r", "c", "g"], [1e-10, 1e-1, 1, 10]):
     recalls = []
     for threshold in np.linspace(min(scores), 1000, num=10):
         recall, total_hits = recall_and_filtration(
-            mmseqs_hits, hmmer_hits, threshold, comp_func, evalue_threshold=evalue_threshold,
+            mmseqs_hits,
+            hmmer_hits,
+            threshold,
+            comp_func,
+            evalue_threshold=evalue_threshold,
         )
         filtration = 100 * (1.0 - (total_hits / denom))
         filtrations.append(filtration)
@@ -50,7 +54,11 @@ for color, evalue_threshold in zip(["r", "c", "g"], [1e-10, 1e-1, 1, 10]):
 
     ax.scatter(filtrations, recalls, c=color, marker="o")
     ax.plot(
-        filtrations, recalls, f"{color}--", linewidth=2, label=f"eval:{evalue_threshold}",
+        filtrations,
+        recalls,
+        f"{color}--",
+        linewidth=2,
+        label=f"eval:{evalue_threshold}",
     )
     ax.set_ylim([-1, 101])
     ax.set_xlim([-1, 101])

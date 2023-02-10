@@ -116,14 +116,14 @@ class SequenceVAE(pl.LightningModule):
 
         sigma_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * (self.initial_seq_len // 2 ** self.downsample_steps),
-                self.res_block_n_filters * (self.initial_seq_len // 2 ** self.downsample_steps),
+                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
         mu_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * (self.initial_seq_len // 2 ** self.downsample_steps),
-                self.res_block_n_filters * (self.initial_seq_len // 2 ** self.downsample_steps),
+                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
 
@@ -260,7 +260,8 @@ class SequenceVAE(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim
@@ -348,7 +349,8 @@ class SequenceVAEWithIndels(SequenceVAE):
                     ).sum() / labelmat.numel()
                     ax[0].set_title(f"accuracy: {acc.item():.5f}")
                 ax[0].imshow(
-                    e1.to("cpu").numpy().astype(float), interpolation="nearest",
+                    e1.to("cpu").numpy().astype(float),
+                    interpolation="nearest",
                 )
                 ax[1].imshow(e2.to("cpu").numpy().astype(float), interpolation="nearest")
                 self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
@@ -363,6 +365,9 @@ class SequenceVAETrainCNN(SequenceVAEWithIndels):
         self.cnn_model = ResNet(**self.cnn_model_args)
         if pretrained_cnn:
             success = self.cnn_model.load_state_dict(
-                torch.load(self.cnn_model_state_dict, map_location=torch.device(self.device),)
+                torch.load(
+                    self.cnn_model_state_dict,
+                    map_location=torch.device(self.device),
+                )
             )
             logger.info(f"{success} for {self.cnn_model_state_dict}")

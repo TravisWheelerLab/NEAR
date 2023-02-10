@@ -20,7 +20,8 @@ class VAEIndels(SequenceVAEWithIndels):
                 acc = (torch.round(torch.sigmoid(all_dots)) == labelmat).sum() / labelmat.numel()
                 ax[0].set_title(f"accuracy: {acc.item():.5f}")
             ax[0].imshow(
-                e1.to("cpu").numpy().astype(float), interpolation="nearest",
+                e1.to("cpu").numpy().astype(float),
+                interpolation="nearest",
             )
             ax[1].imshow(e2.to("cpu").numpy().astype(float), interpolation="nearest")
             self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)

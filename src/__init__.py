@@ -7,20 +7,14 @@ __version__ = "0.0.1"
 
 import logging
 import os
-import pdb
-import shutil
 import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytorch_lightning as pl
 import torch
-import torch.nn as nn
-import yaml
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.plugins import DDPPlugin
 from sacred.observers import FileStorageObserver
 
 from src.callbacks import CallbackSet
@@ -77,12 +71,16 @@ def train(_config):
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args,
+        train_dataset,
+        collate_fn=train_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
     if val_dataset is not None:
         val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args,
+            val_dataset,
+            collate_fn=val_dataset.collate_fn(),
+            **params.dataloader_args,
         )
     else:
         val_dataloader = None
@@ -100,7 +98,9 @@ def train(_config):
     trainer = Trainer(**params.trainer_args, callbacks=CallbackSet.callbacks(), logger=logger)
 
     trainer.fit(
-        model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader,
+        model,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
     )
 
 
@@ -129,7 +129,8 @@ def evaluate(_config):
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
 
     model = params.model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
     ).to(params.device)
 
     evaluator = params.evaluator_class(**params.evaluator_args)

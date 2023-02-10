@@ -101,7 +101,12 @@ def load_model(model_path, hyperparams, device):
 
 
 def create_faiss_index(
-    embeddings, embed_dim, index_string, nprobe, device="cpu", distance_metric="cosine",
+    embeddings,
+    embed_dim,
+    index_string,
+    nprobe,
+    device="cpu",
+    distance_metric="cosine",
 ):
 
     log.info(f"using index with {distance_metric} metric.")

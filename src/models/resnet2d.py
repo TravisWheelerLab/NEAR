@@ -42,7 +42,9 @@ class ResNet2d(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
+            in_channels=self.in_channels,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         _list = []
@@ -143,7 +145,9 @@ class ResNet2dFFT(ResNet2d):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
+            in_channels=self.in_channels,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         sequence_list = []

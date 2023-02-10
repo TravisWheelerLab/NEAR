@@ -8,12 +8,13 @@ from typing import List, Tuple
 import torch
 from src.evaluators.uniref_evaluator import UniRefEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
+import pdb
 
 logger = logging.getLogger("evaluate")
 
 
 class ContrastiveEvaluator(UniRefEvaluator):
-    """ Evaluator for the Contrastive Loss CNN model """
+    """Evaluator for the Contrastive Loss CNN model"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,12 +31,12 @@ class ContrastiveEvaluator(UniRefEvaluator):
         )
 
     def _setup_targets_for_faiss(
-        self, target_embeddings: List[torch.Tensor], target_names: List[str],
+        self,
+        target_embeddings: List[torch.Tensor],
+        target_names: List[str],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
-
-        # TODO: this doesn't include queries, this needs to change
 
         lengths: List[int] = list(map(lambda s: s.shape[0], target_embeddings))
         logger.info(f"Original DB size: {sum(lengths)}")
@@ -53,7 +54,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         unrolled_targets = torch.cat(
             unrolled_targets, dim=0
-        )  # 128 x (num targets x amino per target)
+        )  # (num targets x amino per target) x 256
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
@@ -83,10 +84,15 @@ class ContrastiveEvaluator(UniRefEvaluator):
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
-        filtered_list = []
+        # filtered_list = []
+        filtered_scores = {}
 
         distances, indices = self.index.search(query_embedding.contiguous(), k=1000)
         # remove stuff that's under/over the threshold
+
+        """ BASED ON MY UNDERSTANDING 
+        This should be a matrix 
+        and have values for distances for each amino acid in the query sequence """
         indices = indices[self.comp_func(distances, self.distance_threshold)]
         distances = distances[self.comp_func(distances, self.distance_threshold)]
 
@@ -94,6 +100,11 @@ class ContrastiveEvaluator(UniRefEvaluator):
             distances.ravel().to("cpu").numpy(),
             self.unrolled_names[indices.ravel().to("cpu").numpy()],
         ):
-            filtered_list.append((name, distance))
 
-        return filtered_list
+            # filtered_list.append((name, distance))
+            if name in filtered_scores:
+                filtered_scores[name] += distance
+            else:
+                filtered_scores[name] = distance
+
+        return filtered_scores

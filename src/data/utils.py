@@ -3,10 +3,9 @@ import numpy as np
 import pdb
 import random
 import matplotlib.pyplot as plt
-import cv2
 from typing import Tuple
 
-# import pytorch_lightning as pl
+import pytorch_lightning as pl
 from tqdm import tqdm
 from typing import List
 import torch
@@ -14,13 +13,107 @@ import torch.nn as nn
 
 from src.data.hmmerhits import HmmerHits, FastaFile
 
-# from src.utils import pluginloader, encode_string_sequence
+from src.utils import pluginloader, encode_string_sequence
 from src import models
 
 HOME = os.environ["HOME"]
 
 
-def strobemer_representation(embeddings: List[torch.Tensor]):
+def strobemer_representation(embeddings: List[torch.Tensor]) -> List[torch.Tensor]:
+    """Currently just experimenting with random matrix
+    transformations and maxpooling"""
+
+    """
+    Literally nn.linear except we don't train it
+    hashes are going to be random affine transformations 
+    the mean and std should be 0 and 1, nice gaussian
+    pretty sure that's how nn linear weights off the bat 
+    a bunch of random nn linear untrained functions 
+
+    taking our kmer features and mapping it to magnitude 
+
+    to start, we will do encoding on one amino at at ime 
+    then optimize the 'amino hashes'
+    we get a new vector
+    - pseudo random vectors, random affine transformation m(x+b)
+    - the bias means every big factor has a chance to be large
+    every small vector has the chance to be large still too
+
+    then we do strobemer optimisation 
+    instead of doing a DP matrix to find minimum/maximum sum we do a preprogrammed 
+    convolution of these things
+
+    actual max pooling??
+    kernal takes specific combinations of our space 
+
+    what is the DP thing?
+
+    the kernel calculation is an identity matrix 
+    on the sequence dimension of the kernel everything is 0 except our aminos that we are interested in optimizing 
+
+    doing the convolution on (seq length x embedding dimension) to choose a subset of the embedding vectors 
+
+    the aminos already have information about the surrounding context 
+    we want to figure out what amino features are gonna be the most consistent 
+
+    good INVARIANT set of features 
+
+    map our nice vector space into a random vector space to approximate the hashes
+    a minimum subset of kmers, or we can randomly approximate that 
+    i think because our vectors are more descriptive than random kmers, approximating is ok 
+    approximating = randomly sampling a subset of vectors 
+    exact = normal DP indexing 
+    do a DP matrix type thing to find a minimum hash in strobemers, we do the same thing only instead of minimizing hash values
+    we are minimizing dot products between amino vectors inside a window (dot product of 4 vectors in kmer)
+
+    SEQUENCE -> CNN -> RANDOM TRANSFORMATION M(X+B) (linear layer without bias (X+B) WHERE B IS A RANDOMLY INITIALIZED GAUSSIAN
+    AND X IS THE VECTOR OF AMINO ACID EMBEDDINGS 
+    -- do different versions on the same aminos --end up with a bigger space than i started with
+    -> once we have these we do our strobemer optimization to turn WINDOWS of sequence into a single vector (DOT PRODUCT / ADDING)
+    THEN
+    we have one vector to represent an area. 
+
+    if you want you can do convolution rather than M (M = nn linear)
+
+    you want to make sure that B and M are initialized as random gaussians 
+    (for the bias the std should be the std of the magnitude of all your vectors in your training set )
+
+    InstanceNorm to nromalise our embeddings ???
+        - to replace the +b part 
+    
+
+    normalising and dot producting makes us think of that paper we saw in ML
+
+    ok:: instead of Mx+B we do M(N(X)) marix multiplication times some normalisation of X
+
+    
+    now we have representation of one window of sequence : at the end of this reduction we have 4 representations of the sequence 
+    length 64 sequence getting reduced to 4 vectors 
+
+    then we feed that into FAISS 
+    but for now we do all versus all dot product on our reduced spaces 
+
+    that number (4) is going to depend on the sequence length
+        - take dot prods 
+        - take the minimum 
+        - window length W
+        - windows have overlap 
+        - windows including overlap length = 32
+        - 64 length sequence 
+        - window size 32 with 8 overlap we have compression factor of 16 
+        64 / 16 = 4
+        (sequence / compression factor) (compression factor = W - overlap for window, = how many windows represent that sequence)
+    
+    if you are using multiple hash functino you use whichever optimization is the best
+    - whichever gives you smaller / larger dot products
+
+    our assumption is the best hash function for two homologous sequences will be the same hash function
+
+    a bunch of places for optimisation in vector searching
+    GPU level optimizations?? that would be awesome --TIM
+
+    """
+
     maxpoollayer = nn.MaxPool2d(2)
     num_random_matrices = 10
     random_matrices = [
@@ -39,7 +132,7 @@ def strobemer_representation(embeddings: List[torch.Tensor]):
 
 
 def get_data_from_subset(
-    dirpath: str = "uniref/phmmer_results", query_id=0, file_num=1
+    dirpath: str = "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=0, file_num=1
 ) -> Tuple[dict, dict, dict]:
     """Taking advantage of our current data structure of nested directories
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
@@ -60,17 +153,13 @@ def get_data_from_subset(
     targetdata = targetfasta.data
     targetsequences.update(targetdata)
 
-    target_dir = os.path.join(hmmerhits.dir_path, t)
+    print(f"getting hits from target directory: {t} and query id {query_id}")
 
-    print(f"getting hits from target directory: {target_dir} and query id {query_id}")
-
-    target_query_hits, _ = hmmerhits.get_hits(
-        target_dir, query_num=query_id
+    target_hits = hmmerhits.get_hits(
+        dirpath, t, query_num=query_id
     )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
 
     # qnames = list(target_query_hits[t][query_id].keys())
-
-    target_hits = target_query_hits[t][query_id]  # {queryname: {targetname : [data]}}
 
     for queryname, targethits in target_hits.items():
         for idx, targetname in enumerate(targethits.keys()):
@@ -90,6 +179,8 @@ def get_data_from_subset(
 def get_embeddings(targetsequences: dict, querysequences: dict):
     """Method to get embeddings from sequences
     without having to declare a class"""
+    from src.utils import pluginloader, encode_string_sequence
+
     model_dict = {
         m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
     }
@@ -99,7 +190,8 @@ def get_embeddings(targetsequences: dict, querysequences: dict):
     device = "cuda"
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=checkpoint_path, map_location=torch.device(device),
+        checkpoint_path=checkpoint_path,
+        map_location=torch.device(device),
     ).to(device)
     print("Loaded model")
 
@@ -118,7 +210,7 @@ def get_embeddings(targetsequences: dict, querysequences: dict):
     if querysequences is not None:
         print("get query embeddings...")
 
-        for tname, sequence in tqdm(querysequences.items()):
+        for tname, sequence in tqdm(list(querysequences.items()[:10])):
             embedding = (
                 model(encode_string_sequence(sequence).unsqueeze(0).to(device)).squeeze().T  # 400
             )  # [400, 256]
@@ -151,6 +243,8 @@ def get_subsets(hits_data: dict, score_threshold_high=100, score_threshold_low=3
 
 
 def get_actmaps(embeddings: list, function="sum", p=2, show=False, title=None):
+    import cv2
+
     """Calculate activation maps based on the given function
     on the embedding vectors"""
     num_embeds = 500
@@ -169,9 +263,9 @@ def get_actmaps(embeddings: list, function="sum", p=2, show=False, title=None):
     for idx in range(num_embeds):
         sample = embeddings[idx]
         if function == "sum":
-            outputs = (sample ** p).sum(1)
+            outputs = (sample**p).sum(1)
         elif function == "max":
-            outputs = (sample ** p).max(1)
+            outputs = (sample**p).max(1)
         try:
             outputs_n = outputs.reshape(1, outputs.shape[0])
             outputs_n = outputs_n / outputs_n.sum(axis=1)

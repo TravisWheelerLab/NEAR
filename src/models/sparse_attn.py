@@ -35,7 +35,9 @@ class ResNetSparseAttention(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=20, out_channels=self.res_block_n_filters, kernel_size=1,
+            in_channels=20,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         _list = []
@@ -55,7 +57,9 @@ class ResNetSparseAttention(pl.LightningModule):
         _transformer_list = []
         for _ in range(self.n_transformer_layers):
             transformer = torch.nn.TransformerEncoderLayer(
-                self.res_block_n_filters, nhead=8, dim_feedforward=2 * self.res_block_n_filters,
+                self.res_block_n_filters,
+                nhead=8,
+                dim_feedforward=2 * self.res_block_n_filters,
             )
             _transformer_list.append(transformer)
 
@@ -114,7 +118,8 @@ class ResNetSparseAttention(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim

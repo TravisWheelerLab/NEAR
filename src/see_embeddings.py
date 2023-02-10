@@ -46,7 +46,8 @@ checkpoint_path = f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt
 device = "cuda"
 
 model = model_class.load_from_checkpoint(
-    checkpoint_path=checkpoint_path, map_location=torch.device(device),
+    checkpoint_path=checkpoint_path,
+    map_location=torch.device(device),
 ).to(device)
 logger.info("Loaded model")
 
@@ -115,7 +116,8 @@ checkpoint_path = f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt
 device = "cuda"
 
 model = model_class.load_from_checkpoint(
-    checkpoint_path=checkpoint_path, map_location=torch.device(device),
+    checkpoint_path=checkpoint_path,
+    map_location=torch.device(device),
 ).to(device)
 
 embeddings = []
@@ -195,7 +197,10 @@ def seq_to_randstrobes2_iter(seq, k_size, strobe_w_min_offset, strobe_w_max_offs
         window_p_start = (
             p + strobe_w_min_offset
             if p + strobe_w_max_offset <= len(hash_seq_list)
-            else max((p + strobe_w_min_offset) - (p + strobe_w_max_offset - len(hash_seq_list)), p,)
+            else max(
+                (p + strobe_w_min_offset) - (p + strobe_w_max_offset - len(hash_seq_list)),
+                p,
+            )
         )
         window_p_end = min(p + strobe_w_max_offset, len(hash_seq_list))
         # print(window_p_start, window_p_end)

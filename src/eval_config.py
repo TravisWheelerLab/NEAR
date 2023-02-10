@@ -3,7 +3,7 @@ import os
 
 import yaml
 from sacred import Experiment
-
+import itertools
 from src.data.utils import get_data_from_subset
 
 # from src.datasets.datasets import sanitize_sequence
@@ -18,6 +18,7 @@ Evaluation code is in src/__init__.py"""
 
 HOME = os.environ["HOME"]
 # convert a class to a dictionary with a decorator
+ROOT = "/xdisk/twheeler/daphnedemekas/prefilter-output/ResNet1d"
 
 
 @evaluation_ex.config
@@ -27,12 +28,15 @@ def contrastive():
     evaluator_name = "ContrastiveEvaluator"
     task_id = 0
     print(model_name)
-    logger.info(f"Task ID: {task_id}")
+    print(f"Task ID: {task_id}")
     task_id = int(task_id)
 
-    target_filenum = (task_id - 1) % 45
+    ts = list(range(45))
+    qs = list(range(5))
+    target_queries = list(itertools.product(ts, qs))
 
-    query_filenum = ((task_id - 1) - 40) % 5
+    target_filenum = target_queries[task_id - 1][0]
+    query_filenum = target_queries[task_id - 1][1]
 
     num_threads = 12
     log_verbosity = logging.INFO
@@ -43,8 +47,13 @@ def contrastive():
         hparams = yaml.safe_load(src)
 
     querysequences, targetsequences, all_hits = get_data_from_subset(
-        "uniref/phmmer_results", query_id=query_filenum, file_num=target_filenum
+        "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
+        query_id=query_filenum,
+        file_num=target_filenum,
     )
+    if not os.path.exists(f"{ROOT}/{query_filenum}"):
+        os.mkdir(f"{ROOT}/{query_filenum}")
+        os.mkdir(f"{ROOT}/{query_filenum}/{target_filenum}")
 
     evaluator_args = {
         "query_seqs": querysequences,
@@ -53,10 +62,10 @@ def contrastive():
         "encoding_func": None,
         "model_device": device,
         "index_device": device,
-        "figure_path": f"{HOME}/prefilter/ResNet1d/eval/{query_filenum}/{target_filenum}/roc_test.png",
+        "figure_path": f"{ROOT}/{query_filenum}/{target_filenum}/roc_test.png",
         "normalize_embeddings": True,
-        "minimum_seq_length": 0,
-        "max_seq_length": 10000,
+        "minimum_seq_length": 128,
+        "max_seq_length": 200,
     }
 
 
@@ -185,7 +194,7 @@ def config():
         # target_file = "/xdisk/twheeler/colligan/aligned_benchmark/only_alignments/targets.fa"
         distance_threshold = 0.0
         evalue_threshold = 10
-        minimum_seq_length = 256
+        minimum_seq_length = 0
         max_seq_length = 256
         tile_size = 128
         tile_step = 32

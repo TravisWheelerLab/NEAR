@@ -35,7 +35,11 @@ def plot_roc_curve(
         recalls = []
         for threshold in tqdm.tqdm(distances):
             recall, total_hits = recall_and_filtration(
-                our_hits, max_hmmer_hits, threshold, comp_func, evalue_threshold,
+                our_hits,
+                max_hmmer_hits,
+                threshold,
+                comp_func,
+                evalue_threshold,
             )
 
             filtration = 100 * (1.0 - (total_hits / denom))
@@ -44,13 +48,14 @@ def plot_roc_curve(
             print(f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}")
 
         ax.scatter(filtrations, recalls, c=COLORS[i], marker="o")
-        ax.plot(filtrations, recalls, f"{COLORS[i]}--", linewidth=2)
+        ax.plot(filtrations, recalls, f"{COLORS[i]}--", linewidth=2, label=evalue_threshold)
 
     ax.plot([0, 100], [100, 0], "k--", linewidth=2)
     ax.set_ylim([-1, 101])
     ax.set_xlim([-1, 101])
     ax.set_xlabel("filtration")
     ax.set_ylabel("recall")
+    plt.legend()
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
 
@@ -90,20 +95,3 @@ def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func, e
     # total hmmer hits
     denom = hmmer_hits_for_our_queries
     return 100 * (match_count / denom), our_total_hits
-
-
-def write_output(model_output: dict, hmmer_hits: dict, figure_path: str):
-    json = json.dumps(model_output)
-
-    # TODO: make this a function and save it into the ResNet1d thing
-    print("Writing output to file...")
-    output_path = os.path.join(os.path.dirname(figure_path), "output")
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-    f = open(f"{output_path}/modelhitsoutput.json", "w")
-    f.write(json)
-    f.close()
-    json = json.dumps(hmmer_hits)
-    f = open(f"{output_path}/maxhmmerhits.json", "w")
-    f.write(json)
-    f.close()

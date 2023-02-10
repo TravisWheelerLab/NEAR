@@ -77,35 +77,60 @@ class AlignmentGenerator(DataModule):
     def collate_fn(self):
         return None
 
-    def __init__(self, ali_path, seq_len, training=True):
-        from Bio import AlignIO
+    def __init__(self, train_ali_path, val_ali_path, seq_len, training=True):
+        # from Bio import AlignIO
 
-        self.alignment_files = glob(os.path.join(ali_path, "*.sto"))
+        # self.alignment_files = glob(os.path.join(ali_path, "*.stk"), recursive=True)
         self.training = training
 
         if self.training:
-            self.alignment_files = self.alignment_files[:-100]
+            self.ali_path = train_ali_path
         else:
-            self.alignment_files = self.alignment_files[:100]
+            self.ali_path = val_ali_path
         # also put a classification loss on there.
         # so i can see accuracy numbers
-        if len(self.alignment_files) == 0:
-            raise ValueError(f"No alignment files found at {ali_path}.")
         self.mx = 0
         self.seq_len = seq_len
+
+        self.ali_query_dirs = os.listdir(self.ali_path)
+        self.ali_query_lengths = [os.listdir(d) for d in self.ali_query_dirs]
+        num_alignments = np.sum(self.ali_query_lengths)
+
+        logger.info(f"Found {num_alignments} alignments")
 
     def __len__(self):
         return len(self.alignment_files)
 
+    def get_path_from_index(self, idx):
+        """Given the index of all alignments, returns
+        the path of where to find this alignment file"""
+        if idx < self.ali_query_lengths[0]:
+            return f"{self.ali_query_dirs[0]}/{idx}.txt"
+        else:
+            for num in range(1, len(self.ali_query_lengths)):
+                if idx > self.ali_query_lengths[num - 1] and idx < self.ali_query_lengths[num]:
+                    return f"{self.ali_query_dirs[num]}/{idx-self.ali_query_lengths[num-1]}.txt"
+
+    def parse_alignment(self, alignment_file: str):
+        """Returns the aligned query and target
+        sequences from an alignment file"""
+        with open(alignment_file, "r") as f:
+            lines = f.read()
+            seq1 = lines[0].strip("\n")
+            seq2 = lines[1].strip("\n")
+        return seq1.upper(), seq2.upper()
+
     def __getitem__(self, idx):
-        ali = AlignIO.read(self.alignment_files[idx], "stockholm")._records
-        # aligned index with gaps: aligned index without gaps
-        seq1 = ali[0].upper()
-        seq2 = ali[1].upper()
+
+        alignment_path = self.get_path_from_index(idx)
+
+        seq1, seq1 = self.parse_alignment(alignment_path)
+
         seq1 = sanitize_sequence(seq1)
         seq2 = sanitize_sequence(seq2)
         seq_a_aligned_labels = list(range(self.mx, self.mx + len(seq1)))
         seq_b_aligned_labels = list(range(self.mx, self.mx + len(seq2)))
+
         # just remove elements from the labels above
         # that are gap characters in either sequence.
         # then labels that are the same will be aligned characters
@@ -255,7 +280,9 @@ class SwissProtGenerator(SwissProtLoader):
         )
 
         s2 = utils.mutate_sequence(
-            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         s2 = utils.encode_tensor_sequence(s2)  # 20x256
@@ -574,7 +601,9 @@ class AAIndexDataset(DataModule):
         n_subs = int(len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))])
 
         s2 = utils.mutate_sequence(
-            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         # map back to character space;
@@ -605,7 +634,9 @@ class UniProtSpectDataset(SwissProtGenerator):
         n_subs = int(len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))])
 
         s2 = utils.mutate_sequence(
-            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
         )
 
         s1 = self.mel(sequence.float())

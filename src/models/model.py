@@ -131,7 +131,11 @@ class ResNet(DotProdModel):
 
         layers = [
             nn.Conv1d(
-                start_emb, emb_dim, first_kernel, padding=padding, padding_mode=padding_mode,
+                start_emb,
+                emb_dim,
+                first_kernel,
+                padding=padding,
+                padding_mode=padding_mode,
             ),
             activation(),
         ]

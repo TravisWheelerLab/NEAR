@@ -13,7 +13,7 @@ import os
 
 from src.utils import encode_string_sequence
 from src.evaluators import Evaluator
-from src.evaluators.metrics import plot_roc_curve, write_output
+from src.evaluators.metrics import plot_roc_curve
 from src.data.utils import actmap_pipeline
 from src.utils.gen_utils import generate_string_sequence
 
@@ -115,7 +115,7 @@ class UniRefEvaluator(Evaluator):
     def filter_sequences_by_length(
         self, names: List[str], sequences: List[str], model_class, apply_random_sequence: bool
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
-        """ Filters the sequences by length thresholding given the
+        """Filters the sequences by length thresholding given the
         minimum and maximum length threshold variables"""
         embeddings = []
 
@@ -140,9 +140,9 @@ class UniRefEvaluator(Evaluator):
         return filtered_names, filtered_sequences, embeddings
 
     def filter_hmmer_hits(self, target_names: List[str]):
-        """ Filters the max hmmer hits dict to include
+        """Filters the max hmmer hits dict to include
         only the targets that passed length thresolding
-        This is in order to keep our benchmarking consistent. """
+        This is in order to keep our benchmarking consistent."""
 
         init_len = sum([len(x) for x in self.max_hmmer_hits.values()])
         print(f"initial length: {init_len}")
@@ -203,7 +203,9 @@ class UniRefEvaluator(Evaluator):
             self.tile_size = model_class.initial_seq_len
 
         target_names, _, target_embeddings = self._calc_embeddings(
-            sequence_data=self.target_seqs, model_class=model_class, apply_random_sequence=False,
+            sequence_data=self.target_seqs,
+            model_class=model_class,
+            apply_random_sequence=False,
         )
 
         del self.target_seqs  # remove from memory
@@ -226,7 +228,6 @@ class UniRefEvaluator(Evaluator):
 
         self.denom = len(query_names) * len(target_names)
         self.num_queries = len(query_names)
-        write_output(model_hits, self.max_hmmer_hits, self.figure_path)
         plot_roc_curve(
             model_hits,
             self.max_hmmer_hits,
@@ -253,7 +254,7 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     def _setup_targets_for_faiss(self, target_embeddings, target_names):
-        """ Base method"""
+        """Base method"""
         raise NotImplementedError()
 
     def search(self, query_embedding):
@@ -267,10 +268,12 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def filter(
-        self, queries, query_names,
+        self,
+        queries,
+        query_names,
     ):
-        """Filters our hits based on 
-        distance to the query in the Faiiss 
+        """Filters our hits based on
+        distance to the query in the Faiiss
         cluster space"""
         qdict = dict()
 
@@ -278,8 +281,12 @@ class UniRefEvaluator(Evaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
+        # output_path = os.path.join(os.path.dirname(self.figure_path), "output")
+        # os.mkdir(output_path)
 
         for i in tqdm.tqdm(range(len(queries))):
+            # f = open(f'{output_path}/{query_names[i]}.txt', 'w')
+            # f.write("Name     Distance" + "\n")
             loop_begin = time.time()
             logger.debug(f"{i / (len(queries)):.3f}")
 
@@ -288,19 +295,24 @@ class UniRefEvaluator(Evaluator):
             else:
                 qval = queries[i]
 
-            filtered_hits = self.search(qval)
-            names = np.array([f[0] for f in filtered_hits])
-            distances = np.array([f[1] for f in filtered_hits])
-            sorted_idx = np.argsort(distances)[::-1]
+            filtered_hits: dict = self.search(qval)
+            # names = np.array([f[0] for f in filtered_hits])
+            # distances = np.array([f[1] for f in filtered_hits])
+            # sorted_idx = np.argsort(distances)[::-1]
 
-            names = names[sorted_idx]
-            distances = distances[sorted_idx]
-            logger.debug(f"len names: {len(names)}")
-            names, name_idx = np.unique(names, return_index=True)
+            # #here we are sorting the distances
+            # #and then we are taking the distance of the targets with the highest distances
+            # #as representatives
 
-            filtered_hits = {}
-            for name, distance in zip(names, distances[name_idx]):
-                filtered_hits[name] = distance
+            # names = names[sorted_idx]
+            # distances = distances[sorted_idx]
+            # logger.debug(f"len names: {len(names)}")
+            # names, name_idx = np.unique(names, return_index=True)
+
+            # filtered_hits = {}
+            # for name, distance in zip(names, distances[name_idx]):
+            #    filtered_hits[name] = distance
+            # f.write(f'{name}     {distance}'+ "\n")
 
             logger.debug(f"len unique names: {len(filtered_hits)}")
             qdict[query_names[i]] = filtered_hits
@@ -308,7 +320,7 @@ class UniRefEvaluator(Evaluator):
             t_tot += time_taken
 
             logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-
+            # f.close()
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")

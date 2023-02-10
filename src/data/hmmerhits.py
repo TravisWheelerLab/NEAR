@@ -1,7 +1,9 @@
+""" Classes to interact with Fasta Files and Hmmer Hits files"""
+
+
 import glob
 import os
-import pdb
-
+from typing import List, Tuple
 import numpy as np
 
 
@@ -13,22 +15,28 @@ def dict_of_dicts(keys: list):
 
 
 class FastaFile:
-    def __init__(self, filepath):
+    """Class representing a FASTA file.
+    Class variables include lists of names and sequences,
+    and a dictionary mapping names to sequences."""
 
-        self.filepath = filepath
+    def __init__(self, filepath: str):
+
+        self.filepath: str = filepath
 
         if not os.path.exists(filepath) or not filepath.endswith("fa"):
             raise f"The filepath is invalud: {filepath}"
 
-        f = open(filepath, "r")
-        data = f.readlines()
+        fastafile = open(filepath, "r", encoding="utf8")
+        data: str = fastafile.readlines()
 
         self.data: dict = self.clean_data(data)
 
-        self.uniref_names: list = list(self.data.keys())
-        self.sequences: list = list(self.data.values())
+        self.uniref_names: List[str] = list(self.data.keys())
+        self.sequences: List[str] = list(self.data.values())
 
     def clean_data(self, data: list) -> dict:
+        """Cleans the fasta files and generates
+        a dictionary mapping names to sequences"""
         data_dict = {}
         for i, line in enumerate(data):
             if i % 2 == 0:
@@ -41,28 +49,51 @@ class FastaFile:
 
 
 class HmmerHits:
-    def __init__(self, dir_path="uniref/phmmer_normal_results"):
-        self.dir_path = dir_path
-        self.root = os.path.dirname(dir_path)
+    """Class for a HMMER hits file.
+    Calling get_hits will return a dictionary of
+    format {query:{target:data}}"""
 
-        self.target_dirs = glob.glob(f"{self.dir_path}/*")
+    def __init__(self, dir_path: str = "uniref/phmmer_normal_results"):
+        """Directory path should map to the directory
+        in which the hits are stored
+        The hits are stored in the following structure:
+        phmmer_normal_results/
+            target_dir1/
+                query_file1
+                query_file2...
+            target_dir2/
+            ..."""
+        self.dir_path: str = dir_path
+        self.root: str = os.path.dirname(dir_path)
+
+        self.target_dirs: List[str] = glob.glob(f"{self.dir_path}/*")
         self.target_dirnums = os.listdir(self.dir_path)
 
-    def get_targets_from_dirnum(self, dirnum: str):
+    def get_targets_from_dirnum(self, dirnum: str) -> FastaFile:
+        """Inputs a directory number for a target directory
+        and returns a FastaFile object with the data
+        for these target sequences"""
         target_fasta = FastaFile(
             os.path.join(self.root, "split_subset", "targets", f"targets_{dirnum}.fa")
         )
         return target_fasta
 
-    def get_queries_from_dirnum(self, dirnum: str):
+    def get_queries_from_dirnum(self, dirnum: str) -> FastaFile:
+        """Inputs a directory number for a query directory
+        and returns a FastaFile object with the data
+        for these query sequences"""
         query_fasta = FastaFile(
             os.path.join(self.root, "split_subset", "queries", f"queries_{dirnum}.fa")
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str):
-        f = open(hits_file, "r")
-        hits = f.readlines()
+    def parse_hits_file(self, hits_file: str) -> Tuple[dict, np.array]:
+        """parses a HMMER hits file
+        Input: the path to hits file
+        Returns: a dictionary of structure {query: {target:data}}
+        and a numpy array of just the data"""
+        hmmer_hits_file = open(hits_file, "r", encoding="utf8")
+        hits = hmmer_hits_file.readlines()
         data_dict = {}
         data_array = []
         for row in hits:
@@ -73,7 +104,10 @@ class HmmerHits:
                 print(f"Found an oddly formatted row: {row}")
                 continue
             target_name = row_info[0]
+            assert "UniRef90" in target_name
+
             query_name = row_info[2]
+            assert "UniRef90" in query_name
             (e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,) = (
                 row_info[4],
                 row_info[5],
@@ -83,7 +117,14 @@ class HmmerHits:
                 row_info[9],
             )
             data = np.array(
-                [e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,]
+                [
+                    e_value_full,
+                    score_full,
+                    bias_full,
+                    e_value_best,
+                    score_best,
+                    bias_best,
+                ]
             ).astype("float64")
             data_array.append(data)
 
@@ -96,20 +137,23 @@ class HmmerHits:
 
         return data_dict, np.array(data_array)
 
-    def get_hits(self, target_dir: str, query_num=None) -> dict:
-        hits_files = glob.glob(target_dir + "/*")
-        target_dirnum = target_dir.split("/")[-1]
-        query_dirnums = [h.split("_")[-1][0] for h in hits_files]
+    def get_hits(self, dir: str, target_num, query_num=None) -> Tuple[dict, np.array]:
+        """
+        args:
+            target_dir: the directory where the targets are stored
+            query_num: the query number (marking a directory)
+            to get the hits for
+        returns:
+            target_query_hits: of format {query:{target:data}}
+            hits_array: np array of just the data
+        """
+        hits_files = os.listdir(f"{dir}/{query_num}/{target_num}")
+        print(hits_files)
 
-        if query_num:
-            hits_files = [f"{target_dir}/queries_{query_num}.fa.tblout"]
-            query_dirnums = [query_num]
-
-        target_query_hits = {target_dirnum: {}}
+        all_hits = {}
 
         for i, hits_file in enumerate(hits_files):
-            query_dirnum = query_dirnums[i]
-            hits_dict, hits_array = self.parse_hits_file(hits_file)
-            target_query_hits[target_dirnum][query_dirnum] = hits_dict
+            hits_dict, _ = self.parse_hits_file(f"{dir}/{query_num}/{target_num}/{hits_file}")
+            all_hits.update(hits_dict)
 
-        return target_query_hits, hits_array
+        return all_hits
