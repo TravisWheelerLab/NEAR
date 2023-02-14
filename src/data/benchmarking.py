@@ -34,23 +34,38 @@ print(len(all_hits_max))
 # for query, tdict in all_hits.items():
 # 	assert query in all_hits_max.keys()
 
-ourhits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/ResNet1d/{query_filenum}/{target_filenum}/output"
+#ourhits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/ResNet1d/{query_filenum}/{target_filenum}/output"
 
-ourhitsdict = {}
+
+distance_hits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/DistanceSums/{query_filenum}/{target_filenum}/distances"
+distance_sum_hits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/DistanceSums/{query_filenum}/{target_filenum}/distances_summed"
+
+distance_hits_dict = {}
+distance_sum_hits_dict = {}
+
 all_distances = []
 all_e_values = []
 all_scores = []
+all_distances2 = []
+
+all_e_values2 = []
+all_scores2 = []
 numhits = 0
 targets = []
 
-for queryhits in os.listdir(ourhits):
+for queryhits in os.listdir(distance_hits):
     queryname = queryhits.strip(".txt")
-    f = open(f"{ourhits}/{queryhits}", "r")
+    individual_distances = open(f"{distance_hits}/{queryhits}", "r")
+    with open(f"{distance_sum_hits}/{queryhits}", "r") as file:
+        file = file.read().replace('\n', '')
+        summed_distances = file.replace('UniRef90', '\n' + 'UniRef90')
+    summed_distances = summed_distances.split('\n')
     if queryname not in all_hits_max.keys():
         continue
-    ourhitsdict[queryname] = {}
+    distance_hits_dict[queryname] = {}
+    distance_sum_hits_dict[queryname] = {}
 
-    for line in f:
+    for line in individual_distances:
         if "Distance" in line:
             continue
         target = line.split()[0].strip("\n")
@@ -61,52 +76,74 @@ for queryhits in os.listdir(ourhits):
         distance = float(line.split()[1].strip("\n"))
         numhits += 1
 
-        ourhitsdict[queryname][target] = float(line.split()[1].strip("\n"))
+        distance_hits_dict[queryname][target] = distance
 
         all_distances.append(distance)
         all_e_values.append(all_hits_max[queryname][target][0])
         all_scores.append(all_hits_max[queryname][target][1])
+    
+    
+    
+    for line in summed_distances:
+        if "Distance" in line:
+            continue
+        try:
+            target = line.split()[0].strip("\n")
+            if target not in all_hits_max[queryname].keys():
+                continue
+            # if target not in targets:
+            #     targets.append(target)
+            distance = float(line.split()[1].strip("\n"))
 
-        # if queryname in all_hits.keys() and target in all_hits[queryname].keys():
-        #     if queryname not in intersection.keys():
-        #         intersection[queryname] = {}
-        #     intersection[queryname][target] = distance
-        # elif queryname in all_hits_max.keys() and target in all_hits_max[queryname].keys():
-        #     if queryname not in outersection.keys():
-        #         outersection[queryname] = {}
-        #     outersection[queryname][target] = distance
-        # else:
-        #     if queryname not in extras.keys():
-        #         extras[queryname] = {}
-        #     extras[queryname][target] = distance
-        # {query: {target: distance,
-        #        target: distance,
-        #        target: distance,
-        #           ... }
+            distance = min(distance, 256)
+
+            distance_sum_hits_dict[queryname][target] = distance
+
+            all_distances2.append(distance)
+            all_e_values2.append(all_hits_max[queryname][target][0])
+            all_scores2.append(all_hits_max[queryname][target][1])
+        except:
+            continue
 
 print(f"Got {numhits} total hits from our model")
 
-num_queries = len(ourhitsdict)
-num_targets = len(targets)
+#num_queries = len(ourhitsdict)
+#num_targets = len(targets)
 # denom = num_queries * num_targets
 plot_roc_curve(
-    ourhitsdict,
+    distance_hits_dict,
     all_hits_max,
     True,
     0,
     numhits,
-    "ResNet1d/eval/test.png",
+    "ResNet1d/eval/individual_distances.png",
     np.greater_equal,
     evalue_thresholds=[1e-10, 1e-1, 1, 10],
 )
-
+plt.clf()
+plot_roc_curve(
+    distance_sum_hits_dict,
+    all_hits_max,
+    True,
+    0,
+    numhits,
+    "ResNet1d/eval/summed_distances.png",
+    np.greater_equal,
+    evalue_thresholds=[1e-10, 1e-1, 1, 10],
+    maxvalue = np.max(all_distances2),
+)
 # ourhitsdict contains everything that phmmer max contains
+plt.clf()
 
 plt.scatter(all_scores, all_distances)
 plt.xlabel("Hmmer Scores")
 plt.ylabel("CNN Distances")
-plt.savefig("distances-scores.png")
-
+plt.savefig("individual-distances-scores.png")
+plt.clf()
+plt.scatter(all_scores2, all_distances2)
+plt.xlabel("Hmmer Scores")
+plt.ylabel("CNN Distances")
+plt.savefig("summed-distances-scores.png")
 pdb.set_trace()
 
 

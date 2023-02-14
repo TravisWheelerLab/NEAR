@@ -92,24 +92,24 @@ class AlignmentGenerator(DataModule):
         self.mx = 0
         self.seq_len = seq_len
 
-        self.ali_query_dirs = os.listdir(self.ali_path)
-        self.ali_query_lengths = [os.listdir(d) for d in self.ali_query_dirs]
-        num_alignments = np.sum(self.ali_query_lengths)
+        #self.ali_query_dirs = os.listdir(self.ali_path)
+        #self.ali_query_lengths = [os.listdir(d) for d in self.ali_query_dirs]
+        #num_alignments = np.sum(self.ali_query_lengths)
 
-        logger.info(f"Found {num_alignments} alignments")
+        #logger.info(f"Found {num_alignments} alignments")
 
     def __len__(self):
         return len(self.alignment_files)
 
-    def get_path_from_index(self, idx):
-        """Given the index of all alignments, returns
-        the path of where to find this alignment file"""
-        if idx < self.ali_query_lengths[0]:
-            return f"{self.ali_query_dirs[0]}/{idx}.txt"
-        else:
-            for num in range(1, len(self.ali_query_lengths)):
-                if idx > self.ali_query_lengths[num - 1] and idx < self.ali_query_lengths[num]:
-                    return f"{self.ali_query_dirs[num]}/{idx-self.ali_query_lengths[num-1]}.txt"
+    # def get_path_from_index(self, idx):
+    #     """Given the index of all alignments, returns
+    #     the path of where to find this alignment file"""
+    #     if idx < self.ali_query_lengths[0]:
+    #         return f"{self.ali_query_dirs[0]}/{idx}.txt"
+    #     else:
+    #         for num in range(1, len(self.ali_query_lengths)):
+    #             if idx > self.ali_query_lengths[num - 1] and idx < self.ali_query_lengths[num]:
+    #                 return f"{self.ali_query_dirs[num]}/{idx-self.ali_query_lengths[num-1]}.txt"
 
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
@@ -122,9 +122,9 @@ class AlignmentGenerator(DataModule):
 
     def __getitem__(self, idx):
 
-        alignment_path = self.get_path_from_index(idx)
+        #alignment_path = self.get_path_from_index(idx)
 
-        seq1, seq1 = self.parse_alignment(alignment_path)
+        seq1, seq1 = self.parse_alignment(f"self.ali_path_{idx}.txt")
 
         seq1 = sanitize_sequence(seq1)
         seq2 = sanitize_sequence(seq2)

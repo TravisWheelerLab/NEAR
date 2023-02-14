@@ -80,11 +80,12 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
+
     def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
-        # filtered_list = []
+        filtered_list = []
         filtered_scores = {}
 
         distances, indices = self.index.search(query_embedding.contiguous(), k=1000)
@@ -94,17 +95,19 @@ class ContrastiveEvaluator(UniRefEvaluator):
         This should be a matrix 
         and have values for distances for each amino acid in the query sequence """
         indices = indices[self.comp_func(distances, self.distance_threshold)]
-        distances = distances[self.comp_func(distances, self.distance_threshold)]
+        distances = distances[self.comp_func(distances, self.distance_threshold)] #this has shape sequence length x 1000
+        #for each amino, the 1000 target aminos that are closest to that amino
+        #pdb.set_trace()
 
         for distance, name in zip(
             distances.ravel().to("cpu").numpy(),
             self.unrolled_names[indices.ravel().to("cpu").numpy()],
         ):
 
-            # filtered_list.append((name, distance))
-            if name in filtered_scores:
+            filtered_list.append((name, distance))
+            if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
 
-        return filtered_scores
+        return filtered_scores, filtered_list

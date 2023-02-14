@@ -18,7 +18,7 @@ Evaluation code is in src/__init__.py"""
 
 HOME = os.environ["HOME"]
 # convert a class to a dictionary with a decorator
-ROOT = "/xdisk/twheeler/daphnedemekas/prefilter-output/ResNet1d"
+ROOT = "/xdisk/twheeler/daphnedemekas/prefilter-output/DistanceSums"
 
 
 @evaluation_ex.config
@@ -64,8 +64,8 @@ def contrastive():
         "index_device": device,
         "figure_path": f"{ROOT}/{query_filenum}/{target_filenum}/roc_test.png",
         "normalize_embeddings": True,
-        "minimum_seq_length": 128,
-        "max_seq_length": 200,
+        "minimum_seq_length": 0,
+        "max_seq_length": 512,
     }
 
 

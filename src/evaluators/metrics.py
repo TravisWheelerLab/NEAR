@@ -18,10 +18,12 @@ def plot_roc_curve(
     figure_path,
     comp_func,
     evalue_thresholds=[1e-10, 1e-1, 1, 10],
+    maxvalue = 0.99
 ):
     """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
     if normalize_embeddings:
-        distances = np.linspace(distance_threshold, 0.999, num=10)
+        #TODO: here if we have distances > 1 this won't work
+        distances = np.linspace(distance_threshold, maxvalue, num=10)
     else:
         distances = np.linspace(0.001, distance_threshold, num=10)
 
@@ -78,6 +80,8 @@ def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func, e
         filtered = {}
         for match, evalue in matches.items():
             evalue = float(evalue[0])
+            if match not in our_hits[query]:
+                continue
             if evalue <= evalue_threshold:
                 filtered[match] = evalue
 

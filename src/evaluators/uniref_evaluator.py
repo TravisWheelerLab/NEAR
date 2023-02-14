@@ -78,9 +78,6 @@ class UniRefEvaluator(Evaluator):
                 a parameter of the Faiss index
         """
 
-        # self.query_file = deepcopy(query_file)
-        # self.target_file = deepcopy(target_file)
-
         self.query_seqs: dict = query_seqs
         self.target_seqs: dict = target_seqs
         self.max_hmmer_hits: dict = hmmer_hits_max
@@ -185,13 +182,12 @@ class UniRefEvaluator(Evaluator):
         filtered_names, filtered_sequences, embeddings = self.filter_sequences_by_length(
             names, sequences, model_class, apply_random_sequence
         )
-        print(f"Number of filtered names: {len(filtered_names)}")
 
         assert len(filtered_names) == len(filtered_sequences) == len(embeddings)
 
         return filtered_names, filtered_sequences, embeddings
 
-    def evaluate(self, model_class, visactmaps: bool = False) -> dict:
+    def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
 
         Calculates embeddings for query and targets
@@ -210,10 +206,7 @@ class UniRefEvaluator(Evaluator):
 
         del self.target_seqs  # remove from memory
 
-        self.filter_hmmer_hits(target_names)
-
-        if visactmaps:
-            actmap_pipeline(target_names, target_embeddings, self.max_hmmer_hits)
+        #self.filter_hmmer_hits(target_names)
 
         query_names, _, query_embeddings = self._calc_embeddings(
             sequence_data=self.query_seqs,
@@ -281,12 +274,21 @@ class UniRefEvaluator(Evaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
-        # output_path = os.path.join(os.path.dirname(self.figure_path), "output")
-        # os.mkdir(output_path)
+        output_path = os.path.join(os.path.dirname(self.figure_path), "distances_summed")
+        output_path2 = os.path.join(os.path.dirname(self.figure_path), "distances")
+
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        if not os.path.exists(output_path2):
+            os.mkdir(output_path2)
 
         for i in tqdm.tqdm(range(len(queries))):
-            # f = open(f'{output_path}/{query_names[i]}.txt', 'w')
-            # f.write("Name     Distance" + "\n")
+            f = open(f'{output_path}/{query_names[i]}.txt', 'w')
+            f.write("Name     Distance" + "\n")
+
+            f2 = open(f'{output_path2}/{query_names[i]}.txt', 'w')
+            f2.write("Name     Distance" + "\n")
+
             loop_begin = time.time()
             logger.debug(f"{i / (len(queries)):.3f}")
 
@@ -295,32 +297,38 @@ class UniRefEvaluator(Evaluator):
             else:
                 qval = queries[i]
 
-            filtered_hits: dict = self.search(qval)
-            # names = np.array([f[0] for f in filtered_hits])
-            # distances = np.array([f[1] for f in filtered_hits])
-            # sorted_idx = np.argsort(distances)[::-1]
+            filtered_scores, filtered_hits = self.search(qval)
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
+            
+            
+            names = np.array([f[0] for f in filtered_hits])
+            distances = np.array([f[1] for f in filtered_hits])
+            sorted_idx = np.argsort(distances)[::-1]
 
-            # #here we are sorting the distances
-            # #and then we are taking the distance of the targets with the highest distances
-            # #as representatives
+            #here we are sorting the distances
+            #and then we are taking the distance of the targets with the highest distances
+            #as representatives
 
-            # names = names[sorted_idx]
-            # distances = distances[sorted_idx]
-            # logger.debug(f"len names: {len(names)}")
-            # names, name_idx = np.unique(names, return_index=True)
+            names = names[sorted_idx]
+            distances = distances[sorted_idx]
+            logger.debug(f"len names: {len(names)}")
+            names, name_idx = np.unique(names, return_index=True)
 
-            # filtered_hits = {}
-            # for name, distance in zip(names, distances[name_idx]):
-            #    filtered_hits[name] = distance
-            # f.write(f'{name}     {distance}'+ "\n")
+            filtered_distance_hits = {}
+            for name, distance in zip(names, distances[name_idx]):
+               filtered_distance_hits[name] = distance
+               f2.write(f'{name}     {distance}'+ "\n")
 
-            logger.debug(f"len unique names: {len(filtered_hits)}")
-            qdict[query_names[i]] = filtered_hits
+            logger.debug(f"len unique names: {len(filtered_distance_hits)}")
+            #qdict[query_names[i]] = filtered_hits
+            qdict[query_names[i]] = filtered_scores
             time_taken = time.time() - loop_begin
             t_tot += time_taken
 
             logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-            # f.close()
+            f2.close()
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")
