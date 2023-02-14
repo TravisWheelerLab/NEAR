@@ -23,7 +23,7 @@ def plot_roc_curve(
     """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
     if normalize_embeddings:
         #TODO: here if we have distances > 1 this won't work
-        distances = np.linspace(distance_threshold, maxvalue, num=10)
+        distances = np.linspace(distance_threshold, maxvalue+10, num=10)
     else:
         distances = np.linspace(0.001, distance_threshold, num=10)
 

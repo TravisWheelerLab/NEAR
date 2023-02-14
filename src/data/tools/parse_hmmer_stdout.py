@@ -18,7 +18,10 @@ TRAIN_IDX =0
 VAL_IDX = 0
 
 for query_filenum in [0,1,2,3,4]:
+    print(f"Query filenum: {query_filenum}")
     for target_filenum in range(45):
+        print(f"Target filenum: {target_filenum}")
+
         stdout_path = (
             f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{query_filenum}-{target_filenum}.txt"
         )

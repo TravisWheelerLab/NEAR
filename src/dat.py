@@ -16,19 +16,7 @@ querysequences_max, targetsequences_max, all_hits_max = get_data_from_subset(
 )
 COLORS = ["r", "c", "g", "k"]
 COLORS2 = ["r", "c", "g", "k"]
-def plot_mean_e_values(all_distance, all_e_values):
-    thresholds = np.linspace(0,300,100)
-    all_distance = np.array(all_distance)
-    all_e_values = np.array(all_e_values)
-    means = []
-    for threshold in thresholds:
-        idx = np.where(all_distance>threshold)[0]
-        mean = np.mean(all_e_values[idx])
-        means.append(mean)
-    plt.plot(means)
-    plt.ylabel("E value means")
-    plt.xlabel("Distance Threshold")
-    plt.savefig("ResNet1d/eval/summed_distances.png")
+
 
 def plot_both_roc(
     distance_hits,
@@ -102,7 +90,6 @@ def plot_both_roc(
         plt.legend()
         plt.savefig(f"ResNet1d/eval/{evalue_threshold}.png", bbox_inches="tight")
         plt.clf()
-
 
 
 # querysequences, targetsequences, all_hits = get_data_from_subset(
@@ -209,8 +196,7 @@ numhits = np.sum([len(distance_sum_hits_dict[q]) for q in list(distance_sum_hits
 print(
     f"Got {numhits} total hits from our model"
 )
-plot_mean_e_values(all_distances2, all_e_values2)
-#plot_both_roc(distance_hits_dict, distance_sum_hits_dict,all_hits_max,True,0,numhits,"ResNet1d/eval/summed_distances.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],maxvalue = np.max(all_distances2))
+plot_both_roc(distance_hits_dict, distance_sum_hits_dict,all_hits_max,True,0,numhits,"ResNet1d/eval/summed_distances.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],maxvalue = np.max(all_distances2))
 pdb.set_trace()
 #num_queries = len(ourhitsdict)
 #num_targets = len(targets)
