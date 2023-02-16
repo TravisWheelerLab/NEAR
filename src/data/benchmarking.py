@@ -16,19 +16,44 @@ querysequences_max, targetsequences_max, all_hits_max = get_data_from_subset(
 )
 COLORS = ["r", "c", "g", "k"]
 COLORS2 = ["r", "c", "g", "k"]
-def plot_mean_e_values(all_distance, all_e_values):
-    thresholds = np.linspace(0,300,100)
+def plot_mean_e_values(all_distance, all_e_values, min = 0, max = 300, alpha = 0.5, fn = 'evaluemeans', plot_stds = True, plot_lengths = True, title = ''):
+    plt.clf()
+    thresholds = np.linspace(min,max,100)
     all_distance = np.array(all_distance)
     all_e_values = np.array(all_e_values)
+    
     means = []
+    stds = []
+    lengths = []
     for threshold in thresholds:
         idx = np.where(all_distance>threshold)[0]
-        mean = np.mean(all_e_values[idx])
+        mean = np.mean(np.ma.masked_invalid(np.log10(all_e_values[idx])))
+        std = np.std(np.ma.masked_invalid(np.log10(all_e_values[idx])))
         means.append(mean)
-    plt.plot(means)
-    plt.ylabel("E value means")
-    plt.xlabel("Distance Threshold")
-    plt.savefig("ResNet1d/eval/summed_distances.png")
+        stds.append(std)
+        length = len(idx)
+        lengths.append(length)
+    lengths = np.log(lengths)
+    plt.plot(thresholds, means)
+    if plot_stds:
+        plt.fill_between(thresholds, np.array(means) - np.array(stds)/2, np.array(means) + np.array(stds)/2, alpha = alpha)
+    if plot_lengths:
+        plt.fill_between(thresholds, np.array(means) - np.array(lengths), np.array(means) + np.array(lengths), alpha = 0.5, color = 'orange')
+    plt.title(title)
+    plt.ylabel("Log E value means")
+    plt.xlabel("Similarity Threshold")
+    plt.savefig(f"ResNet1d/eval/{fn}.png")
+
+
+# thresholds = np.linspace(0,8000,100)
+# all_distance = np.array(all_distances_full)
+# all_e_values = np.array(all_e_values2)
+# idxs = [np.where(all_distance>threshold)[0] for threshold in thresholds]
+# means = [np.mean(np.ma.masked_invalid(np.log10(all_e_values[idx]))) for idx in idxs]
+# stds = [np.std(np.ma.masked_invalid(np.log10(all_e_values[idx]))) for idx in idxs]
+# lengths = [len(idx) for idx in idxs]
+# plt.fill_between(thresholds, np.array(means) - np.array(lengths), np.array(means) + np.array(lengths), alpha = 0.5, color = 'orange')
+
 
 def plot_both_roc(
     distance_hits,
@@ -133,7 +158,53 @@ print(len(targetsequences_max))
 print(len(all_hits_max))
 
 
+all_distances_full = np.load('all_distances_full.npy')
+all_distances2 = np.load('all_distances2.npy')
+all_distances = np.load('all_distances.npy')
+all_e_values2 = np.load('all_e_values2.npy')
+all_e_values = np.load('all_e_values.npy')
+all_targets = np.load('all_targets.npy')
 
+# d_idxs = np.where(all_distances_full > 1000)[0]
+
+# e_vals = all_e_values2[d_idxs]
+
+# outliers = np.where(e_vals > 1)[0]
+
+# outlier_idx = d_idxs[outliers]
+
+# pairs = all_targets[outlier_idx]
+
+# f = open('outliers.txt', 'w')
+# for idx in outlier_idx:
+#     pair = all_targets[idx]
+#     f.write('Query' + '\n' + str(pair[0])+ '\n')
+#     f.write(querysequences_max[pair[0]]+ '\n')
+#     f.write('Target' + '\n' + str(pair[1])+ '\n')
+#     f.write(targetsequences_max[pair[1]]+ '\n')
+
+#     f.write('Predicted Similarity: ' + str(all_distances_full[idx]) + '\n')
+#     f.write('E-value: '  + str(all_e_values2[idx]) + '\n')
+# f.close()
+
+loge = np.ma.masked_invalid(np.log10(all_e_values2))
+idxs = np.where(loge < -250)[0]
+pairs = all_targets[idxs]
+
+f = open('inliers.txt', 'w')
+for idx in idxs:
+    pair = all_targets[idx]
+    f.write('Query' + '\n' + str(pair[0])+ '\n')
+    f.write(querysequences_max[pair[0]]+ '\n')
+    f.write('Target' + '\n' + str(pair[1])+ '\n')
+    f.write(targetsequences_max[pair[1]]+ '\n')
+
+    f.write('Predicted Similarity: ' + str(all_distances_full[idx]) + '\n')
+    f.write('E-value: '  + str(all_e_values2[idx]) + '\n')
+f.close()
+
+
+pdb.set_trace()
 
 distance_hits_dict = {}
 distance_sum_hits_dict = {}
@@ -142,11 +213,12 @@ all_distances = []
 all_e_values = []
 all_scores = []
 all_distances2 = []
+all_distances_full = []
 
 all_e_values2 = []
 all_scores2 = []
 targets = []
-
+all_targets = []
 for queryhits in os.listdir(distance_hits):
     queryname = queryhits.strip(".txt")
     individual_distances = open(f"{distance_hits}/{queryhits}", "r")
@@ -159,21 +231,21 @@ for queryhits in os.listdir(distance_hits):
     distance_hits_dict[queryname] = {}
     distance_sum_hits_dict[queryname] = {}
 
-    for line in individual_distances:
-        if "Distance" in line:
-            continue
-        target = line.split()[0].strip("\n")
-        if target not in all_hits_max[queryname].keys():
-            continue
-        if target not in targets:
-            targets.append(target)
-        distance = float(line.split()[1].strip("\n"))
+    # for line in individual_distances:
+    #     if "Distance" in line:
+    #         continue
+    #     target = line.split()[0].strip("\n")
+    #     if target not in all_hits_max[queryname].keys():
+    #         continue
+    #     if target not in targets:
+    #         targets.append(target)
+    #     distance = float(line.split()[1].strip("\n"))
 
-        distance_hits_dict[queryname][target] = distance
+    #     distance_hits_dict[queryname][target] = distance
 
-        all_distances.append(distance)
-        all_e_values.append(all_hits_max[queryname][target][0])
-        all_scores.append(all_hits_max[queryname][target][1])
+    #     all_distances.append(distance)
+    #     all_e_values.append(all_hits_max[queryname][target][0])
+    #     all_scores.append(all_hits_max[queryname][target][1])
     
     
     
@@ -187,11 +259,11 @@ for queryhits in os.listdir(distance_hits):
             if target not in targets:
                 targets.append(target)
             distance = float(line.split()[1].strip("\n"))
+            all_distances_full.append(distance)
+
+            target_length = len(targetsequences_max[target])
+            distance = distance / target_length
             all_distances2.append(distance)
-
-            distance = min(distance, 100)
-
-            # target_length = len(targetsequences_max[target])
 
             # print(f"Target length: {target_length}")
             # print(f"Distance: {distance}")
@@ -201,15 +273,50 @@ for queryhits in os.listdir(distance_hits):
 
             all_e_values2.append(all_hits_max[queryname][target][0])
             all_scores2.append(all_hits_max[queryname][target][1])
+            all_targets.append((queryname, target))
         except:
             continue
+
+all_distances_full = np.array(all_distances_full)
+all_distances2 = np.array(all_distances2)
+all_distances = np.array(all_distances)
+all_e_values2 = np.array(all_e_values2)
+all_e_values = np.array(all_e_values)
+
+pdb.set_trace()
+
+np.save('all_distances_full', all_distances_full, allow_pickle = True)
+
+np.save('all_distances2', all_distances2, allow_pickle = True)
+np.save('all_distances', all_distances, allow_pickle = True)
+np.save('all_e_values2', all_e_values2, allow_pickle = True)
+np.save('all_e_values', all_e_values, allow_pickle = True)
+
 
 
 numhits = np.sum([len(distance_sum_hits_dict[q]) for q in list(distance_sum_hits_dict.keys())])
 print(
     f"Got {numhits} total hits from our model"
 )
-plot_mean_e_values(all_distances2, all_e_values2)
+
+over_7000 = np.where(np.array(all_distances_full) > 7000)[0]
+
+e_val_7000 = np.array(all_e_values2)[over_7000]
+
+
+
+#plot_mean_e_values(all_distances2, all_e_values2, fn = 'evaluemeans_summed', max = 300)
+#plot_mean_e_values(all_distances, all_e_values, fn = 'evaluemeans',max = 1)
+
+# plot_mean_e_values(all_distances2, all_e_values2, fn = 'evaluemeans_summed', max = 1e-1)
+# plot_mean_e_values(all_distances, all_e_values, max = 1e-1)
+
+# plot_mean_e_values(all_distances2, all_e_values2, fn = 'evaluemeans_summed', max = 1)
+# plot_mean_e_values(all_distances, all_e_values, max = 1)
+
+
+# plot_mean_e_values(all_distances2, all_e_values2, fn = 'evaluemeans_summed', max = 10)
+# plot_mean_e_values(all_distances, all_e_values, max = 10)
 #plot_both_roc(distance_hits_dict, distance_sum_hits_dict,all_hits_max,True,0,numhits,"ResNet1d/eval/summed_distances.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],maxvalue = np.max(all_distances2))
 pdb.set_trace()
 #num_queries = len(ourhitsdict)

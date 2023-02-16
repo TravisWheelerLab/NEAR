@@ -17,19 +17,7 @@ from src.utils import pluginloader, encode_string_sequence
 from src import models
 
 HOME = os.environ["HOME"]
-def plot_mean_e_values(all_distance, all_e_values):
-    thresholds = np.linspace(0,300,100)
-    all_distance = np.array(all_distance)
-    all_e_values = np.array(all_e_values)
-    means = []
-    for threshold in thresholds:
-        idx = np.where(all_distance>threshold)[0]
-        mean = np.mean(all_e_values[idx])
-        means.append(mean)
-    plt.plot(means)
-    plt.ylabel("E value means")
-    plt.xlabel("Distance Threshold")
-    plt.savefig("ResNet1d/eval/summed_distances.png")
+
 
 
 

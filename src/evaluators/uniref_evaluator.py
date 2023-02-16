@@ -206,7 +206,7 @@ class UniRefEvaluator(Evaluator):
 
         del self.target_seqs  # remove from memory
 
-        #self.filter_hmmer_hits(target_names)
+        self.filter_hmmer_hits(target_names)
 
         query_names, _, query_embeddings = self._calc_embeddings(
             sequence_data=self.query_seqs,
@@ -305,11 +305,11 @@ class UniRefEvaluator(Evaluator):
             
             names = np.array([f[0] for f in filtered_hits])
             distances = np.array([f[1] for f in filtered_hits])
-            sorted_idx = np.argsort(distances)[::-1]
+            sorted_idx = np.argsort(distances)[::-1] #biggest FIRST
 
             #here we are sorting the distances
             #and then we are taking the distance of the targets with the highest distances
-            #as representatives
+            #as representatives, becuase np unique gives u the first instance
 
             names = names[sorted_idx]
             distances = distances[sorted_idx]
