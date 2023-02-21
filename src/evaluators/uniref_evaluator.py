@@ -286,10 +286,7 @@ class UniRefEvaluator(Evaluator):
             f = open(f'{output_path}/{query_names[i]}.txt', 'w')
             f.write("Name     Distance" + "\n")
 
-            f2 = open(f'{output_path2}/{query_names[i]}.txt', 'w')
-            f2.write("Name     Distance" + "\n")
-
-            loop_begin = time.time()
+            # loop_begin = time.time()
             logger.debug(f"{i / (len(queries)):.3f}")
 
             if self.normalize_embeddings:
@@ -297,38 +294,38 @@ class UniRefEvaluator(Evaluator):
             else:
                 qval = queries[i]
 
-            filtered_scores, filtered_hits = self.search(qval)
+            filtered_scores = self.search(qval)
             for name, distance in filtered_scores.items():
                 f.write(f"{name}     {distance}" + "\n")
             f.close()
             
             
-            names = np.array([f[0] for f in filtered_hits])
-            distances = np.array([f[1] for f in filtered_hits])
-            sorted_idx = np.argsort(distances)[::-1] #biggest FIRST
+            # names = np.array([f[0] for f in filtered_hits])
+            # distances = np.array([f[1] for f in filtered_hits])
+            # sorted_idx = np.argsort(distances)[::-1] #biggest FIRST
 
-            #here we are sorting the distances
-            #and then we are taking the distance of the targets with the highest distances
-            #as representatives, becuase np unique gives u the first instance
+            # #here we are sorting the distances
+            # #and then we are taking the distance of the targets with the highest distances
+            # #as representatives, becuase np unique gives u the first instance
 
-            names = names[sorted_idx]
-            distances = distances[sorted_idx]
-            logger.debug(f"len names: {len(names)}")
-            names, name_idx = np.unique(names, return_index=True)
+            # names = names[sorted_idx]
+            # distances = distances[sorted_idx]
+            # logger.debug(f"len names: {len(names)}")
+            # names, name_idx = np.unique(names, return_index=True)
 
-            filtered_distance_hits = {}
-            for name, distance in zip(names, distances[name_idx]):
-               filtered_distance_hits[name] = distance
-               f2.write(f'{name}     {distance}'+ "\n")
+            # filtered_distance_hits = {}
+            # for name, distance in zip(names, distances[name_idx]):
+            #    filtered_distance_hits[name] = distance
+            #    f2.write(f'{name}     {distance}'+ "\n")
 
-            logger.debug(f"len unique names: {len(filtered_distance_hits)}")
-            #qdict[query_names[i]] = filtered_hits
+            # logger.debug(f"len unique names: {len(filtered_distance_hits)}")
+            # #qdict[query_names[i]] = filtered_hits
             qdict[query_names[i]] = filtered_scores
-            time_taken = time.time() - loop_begin
-            t_tot += time_taken
+            # time_taken = time.time() - loop_begin
+            # t_tot += time_taken
 
-            logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-            f2.close()
+            # logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
+            # f2.close()
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")

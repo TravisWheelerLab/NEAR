@@ -63,7 +63,7 @@ def contrastive():
         "model_device": device,
         "index_device": device,
         "figure_path": f"{ROOT}/{query_filenum}/{target_filenum}/roc_test.png",
-        "normalize_embeddings": False,
+        "normalize_embeddings": True,
         "minimum_seq_length": 0,
         "max_seq_length": 512,
     }

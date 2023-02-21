@@ -80,6 +80,27 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
+    def filter_scores(self, scores_array, indices_array):
+        """Filters the scores such that every query amino can only
+        be matched to one amino from each target sequence
+        and it matches the one with the biggest score"""
+        scores = []
+        indices = []
+        
+        for idx in range(len(scores_array)):
+            scores = scores_array[idx]
+            names = self.unrolled_names[indices_array[idx]] #the names of the targets for each 1000 hits
+            sorted_idx = np.argsort(scores)[::-1]
+
+            _, unique_indices = np.unique(names[sorted_idx], return_index=True) #the unique names of the targets for each 1000 hits (<= 1000)
+            try:
+                indices += indices_array[idx][sorted_idx][unique_indices]
+                scores += scores[sorted_idx][unique_indices]
+            except ValueError as e:
+                print(e)
+                pdb.set_trace()
+        return scores, indices
+
 
     def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
         """Searches through the target DB and gathers a
@@ -88,26 +109,29 @@ class ContrastiveEvaluator(UniRefEvaluator):
         filtered_list = []
         filtered_scores = {}
 
-        distances, indices = self.index.search(query_embedding.contiguous(), k=1000)
+        scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
         # remove stuff that's under/over the threshold
 
         """ BASED ON MY UNDERSTANDING 
         This should be a matrix 
         and have values for distances for each amino acid in the query sequence """
-        indices = indices[self.comp_func(distances, self.distance_threshold)]
-        distances = distances[self.comp_func(distances, self.distance_threshold)] #this has shape sequence length x 1000
+        #indices = indices_array[self.comp_func(distances_array, self.distance_threshold)]
+        #distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
         #for each amino, the 1000 target aminos that are closest to that amino
-        #pdb.set_trace()
+        scores, indices = self.filter_scores(scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy())
 
+        # for distance, name in zip(
+        #     distances.ravel().to("cpu").numpy(),
+        #     self.unrolled_names[indices.ravel().to("cpu").numpy()],
+        # ):
         for distance, name in zip(
-            distances.ravel().to("cpu").numpy(),
-            self.unrolled_names[indices.ravel().to("cpu").numpy()],
+            scores,
+            self.unrolled_names[indices],
         ):
-
-            filtered_list.append((name, distance))
+            #filtered_list.append((name, distance))
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
 
-        return filtered_scores, filtered_list
+        return filtered_scores#, filtered_list

@@ -151,6 +151,8 @@ def get_data_from_subset(
     querysequences = queryfasta.data
     targetsequences = {}
 
+    print(f"uniref/split_subset/targets/targets_{t}.fa")
+
     targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
     targetdata = targetfasta.data
     targetsequences.update(targetdata)

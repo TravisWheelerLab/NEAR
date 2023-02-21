@@ -40,7 +40,7 @@ def run_phmmer(query_filenum: int, target_filenum: int):
         )
 
     hmmer = subprocess.run(
-        f'phmmer --cpu 16 --max -E 100 --tblout /xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}/{target_filenum}/hits.tblout "/xdisk/twheeler/colligan/uniref/split_subset/queries/queries_{query_filenum}.fa" "/xdisk/twheeler/colligan/uniref/split_subset/targets/targets_{target_filenum}.fa"',
+        f'phmmer --cpu 16 --max -E 10 --tblout /xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}/{target_filenum}/hits.tblout "/xdisk/twheeler/colligan/uniref/split_subset/queries/queries_{query_filenum}.fa" "/xdisk/twheeler/colligan/uniref/split_subset/targets/targets_{target_filenum}.fa"',
         shell=True,
         capture_output=True,
     )

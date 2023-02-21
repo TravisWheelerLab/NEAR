@@ -5,18 +5,13 @@ import numpy as np
 from src.evaluators.metrics import plot_roc_curve, recall_and_filtration
 import matplotlib.pyplot as plt
 import tqdm
+# querysequences, targetsequences, all_hits = get_data_from_subset(
+#     "uniref/phmmer_normal_results", query_id=query_filenum, file_num=target_filenum
+# )
 
-query_filenum = 1
-target_filenum = 0
-
-querysequences_max, targetsequences_max, all_hits_max = get_data_from_subset(
-    "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
-    query_id=query_filenum,
-    file_num=target_filenum,
-)
 COLORS = ["r", "c", "g", "k"]
 COLORS2 = ["r", "c", "g", "k"]
-def plot_mean_e_values(all_distance, all_e_values, min = 0, max = 300, alpha = 0.5, fn = 'evaluemeans', plot_stds = True, plot_lengths = True, title = ''):
+def plot_mean_e_values(all_distance, all_e_values, biases, min = 0, max = 300, alpha = 0.5, fn = 'evaluemeans', plot_stds = True, plot_lengths = True, title = '', s = 1):
     plt.clf()
     thresholds = np.linspace(min,max,100)
     all_distance = np.array(all_distance)
@@ -25,15 +20,19 @@ def plot_mean_e_values(all_distance, all_e_values, min = 0, max = 300, alpha = 0
     means = []
     stds = []
     lengths = []
+    mean_bias = []
     for threshold in thresholds:
         idx = np.where(all_distance>threshold)[0]
         mean = np.mean(np.ma.masked_invalid(np.log10(all_e_values[idx])))
         std = np.std(np.ma.masked_invalid(np.log10(all_e_values[idx])))
+        bias = np.mean(biases[idx])
         means.append(mean)
         stds.append(std)
         length = len(idx)
         lengths.append(length)
+        mean_bias.append(bias)
     lengths = np.log(lengths)
+    plt.scatter(thresholds, means, c = mean_bias, cmap = 'Greens', s = s)
     plt.plot(thresholds, means)
     if plot_stds:
         plt.fill_between(thresholds, np.array(means) - np.array(stds)/2, np.array(means) + np.array(stds)/2, alpha = alpha)
@@ -44,126 +43,171 @@ def plot_mean_e_values(all_distance, all_e_values, min = 0, max = 300, alpha = 0
     plt.xlabel("Similarity Threshold")
     plt.savefig(f"ResNet1d/eval/{fn}.png")
 
-
-# thresholds = np.linspace(0,8000,100)
-# all_distance = np.array(all_distances_full)
-# all_e_values = np.array(all_e_values2)
-# idxs = [np.where(all_distance>threshold)[0] for threshold in thresholds]
-# means = [np.mean(np.ma.masked_invalid(np.log10(all_e_values[idx]))) for idx in idxs]
-# stds = [np.std(np.ma.masked_invalid(np.log10(all_e_values[idx]))) for idx in idxs]
-# lengths = [len(idx) for idx in idxs]
-# plt.fill_between(thresholds, np.array(means) - np.array(lengths), np.array(means) + np.array(lengths), alpha = 0.5, color = 'orange')
-
-
-def plot_both_roc(
-    distance_hits,
-    distance_sum_hits,
-    max_hmmer_hits,
-    normalize_embeddings,
-    distance_threshold,
-    denom,
-    figure_path,
-    comp_func,
-    evalue_thresholds=[1e-10, 1e-1, 1, 10],
-    maxvalue = 0.99
+def plot_roc_curve(figure_path,numpos1, numpos2, numpos3, numpos4, evalue_thresholds=[1e-10,1e-1, 1, 10], filename = 'data.txt'
 ):
-    """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
-    sum_thresholds = np.linspace(distance_threshold, maxvalue+10, num=10)
-    distance_thresholds = np.append(np.linspace(0,0.5,7), np.linspace(0.6,1,3))
-
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.set_title(f"{os.path.splitext(os.path.basename(figure_path))[0]}")
+    datafile = open(filename,'r')
+    lines = datafile.readlines()
+    numhits = len(lines)
+    numpos = [numpos1,numpos2,numpos3,numpos4]
 
     # for color, evalue_threshold in zip(["r", "c", "g", "k"], [1e-10, 1e-1, 1, 10]):
     for i, evalue_threshold in enumerate(evalue_thresholds):
+        print(f'Evalue threshold: {evalue_threshold}')
 
         filtrations = []
         recalls = []
-        for threshold in tqdm.tqdm(distance_thresholds):
-            recall, total_hits = recall_and_filtration(
-                distance_hits,
-                max_hmmer_hits,
-                threshold,
-                comp_func,
-                evalue_threshold,
-            )
 
-            filtration = 100 * (1.0 - (total_hits / denom))
-            filtrations.append(filtration)
-            recalls.append(recall)
-            print(f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}")
+        num_positives = 0
+        num_decoys = 0
+        recall = None
+        filtration = None
 
-
-
-
-        filtrations2 = []
-        recalls2 = []
-        for threshold in tqdm.tqdm(sum_thresholds):
-            recall, total_hits = recall_and_filtration(
-                distance_sum_hits,
-                max_hmmer_hits,
-                threshold,
-                comp_func,
-                evalue_threshold,
-            )
-
-            filtration = 100 * (1.0 - (total_hits / denom))
-            filtrations2.append(filtration)
-            recalls2.append(recall)
-            print(f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}")
-
-        ax.scatter(filtrations, recalls, color = 'mediumseagreen', marker="o")
-        ax.scatter(filtrations2, recalls2, color = 'purple', marker="o")
-
-        ax.plot(filtrations, recalls,  color = 'mediumseagreen', linewidth=2, label='distances')
-        ax.plot(filtrations2, recalls2,  color = 'purple', linestyle = '--', linewidth=2, label='distances summed')
-        plt.title(evalue_threshold)
-
-        #ax.plot([0, 100], [100, 0], "k--", linewidth=2)
-        ax.set_ylim([-1, 101])
-        ax.set_xlim([-1, 101])
-        ax.set_xlabel("filtration")
-        ax.set_ylabel("recall")
-        plt.legend()
-        plt.savefig(f"ResNet1d/eval/{evalue_threshold}.png", bbox_inches="tight")
-        plt.clf()
+        for idx, line in enumerate(lines):
+            line = line.split()
+            classname = line[3+i]
+            if classname == 'P':
+                num_positives +=1 
+                recall = num_positives / numpos[i]
+            elif classname == 'D':
+                num_decoys += 1
+                filtration = num_decoys / numhits
 
 
+            if recall is not None and filtration is not None:
+                if idx % 3000 == 0:   
+                    print(f"num_Ps: {num_positives},  num_Ds: {num_decoys},  recall: {100*recall:.3f}, filtration: {100*(1-filtration):.3f}")
+                    filtrations.append(100*(1-filtration))
+                    recalls.append(100*recall)
+        datafile.close()
+                #print(f"recall: {recall:.3f}, filtration: {filtration:.3f}")
 
-# querysequences, targetsequences, all_hits = get_data_from_subset(
-#     "uniref/phmmer_normal_results", query_id=query_filenum, file_num=target_filenum
-# )
+       # ax.scatter(filtrations, recalls, c=COLORS[i], marker="o")
+        ax.plot(filtrations, recalls, f"{COLORS[i]}--", linewidth=2, label=evalue_threshold)
 
-# print('Max Hmmer Hits')
-# print(len(all_hits_max))
-# print('Hmmer hits')
-# print(len(all_hits))
+    ax.plot([0, 100], [100, 0], "k--", linewidth=2)
+    #ax.set_ylim([-1, 101])
+    #ax.set_xlim([-1, 101])
+    ax.set_xlabel("filtration")
+    ax.set_ylabel("recall")
+    plt.legend()
+    plt.savefig(f"{figure_path}", bbox_inches="tight")
+    plt.close()
 
-# if len(all_hits) > len(all_hits_max):
-# 	x = all_hits
-# 	all_hits = all_hits_max
-# 	all_hits_max = x
-# for query, tdict in all_hits.items():
-# 	assert query in all_hits_max.keys()
+def get_data(modelhitsfile):
+    all_scores = []
+    all_pairs = []
+    for queryhits in os.listdir(modelhitsfile):
+        queryname = queryhits.strip(".txt")
+        if queryname not in all_hits_max.keys():
+            print(f"Query {queryname} not in hmmer hits")
+            continue
+        
+        file = open(f"{modelhitsfile}/{queryhits}", "r")
+        scores = file.readlines()
+        # file = open(f"{modelhitsfile}/{queryhits}", "r")
+        # scores = file.read().replace('\n', '')
+        # scores = scores.replace('UniRef90', '\n' + 'UniRef90')
+        # scores = scores.split('\n')
+        for line in scores:
+            if "Distance" in line:
+                continue
+            target = line.split()[0].strip("\n")
 
-#ourhits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/ResNet1d/{query_filenum}/{target_filenum}/output"
+            score = float(line.split()[1].strip("\n"))
+            all_scores.append(score)
+
+            all_pairs.append((queryname, target))
+        file.close()
+    return all_scores, all_pairs 
 
 
+def write_datafile(pairs, evalue_thresholds = [1e-10,1e-1,1,10], filename = 'data.txt'):
+    datafile = open(filename, 'w')
+    numpos1 = numpos2 = numpos3 = numpos4 = 0
+    for pair in pairs:
+        query, target = pair[0], pair[1]
+
+        evalue = None
+        if target not in all_hits_max[query].keys():
+            classname1 = classname2 = classname3 = classname4 = 'D'
+        else:
+            evalue = all_hits_max[query][target][0]
+            classname1 = classname2 = classname3 = classname4 = 'M'
+
+            if evalue < evalue_thresholds[3]: 
+                classname4 = 'P'
+                numpos4 += 1
+                if evalue < evalue_thresholds[2]: 
+                    classname3 = 'P'
+                    numpos3 += 1
+                    if evalue < evalue_thresholds[1]: 
+                        classname2 = 'P'
+                        numpos2 += 1
+                        if evalue < evalue_thresholds[0]: 
+                            classname1 = 'P'
+                            numpos1 += 1
+
+        datafile.write(f'{query}          {target}          {evalue}          {classname1}          {classname2}          {classname3}          {classname4}' + '\n')
+    datafile.close()
+
+    return numpos1, numpos2, numpos3, numpos4
+
+# filename = 'data0_distance_hits.txt'
+# scores, pairs = get_data(distance_hits, filename=filename)
+# print("Got data")
+
+# sortedidx = np.argsort(scores)[::-1]
+# pairs = np.array(pairs)[sortedidx]
+# numhmmerhits = write_datafile(pairs)
+# print("Wrote files")
+
+query_filenum = 1
+target_filenum =1
+
+querysequences_max, targetsequences_max, all_hits_max = get_data_from_subset(
+    "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
+    query_id=query_filenum,
+    file_num=target_filenum,
+)
+# plot_roc_curve("ResNet1d/eval/roc_distances_max.png", numhmmerhits,filename=filename)
 distance_hits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/DistanceSums/{query_filenum}/{target_filenum}/distances"
 distance_sum_hits = f"/xdisk/twheeler/daphnedemekas/prefilter-output/DistanceSums/{query_filenum}/{target_filenum}/distances_summed"
 
+filename = 'data1_distance_sum_hits.txt'
 
-print(len(querysequences_max))
-print(len(targetsequences_max))
-print(len(all_hits_max))
+scores, pairs = get_data(distance_sum_hits)
+print("Got data")
+sortedidx = np.argsort(scores)[::-1]
+pairs = np.array(pairs)[sortedidx]
+numpos1, numpos2, numpos3, numpos4 = write_datafile(pairs,evalue_thresholds = [1e-10,1e-1,1,10], filename=filename)
+print("Wrote files")
+plot_roc_curve("ResNet1d/eval/roc_distances_sums_filtered.png", numpos1, numpos2, numpos3, numpos4,filename=filename)
+os.remove(filename)
+
+filename = 'data1_distance_sum_hits.txt'
+
+scores, pairs = get_data(distance_sum_hits)
+print("Got data")
+sortedidx = np.argsort(scores)[::-1]
+pairs = np.array(pairs)[sortedidx]
+numpos1, numpos2, numpos3, numpos4 = write_datafile(pairs,evalue_thresholds = [1e-10,1e-1,1,10], filename=filename)
+print("Wrote files")
+plot_roc_curve("ResNet1d/eval/roc_distances_max_filtered.png", numpos1, numpos2, numpos3, numpos4,filename=filename)
+os.remove(filename)
+
+raise
 
 
-all_distances_full = np.load('all_distances_full.npy')
-all_distances2 = np.load('all_distances2.npy')
-all_distances = np.load('all_distances.npy')
-all_e_values2 = np.load('all_e_values2.npy')
-all_e_values = np.load('all_e_values.npy')
-all_targets = np.load('all_targets.npy')
+
+
+# all_distances_full = np.load('all_distances_full.npy')
+# all_e_values2 = np.load('all_e_values2.npy')
+# all_targets = np.load('all_targets.npy')
+# all_bias = np.load('all_biases.npy')
+# numhits = len(all_targets)
+
 
 # d_idxs = np.where(all_distances_full > 1000)[0]
 
@@ -187,36 +231,32 @@ all_targets = np.load('all_targets.npy')
 #     f.write('E-value: '  + str(all_e_values2[idx]) + '\n')
 # f.close()
 
-loge = np.ma.masked_invalid(np.log10(all_e_values2))
-idxs = np.where(loge < -250)[0]
-pairs = all_targets[idxs]
+# loge = np.ma.masked_invalid(np.log10(all_e_values2))
+# idxs = np.where(loge < -250)[0]
 
-f = open('inliers.txt', 'w')
-for idx in idxs:
-    pair = all_targets[idx]
-    f.write('Query' + '\n' + str(pair[0])+ '\n')
-    f.write(querysequences_max[pair[0]]+ '\n')
-    f.write('Target' + '\n' + str(pair[1])+ '\n')
-    f.write(targetsequences_max[pair[1]]+ '\n')
+# f = open('inliers.txt', 'w')
+# for idx in idxs:
+#     pair = all_targets[idx]
+#     f.write('Query' + '\n' + str(pair[0])+ '\n')
+#     f.write(querysequences_max[pair[0]]+ '\n')
+#     f.write('Target' + '\n' + str(pair[1])+ '\n')
+#     f.write(targetsequences_max[pair[1]]+ '\n')
 
-    f.write('Predicted Similarity: ' + str(all_distances_full[idx]) + '\n')
-    f.write('E-value: '  + str(all_e_values2[idx]) + '\n')
-f.close()
+#     f.write('Predicted Similarity: ' + str(all_distances_full[idx]) + '\n')
+#     f.write('E-value: '  + str(all_e_values2[idx]) + '\n')
+# f.close()
 
-
-pdb.set_trace()
-
-distance_hits_dict = {}
+#distance_hits_dict = {}
 distance_sum_hits_dict = {}
 
-all_distances = []
-all_e_values = []
-all_scores = []
+# all_distances = []
+# all_e_values = []
+# all_scores = []
 all_distances2 = []
 all_distances_full = []
 
 all_e_values2 = []
-all_scores2 = []
+all_bias2 = []
 targets = []
 all_targets = []
 for queryhits in os.listdir(distance_hits):
@@ -228,7 +268,7 @@ for queryhits in os.listdir(distance_hits):
     summed_distances = summed_distances.split('\n')
     if queryname not in all_hits_max.keys():
         continue
-    distance_hits_dict[queryname] = {}
+    # distance_hits_dict[queryname] = {}
     distance_sum_hits_dict[queryname] = {}
 
     # for line in individual_distances:
@@ -261,9 +301,9 @@ for queryhits in os.listdir(distance_hits):
             distance = float(line.split()[1].strip("\n"))
             all_distances_full.append(distance)
 
-            target_length = len(targetsequences_max[target])
-            distance = distance / target_length
-            all_distances2.append(distance)
+            #target_length = len(targetsequences_max[target])
+            #distance = distance / target_length
+            #all_distances2.append(distance)
 
             # print(f"Target length: {target_length}")
             # print(f"Distance: {distance}")
@@ -272,25 +312,30 @@ for queryhits in os.listdir(distance_hits):
             distance_sum_hits_dict[queryname][target] = distance
 
             all_e_values2.append(all_hits_max[queryname][target][0])
-            all_scores2.append(all_hits_max[queryname][target][1])
+            all_bias2.append(all_hits_max[queryname][target][2])
             all_targets.append((queryname, target))
         except:
             continue
 
 all_distances_full = np.array(all_distances_full)
-all_distances2 = np.array(all_distances2)
-all_distances = np.array(all_distances)
+#all_distances2 = np.array(all_distances2)
+#all_distances = np.array(all_distances)
 all_e_values2 = np.array(all_e_values2)
-all_e_values = np.array(all_e_values)
-
+#all_e_values = np.array(all_e_values)
+all_bias2 = np.array(all_bias2)
 pdb.set_trace()
 
-np.save('all_distances_full', all_distances_full, allow_pickle = True)
+plot_roc_curve( distance_sum_hits_dict, all_hits_max,True,0,len(all_targets),"ResNet1d/eval/roc.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],meanvalue = np.mean(all_distances_full)+np.std(all_distances_full)*2, maxvalue = np.max(all_distances_full))
+plt.clf()
 
-np.save('all_distances2', all_distances2, allow_pickle = True)
-np.save('all_distances', all_distances, allow_pickle = True)
+
+np.save('all_distances_full', all_distances_full, allow_pickle = True)
+np.save('all_biases', all_bias2, allow_pickle = True)
+
+#np.save('all_distances2', all_distances2, allow_pickle = True)
+#np.save('all_distances', all_distances, allow_pickle = True)
 np.save('all_e_values2', all_e_values2, allow_pickle = True)
-np.save('all_e_values', all_e_values, allow_pickle = True)
+#np.save('all_e_values', all_e_values, allow_pickle = True)
 
 
 
@@ -298,7 +343,8 @@ numhits = np.sum([len(distance_sum_hits_dict[q]) for q in list(distance_sum_hits
 print(
     f"Got {numhits} total hits from our model"
 )
-
+pdb.set_trace()
+raise
 over_7000 = np.where(np.array(all_distances_full) > 7000)[0]
 
 e_val_7000 = np.array(all_e_values2)[over_7000]
@@ -319,121 +365,4 @@ e_val_7000 = np.array(all_e_values2)[over_7000]
 # plot_mean_e_values(all_distances, all_e_values, max = 10)
 #plot_both_roc(distance_hits_dict, distance_sum_hits_dict,all_hits_max,True,0,numhits,"ResNet1d/eval/summed_distances.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],maxvalue = np.max(all_distances2))
 pdb.set_trace()
-#num_queries = len(ourhitsdict)
-#num_targets = len(targets)
-# denom = num_queries * num_targets
-# plot_roc_curve(
-#     distance_hits_dict,
-#     all_hits_max,
-#     True,
-#     0,
-#     numhits,
-#     "ResNet1d/eval/individual_distances.png",
-#     np.greater_equal,
-#     evalue_thresholds=[1e-10, 1e-1, 1, 10],
-# )
-# plt.clf()
-#plot_roc_curve(distance_sum_hits_dict,all_hits_max,True,0,numhits,"ResNet1d/eval/summed_distances.png",np.greater_equal,evalue_thresholds=[1e-10, 1e-1, 1, 10],maxvalue = np.max(all_distances2))
-# ourhitsdict contains everything that phmmer max contains
-plt.clf()
 
-plt.scatter(all_scores, all_distances)
-plt.xlabel("Hmmer Scores")
-plt.ylabel("CNN Distances")
-plt.savefig("individual-distances-scores.png")
-plt.clf()
-plt.scatter(all_scores2, all_distances2)
-plt.xlabel("Hmmer Scores")
-plt.ylabel("CNN Distances")
-plt.savefig("summed-distances-scores.png")
-pdb.set_trace()
-
-
-hmmer_pairs = []
-hmmer_max_pairs = []
-our_pairs = []
-
-for query, targetdict in all_hits.items():
-    for target in targetdict.keys():
-        hmmer_pairs.append(sorted([(query, target)]))
-
-for query, targetdict in all_hits_max.items():
-    for target in targetdict.keys():
-        hmmer_max_pairs.append(sorted([(query, target)]))
-
-for query, targetdict in ourhitsdict.items():
-    for target in targetdict.keys():
-        our_pairs.append(sorted([(query, target)]))
-
-intersection = outersection = extras = []
-for pair in our_pairs:
-    if pair in hmmer_pairs:
-        intersection.append(pair)
-    elif pair in hmmer_max_pairs:
-        outersection.append(pair)
-    else:
-        extras.append(pair)
-
-
-pdb.set_trace()
-
-
-num_overlap = sum([len(targets) for targets in intersection.values()])
-
-print(
-    f"{(len(prefilter_overlap)/(num_our_prefilter))*100}% of our hits are also in hmmers prefiltered results"
-)
-print()
-print(
-    f"{(len(outersection)/(num_our_prefilter))*100}% of our hits are NOT in hmmers prefiltered results"
-)
-print()
-print(f"{(len(extras)/(num_our_prefilter))*100}% of our hits are not in any hmmer results")
-print()
-print(f"There are {len(missing)} HMMER hits that are not in our results.")
-
-distances_in_intersection = {}
-distances_in_outersection = {}
-hmmer_data_intersection = {}
-hmmer_data_outersection = {}
-
-distances_in_extras = {}
-
-# the ones that we filtered out, that they also filtered out
-for query in prefilter_overlap:
-    for target, distance in ourhitsdict[query].items():
-        distances_in_intersection[target] = distance
-    for target, data in all_hits[query].items():
-        hmmer_data_intersection[target] = data
-
-# the ones that we filtered out, that they did not filter
-for query in outersection:
-    for target, distance in ourhitsdict[query].items():
-        distances_in_outersection[target] = distance
-    for target, data in all_hits_max[query].items():
-        hmmer_data_outersection[target] = data
-
-for query in extras:
-    for target, distance in ourhitsdict[query].items():
-        distances_in_extras[target] = distance
-
-import matplotlib.pyplot as plt
-
-plt.hist(
-    distances_in_intersection.values(),
-    density=True,
-    histtype="step",
-    alpha=0.75,
-    label="intersection",
-)
-plt.hist(
-    distances_in_outersection.values(),
-    density=True,
-    histtype="step",
-    alpha=0.75,
-    label="outersection",
-)
-plt.hist(distances_in_extras.values(), density=True, histtype="step", alpha=0.75, label="other")
-
-plt.legend()
-plt.savefig("distances.png")

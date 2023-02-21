@@ -18,12 +18,13 @@ def plot_roc_curve(
     figure_path,
     comp_func,
     evalue_thresholds=[1e-10, 1e-1, 1, 10],
+    meanvalue = 0.5,
     maxvalue = 0.99
 ):
     """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
     if normalize_embeddings:
         #TODO: here if we have distances > 1 this won't work
-        distances = np.linspace(distance_threshold, maxvalue+10, num=10)
+        distances = np.append(np.linspace(distance_threshold, meanvalue, num=8), np.linspace(meanvalue, maxvalue+10, num=3)[1:])
     else:
         distances = np.linspace(0.001, distance_threshold, num=10)
 
@@ -75,6 +76,7 @@ def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func, e
             # we've set an e-value threshold, meaning
             # that this query was never picked up
             print(f"Query {query} not in hmmer_hits.")
+            continue
 
         matches = hmmer_hits[query]
         filtered = {}
