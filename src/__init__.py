@@ -16,6 +16,7 @@ import torch
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import TensorBoardLogger
 from sacred.observers import FileStorageObserver
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from src.callbacks import CallbackSet
 from src.eval_config import evaluation_ex

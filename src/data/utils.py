@@ -10,7 +10,7 @@ from tqdm import tqdm
 from typing import List
 import torch
 import torch.nn as nn
-
+import pickle
 from src.data.hmmerhits import HmmerHits, FastaFile
 
 from src.utils import pluginloader, encode_string_sequence
@@ -176,6 +176,60 @@ def get_data_from_subset(
 
     return querysequences, targetsequences, target_hits
 
+
+def get_evaluation_data(
+    dirpath: str = "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=4, val_targets = None
+) -> Tuple[dict, dict, dict]:
+    """Taking advantage of our current data structure of nested directories
+    holding fasta files to quickly get all hmmer hits and sequence dicts for all
+    queries in the input query id file and all target sequences in all of num_files"""
+
+    query_id = str(query_id)
+
+    queryfile = f"{HOME}/prefilter/uniref/split_subset/queries/queries_{query_id}.fa"
+    queryfasta = FastaFile(queryfile)
+    hmmerhits = HmmerHits(dir_path=dirpath)
+
+    # all_hits = {}
+    querysequences = queryfasta.data
+    targetsequences = {}
+    all_target_hits = {}
+
+    if os.path.exists('evaltargetsequences.pkl') and os.path.exists('evaltargethmmerhits.pkl'):
+        with open('evaltargetsequences.pkl','rb') as t:
+            targetsequences = pickle.load(t)
+        with open('evaltargethmmerhits.pkl','rb') as t:
+            all_target_hits = pickle.load(t)
+        return querysequences, targetsequences, all_target_hits
+  
+    for t in tqdm(range(45)):
+
+        targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
+        targetdata = targetfasta.data
+        eval_targets = {}
+
+        for target in targetdata:
+            if target in val_targets:
+                eval_targets.update({target: targetdata[target]})
+        
+        targetsequences.update(eval_targets)
+        target_hits = hmmerhits.get_hits(
+            dirpath, t, query_num=query_id, filtered_targets = list(eval_targets.keys())
+        )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
+
+        all_target_hits.update(target_hits)
+    try:
+        print("Saving target to a file...")
+        evaltargetfile = open('evaltargetsequences.pkl','wb')
+        pickle.dump(targetsequences, evaltargetfile)
+        evaltargetfile.close()
+        print("Saving hits to a file...")
+        evalhitsfile = open('evaltargethmmerhits.pkl','wb')
+        pickle.dump(all_target_hits, evalhitsfile)
+        evalhitsfile.close()
+    except Exception as e:
+        print(e)    
+    return querysequences, targetsequences, all_target_hits
 
 # LOCALLY -- make some distributions of e values?
 

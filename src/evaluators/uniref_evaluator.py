@@ -13,7 +13,8 @@ import os
 
 from src.utils import encode_string_sequence
 from src.evaluators import Evaluator
-from src.evaluators.metrics import plot_roc_curve
+#from src.evaluators.metrics import plot_roc_curve
+from src.data.benchmarking import generate_roc
 from src.data.utils import actmap_pipeline
 from src.utils.gen_utils import generate_string_sequence
 
@@ -161,7 +162,7 @@ class UniRefEvaluator(Evaluator):
 
         new_len = sum([len(x) for x in self.max_hmmer_hits.values()])
         logger.info(
-            f"Removed {init_len - new_len} entries from the target hit dictionary"
+            f"Removed {init_len - new_len} entries from the hmmer hit dictionary"
             f" since they didn't pass length thresholding."
         )
 
@@ -217,20 +218,22 @@ class UniRefEvaluator(Evaluator):
 
         self._setup_targets_for_faiss(target_embeddings, target_names)
 
-        model_hits, avg_it, total_t = self.filter(query_embeddings, query_names)
+        model_hits, _, _ = self.filter(query_embeddings, query_names)
 
-        self.denom = len(query_names) * len(target_names)
-        self.num_queries = len(query_names)
-        plot_roc_curve(
-            model_hits,
-            self.max_hmmer_hits,
-            self.normalize_embeddings,
-            self.distance_threshold,
-            self.denom,
-            self.figure_path,
-            self.comp_func,
-            evalue_thresholds=[1e-10],
-        )
+        #self.denom = len(query_names) * len(target_names)
+        #self.num_queries = len(query_names)
+
+        generate_roc(filename = 'data.txt', modelhitsfile = self.output_path, hmmerhits = self.max_hmmer_hits, figure_path = self.figure_path)
+        # plot_roc_curve(
+        #     model_hits,
+        #     self.max_hmmer_hits,
+        #     self.normalize_embeddings,
+        #     self.distance_threshold,
+        #     self.denom,
+        #     self.figure_path,
+        #     self.comp_func,
+        #     evalue_thresholds=[1e-10],
+        # )
         return model_hits
 
     def compute_embedding(self, sequence, model_class):
@@ -274,16 +277,13 @@ class UniRefEvaluator(Evaluator):
         # for query in queries
         t_tot = 0
         t_begin = time.time()
-        output_path = os.path.join(os.path.dirname(self.figure_path), "distances_summed")
-        output_path2 = os.path.join(os.path.dirname(self.figure_path), "distances")
+        self.output_path = os.path.join(os.path.dirname(self.figure_path), "similarities")
 
-        if not os.path.exists(output_path):
-            os.mkdir(output_path)
-        if not os.path.exists(output_path2):
-            os.mkdir(output_path2)
-
+        if not os.path.exists(self.output_path):
+            os.mkdir(self.output_path)
+        
         for i in tqdm.tqdm(range(len(queries))):
-            f = open(f'{output_path}/{query_names[i]}.txt', 'w')
+            f = open(f'{self.output_path}/{query_names[i]}.txt', 'w')
             f.write("Name     Distance" + "\n")
 
             # loop_begin = time.time()

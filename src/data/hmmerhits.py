@@ -87,7 +87,7 @@ class HmmerHits:
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str) -> Tuple[dict, np.array]:
+    def parse_hits_file(self, hits_file: str, filtered_targets = None) -> Tuple[dict, np.array]:
         """parses a HMMER hits file
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
@@ -95,7 +95,6 @@ class HmmerHits:
         hmmer_hits_file = open(hits_file, "r", encoding="utf8")
         hits = hmmer_hits_file.readlines()
         data_dict = {}
-        data_array = []
         for row in hits:
             if row[0] == "#":
                 continue
@@ -105,6 +104,8 @@ class HmmerHits:
                 continue
             target_name = row_info[0]
             assert "UniRef90" in target_name
+            if filtered_targets is not None and target_name not in filtered_targets:
+                continue
 
             query_name = row_info[2]
             assert "UniRef90" in query_name
@@ -126,18 +127,16 @@ class HmmerHits:
                     bias_best,
                 ]
             ).astype("float64")
-            data_array.append(data)
 
             if query_name in data_dict.keys():
-
                 data_dict[query_name][target_name] = data
             else:
                 data_dict[query_name] = {}
                 data_dict[query_name][target_name] = data
 
-        return data_dict, np.array(data_array)
+        return data_dict
 
-    def get_hits(self, dir: str, target_num, query_num=None) -> Tuple[dict, np.array]:
+    def get_hits(self, dir: str, target_num, query_num=None, filtered_targets = None) -> Tuple[dict, np.array]:
         """
         args:
             target_dir: the directory where the targets are stored
@@ -147,13 +146,8 @@ class HmmerHits:
             target_query_hits: of format {query:{target:data}}
             hits_array: np array of just the data
         """
-        hits_files = os.listdir(f"{dir}/{query_num}/{target_num}")
-        print(hits_files)
+        hits_file = os.listdir(f"{dir}/{query_num}/{target_num}")[0]
 
-        all_hits = {}
+        hits_dict = self.parse_hits_file(f"{dir}/{query_num}/{target_num}/{hits_file}", filtered_targets = filtered_targets)
 
-        for i, hits_file in enumerate(hits_files):
-            hits_dict, _ = self.parse_hits_file(f"{dir}/{query_num}/{target_num}/{hits_file}")
-            all_hits.update(hits_dict)
-
-        return all_hits
+        return hits_dict

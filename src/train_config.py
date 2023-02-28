@@ -27,18 +27,18 @@ def contrastive_alignment_generator():
 
     @to_dict
     class model_args:
-        learning_rate = 1e-3
+        learning_rate = 1e-5
         log_interval = 100
         in_channels = 20
 
     @to_dict
     class train_dataset_args:
-        ali_path = "/xdisk/twheeler/daphnedemekas/stk_alignments"
-        seq_len = 256
+        ali_path = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
+        seq_len = 128 
 
     @to_dict
     class dataloader_args:
-        batch_size = 32
+        batch_size = 64
         num_workers = 6
         drop_last = True
 
@@ -50,12 +50,12 @@ def contrastive_alignment_generator():
 
     @to_dict
     class val_dataset_args:
-        ali_path = "/xdisk/twheeler/daphnedemekas/stk_alignments"
+        ali_path = "/xdisk/twheeler/daphnedemekas/valpaths2.txt"
         seq_len = 256
         training = False
 
 
-@train_ex.config
+#@train_ex.config
 def vae_config():
 
     description = "Turning up the number of downsampling steps"

@@ -13,7 +13,7 @@ import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
-
+import pdb
 logger = logging.getLogger(__name__)
 
 DECOY_FLAG = -1
@@ -75,120 +75,87 @@ class SequenceIterator(DataModule):
 
 class AlignmentGenerator(DataModule):
     def collate_fn(self):
-        return None
+        def pad(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
 
-    def __init__(self, train_ali_path, val_ali_path, seq_len, training=True):
+            seq1 = [b[0] for b in batch]
+            seq2 = [b[1] for b in batch]
+            data = seq1 + seq2
+            return torch.stack(data)
+
+        return pad
+
+    def __init__(self, ali_path, seq_len, training=True):
         # from Bio import AlignIO
 
-        # self.alignment_files = glob(os.path.join(ali_path, "*.stk"), recursive=True)
-        self.training = training
+        f = open(ali_path, 'r')
+        self.alignment_file_paths = f.readlines()
+        f.close()
+        print(f"Found {len(self.alignment_file_paths)} alignment files")
 
-        if self.training:
-            self.ali_path = train_ali_path
-        else:
-            self.ali_path = val_ali_path
+        self.training = training
         # also put a classification loss on there.
         # so i can see accuracy numbers
         self.mx = 0
         self.seq_len = seq_len
 
-        #self.ali_query_dirs = os.listdir(self.ali_path)
-        #self.ali_query_lengths = [os.listdir(d) for d in self.ali_query_dirs]
-        #num_alignments = np.sum(self.ali_query_lengths)
-
-        #logger.info(f"Found {num_alignments} alignments")
 
     def __len__(self):
-        return len(self.alignment_files)
-
-    # def get_path_from_index(self, idx):
-    #     """Given the index of all alignments, returns
-    #     the path of where to find this alignment file"""
-    #     if idx < self.ali_query_lengths[0]:
-    #         return f"{self.ali_query_dirs[0]}/{idx}.txt"
-    #     else:
-    #         for num in range(1, len(self.ali_query_lengths)):
-    #             if idx > self.ali_query_lengths[num - 1] and idx < self.ali_query_lengths[num]:
-    #                 return f"{self.ali_query_dirs[num]}/{idx-self.ali_query_lengths[num-1]}.txt"
+        return len(self.alignment_file_paths)
 
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
         sequences from an alignment file"""
-        with open(alignment_file, "r") as f:
-            lines = f.read()
-            seq1 = lines[0].strip("\n")
-            seq2 = lines[1].strip("\n")
+        f = open(alignment_file, "r")
+        lines = f.readlines()
+        assert len(lines) == 3
+        seq1 = lines[1].strip("\n")
+        seq2 = lines[2].strip("\n")
+        f.close()
         return seq1.upper(), seq2.upper()
 
     def __getitem__(self, idx):
 
-        #alignment_path = self.get_path_from_index(idx)
+        alignment_path = self.alignment_file_paths[idx].strip('\n')
 
-        seq1, seq1 = self.parse_alignment(f"self.ali_path_{idx}.txt")
+        seq1, seq2 = self.parse_alignment(alignment_path)
+        assert len(seq1) == len(seq2)
 
         seq1 = sanitize_sequence(seq1)
         seq2 = sanitize_sequence(seq2)
-        seq_a_aligned_labels = list(range(self.mx, self.mx + len(seq1)))
-        seq_b_aligned_labels = list(range(self.mx, self.mx + len(seq2)))
 
-        # just remove elements from the labels above
-        # that are gap characters in either sequence.
-        # then labels that are the same will be aligned characters
-        seq_a_to_keep = []
-        for j, amino in enumerate(seq1):
-            if amino not in ("-", "."):
-                seq_a_to_keep.append(j)
+        seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
+        seq2_dots_and_dashes = [i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"]
 
-        seq_a_aligned_labels = [seq_a_aligned_labels[s] for s in seq_a_to_keep]
-        seq_b_to_keep = []
-        for j, amino in enumerate(seq2):
-            if amino not in ("-", "."):
-                seq_b_to_keep.append(j)
+        clean_seq1 = ""
+        clean_seq2 = ""
+        for i in range(len(seq1)):
+            if i not in seq1_dots_and_dashes and i not in seq2_dots_and_dashes:
+                clean_seq1 += seq1[i]
+                clean_seq2 += seq2[i]
 
-        seq_b_aligned_labels = [seq_b_aligned_labels[s] for s in seq_b_to_keep]
-        seq1 = seq1.replace(".", "").replace("-", "")
-        seq2 = seq2.replace(".", "").replace("-", "")
+        seq1 = clean_seq1
+        seq2 = clean_seq2
 
-        seq1_chop = len(seq1) - self.seq_len
-        seq2_chop = len(seq2) - self.seq_len
 
-        if seq1_chop > 0:
-            seq1 = seq1[seq1_chop // 2 : -seq1_chop // 2]
-            seq_a_aligned_labels = seq_a_aligned_labels[seq1_chop // 2 : -seq1_chop // 2]
-        elif seq1_chop == 0:
-            pass
-        else:
-            # add characters to the front
-            addition = generate_string_sequence(-seq1_chop)
-            # now add bullshit to the labels at the beginning
-            mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
-            seq1 = addition + seq1
-            for _ in range(len(addition)):
-                seq_a_aligned_labels.insert(0, mx)
-                mx += 1
-
-        if seq2_chop > 0:
-            seq2 = seq2[seq2_chop // 2 : -seq2_chop // 2]
-            seq_b_aligned_labels = seq_b_aligned_labels[seq2_chop // 2 : -seq2_chop // 2]
-        elif seq2_chop == 0:
-            pass
-        else:
-            # add characters to the front
-            addition = generate_string_sequence(-seq2_chop)
-            # now add bullshit to the labels at the beginning
-            mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
+        if len(seq1) > self.seq_len:
+            seq1 = seq1[-self.seq_len:]
+            seq2 = seq2[-self.seq_len:]
+        elif len(seq1) < self.seq_len:
+            seq_chop = len(seq1) - self.seq_len
+            addition = generate_string_sequence(-seq_chop)
             seq2 = addition + seq2
-            for _ in range(len(addition)):
-                seq_b_aligned_labels.insert(0, mx)
-                mx += 1
-        # brutally chop off the ends?
-        self.mx = max(max(seq_a_aligned_labels), max(seq_b_aligned_labels)) + 1
-        return (
-            utils.encode_string_sequence(seq1),
-            torch.as_tensor(seq_a_aligned_labels),
-            utils.encode_string_sequence(seq2),
-            torch.as_tensor(seq_b_aligned_labels),
-        )
+            seq1 = addition + seq1
+
+        return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
+
 
 
 class SwissProtLoader(DataModule):

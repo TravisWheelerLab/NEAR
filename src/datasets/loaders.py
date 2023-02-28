@@ -11,7 +11,7 @@ from torchaudio.transforms import MelSpectrogram
 
 import src.utils as utils
 from src.datasets import DataModule
-from src.datasets.dataset import sanitize_sequence
+from src.datasets.datasets import sanitize_sequence
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
 

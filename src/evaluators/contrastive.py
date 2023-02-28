@@ -88,14 +88,14 @@ class ContrastiveEvaluator(UniRefEvaluator):
         indices = []
         
         for idx in range(len(scores_array)):
-            scores = scores_array[idx]
+            scores_idx = scores_array[idx]
             names = self.unrolled_names[indices_array[idx]] #the names of the targets for each 1000 hits
-            sorted_idx = np.argsort(scores)[::-1]
+            sorted_idx = np.argsort(scores_idx)[::-1]
 
             _, unique_indices = np.unique(names[sorted_idx], return_index=True) #the unique names of the targets for each 1000 hits (<= 1000)
             try:
-                indices += indices_array[idx][sorted_idx][unique_indices]
-                scores += scores[sorted_idx][unique_indices]
+                indices += list(indices_array[idx][sorted_idx][unique_indices])
+                scores += list(scores_idx[sorted_idx][unique_indices])
             except ValueError as e:
                 print(e)
                 pdb.set_trace()
@@ -103,10 +103,9 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
 
     def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
-        """Searches through the target DB and gathers a
+        """Searches through the target DB and gathers a 
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
-        filtered_list = []
         filtered_scores = {}
 
         scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
@@ -133,5 +132,4 @@ class ContrastiveEvaluator(UniRefEvaluator):
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
-
         return filtered_scores#, filtered_list
