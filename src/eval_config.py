@@ -1,11 +1,11 @@
+import itertools
 import logging
 import os
 
 import yaml
 from sacred import Experiment
-import itertools
-from src.data.utils import get_evaluation_data
 
+from src.data.utils import get_evaluation_data
 # from src.datasets.datasets import sanitize_sequence
 from src.utils.helpers import to_dict
 
@@ -22,22 +22,14 @@ ROOT = "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation"
 
 if not os.path.exists(ROOT):
     os.mkdir(ROOT)
+
+
 @evaluation_ex.config
 def contrastive():
     device = "cuda"
     model_name = "ResNet1d"
     evaluator_name = "ContrastiveEvaluator"
-    #task_id = 0
     print(model_name)
-    # print(f"Task ID: {task_id}")
-    # task_id = int(task_id)
-
-    # ts = list(range(45))
-    # qs = list(range(5))
-    # target_queries = list(itertools.product(ts, qs))
-
-    #target_filenum = target_queries[task_id - 1][0]
-    #query_filenum = target_queries[task_id - 1][1]
 
     num_threads = 12
     log_verbosity = logging.INFO
@@ -46,22 +38,14 @@ def contrastive():
 
     with open(f"{root}/hparams.yaml", "r") as src:
         hparams = yaml.safe_load(src)
-    val_target_file = open('/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt','r')
+    val_target_file = open("/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt", "r")
     val_targets = val_target_file.read().splitlines()
 
-    # querysequences, targetsequences, all_hits = get_data_from_subset(
-    #     "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
-    #     query_id=query_filenum,
-    #     file_num=target_filenum,
-    # )
-    # if not os.path.exists(f"{ROOT}/{query_filenum}"):
-    #     os.mkdir(f"{ROOT}/{query_filenum}")
-    #     os.mkdir(f"{ROOT}/{query_filenum}/{target_filenum}")
     querysequences, targetsequences, all_hits = get_evaluation_data(
-        "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
-        query_id=4,val_targets = val_targets
+        "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=4, val_targets=val_targets
     )
-    print('Loaded all data')
+    del val_targets
+    print("Loaded all data")
     evaluator_args = {
         "query_seqs": querysequences,
         "target_seqs": targetsequences,

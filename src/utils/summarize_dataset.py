@@ -7,12 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from src.utils import (
-    fasta_from_file,
-    handle_figure_path,
-    load_sequences_and_labels,
-    parse_labels,
-)
+from src.utils import (fasta_from_file, handle_figure_path,
+                       load_sequences_and_labels, parse_labels)
 
 
 def histogram_number_of_seqs_per_family(fasta_files, savefig=None):

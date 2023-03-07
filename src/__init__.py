@@ -14,14 +14,15 @@ from types import SimpleNamespace
 
 import torch
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from sacred.observers import FileStorageObserver
-from pytorch_lightning.callbacks import ModelCheckpoint
 
 from src.callbacks import CallbackSet
 from src.eval_config import evaluation_ex
 from src.train_config import train_ex
-from src.utils.util import load_dataset_class, load_evaluator_class, load_model_class
+from src.utils.util import (load_dataset_class, load_evaluator_class,
+                            load_model_class)
 
 
 @train_ex.config
@@ -96,7 +97,12 @@ def train(_config):
         tag="description", text_string=params.description, walltime=time.time()
     )
 
-    trainer = Trainer(**params.trainer_args, callbacks=CallbackSet.callbacks(), logger=logger)
+    trainer = Trainer(
+        **params.trainer_args,
+        callbacks=CallbackSet.callbacks(),
+        logger=logger,
+        val_check_interval=0.2,
+    )
 
     trainer.fit(
         model,

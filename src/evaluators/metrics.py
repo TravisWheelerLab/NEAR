@@ -1,10 +1,11 @@
 """ Metrics: module for evaluation metrics and plotting functions """
 
-import os
-import tqdm
-import numpy as np
-import matplotlib.pyplot as plt
 import json
+import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tqdm
 
 COLORS = ["r", "c", "g", "k"]
 
@@ -18,13 +19,16 @@ def plot_roc_curve(
     figure_path,
     comp_func,
     evalue_thresholds=[1e-10, 1e-1, 1, 10],
-    meanvalue = 0.5,
-    maxvalue = 0.99
+    meanvalue=0.5,
+    maxvalue=0.99,
 ):
     """Roc Curve for comparing model hits to the HMMER hits without the prefilter"""
     if normalize_embeddings:
-        #TODO: here if we have distances > 1 this won't work
-        distances = np.append(np.linspace(distance_threshold, meanvalue, num=8), np.linspace(meanvalue, maxvalue+10, num=3)[1:])
+        # TODO: here if we have distances > 1 this won't work
+        distances = np.append(
+            np.linspace(distance_threshold, meanvalue, num=8),
+            np.linspace(meanvalue, maxvalue + 10, num=3)[1:],
+        )
     else:
         distances = np.linspace(0.001, distance_threshold, num=10)
 

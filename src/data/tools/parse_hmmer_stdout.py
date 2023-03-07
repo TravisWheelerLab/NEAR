@@ -1,18 +1,19 @@
-import os
-from Bio import SearchIO
-import pdb
-import logging
 import itertools
+import logging
+import os
+import pdb
 import sys
+
+from Bio import SearchIO
+
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.INFO)
 
-train_target_file = open('/xdisk/twheeler/daphnedemekas/target_data/trainfastanames.txt','r')
+train_target_file = open("/xdisk/twheeler/daphnedemekas/target_data/trainfastanames.txt", "r")
 train_targets = train_target_file.read().splitlines()
-val_target_file = open('/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt','r')
+val_target_file = open("/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt", "r")
 val_targets = val_target_file.read().splitlines()
-
 
 
 def main(task_id):
@@ -32,14 +33,13 @@ def main(task_id):
 
     parse_stdout(query_filenum, target_filenum)
 
+
 def parse_stdout(query_filenum, target_filenum):
     TRAIN_IDX = 0
-    VAL_IDX = 0 
-    stdout_path = (
-        f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{query_filenum}-{target_filenum}.txt"
-    )
-    dirpath1 = f'/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}'
-    dirpath2 = f'/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}/{target_filenum}'
+    VAL_IDX = 0
+    stdout_path = f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{query_filenum}-{target_filenum}.txt"
+    dirpath1 = f"/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}"
+    dirpath2 = f"/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}/{target_filenum}"
 
     # if len(os.listdir(dirpath2)) != 0:
     #     print("Already have these alignments")
@@ -49,8 +49,8 @@ def parse_stdout(query_filenum, target_filenum):
         os.mkdir(dirpath1)
     if not os.path.exists(dirpath2):
         os.mkdir(dirpath2)
-    dirpath1 = f'/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}'
-    dirpath2 = f'/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}/{target_filenum}'
+    dirpath1 = f"/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}"
+    dirpath2 = f"/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}/{target_filenum}"
 
     if not os.path.exists(dirpath1):
         os.mkdir(dirpath1)
@@ -69,21 +69,27 @@ def parse_stdout(query_filenum, target_filenum):
             target_id = hit.id
 
             if hit.evalue > 10:
-                #print("E value > 10, skipping.")
+                # print("E value > 10, skipping.")
                 continue
 
             # result_dict[query_id][target_id] = []
             for al in range(len(qresult[idx])):
                 if target_id in train_targets and hit.evalue < 1:
                     if query_id != 0:
-                        alignment_file = open(f'/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}/{target_filenum}/{TRAIN_IDX}.txt','w')
+                        alignment_file = open(
+                            f"/xdisk/twheeler/daphnedemekas/train-alignments-2/{query_filenum}/{target_filenum}/{TRAIN_IDX}.txt",
+                            "w",
+                        )
                         TRAIN_IDX += 1
                 elif target_id in val_targets:
                     if query_id == 0:
-                        alignment_file = open(f'/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}/{target_filenum}/{VAL_IDX}.txt','w')
+                        alignment_file = open(
+                            f"/xdisk/twheeler/daphnedemekas/eval-alignments-2/{query_filenum}/{target_filenum}/{VAL_IDX}.txt",
+                            "w",
+                        )
                         VAL_IDX += 1
                 else:
-                    #print(f"{target_id} not in data")
+                    # print(f"{target_id} not in data")
                     continue
 
                 hsp = qresult[idx][al]
@@ -96,6 +102,7 @@ def parse_stdout(query_filenum, target_filenum):
                 alignment_file.close()
 
             # result_dict[query_id][target_id].append([seq1, seq2])
+
 
 import argparse
 

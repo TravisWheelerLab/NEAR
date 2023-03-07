@@ -1,6 +1,7 @@
 # pylint: disable=no-member
 import logging
 import os
+import pdb
 from glob import glob
 from random import shuffle
 
@@ -13,7 +14,7 @@ import src.utils as utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 from src.utils.helpers import AAIndexFFT
-import pdb
+
 logger = logging.getLogger(__name__)
 
 DECOY_FLAG = -1
@@ -88,14 +89,16 @@ class AlignmentGenerator(DataModule):
             seq1 = [b[0] for b in batch]
             seq2 = [b[1] for b in batch]
             data = seq1 + seq2
-            return torch.stack(data)
+            # seq1_raw = [b[2] for b in batch]
+            # seq2_raw = [b[3] for b in batch]
+            return torch.stack(data)  # seq1_raw, seq2_raw
 
         return pad
 
     def __init__(self, ali_path, seq_len, training=True):
         # from Bio import AlignIO
 
-        f = open(ali_path, 'r')
+        f = open(ali_path, "r")
         self.alignment_file_paths = f.readlines()
         f.close()
         print(f"Found {len(self.alignment_file_paths)} alignment files")
@@ -106,7 +109,6 @@ class AlignmentGenerator(DataModule):
         self.mx = 0
         self.seq_len = seq_len
 
-
     def __len__(self):
         return len(self.alignment_file_paths)
 
@@ -115,7 +117,6 @@ class AlignmentGenerator(DataModule):
         sequences from an alignment file"""
         f = open(alignment_file, "r")
         lines = f.readlines()
-        assert len(lines) == 3
         seq1 = lines[1].strip("\n")
         seq2 = lines[2].strip("\n")
         f.close()
@@ -123,13 +124,13 @@ class AlignmentGenerator(DataModule):
 
     def __getitem__(self, idx):
 
-        alignment_path = self.alignment_file_paths[idx].strip('\n')
+        alignment_path = self.alignment_file_paths[idx].strip("\n")
 
-        seq1, seq2 = self.parse_alignment(alignment_path)
-        assert len(seq1) == len(seq2)
+        seq1_raw, seq2_raw = self.parse_alignment(alignment_path)
+        assert len(seq1_raw) == len(seq2_raw)
 
-        seq1 = sanitize_sequence(seq1)
-        seq2 = sanitize_sequence(seq2)
+        seq1 = sanitize_sequence(seq1_raw)
+        seq2 = sanitize_sequence(seq2_raw)
 
         seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
         seq2_dots_and_dashes = [i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"]
@@ -144,18 +145,20 @@ class AlignmentGenerator(DataModule):
         seq1 = clean_seq1
         seq2 = clean_seq2
 
-
         if len(seq1) > self.seq_len:
-            seq1 = seq1[-self.seq_len:]
-            seq2 = seq2[-self.seq_len:]
+            seq1 = seq1[-self.seq_len :]
+            seq2 = seq2[-self.seq_len :]
         elif len(seq1) < self.seq_len:
             seq_chop = len(seq1) - self.seq_len
-            addition = generate_string_sequence(-seq_chop)
-            seq2 = addition + seq2
-            seq1 = addition + seq1
+            addition1 = generate_string_sequence(-seq_chop)
+            addition2 = generate_string_sequence(-seq_chop)
 
-        return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
+            seq2 = addition1 + seq2
+            seq1 = addition2 + seq1
 
+        return utils.encode_string_sequence(seq1), utils.encode_string_sequence(
+            seq2
+        )  # , seq1, seq2
 
 
 class SwissProtLoader(DataModule):

@@ -1,8 +1,8 @@
 """ Stockholm sequence alignments"""
 
-import subprocess
-import os
 import logging
+import os
+import subprocess
 
 logger = logging.getLogger("evaluate")
 logger.setLevel(logging.INFO)

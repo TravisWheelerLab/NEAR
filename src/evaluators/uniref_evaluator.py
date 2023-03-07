@@ -1,21 +1,22 @@
 """Evaluator base class for any evaluator using 
 Uniref database"""
 
-from typing import List, Tuple
-import pdb
+import json
 import logging
+import os
+import pdb
 import time
+from typing import List, Tuple
+
 import numpy as np
 import torch
 import tqdm
-import json
-import os
 
-from src.utils import encode_string_sequence
-from src.evaluators import Evaluator
-#from src.evaluators.metrics import plot_roc_curve
+# from src.evaluators.metrics import plot_roc_curve
 from src.data.benchmarking import generate_roc
 from src.data.utils import actmap_pipeline
+from src.evaluators import Evaluator
+from src.utils import encode_string_sequence
 from src.utils.gen_utils import generate_string_sequence
 
 logger = logging.getLogger("evaluate")
@@ -220,10 +221,15 @@ class UniRefEvaluator(Evaluator):
 
         model_hits, _, _ = self.filter(query_embeddings, query_names)
 
-        #self.denom = len(query_names) * len(target_names)
-        #self.num_queries = len(query_names)
+        # self.denom = len(query_names) * len(target_names)
+        # self.num_queries = len(query_names)
 
-        generate_roc(filename = 'data.txt', modelhitsfile = self.output_path, hmmerhits = self.max_hmmer_hits, figure_path = self.figure_path)
+        generate_roc(
+            filename="data.txt",
+            modelhitsfile=self.output_path,
+            hmmerhits=self.max_hmmer_hits,
+            figure_path=self.figure_path,
+        )
         # plot_roc_curve(
         #     model_hits,
         #     self.max_hmmer_hits,
@@ -274,19 +280,17 @@ class UniRefEvaluator(Evaluator):
         qdict = dict()
 
         logger.info("Beginning search.")
-        # for query in queries
-        t_tot = 0
+
         t_begin = time.time()
         self.output_path = os.path.join(os.path.dirname(self.figure_path), "similarities")
 
         if not os.path.exists(self.output_path):
             os.mkdir(self.output_path)
-        
+
         for i in tqdm.tqdm(range(len(queries))):
-            f = open(f'{self.output_path}/{query_names[i]}.txt', 'w')
+            f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
 
-            # loop_begin = time.time()
             logger.debug(f"{i / (len(queries)):.3f}")
 
             if self.normalize_embeddings:
@@ -298,34 +302,9 @@ class UniRefEvaluator(Evaluator):
             for name, distance in filtered_scores.items():
                 f.write(f"{name}     {distance}" + "\n")
             f.close()
-            
-            
-            # names = np.array([f[0] for f in filtered_hits])
-            # distances = np.array([f[1] for f in filtered_hits])
-            # sorted_idx = np.argsort(distances)[::-1] #biggest FIRST
 
-            # #here we are sorting the distances
-            # #and then we are taking the distance of the targets with the highest distances
-            # #as representatives, becuase np unique gives u the first instance
-
-            # names = names[sorted_idx]
-            # distances = distances[sorted_idx]
-            # logger.debug(f"len names: {len(names)}")
-            # names, name_idx = np.unique(names, return_index=True)
-
-            # filtered_distance_hits = {}
-            # for name, distance in zip(names, distances[name_idx]):
-            #    filtered_distance_hits[name] = distance
-            #    f2.write(f'{name}     {distance}'+ "\n")
-
-            # logger.debug(f"len unique names: {len(filtered_distance_hits)}")
-            # #qdict[query_names[i]] = filtered_hits
             qdict[query_names[i]] = filtered_scores
-            # time_taken = time.time() - loop_begin
-            # t_tot += time_taken
 
-            # logger.debug(f"time/it: {time_taken}, avg time/it: {t_tot / (i + 1)}")
-            # f2.close()
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")

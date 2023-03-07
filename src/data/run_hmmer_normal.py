@@ -1,10 +1,12 @@
 """ Stockholm sequence alignments"""
 
-import subprocess
-import os
 import logging
-from src.data.utils import get_data_from_subset
+import os
+import subprocess
+
 from tqdm import tqdm
+
+from src.data.utils import get_data_from_subset
 
 logger = logging.getLogger(__name__)
 import itertools

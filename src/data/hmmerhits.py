@@ -4,6 +4,7 @@
 import glob
 import os
 from typing import List, Tuple
+
 import numpy as np
 
 
@@ -87,7 +88,7 @@ class HmmerHits:
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str, filtered_targets = None) -> Tuple[dict, np.array]:
+    def parse_hits_file(self, hits_file: str, filtered_targets=None) -> Tuple[dict, np.array]:
         """parses a HMMER hits file
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
@@ -136,7 +137,9 @@ class HmmerHits:
 
         return data_dict
 
-    def get_hits(self, dir: str, target_num, query_num=None, filtered_targets = None) -> Tuple[dict, np.array]:
+    def get_hits(
+        self, dir: str, target_num, query_num=None, filtered_targets=None
+    ) -> Tuple[dict, np.array]:
         """
         args:
             target_dir: the directory where the targets are stored
@@ -148,6 +151,8 @@ class HmmerHits:
         """
         hits_file = os.listdir(f"{dir}/{query_num}/{target_num}")[0]
 
-        hits_dict = self.parse_hits_file(f"{dir}/{query_num}/{target_num}/{hits_file}", filtered_targets = filtered_targets)
+        hits_dict = self.parse_hits_file(
+            f"{dir}/{query_num}/{target_num}/{hits_file}", filtered_targets=filtered_targets
+        )
 
         return hits_dict

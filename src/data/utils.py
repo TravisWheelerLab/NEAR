@@ -1,24 +1,21 @@
 import os
-import numpy as np
 import pdb
+import pickle
 import random
-import matplotlib.pyplot as plt
-from typing import Tuple
+from typing import List, Tuple
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pytorch_lightning as pl
-from tqdm import tqdm
-from typing import List
 import torch
 import torch.nn as nn
-import pickle
-from src.data.hmmerhits import HmmerHits, FastaFile
+from tqdm import tqdm
 
-from src.utils import pluginloader, encode_string_sequence
 from src import models
+from src.data.hmmerhits import FastaFile, HmmerHits
+from src.utils import encode_string_sequence, pluginloader
 
 HOME = os.environ["HOME"]
-
-
 
 
 def strobemer_representation(embeddings: List[torch.Tensor]) -> List[torch.Tensor]:
@@ -178,7 +175,7 @@ def get_data_from_subset(
 
 
 def get_evaluation_data(
-    dirpath: str = "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=4, val_targets = None
+    dirpath: str = "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=4, val_targets=None
 ) -> Tuple[dict, dict, dict]:
     """Taking advantage of our current data structure of nested directories
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
@@ -190,18 +187,34 @@ def get_evaluation_data(
     queryfasta = FastaFile(queryfile)
     hmmerhits = HmmerHits(dir_path=dirpath)
 
+    existing_queries = [
+        f.strip(".txt")
+        for f in os.listdir(
+            "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
+        )
+    ]
+
     # all_hits = {}
+    print("Cleaning out queries that we already have in results...")
     querysequences = queryfasta.data
     targetsequences = {}
     all_target_hits = {}
+    filtered_query_sequences = {}
+    for q, v in querysequences.items():
+        if q not in existing_queries:
+            filtered_query_sequences.update({q: v})
 
-    if os.path.exists('evaltargetsequences.pkl') and os.path.exists('evaltargethmmerhits.pkl'):
-        with open('evaltargetsequences.pkl','rb') as t:
+    querysequences = filtered_query_sequences
+    if os.path.exists(f"{HOME}/prefilter/evaltargetsequences.pkl") and os.path.exists(
+        f"{HOME}/prefilter/evaltargethmmerhits.pkl"
+    ):
+        print("Found existing evaluation data")
+        with open("evaltargetsequences.pkl", "rb") as t:
             targetsequences = pickle.load(t)
-        with open('evaltargethmmerhits.pkl','rb') as t:
+        with open("evaltargethmmerhits.pkl", "rb") as t:
             all_target_hits = pickle.load(t)
         return querysequences, targetsequences, all_target_hits
-  
+
     for t in tqdm(range(45)):
 
         targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
@@ -211,25 +224,26 @@ def get_evaluation_data(
         for target in targetdata:
             if target in val_targets:
                 eval_targets.update({target: targetdata[target]})
-        
+
         targetsequences.update(eval_targets)
         target_hits = hmmerhits.get_hits(
-            dirpath, t, query_num=query_id, filtered_targets = list(eval_targets.keys())
+            dirpath, t, query_num=query_id, filtered_targets=list(eval_targets.keys())
         )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
 
         all_target_hits.update(target_hits)
     try:
         print("Saving target to a file...")
-        evaltargetfile = open('evaltargetsequences.pkl','wb')
+        evaltargetfile = open("evaltargetsequences.pkl", "wb")
         pickle.dump(targetsequences, evaltargetfile)
         evaltargetfile.close()
         print("Saving hits to a file...")
-        evalhitsfile = open('evaltargethmmerhits.pkl','wb')
+        evalhitsfile = open("evaltargethmmerhits.pkl", "wb")
         pickle.dump(all_target_hits, evalhitsfile)
         evalhitsfile.close()
     except Exception as e:
-        print(e)    
+        print(e)
     return querysequences, targetsequences, all_target_hits
+
 
 # LOCALLY -- make some distributions of e values?
 
@@ -237,7 +251,7 @@ def get_evaluation_data(
 def get_embeddings(targetsequences: dict, querysequences: dict):
     """Method to get embeddings from sequences
     without having to declare a class"""
-    from src.utils import pluginloader, encode_string_sequence
+    from src.utils import encode_string_sequence, pluginloader
 
     model_dict = {
         m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)

@@ -1,11 +1,13 @@
+import pdb
+
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
 from src.utils.layers import ResConv
-from src.utils.losses import SupConLoss
-import pdb
+from src.utils.losses import NpairLoss, SupConLoss
+
 
 class ResNet1d(pl.LightningModule):
     def __init__(
@@ -17,7 +19,7 @@ class ResNet1d(pl.LightningModule):
         in_channels: int = 128,
         n_res_blocks: int = 8,
         training: bool = True,
-        indels = False
+        indels=False,
     ):
 
         super(ResNet1d, self).__init__()
@@ -35,7 +37,7 @@ class ResNet1d(pl.LightningModule):
 
         self.log_interval = log_interval
 
-        self.loss_func = SupConLoss()
+        self.loss_func = NpairLoss()
 
         self._setup_layers()
 
@@ -98,9 +100,6 @@ class ResNet1d(pl.LightningModule):
         for batch_idx in range(feature1_indices.shape[0]):
             feature1_indices[batch_idx] += batch_idx * seq_len
             feature2_indices[batch_idx] += batch_idx * seq_len
-        #feature1_indices = feature1_indices.contiguous().view(-1,1)
-        #feature2_indices = feature2_indices.contiguous().view(-1,1)
-        #mask = torch.eq(feature1_indices, feature2_indices.T)
         l1 = torch.cat(torch.unbind(feature1_indices, dim=0))
         l2 = torch.cat(torch.unbind(feature2_indices, dim=0))
         labelmat = torch.eq(l1.unsqueeze(1), l2.unsqueeze(0)).float()
@@ -117,16 +116,27 @@ class ResNet1d(pl.LightningModule):
                 labels2,
             ) = batch  # 32 pairs of sequences, each amino has a label
 
-            features = torch.cat([seq1, seq2], dim = 0)
-        
-            mask = self.construct_mask(labels1, labels2)
+            features = torch.cat([seq1, seq2], dim=0)
+
+            # mask = self.construct_mask(labels1, labels2)
+            seq_len = labels1.shape[1]
+
+            # have to make the labels unique for every batchs
+            for batch_idx in range(labels1.shape[0]):
+                labels1[batch_idx] += batch_idx * seq_len
+                labels2[batch_idx] += batch_idx * seq_len
+
+            l1 = torch.cat(torch.unbind(labels1, dim=0))
+            l2 = torch.cat(torch.unbind(labels2, dim=0))
+            mask = torch.eq(l1.unsqueeze(1), l2.unsqueeze(0)).float()
+            e1_indices = torch.where(~l1.isnan())[0]
+            e2_indices = torch.where(~l2.isnan())[0]
         else:
             features = batch
-            mask = None
+            mask = e1_indices = e2_indices = None
 
         embeddings = self.forward(features)
         # batch_size x sequence_length x embedding_dimension
-        # 32x768x200
 
         embeddings_transposed = embeddings.transpose(
             -1, -2
@@ -141,9 +151,6 @@ class ResNet1d(pl.LightningModule):
         e2 = torch.cat(torch.unbind(e2, dim=0))  # mutated seq embeddings
         # ((batch_size/2) * sequence_length) x embedding_dimension
 
-        e1 = torch.nn.functional.normalize(e1, dim=-1)
-        e2 = torch.nn.functional.normalize(e2, dim=-1)
-
         if self.global_step % self.log_interval == 0:
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
@@ -152,10 +159,14 @@ class ResNet1d(pl.LightningModule):
                 plt.imshow(arr)
                 plt.colorbar()
                 self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1), mask = mask
-        )  # input is ((batch_size/2) x 2 x embedding_dimension)
+        # loss = self.loss_func(
+        #     torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1), mask = mask
+        # )
+        # input is ((batch_size/2) x 2 x embedding_dimension)
 
+        loss = self.loss_func(
+            e1, e2, mask, e1_indices, e2_indices
+        )  # input is ((batch_size/2) x 2 x embedding_dimension)
         return loss
 
     def training_step(self, batch, batch_nb):

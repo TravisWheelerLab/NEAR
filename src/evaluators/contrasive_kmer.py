@@ -1,16 +1,18 @@
 """" Evaluator class for the contrastive CNN model """
 
-import os
+import itertools
 import logging
+import os
+import pdb
+from typing import List, Tuple
+
 import faiss
 import numpy as np
-from typing import List, Tuple
 import torch
+from torch import nn
+
 from src.evaluators.contrastive import ContrastiveEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
-import pdb
-from torch import nn
-import itertools 
 
 logger = logging.getLogger("evaluate")
 
@@ -25,7 +27,10 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         self.embedding_dimension = 256
 
         self.num_random_matrices = 1
-        self.random_matrices = [torch.randn(size=(self.embedding_dimension, self.embedding_dimension)) for i in range(self.num_random_matrices)]
+        self.random_matrices = [
+            torch.randn(size=(self.embedding_dimension, self.embedding_dimension))
+            for i in range(self.num_random_matrices)
+        ]
 
         self.W = 10
         self.step_size = 1
@@ -41,12 +46,14 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
                 transformed_amino_embeddings.append(transformed_embedding)
 
             transformed_sequence_embeddings.append(transformed_amino_embeddings)
-        return transformed_sequence_embeddings 
+        return transformed_sequence_embeddings
 
     def find_maximizers(self, transformed_amino_embedding: torch.Tensor):
         """
-        Input: one transformed amino embedding of size embedding dimension """
-        windowed_embedding = transformed_amino_embedding.unfold(0, self.W, self.step_size) # num_windows, W
+        Input: one transformed amino embedding of size embedding dimension"""
+        windowed_embedding = transformed_amino_embedding.unfold(
+            0, self.W, self.step_size
+        )  # num_windows, W
         indices = [i for i in itertools.product(range(self.W), range(self.W)) if i[0] != i[1]]
 
         maximizers = []
@@ -55,15 +62,13 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         for window in windowed_embedding:
             max_prod = 0
             optimal_pair = None
-            #all versus all products 
+            # all versus all products
             for pair in indices:
-                prod = torch.dot(window[:,pair[0]],window[:,pair[1]])
+                prod = torch.dot(window[:, pair[0]], window[:, pair[1]])
                 if prod > max_prod:
-                    max_prod = prod 
+                    max_prod = prod
                     optimal_pair = pair
             maximizers.append(optimal_pair)
             products.append(max_prod)
-        
+
         return products, maximizers
-            
-            

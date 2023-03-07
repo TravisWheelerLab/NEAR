@@ -19,22 +19,25 @@ train_ex = Experiment()
 @train_ex.config
 def contrastive_alignment_generator():
 
-    description = "Training on alignment data"
+    description = (
+        "Training on alignment data with indels using real sequence padding and masked regloss"
+    )
     model_name = "ResNet1d"
-    dataset_name = "AlignmentGenerator"
+    dataset_name = "AlignmentGeneratorWithIndels"
     log_dir = f"{HOME}/prefilter"
     log_verbosity = logging.INFO
 
     @to_dict
     class model_args:
         learning_rate = 1e-5
-        log_interval = 100
+        log_interval = 1000
         in_channels = 20
+        indels = True
 
     @to_dict
     class train_dataset_args:
         ali_path = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
-        seq_len = 128 
+        seq_len = 128
 
     @to_dict
     class dataloader_args:
@@ -51,11 +54,51 @@ def contrastive_alignment_generator():
     @to_dict
     class val_dataset_args:
         ali_path = "/xdisk/twheeler/daphnedemekas/valpaths2.txt"
-        seq_len = 256
+        seq_len = 128
         training = False
 
 
-#@train_ex.config
+# @train_ex.config
+def contrastive_alignment_generator_ungapped():
+
+    description = "Training on alignment data without indels, BUG FIXED"
+    model_name = "ResNet1d"
+    dataset_name = "AlignmentGenerator"
+    log_dir = f"{HOME}/prefilter"
+    log_verbosity = logging.INFO
+
+    @to_dict
+    class model_args:
+        learning_rate = 1e-5
+        log_interval = 100
+        in_channels = 20
+        indels = False
+
+    @to_dict
+    class train_dataset_args:
+        ali_path = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
+        seq_len = 128
+
+    @to_dict
+    class dataloader_args:
+        batch_size = 32
+        num_workers = 6
+        drop_last = True
+
+    @to_dict
+    class trainer_args:
+        accelerator = "gpu"
+        num_nodes = 1
+        max_epochs = 100
+
+    @to_dict
+    class val_dataset_args:
+        ali_path = "/xdisk/twheeler/daphnedemekas/valpaths2.txt"
+        seq_len = 128
+        training = False
+
+
+# @train_ex.config
 def vae_config():
 
     description = "Turning up the number of downsampling steps"
@@ -77,7 +120,7 @@ def vae_config():
 
     @to_dict
     class dataloader_args:
-        batch_size = 32
+        batch_size = 64
         num_workers = 6
         drop_last = True
 

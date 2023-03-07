@@ -4,10 +4,13 @@ Date: May 07, 2020
 """
 from __future__ import print_function
 
+import pdb
+
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import pdb
+import torch.nn.functional as F
+
 
 def _save(fpath, arr):
     plt.imshow(arr.cpu())
@@ -27,6 +30,59 @@ def calc_unique(x, dim=-1):
     )
 
 
+def cross_entropy(logits, target, size_average=True):
+    if size_average:
+        sum = torch.sum(-target * F.log_softmax(logits, -1), -1)
+        zeros = torch.where(target.sum(1) == 0)[0]
+        sum[zeros] = float("nan")
+        return torch.nanmean(sum)
+    else:
+        return torch.sum(torch.sum(-target * F.log_softmax(logits, -1), -1))
+
+
+class NpairLoss(nn.Module):
+    """the multi-class n-pair loss"""
+
+    def __init__(self, l2_reg=0.02):
+        super(NpairLoss, self).__init__()
+        self.l2_reg = l2_reg
+
+    # def forward(self, anchor: torch.Tensor, positive: torch.Tensor, target: torch.Tensor) -> float:
+    #     device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
+
+    #     batch_size = anchor.size(0)
+    #     anchor_mask = torch.where(target.sum(1) == float('nan'))[0]
+    #     pos_mask = torch.where(target.sum(0) == float('nan'))[0]
+
+    #     if target is None:
+    #         target = torch.eye(batch_size, dtype=torch.float32).to(device)
+
+    #     logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
+    #     loss_ce = cross_entropy(logit, target)
+    #     l2_loss = torch.sum(anchor[zeros]**2) / batch_size + torch.sum(positive**2) / batch_size
+
+    #     loss = loss_ce + self.l2_reg*l2_loss*0.25
+    #     return loss
+    def forward(self, anchor, positive, target, a_indices, p_indices):
+        device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
+        batch_size = anchor.size(0)
+        if target is None:
+            target = torch.eye(batch_size, dtype=torch.float32).to(device)
+
+        logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
+        loss_ce = cross_entropy(logit, target)
+
+        if a_indices is not None:
+            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(a_indices) + torch.sum(
+                positive[p_indices] ** 2
+            ) / len(p_indices)
+        else:
+            l2_loss = (torch.sum(anchor**2) + torch.sum(positive**2)) / batch_size
+
+        loss = loss_ce + self.l2_reg * l2_loss * 0.25
+        return loss
+
+
 class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
@@ -42,12 +98,13 @@ class SupConLoss(nn.Module):
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
         Args:
-            features: hidden vector of shape [bsz, n_views, ...].
+            features: hidden vector of shape [bsz, 2, ...].
             labels: ground truth of shape [bsz].
             mask: contrastive mask of shape [bsz, bsz], mask_{i,j}=1 if sample j
                 has the same class as sample i. Can be asymmetric.
         Returns:
             A loss scalar.
+
         """
         device = torch.device("cuda") if features.is_cuda else torch.device("cpu")
 
@@ -71,8 +128,6 @@ class SupConLoss(nn.Module):
         else:
             mask = mask.float().to(device)
 
-
-
         contrast_count = features.shape[1]
         contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
         if self.contrast_mode == "one":
@@ -84,15 +139,27 @@ class SupConLoss(nn.Module):
         else:
             raise ValueError("Unknown mode: {}".format(self.contrast_mode))
         # compute logits
-        anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T), self.temperature)
+        anchor_dot_contrast = torch.div(
+            torch.matmul(anchor_feature, contrast_feature.T), self.temperature
+        )
         # for numerical stability
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
 
         # tile mask
         mask = mask.repeat(anchor_count, contrast_count)
-        # mask-out self-contrast cases
-        logits_mask = torch.scatter(torch.ones_like(mask),1,torch.arange(batch_size * anchor_count).view(-1, 1).to(device),0,)
+        # indices = torch.where(mask.sum(1)!=0) #there are cases such as additions in which we
+        # don't want to treat the features as pos or neg, ignore entirely
+        # logits = logits[indices]
+        # mask = mask[indices]
+
+        # mask-out self-contrast cases (put zeros on the diagonal)
+        logits_mask = torch.scatter(
+            torch.ones_like(mask),
+            1,
+            torch.arange(len(batch_size)).view(-1, 1).to(device),
+            0,
+        )
         mask = mask * logits_mask
 
         # compute log_prob
@@ -103,8 +170,9 @@ class SupConLoss(nn.Module):
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
         # loss
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = loss.nanmean()
 
-        loss = loss.view(anchor_count, batch_size).nanmean()
+        # loss = loss.view(anchor_count, batch_size).nanmean()
 
         return loss
 
