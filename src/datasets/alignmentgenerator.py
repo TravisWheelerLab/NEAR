@@ -1,44 +1,109 @@
-# pylint: disable=no-member
-import pdb
-
+"""Alignment generator class for using HMMER alignments parsed from the 
+HMMER stdout as data, with indels that are masked by indicess"""
 import torch
-
-import src.utils as utils
+from src import utils
 from src.datasets import DataModule
-from src.datasets.datasets import sanitize_sequence
 from src.utils.gen_utils import generate_string_sequence
 
+class AlignmentGenerator(DataModule):
+    """Alignment generator class without indels"""
 
-class AlignmentGeneratorWithIndels(DataModule):
+    def collate_fn(self):
+        """What is returned when fetching batch"""
+
+        def pad(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+
+            seq1 = [b[0] for b in batch]
+            seq2 = [b[1] for b in batch]
+            data = seq1 + seq2
+            # seq1_raw = [b[2] for b in batch]
+            # seq2_raw = [b[3] for b in batch]
+            return torch.stack(data)  # seq1_raw, seq2_raw
+
+        return pad
+
     def __init__(self, ali_path, seq_len, training=True):
-        f = open(ali_path, "r")
-        self.alignment_file_paths = f.readlines()
-        f.close()
+        """Arguments:
+        ali_path: path to alignments
+        seq_len: fixed sequence length"""
+
+        with open(ali_path, "r") as file:
+            self.alignment_file_paths = file.readlines()
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
         self.seq_len = seq_len
-        print(f"Sequence length: {self.seq_len}")
-
-    def collate_fn(self):
-        return None
 
     def __len__(self):
+        """Number of alignment files"""
         return len(self.alignment_file_paths)
 
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
-        sequences from an alignment file
-        As well as the full sequences"""
-        f = open(alignment_file, "r")
-        lines = f.readlines()
-        seq1 = lines[1].strip("\n")
-        seq2 = lines[2].strip("\n")
-        full_seq1 = lines[3].strip("\n")
-        full_seq2 = lines[4].strip("\n")
+        sequences from an alignment file"""
+        with open(alignment_file, "r") as file:
+            lines = file.readlines()
+            seq1 = lines[1].strip("\n")
+            seq2 = lines[2].strip("\n")
+        return seq1.upper(), seq2.upper()
 
-        f.close()
-        return seq1.upper(), seq2.upper(), full_seq1.upper(), full_seq2.upper()
+    def __getitem__(self, idx):
+        """Get ungapped alignments"""
+
+        alignment_path = self.alignment_file_paths[idx].strip("\n")
+
+        seq1_raw, seq2_raw = self.parse_alignment(alignment_path)
+        assert len(seq1_raw) == len(seq2_raw)
+
+        seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
+        seq2_dots_and_dashes = [i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"]
+
+        clean_seq1 = ""
+        clean_seq2 = ""
+        for i in range(len(seq1)):
+            if i not in seq1_dots_and_dashes and i not in seq2_dots_and_dashes:
+                clean_seq1 += seq1[i]
+                clean_seq2 += seq2[i]
+
+        seq1 = clean_seq1
+        seq2 = clean_seq2
+
+        if len(seq1) > self.seq_len:
+            seq1 = seq1[-self.seq_len :]
+            seq2 = seq2[-self.seq_len :]
+        elif len(seq1) < self.seq_len:
+            seq_chop = len(seq1) - self.seq_len
+            addition1 = generate_string_sequence(-seq_chop)
+            addition2 = generate_string_sequence(-seq_chop)
+
+            seq2 = addition1 + seq2
+            seq1 = addition2 + seq1
+
+        return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
+
+
+class AlignmentGeneratorWithIndels(AlignmentGenerator):
+    """Alignment generator with insertions and deletions"""
+
+    def __init__(self, ali_path: str, seq_len: int, training=True):
+        """
+        Args:
+            ali_path: path to alignment files
+            seq_len: fixed sequence length"""
+        super.__init__(ali_path, seq_len, training)
+
+    def collate_fn(self):
+        """What is returned when getting a batch
+        if None, defaults to the return of __getitem__()"""
+        return None
 
     def parse_indels(self, seq1: str, seq2: str):
         """
@@ -60,14 +125,14 @@ class AlignmentGeneratorWithIndels(DataModule):
         for i in range(length):
             if i in seq2_dots_and_dashes:
                 continue
-            elif i in seq1_dots_and_dashes:
+            if i in seq1_dots_and_dashes:
                 seq2_indices.append(float("nan"))
             else:
                 seq2_indices.append(i)
         for i in range(length):
             if i in seq1_dots_and_dashes:
                 continue
-            elif i in seq2_dots_and_dashes:
+            if i in seq2_dots_and_dashes:
                 seq1_indices.append(float("nan"))
             else:
                 seq1_indices.append(i)
@@ -80,14 +145,17 @@ class AlignmentGeneratorWithIndels(DataModule):
 
     def pad_sequence(
         self,
-        sequence,
-        indices,
-        subseq_index,
-        full_seq,
-        left_padding,
-        right_padding,
+        sequence: str,
+        indices: list,
+        subseq_index: int,
+        full_seq: str,
+        left_padding: int,
+        right_padding: int,
         value=float("nan"),
     ):
+        """Pads the sequence so that it has length self.seq_len
+        We use the full sequence to pad around the subequence,
+        this helps maintain context in the CNN"""
         addition_left = full_seq[subseq_index - left_padding : subseq_index]
         addition_right = full_seq[
             subseq_index + len(sequence) : subseq_index + len(sequence) + right_padding
@@ -115,7 +183,7 @@ class AlignmentGeneratorWithIndels(DataModule):
             indices = indices[:sequence_length]
             return sequence, indices
 
-        elif len(sequence) < sequence_length:
+        if len(sequence) < sequence_length:
             seq_chop = self.seq_len - len(sequence)
             subseq_index = full_seq.find(sequence)
             half = seq_chop // 2
@@ -141,7 +209,7 @@ class AlignmentGeneratorWithIndels(DataModule):
                     )
                     return sequence, indices
 
-                elif subseq_index < addition_left_amt:
+                if subseq_index < addition_left_amt:
                     addition_right_amt = addition_right_amt + (addition_left_amt - subseq_index)
                     addition_left_amt = subseq_index
 
@@ -155,7 +223,7 @@ class AlignmentGeneratorWithIndels(DataModule):
                     )
                     return sequence, indices
 
-                elif len(full_seq) - (subseq_index + len(sequence)) < half:
+                if len(full_seq) - (subseq_index + len(sequence)) < half:
                     addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
 
                     addition_left_amt = self.seq_len - addition_right_amt - len(sequence)
@@ -168,33 +236,32 @@ class AlignmentGeneratorWithIndels(DataModule):
                         addition_right_amt,
                     )
                     return sequence, indices
-                else:
-                    addition_left_amt = half + 1
-                    addition_right_amt = half
-                    sequence, indices = self.pad_sequence(
-                        sequence,
-                        indices,
-                        subseq_index,
-                        full_seq,
-                        addition_left_amt,
-                        addition_right_amt,
-                    )
-                    return sequence, indices
-            else:  # our full sequence is not long enough so we need to add padding
-                addition_left_amt = subseq_index
-                addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
+                addition_left_amt = half + 1
+                addition_right_amt = half
                 sequence, indices = self.pad_sequence(
-                    sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt
+                    sequence,
+                    indices,
+                    subseq_index,
+                    full_seq,
+                    addition_left_amt,
+                    addition_right_amt,
                 )
-                seq_chop = self.seq_len - len(sequence)
-
-                addition = generate_string_sequence(seq_chop)
-                sequence = sequence + addition
-                indices = indices + [value] * seq_chop
-
                 return sequence, indices
+            addition_left_amt = subseq_index
+            addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
+            sequence, indices = self.pad_sequence(
+                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt
+            )
+            seq_chop = self.seq_len - len(sequence)
 
-    def __getitem__(self, idx):
+            addition = generate_string_sequence(seq_chop)
+            sequence = sequence + addition
+            indices = indices + [value] * seq_chop
+
+            return sequence, indices
+
+    def __getitem__(self, idx: int):
+        """Gets the sequences as indices for a batch"""
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)

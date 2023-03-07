@@ -1,3 +1,6 @@
+"""Functions to add the full sequences into the alignment data
+Which we will then use for padding"""
+import argparse
 import itertools
 import os
 
@@ -6,92 +9,81 @@ from src.data.hmmerhits import FastaFile
 # TRAINING
 
 
-def write_to_train_paths(id):
-    task_id = int(id)
+def write_to_train_paths(task_id):
+    """write the full query into the alignment file"""
+    train_path = "/xdisk/twheeler/daphnedemekas/train-alignments"
 
-    ts = list(range(45))
-    qs = list(range(2, 5))
-    target_queries = list(itertools.product(ts, qs))
+    targets = list(range(45))
+    queries = list(range(2, 5))
+    target_queries = list(itertools.product(targets, queries))
 
-    t = target_queries[task_id - 1][0]
-    q = target_queries[task_id - 1][1]
+    target = target_queries[int(task_id) - 1][0]
+    query = target_queries[int(task_id) - 1][1]
 
-    queryfile = f"uniref/split_subset/queries/queries_{q}.fa"
+    queryfile = f"uniref/split_subset/queries/queries_{query}.fa"
     queryfasta = FastaFile(queryfile)
-    print(q)
+    print(query)
 
     # all_hits = {}
     querysequences = queryfasta.data
-    print(t)
+    print(target)
     targetsequences = {}
 
-    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
+    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{target}.fa")
     targetdata = targetfasta.data
     targetsequences.update(targetdata)
 
-    for alignment_file in os.listdir(f"/xdisk/twheeler/daphnedemekas/train-alignments/{q}/{t}"):
-        file = open(f"/xdisk/twheeler/daphnedemekas/train-alignments/{q}/{t}/{alignment_file}", "r")
-        lines = file.readlines()
-        if len(lines) > 3:
-            file.close()
-            continue
-        query_and_target = lines[0]
-        query = query_and_target.split()[0].strip(">")
-        target = query_and_target.split()[-1]
-        query_sequence = querysequences[query]
-        target_sequence = targetsequences[target]
+    for alignment_file in os.listdir(f"{train_path}/{query}/{target}"):
+        with open(f"{train_path}/{query}/{target}/{alignment_file}", "r") as file:
+            lines = file.readlines()
+            if len(lines) > 3:
+                file.close()
+                continue
+            query_and_target = lines[0]
+            query = query_and_target.split()[0].strip(">")
+            target = query_and_target.split()[-1]
+            query_sequence = querysequences[query]
+            target_sequence = targetsequences[target]
 
-        writefile = open(
-            f"/xdisk/twheeler/daphnedemekas/train-alignments/{q}/{t}/{alignment_file}", "a"
-        )
-        writefile.write("\n" + query_sequence + "\n")
-        writefile.write(target_sequence + "\n")
-        writefile.close()
-        file.close()
+            with open(f"{train_path}/{query}/{target}/{alignment_file}", "a") as writefile:
+                writefile.write("\n" + query_sequence + "\n")
+                writefile.write(target_sequence + "\n")
 
-
-# raise
 
 # EVAL
-def write_to_eval_paths(id):
-    alignment_file_paths = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
+def write_to_eval_paths(task_id):
+    """write the full query into the eval alignment files"""
+    eval_path = "/xdisk/twheeler/daphnedemekas/eval-alignments"
 
-    t = id
-    q = 0
+    target = task_id
+    query = 0
 
-    queryfile = f"uniref/split_subset/queries/queries_{q}.fa"
+    queryfile = f"uniref/split_subset/queries/queries_{query}.fa"
     queryfasta = FastaFile(queryfile)
-    print(q)
+    print(query)
 
-    # all_hits = {}
     querysequences = queryfasta.data
 
-    print(t)
+    print(target)
     targetsequences = {}
 
-    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t}.fa")
+    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{target}.fa")
     targetdata = targetfasta.data
     targetsequences.update(targetdata)
 
-    for alignment_file in os.listdir(f"/xdisk/twheeler/daphnedemekas/eval-alignments/{q}/{t}"):
-        file = open(f"/xdisk/twheeler/daphnedemekas/eval-alignments/{q}/{t}/{alignment_file}", "r")
-        lines = file.readlines()
-        query_and_target = lines[0]
-        query = query_and_target.split()[0].strip(">")
-        target = query_and_target.split()[-1]
-        query_sequence = querysequences[query]
-        target_sequence = targetsequences[target]
+    for alignment_file in os.listdir(f"{eval_path}/{query}/{target}"):
+        with open(f"{eval_path}/{query}/{target}/{alignment_file}", "r") as file:
+            lines = file.readlines()
+            query_and_target = lines[0]
+            query = query_and_target.split()[0].strip(">")
+            target = query_and_target.split()[-1]
+            query_sequence = querysequences[query]
+            target_sequence = targetsequences[target]
 
-        writefile = open(
-            f"/xdisk/twheeler/daphnedemekas/eval-alignments/{q}/{t}/{alignment_file}", "a"
-        )
-        writefile.write("\n" + query_sequence + "\n")
-        writefile.write(target_sequence + "\n")
-        writefile.close()
-        file.close()
+            with open(f"{eval_path}/{query}/{target}/{alignment_file}", "a") as writefile:
+                writefile.write("\n" + query_sequence + "\n")
+                writefile.write(target_sequence + "\n")
 
-
-import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("task_id")

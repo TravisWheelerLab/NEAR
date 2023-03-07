@@ -1,62 +1,64 @@
-""" Stockholm sequence alignments"""
+""" Running phmmer"""
 
+import argparse
+import itertools
 import logging
 import os
 import subprocess
 
-logger = logging.getLogger("evaluate")
-logger.setLevel(logging.INFO)
-import itertools
+logger = logging.getLogger(__name__)
 
 
 def main(task_id):
     """Generate alignments for a given task id"""
     task_id = int(task_id)
-    logger.info(f"Task ID: {task_id}")
+    logger.info("Task ID: %s", task_id)
 
-    ts = list(range(45))
-    qs = list(range(5))
-    target_queries = list(itertools.product(ts, qs))
+    targets = list(range(45))
+    queries = list(range(5))
+    target_queries = list(itertools.product(targets, queries))
 
     target_filenum = target_queries[task_id - 1][0]
     query_filenum = target_queries[task_id - 1][1]
 
     print(f"Running phmmer for q {query_filenum}, t {target_filenum}")
-    logger.info(f"Running phmmer for q {query_filenum}, t {target_filenum}")
+    logger.info("Running phmmer for q %s, t %s", query_filenum, target_filenum)
 
     run_phmmer(query_filenum, target_filenum)
 
 
-def run_phmmer(query_filenum: int, target_filenum: int):
+def run_phmmer(q_fnum: int, t_fnum: int):
     """Run phmmer between all queries and targets
     in the query and target files."""
-    if not os.path.exists(f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}"):
-        os.mkdir(f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}")
+    root = "/xdisk/twheeler/daphnedemekas"
+    data_path = "/xdisk/twheeler/daphnedemekas/prefilter/uniref/split_subset"
+    if not os.path.exists(f"{root}/phmmer_max_results/{q_fnum}"):
+        os.mkdir(f"{root}/phmmer_max_results/{q_fnum}")
     if not os.path.exists(
-        f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}/{target_filenum}"
+        f"{root}/phmmer_max_results/{q_fnum}/{t_fnum}"
     ):
         os.mkdir(
-            f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}/{target_filenum}"
+            f"{root}/phmmer_max_results/{q_fnum}/{t_fnum}"
         )
 
     hmmer = subprocess.run(
-        f'phmmer --cpu 16 --max -E 10 --tblout /xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}/{target_filenum}/hits.tblout "/xdisk/twheeler/colligan/uniref/split_subset/queries/queries_{query_filenum}.fa" "/xdisk/twheeler/colligan/uniref/split_subset/targets/targets_{target_filenum}.fa"',
+        f'phmmer --cpu 16 --tblout {root}/phmmer_results/{q_fnum}/{t_fnum}/hits.tblout \
+            "{data_path}/queries/queries_{q_fnum}.fa" "{data_path}/targets/targets_{t_fnum}.fa"',
         shell=True,
         capture_output=True,
+        check=True
     )
     logger.info(
-        f"Saving stdout to '/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{query_filenum}-{target_filenum}.txt'"
+        "Saving stdout to '%s/phmmer_max_results/stdouts/%s-%s.txt'", root, q_fnum, t_fnum
     )
 
     with open(
-        f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{query_filenum}-{target_filenum}.txt",
-        "w",
-    ) as f:
-        f.write(hmmer.stdout.decode("utf-8"))
-        f.close()
+        f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/stdouts/{q_fnum}-{t_fnum}.txt",
+        "w", encoding = 'utf-8'
+    ) as stdout_file:
+        stdout_file.write(hmmer.stdout.decode("utf-8"))
+        stdout_file.close()
 
-
-import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("task_id")

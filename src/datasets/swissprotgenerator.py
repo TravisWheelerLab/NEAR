@@ -1,19 +1,15 @@
+"""Datasets"""
 # pylint: disable=no-member
 import logging
 import os
-from glob import glob
 from random import shuffle
 
 import numpy as np
 import torch
-from Bio import AlignIO
-from torchaudio.transforms import MelSpectrogram
 
-import src.utils as utils
+from src import utils
 from src.datasets import DataModule
-from src.datasets.datasets import sanitize_sequence
 from src.utils.gen_utils import generate_string_sequence
-from src.utils.helpers import AAIndexFFT
 
 logger = logging.getLogger(__name__)
 
@@ -22,28 +18,44 @@ DECOY_FLAG = -1
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
-class SwissProtLoaderGeneralInput(DataModule):
+def sanitize_sequence(sequence):
+    """Replaces X U and O in sequences"""
+    sanitized = []
+    for char in sequence:
+        char = char.upper()
+        if char in (
+            "X",
+            "U",
+            "O",
+        ):  # ambiguous aminos -- replacing them with some other amino from backgorund distribution
+            sampled_char = utils.amino_alphabet[utils.amino_distribution.sample().item()]
+            sanitized.append(sampled_char)
+            logger.debug("Replacing <X, U, O> with %s", sampled_char)
+        elif char == "B":  # can be either D or N
+            if int(2 * np.random.rand()) == 1:
+                sanitized.append("D")
+            else:
+                sanitized.append("N")
+        elif char == "Z":  # can be either E or Q
+            if int(2 * np.random.rand()) == 1:
+                sanitized.append("E")
+            else:
+                sanitized.append("Q")
+        else:
+            sanitized.append(char)
+
+    return "".join(sanitized)
+
+class SwissProtLoader(DataModule):
     """
     Grab a sequence from swiss-prot, mutate it, then
     feed it to the model as a contrastive pair.
     """
 
-    def __init__(
-        self,
-        minlen,
-        labels: list = None,
-        seqs: list = None,
-        fa_file: str = None,
-        training=True,
-    ):
+    def __init__(self, fa_file, minlen, training=True):
 
-        if fa_file:
-            self.fa_file = fa_file
-            labels, seqs = utils.fasta_from_file(fa_file)
-        else:
-            assert (
-                labels is not None and seqs is not None
-            ), "You must input an fa file or labels and sequences"
+        self.fa_file = fa_file
+        _, seqs = utils.fasta_from_file(fa_file)
         self.seqs = [s for s in seqs if len(s) >= minlen]
         self.training = training
         self.sub_dists = utils.create_substitution_distribution(62)
@@ -52,27 +64,33 @@ class SwissProtLoaderGeneralInput(DataModule):
         shuffle(self.seqs)
 
     def __len__(self):
+        """Number of sequences"""
         return len(self.seqs)
 
     def collate_fn(self):
+        """What is returned when fetching batch
+        if None then defaults to __getitem__"""
         return None
 
     def shuffle(self):
+        """shuffle"""
         shuffle(self.seqs)
 
-    def __getitem__(self, idx):
-        s1, s2, label = self._sample(idx)
-        return s1, s2, label
+    def __getitem__(self, idx: int):
+        """idx: index of sequence to sample"""
+        seq1, seq2, label = self._sample(idx)
+        return seq1, seq2, label
 
 
-class SwissProtGenerator(SwissProtLoaderGeneralInput):
+class SwissProtGenerator(SwissProtLoader):
     """
     Grab a sequence from swiss-prot, mutate it, then
     feed it to the model as a contrastive pair.
     """
 
-    def __init__(self, minlen, labels=None, seqs=None, fa_file=None, training=True):
-        super(SwissProtGenerator, self).__init__(minlen, labels, seqs, fa_file, training)
+    def __init__(self, fa_file, minlen, training=True):
+        """Initialize from SwissProtLoader"""
+        super().__init__(fa_file, minlen, training)
 
     def collate_fn(self):
         def pad(batch):
@@ -97,6 +115,7 @@ class SwissProtGenerator(SwissProtLoaderGeneralInput):
         return pad
 
     def _sample(self, idx):
+        """Sample a sequence and mutate from BLOSUM-62"""
         if not self.training:
             if idx == 0:
                 logger.info("shuffling.")
@@ -122,14 +141,15 @@ class SwissProtGenerator(SwissProtLoaderGeneralInput):
             len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
-        s2 = utils.mutate_sequence(
+        seq2 = utils.mutate_sequence(
             sequence=sequence,
             substitutions=n_subs,
             sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
-        s2 = utils.encode_tensor_sequence(s2)  # 20x256
-        return utils.encode_tensor_sequence(sequence), s2, idx % len(self.seqs)
+        seq2 = utils.encode_tensor_sequence(seq2)  # 20x256
+        return utils.encode_tensor_sequence(sequence), seq2, idx % len(self.seqs)
 
     def __getitem__(self, idx):
+        """Get a sampled and mutated sequence, vectorized"""
         return self._sample(idx)

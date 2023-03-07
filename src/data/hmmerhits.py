@@ -8,27 +8,20 @@ from typing import List, Tuple
 import numpy as np
 
 
-def dict_of_dicts(keys: list):
-    _dict = {}
-    for key in keys:
-        _dict[key] = {}
-    return _dict
-
-
 class FastaFile:
     """Class representing a FASTA file.
     Class variables include lists of names and sequences,
     and a dictionary mapping names to sequences."""
 
     def __init__(self, filepath: str):
-
+        """initialize fasta file from fasta path"""
         self.filepath: str = filepath
 
         if not os.path.exists(filepath) or not filepath.endswith("fa"):
             raise f"The filepath is invalud: {filepath}"
 
-        fastafile = open(filepath, "r", encoding="utf8")
-        data: str = fastafile.readlines()
+        with open(filepath, "r", encoding="utf8") as fastafile:
+            data: str = fastafile.readlines()
 
         self.data: dict = self.clean_data(data)
 
@@ -93,8 +86,8 @@ class HmmerHits:
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
         and a numpy array of just the data"""
-        hmmer_hits_file = open(hits_file, "r", encoding="utf8")
-        hits = hmmer_hits_file.readlines()
+        with open(hits_file, "r", encoding="utf8") as hmmer_hits_file:
+            hits = hmmer_hits_file.readlines()
         data_dict = {}
         for row in hits:
             if row[0] == "#":
@@ -129,7 +122,7 @@ class HmmerHits:
                 ]
             ).astype("float64")
 
-            if query_name in data_dict.keys():
+            if query_name in data_dict:
                 data_dict[query_name][target_name] = data
             else:
                 data_dict[query_name] = {}
@@ -138,7 +131,7 @@ class HmmerHits:
         return data_dict
 
     def get_hits(
-        self, dir: str, target_num, query_num=None, filtered_targets=None
+        self, directory: str, target_num, query_num=None, filtered_targets=None
     ) -> Tuple[dict, np.array]:
         """
         args:
@@ -149,10 +142,10 @@ class HmmerHits:
             target_query_hits: of format {query:{target:data}}
             hits_array: np array of just the data
         """
-        hits_file = os.listdir(f"{dir}/{query_num}/{target_num}")[0]
+        hits_file = os.listdir(f"{directory}/{query_num}/{target_num}")[0]
 
         hits_dict = self.parse_hits_file(
-            f"{dir}/{query_num}/{target_num}/{hits_file}", filtered_targets=filtered_targets
+            f"{directory}/{query_num}/{target_num}/{hits_file}", filtered_targets=filtered_targets
         )
 
         return hits_dict
