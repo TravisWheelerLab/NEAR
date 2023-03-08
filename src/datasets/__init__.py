@@ -7,6 +7,7 @@ from torch.utils.data.dataset import Dataset
 
 class DataModule(Dataset, ABC):
     """abstract DataModule superclass"""
+
     @abstractmethod
     def __init__(self, **kwargs):
         super().__init__()

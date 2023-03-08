@@ -41,7 +41,7 @@ def contrastive_alignment_generator():
 
     @to_dict
     class dataloader_args:
-        batch_size = 64
+        batch_size = 32
         num_workers = 6
         drop_last = True
 

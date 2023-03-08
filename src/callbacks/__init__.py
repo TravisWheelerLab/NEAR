@@ -1,7 +1,9 @@
+"""The CallbackSet class determines how model checkpoints get saved during training"""
 import pytorch_lightning as pl
 
 
 class CallbackSet:
+    """ CallbackSet class"""
 
     _callbacks = []
 
@@ -19,7 +21,7 @@ class CallbackSet:
         mode="min",
         filename="epoch_{epoch}_{val_loss:.5f}",
         auto_insert_metric_name=False,
-        save_top_k=10,
+        save_top_k=5,
     )
 
     _callbacks.append(checkpoint_callback)

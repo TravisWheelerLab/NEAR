@@ -6,8 +6,7 @@ import pytorch_lightning as pl
 import torch
 
 from src import models
-from src.datasets.alignmentgenerator import AlignmentGeneratorWithIndels
-from src.datasets.datasets import AlignmentGenerator
+from src.datasets.alignmentgenerator import AlignmentGeneratorWithIndels, AlignmentGenerator
 from src.utils import pluginloader
 from src.utils.losses import NpairLoss, SupConLoss
 
@@ -112,6 +111,16 @@ if __name__ == "__main__":
             num_workers=6,
             drop_last=True,
         )
+        val_dataset_indels = AlignmentGeneratorWithIndels("/xdisk/twheeler/daphnedemekas/valpaths2.txt", seq_len=128)
+
+        val_dataloader_indels = torch.utils.data.DataLoader(
+            val_dataset_indels,
+            collate_fn=train_dataset_indels.collate_fn(),
+            batch_size=32,
+            num_workers=6,
+            drop_last=True,
+        )
+        raise
 
         dataiter_indels = iter(train_dataloader_indels)
         (

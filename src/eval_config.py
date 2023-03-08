@@ -52,7 +52,7 @@ def contrastive():
         "hmmer_hits_max": all_hits,
         "encoding_func": None,
         "model_device": device,
-        "index_device": device,
+        "index_device": "cpu",
         "figure_path": f"{ROOT}/roc.png",
         "normalize_embeddings": True,
         "minimum_seq_length": 0,
@@ -107,7 +107,7 @@ def vae():
         query_file = f"{HOME}/Q_benchmark2k30k.fa"
         target_file = f"{HOME}/T_benchmark2k30k.fa"
         encoding_func = None
-        model_device = "cuda"
+        model_device = "cpu"
         index_device = "cuda"
         figure_path = f"{HOME}/prefilter/VAEIndels/7/fig.png"
         normalize_embeddings = True

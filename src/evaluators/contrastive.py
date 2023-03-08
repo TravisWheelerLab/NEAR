@@ -16,9 +16,10 @@ logger = logging.getLogger("evaluate")
 
 
 class ContrastiveEvaluator(UniRefEvaluator):
-    """Evaluator for the Contrastive Loss CNN model"""
+    """Evaluator for the Contrastive Loss Model"""
 
     def __init__(self, *args, **kwargs):
+
         super().__init__(*args, **kwargs)
         self.unrolled_names = []
         self.index: faiss.Index = None
@@ -26,6 +27,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
     def compute_embedding(self, sequence: str, model_class) -> torch.Tensor:
         """Encodes the input sequence as a tensor and then passes
         through the model forward function to get the embedding tensor"""
+
         return (
             model_class(encode_string_sequence(sequence).unsqueeze(0).to(self.model_device))
             .squeeze()

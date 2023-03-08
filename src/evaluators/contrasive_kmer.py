@@ -2,17 +2,12 @@
 
 import itertools
 import logging
-import os
-import pdb
-from typing import List, Tuple
 
 import faiss
-import numpy as np
 import torch
 from torch import nn
 
 from src.evaluators.contrastive import ContrastiveEvaluator
-from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 

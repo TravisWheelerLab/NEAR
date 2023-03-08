@@ -9,7 +9,6 @@ import torch
 
 from src import utils
 from src.datasets import DataModule
-from src.utils.gen_utils import generate_string_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,9 @@ def sanitize_sequence(sequence):
             "U",
             "O",
         ):  # ambiguous aminos -- replacing them with some other amino from backgorund distribution
-            sampled_char = utils.amino_alphabet[utils.amino_distribution.sample().item()]
+            sampled_char = utils.amino_alphabet[
+                utils.amino_distribution.sample().item()
+            ]
             sanitized.append(sampled_char)
             logger.debug("Replacing <X, U, O> with %s", sampled_char)
         elif char == "B":  # can be either D or N
@@ -45,6 +46,7 @@ def sanitize_sequence(sequence):
             sanitized.append(char)
 
     return "".join(sanitized)
+
 
 class SwissProtLoader(DataModule):
     """
@@ -138,7 +140,8 @@ class SwissProtGenerator(SwissProtLoader):
         )  # map amino to int identity
 
         n_subs = int(  # NOte: we are potentially replacing with the same thing
-            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence)
+            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         seq2 = utils.mutate_sequence(
@@ -148,7 +151,11 @@ class SwissProtGenerator(SwissProtLoader):
         )
         # this creates a fuzzy tensor.
         seq2 = utils.encode_tensor_sequence(seq2)  # 20x256
-        return utils.encode_tensor_sequence(sequence), seq2, idx % len(self.seqs)
+        return (
+            utils.encode_tensor_sequence(sequence),
+            seq2,
+            idx % len(self.seqs),
+        )
 
     def __getitem__(self, idx):
         """Get a sampled and mutated sequence, vectorized"""
