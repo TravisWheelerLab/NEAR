@@ -19,9 +19,7 @@ train_ex = Experiment()
 @train_ex.config
 def contrastive_alignment_generator():
 
-    description = (
-        "Training on alignment data with indels using real sequence padding and masked regloss"
-    )
+    description = "Training on alignment data with indels using real sequence padding and masked regloss"
     model_name = "ResNet1d"
     dataset_name = "AlignmentGeneratorWithIndels"
     log_dir = f"{HOME}/prefilter"

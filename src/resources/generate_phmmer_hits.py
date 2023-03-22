@@ -42,14 +42,12 @@ def run(phmmer_file_subset):
             dst.write(f">{query}\n{query_seq}\n")
 
         for hit, e_value in list_of_hits:
-            target_seq = check_output(f"esl-sfetch T_benchmark2k30k.fa {hit}".split()).decode(
-                "utf-8"
-            )
+            target_seq = check_output(
+                f"esl-sfetch T_benchmark2k30k.fa {hit}".split()
+            ).decode("utf-8")
             target_seq = target_seq[target_seq.find("\n") + 1 :]
 
-            target_out_file = (
-                f"targets_{os.path.splitext(os.path.basename(phmmer_file_subset))[1]}.fa"
-            )
+            target_out_file = f"targets_{os.path.splitext(os.path.basename(phmmer_file_subset))[1]}.fa"
 
             with open(f"{target_out_file}", "w") as dst:
                 dst.write(f">{query}\n{query_seq}\n")

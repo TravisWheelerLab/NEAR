@@ -14,7 +14,9 @@ with open(
     "/xdisk/twheeler/daphnedemekas/target_data/trainfastanames.txt", "r"
 ) as train_target_file:
     train_targets = train_target_file.read().splitlines()
-with open("/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt", "r") as val_target_file:
+with open(
+    "/xdisk/twheeler/daphnedemekas/target_data/evalfastanames.txt", "r"
+) as val_target_file:
     val_targets = val_target_file.read().splitlines()
 
 
@@ -78,11 +80,15 @@ def parse_stdout(q_fnum, t_fnum):
             # result_dict[query_id][target_id] = []
             if target_id in train_targets and hit.evalue < 1:
                 if query_id != 0:
-                    alignment_file_path = f"{train_root}/{q_fnum}/{t_fnum}/{train_idx}.txt"
+                    alignment_file_path = (
+                        f"{train_root}/{q_fnum}/{t_fnum}/{train_idx}.txt"
+                    )
                     train_idx += 1
             elif target_id in val_targets:
                 if query_id == 0:
-                    alignment_file_path = f"{val_root}/{q_fnum}/{t_fnum}/{val_idx}.txt"
+                    alignment_file_path = (
+                        f"{val_root}/{q_fnum}/{t_fnum}/{val_idx}.txt"
+                    )
                     val_idx += 1
             else:
                 continue
@@ -91,7 +97,9 @@ def parse_stdout(q_fnum, t_fnum):
                     alignments = hsp.aln
                     seq1 = str(alignments[0].seq)
                     seq2 = str(alignments[1].seq)
-                    alignment_file.write(">" + query_id + " & " + target_id + "\n")
+                    alignment_file.write(
+                        ">" + query_id + " & " + target_id + "\n"
+                    )
                     alignment_file.write(seq1 + "\n")
                     alignment_file.write(seq2)
 

@@ -17,7 +17,9 @@ class DotProdModel(pl.LightningModule):
 
     # expects [batch, dim, seq_len]
     def L2Dist(self, A, B):
-        return torch.cdist(torch.transpose(A, -1, -2), torch.transpose(B, -1, -2))
+        return torch.cdist(
+            torch.transpose(A, -1, -2), torch.transpose(B, -1, -2)
+        )
 
 
 class SinActivation(nn.Module):
@@ -108,9 +110,17 @@ class ResNet(DotProdModel):
             )
             # layers.append(nn.Dropout(0.1))
 
-        layers.append(nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode))
+        layers.append(
+            nn.Conv1d(
+                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
+            )
+        )
         layers.append(activation())
-        layers.append(nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode))
+        layers.append(
+            nn.Conv1d(
+                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
+            )
+        )
 
         self.layers = nn.Sequential(*layers)
 

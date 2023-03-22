@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 
 
 class CallbackSet:
-    """ CallbackSet class"""
+    """CallbackSet class"""
 
     _callbacks = []
 

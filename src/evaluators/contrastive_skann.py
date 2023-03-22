@@ -1,28 +1,25 @@
-"""" Evaluator class for the contrastive CNN model """
-
 import logging
 import os
 import pdb
 from typing import List, Tuple
 
-import faiss
+# import scann
 import numpy as np
 import torch
 
 from src.evaluators.uniref_evaluator import UniRefEvaluator
-from src.utils import create_faiss_index, encode_string_sequence
+from src.utils import encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 
 
-class ContrastiveEvaluator(UniRefEvaluator):
+class ContrastiveEvaluatorScaNN(UniRefEvaluator):
     """Evaluator for the Contrastive Loss Model"""
 
     def __init__(self, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
         self.unrolled_names = []
-        self.index: faiss.Index = None
 
     def compute_embedding(self, sequence: str, model_class) -> torch.Tensor:
         """Encodes the input sequence as a tensor and then passes
@@ -38,7 +35,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             .T
         )
 
-    def _setup_targets_for_faiss(
+    def _setup_targets_for_skann(
         self,
         target_embeddings: List[torch.Tensor],
         target_names: List[str],
@@ -77,24 +74,24 @@ class ContrastiveEvaluator(UniRefEvaluator):
                 unrolled_targets, dim=-1
             )
 
-        self.index: faiss.Index = create_faiss_index(
-            embeddings=unrolled_targets,
-            embed_dim=unrolled_targets.shape[-1],
-            distance_metric="cosine" if self.normalize_embeddings else "l2",
-            index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            nprobe=self.nprobe,
-            device=self.index_device,
+        n = unrolled_targets.shape[-1]
+
+        num_partitions = int(np.sqrt(n))
+        print(f"Number of leaves: {num_partitions}")
+
+        self.searcher = (
+            scann.scann_ops_pybind.builer(unrolled_targets, 10, "dot_product")
+            .tree(
+                num_leaves=num_partitions,
+                num_leaves_to_search=num_partitions // 20,
+                training_sample_size=250000,
+            )
+            .score_ah(2, anisotropic_quantization_threshold=0.2)
+            .reorder(100)
+            .build()
         )
 
-        logger.info("Adding targets to index.")
-        if self.index_device == "cpu":
-            self.index.add(unrolled_targets.to("cpu"))
-        else:
-            self.index.add(unrolled_targets)
-
         self.unrolled_names = np.asarray(self.unrolled_names)
-
-        faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     def filter_scores(self, scores_array, indices_array):
         """Filters the scores such that every query amino can only
@@ -127,8 +124,8 @@ class ContrastiveEvaluator(UniRefEvaluator):
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        scores_array, indices_array = self.index.search(
-            query_embedding.contiguous(), k=1000
+        scores_array, indices_array = self.searcher.search_batched(
+            query_embedding.contiguous()
         )
         # remove stuff that's under/over the threshold
 

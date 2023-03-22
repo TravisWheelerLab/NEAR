@@ -6,8 +6,12 @@ import logging
 import faiss
 import torch
 from torch import nn
-
+from typing import Tuple, List
+import pdb
+import os
+import tqdm
 from src.evaluators.contrastive import ContrastiveEvaluator
+from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 
@@ -23,47 +27,179 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         self.num_random_matrices = 1
         self.random_matrices = [
-            torch.randn(size=(self.embedding_dimension, self.embedding_dimension))
+            torch.randn(
+                size=(self.embedding_dimension, self.embedding_dimension)
+            )
             for i in range(self.num_random_matrices)
-        ]
+        ]  # should these be between 0 and 1 since we just normalized? yes they are random normal...
 
-        self.W = 10
-        self.step_size = 1
+        self.W = 15
+        self.step_size = 15
 
-    def transform(self, sequence_embedding: torch.Tensor):
+    def transform(self, sequence_embeddings: List[torch.Tensor]):
         transformed_sequence_embeddings = []
 
-        for amino_embedding in sequence_embedding:
-            transformed_amino_embeddings = []
-            normalized_embedding = nn.InstanceNorm1d(amino_embedding)
+        for (
+            sequence_embedding
+        ) in sequence_embeddings:  # dim = sequence len, amino embedding
+            sequence_embedding = sequence_embedding.unsqueeze(1)
+            n = nn.InstanceNorm1d(sequence_embedding.shape[0])
+            normalized_embedding = n(sequence_embedding)
             for random_matrix in self.random_matrices:
-                transformed_embedding = torch.mm(random_matrix, normalized_embedding)
-                transformed_amino_embeddings.append(transformed_embedding)
+                transformed_embedding = torch.mm(
+                    normalized_embedding.squeeze(1), random_matrix
+                )
+                transformed_sequence_embeddings.append(transformed_embedding)
+            # for amino_embedding in sequence_embedding:
+            #     transformed_amino_embeddings = []
+            #     normalized_embedding = nn.InstanceNorm1d(amino_embedding)
+            #     for random_matrix in self.random_matrices:
+            #         transformed_embedding = torch.mm(random_matrix, normalized_embedding)
+            #         transformed_amino_embeddings.append(transformed_embedding)
 
-            transformed_sequence_embeddings.append(transformed_amino_embeddings)
-        return transformed_sequence_embeddings
+            #     transformed_sequence_embeddings.append(transformed_amino_embeddings)
+        return (
+            transformed_sequence_embeddings  # list of tensors of shape 506,256
+        )
 
-    def find_maximizers(self, transformed_amino_embedding: torch.Tensor):
+    def find_maximizers(self, transformed_embeddings: torch.Tensor):
         """
-        Input: one transformed amino embedding of size embedding dimension"""
-        windowed_embedding = transformed_amino_embedding.unfold(
-            0, self.W, self.step_size
-        )  # num_windows, W
-        indices = [i for i in itertools.product(range(self.W), range(self.W)) if i[0] != i[1]]
+        Input: one transformed sequence embedding of size embedding dimension"""
+        for transformed_embeddings in transformed_embeddings:
+            windowed_embedding = transformed_embeddings.unfold(
+                0, self.W, self.step_size
+            )  # num_windows, W
+            indices = [
+                i
+                for i in itertools.product(range(self.W), range(self.W))
+                if i[0] != i[1]
+            ]
 
-        maximizers = []
-        products = []
+            maximizers = []
+            products = []
 
-        for window in windowed_embedding:
-            max_prod = 0
-            optimal_pair = None
-            # all versus all products
-            for pair in indices:
-                prod = torch.dot(window[:, pair[0]], window[:, pair[1]])
-                if prod > max_prod:
-                    max_prod = prod
-                    optimal_pair = pair
-            maximizers.append(optimal_pair)
-            products.append(max_prod)
+            for window in windowed_embedding:
+                max_prod = 0
+                optimal_pair = None
+                # all versus all products
+                for pair in indices:
+                    prod = torch.dot(window[:, pair[0]], window[:, pair[1]])
+                    if prod > max_prod:
+                        max_prod = prod
+                        optimal_pair = pair
+                maximizers.append(optimal_pair)
+                products.append(max_prod)
 
         return products, maximizers
+
+    def reduce(self, sequence_embeddings: List[torch.Tensor]):
+        """I think right now i'm just gonna put both pairs in without keeping track of
+        the fact that they are pairs.. but i should rethink this. when we do search maybe we only want
+        to do a distance for each pair
+
+        also maybe want to see whether i can plug 2d vectors into FAISS"""
+        indices = [
+            i
+            for i in itertools.product(range(self.W), range(self.W))
+            if i[0] != i[1]
+        ]
+
+        sequence_minimizers = []
+        for embedding in tqdm.tqdm(sequence_embeddings):
+            windowed_embedding = embedding.unfold(0, self.W, self.step_size)
+            minimizers = torch.Tensor(
+                len(windowed_embedding), 2, windowed_embedding[0].shape[0]
+            )
+            for idx, window in enumerate(windowed_embedding):
+                optimal_pair = None
+                min_sim = 10000
+                for pair in indices:
+                    A = window[:, pair[0]]
+                    B = window[:, pair[1]]
+                    cos_sim = torch.dot(A, B) / (torch.norm(A) * torch.norm(B))
+                    if cos_sim < min_sim:
+                        min_sim = cos_sim
+                        optimal_pair = torch.stack((A, B))
+                minimizers[idx] = optimal_pair
+            sequence_minimizers.append(
+                minimizers.reshape(
+                    len(windowed_embedding) * 2, windowed_embedding[0].shape[0]
+                )
+            )
+
+        return sequence_minimizers
+
+    @torch.no_grad()
+    def _calc_embeddings(
+        self,
+        sequence_data: dict,
+        model_class,
+        apply_random_sequence: bool,
+        max_seq_length=512,
+    ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+        """Calculates the embeddings for the sequences by
+        calling the model forward function. Filters the sequences by max/min
+        sequence length and returns the filtered sequences/names and embeddings
+
+        Returns [names], [sequences], [embeddings]"""
+
+        names = list(sequence_data.keys())
+        sequences = list(sequence_data.values())
+
+        logger.info("Filtering sequences by length...")
+        filtered_names, embeddings = self.filter_sequences_by_length(
+            names,
+            sequences,
+            model_class,
+            apply_random_sequence,
+            max_seq_length,
+        )
+
+        assert len(filtered_names) == len(embeddings)
+
+        # transformed_embeddings = self.transform(embeddings)
+        # products, maximizers = self.find_maximizers(transformed_embeddings)
+
+        print("Reducing...")
+        embeddings_minimized = self.reduce(embeddings)
+
+        return filtered_names, embeddings_minimized
+
+    def evaluate(self, model_class) -> dict:
+        """Evaluation pipeline.
+
+        Calculates embeddings for query and targets
+        If visactmaps is true, generates activation map plots given the target embeddings
+            (probably want to remove this feature)
+        Then runs Faiss clustering and filtering and returns a dictionary of the model's hits.
+        """
+        if hasattr(model_class, "initial_seq_len"):
+            self.tile_size = model_class.initial_seq_len
+
+        print(f"Found {(len(self.target_seqs))} targets")
+
+        target_names, target_embeddings = self._calc_embeddings(
+            sequence_data=self.target_seqs,
+            model_class=model_class,
+            apply_random_sequence=False,
+            max_seq_length=self.max_seq_length,
+        )
+
+        del self.target_seqs  # remove from memory
+
+        query_names, query_embeddings = self._calc_embeddings(
+            sequence_data=self.query_seqs,
+            model_class=model_class,
+            apply_random_sequence=self.add_random_sequence,
+            max_seq_length=self.max_seq_length,
+        )
+        del self.query_seqs
+
+        self._setup_targets_for_faiss(target_embeddings, target_names)
+
+        model_hits, _, _ = self.filter(query_embeddings, query_names)
+
+        self.denom = len(query_names) * len(target_names)
+        self.num_queries = len(query_names)
+
+        return model_hits

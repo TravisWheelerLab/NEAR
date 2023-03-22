@@ -4,7 +4,9 @@ from torchaudio.transforms import MelSpectrogram
 
 from src.utils import amino_char_to_index, fasta_from_file
 
-_, seqs = fasta_from_file("/Users/mac/share/prefilter/src/resources/Q_benchmark2k30k.fa")
+_, seqs = fasta_from_file(
+    "/Users/mac/share/prefilter/src/resources/Q_benchmark2k30k.fa"
+)
 
 trans = MelSpectrogram(win_length=32, hop_length=16)
 

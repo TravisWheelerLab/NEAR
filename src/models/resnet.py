@@ -41,7 +41,9 @@ class ResNetParamFactory(pl.LightningModule):
     def load_from_checkpoint(
         self,
         checkpoint_path: Union[str, IO],
-        map_location: Optional[Union[Dict[str, str], str, torch.device, int, Callable]] = None,
+        map_location: Optional[
+            Union[Dict[str, str], str, torch.device, int, Callable]
+        ] = None,
         hparams_file: Optional[str] = None,
         strict: bool = True,
         **kwargs,

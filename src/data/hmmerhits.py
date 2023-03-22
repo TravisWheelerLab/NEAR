@@ -4,7 +4,7 @@
 import glob
 import os
 from typing import List, Tuple
-
+import tqdm
 import numpy as np
 
 
@@ -68,7 +68,9 @@ class HmmerHits:
         and returns a FastaFile object with the data
         for these target sequences"""
         target_fasta = FastaFile(
-            os.path.join(self.root, "split_subset", "targets", f"targets_{dirnum}.fa")
+            os.path.join(
+                self.root, "split_subset", "targets", f"targets_{dirnum}.fa"
+            )
         )
         return target_fasta
 
@@ -77,19 +79,20 @@ class HmmerHits:
         and returns a FastaFile object with the data
         for these query sequences"""
         query_fasta = FastaFile(
-            os.path.join(self.root, "split_subset", "queries", f"queries_{dirnum}.fa")
+            os.path.join(
+                self.root, "split_subset", "queries", f"queries_{dirnum}.fa"
+            )
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str, filtered_targets=None) -> Tuple[dict, np.array]:
+    def parse_hits_file(self, hits_file: str) -> Tuple[dict, np.array]:
         """parses a HMMER hits file
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
         and a numpy array of just the data"""
-        with open(hits_file, "r", encoding="utf8") as hmmer_hits_file:
-            hits = hmmer_hits_file.readlines()
         data_dict = {}
-        for row in hits:
+        hmmer_hits_file = open(hits_file, "r")
+        for row in hmmer_hits_file:
             if row[0] == "#":
                 continue
             row_info = " ".join(row.split()).split(" ")
@@ -98,12 +101,18 @@ class HmmerHits:
                 continue
             target_name = row_info[0]
             assert "UniRef90" in target_name
-            if filtered_targets is not None and target_name not in filtered_targets:
-                continue
 
             query_name = row_info[2]
             assert "UniRef90" in query_name
-            (e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,) = (
+
+            (
+                e_value_full,
+                score_full,
+                bias_full,
+                e_value_best,
+                score_best,
+                bias_best,
+            ) = (
                 row_info[4],
                 row_info[5],
                 row_info[6],
@@ -123,10 +132,13 @@ class HmmerHits:
             ).astype("float64")
 
             if query_name in data_dict:
-                data_dict[query_name][target_name] = data
+                data_dict[query_name].update({target_name: data})
             else:
                 data_dict[query_name] = {}
-                data_dict[query_name][target_name] = data
+                data_dict[query_name].update({target_name: data})
+            # if idx == 275:
+            #     print(data_dict['UniRef90_UPI001F15798D'])
+        hmmer_hits_file.close()
 
         return data_dict
 
@@ -142,10 +154,9 @@ class HmmerHits:
             target_query_hits: of format {query:{target:data}}
             hits_array: np array of just the data
         """
-        hits_file = os.listdir(f"{directory}/{query_num}/{target_num}")[0]
 
         hits_dict = self.parse_hits_file(
-            f"{directory}/{query_num}/{target_num}/{hits_file}", filtered_targets=filtered_targets
+            f"{directory}/{query_num}/{target_num}/hits.tblout"
         )
 
         return hits_dict

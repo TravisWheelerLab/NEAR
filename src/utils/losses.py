@@ -22,7 +22,9 @@ def _save(fpath, arr):
 
 def calc_unique(x, dim=-1):
     unique, inverse = torch.unique(x, return_inverse=True, dim=dim)
-    perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
+    perm = torch.arange(
+        inverse.size(dim), dtype=inverse.dtype, device=inverse.device
+    )
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return (
         unique,
@@ -64,7 +66,9 @@ class NpairLoss(nn.Module):
     #     loss = loss_ce + self.l2_reg*l2_loss*0.25
     #     return loss
     def forward(self, anchor, positive, target, a_indices, p_indices):
-        device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
+        device = (
+            torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
+        )
         batch_size = anchor.size(0)
         if target is None:
             target = torch.eye(batch_size, dtype=torch.float32).to(device)
@@ -73,11 +77,13 @@ class NpairLoss(nn.Module):
         loss_ce = cross_entropy(logit, target)
 
         if a_indices is not None:
-            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(a_indices) + torch.sum(
-                positive[p_indices] ** 2
-            ) / len(p_indices)
+            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(
+                a_indices
+            ) + torch.sum(positive[p_indices] ** 2) / len(p_indices)
         else:
-            l2_loss = (torch.sum(anchor**2) + torch.sum(positive**2)) / batch_size
+            l2_loss = (
+                torch.sum(anchor**2) + torch.sum(positive**2)
+            ) / batch_size
 
         loss = loss_ce + self.l2_reg * l2_loss * 0.25
         return loss
@@ -87,7 +93,9 @@ class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
 
-    def __init__(self, temperature=0.07, contrast_mode="all", base_temperature=0.07):
+    def __init__(
+        self, temperature=0.07, contrast_mode="all", base_temperature=0.07
+    ):
         super().__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -106,11 +114,14 @@ class SupConLoss(nn.Module):
             A loss scalar.
 
         """
-        device = torch.device("cuda") if features.is_cuda else torch.device("cpu")
+        device = (
+            torch.device("cuda") if features.is_cuda else torch.device("cpu")
+        )
 
         if len(features.shape) < 3:
             raise ValueError(
-                "`features` needs to be [bsz, n_views, ...]," "at least 3 dimensions are required"
+                "`features` needs to be [bsz, n_views, ...],"
+                "at least 3 dimensions are required"
             )
         if len(features.shape) > 3:
             features = features.view(features.shape[0], features.shape[1], -1)
@@ -123,7 +134,9 @@ class SupConLoss(nn.Module):
         elif labels is not None:
             labels = labels.contiguous().view(-1, 1)
             if labels.shape[0] != batch_size:
-                raise ValueError("Num of labels does not match num of features")
+                raise ValueError(
+                    "Num of labels does not match num of features"
+                )
             mask = torch.eq(labels, labels.T).float().to(device)
         else:
             mask = mask.float().to(device)

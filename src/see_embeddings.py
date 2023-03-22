@@ -39,10 +39,15 @@ figure_path = f"{HOME}/roc_test.png"
 minimum_seq_length = 0
 max_seq_length = 10000
 
-model_dict = {m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)}
+model_dict = {
+    m.__name__: m
+    for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
+}
 
 model_class = model_dict["ResNet1d"]
-checkpoint_path = f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt"
+checkpoint_path = (
+    f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt"
+)
 device = "cuda"
 
 model = model_class.load_from_checkpoint(
@@ -109,10 +114,15 @@ for tname, data in target_hits2.items():
     e_values.append(data[0])
 
 
-model_dict = {m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)}
+model_dict = {
+    m.__name__: m
+    for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
+}
 
 model_class = model_dict["ResNet1d"]
-checkpoint_path = f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt"
+checkpoint_path = (
+    f"{HOME}/prefilter/ResNet1d/4/checkpoints/best_loss_model.ckpt"
+)
 device = "cuda"
 
 model = model_class.load_from_checkpoint(
@@ -123,7 +133,9 @@ model = model_class.load_from_checkpoint(
 embeddings = []
 for sequence in sequences:
     embedding = (
-        model(encode_string_sequence(sequence).unsqueeze(0).to(device)).squeeze().T  # 400
+        model(encode_string_sequence(sequence).unsqueeze(0).to(device))
+        .squeeze()
+        .T  # 400
     )  # [400, 256]
 
     embeddings.append(embedding)
@@ -177,9 +189,14 @@ def randstrobe_order2(hash_seq_list, start, stop, hash_m1, prime):
     return min_index, min_hash_val
 
 
-def seq_to_randstrobes2_iter(seq, k_size, strobe_w_min_offset, strobe_w_max_offset, prime, w):
+def seq_to_randstrobes2_iter(
+    seq, k_size, strobe_w_min_offset, strobe_w_max_offset, prime, w
+):
     # print([seq[i:i+k_size].mean().round(2) for i in range(len(seq) - k_size +1)][:10])
-    hash_seq_list = [(i, hash(seq[i : i + k_size].sum())) for i in range(len(seq) - k_size + 1)]
+    hash_seq_list = [
+        (i, hash(seq[i : i + k_size].sum()))
+        for i in range(len(seq) - k_size + 1)
+    ]
     # print(hash_seq_list[:10])
     if w > 1:
         hash_seq_list_thinned = thinner(
@@ -198,7 +215,8 @@ def seq_to_randstrobes2_iter(seq, k_size, strobe_w_min_offset, strobe_w_max_offs
             p + strobe_w_min_offset
             if p + strobe_w_max_offset <= len(hash_seq_list)
             else max(
-                (p + strobe_w_min_offset) - (p + strobe_w_max_offset - len(hash_seq_list)),
+                (p + strobe_w_min_offset)
+                - (p + strobe_w_max_offset - len(hash_seq_list)),
                 p,
             )
         )
@@ -211,7 +229,9 @@ def seq_to_randstrobes2_iter(seq, k_size, strobe_w_min_offset, strobe_w_max_offs
         yield p, p2, hash_value
 
 
-def randstrobes(seq, k_size, strobe_w_min_offset, strobe_w_max_offset, w, order=2):
+def randstrobes(
+    seq, k_size, strobe_w_min_offset, strobe_w_max_offset, w, order=2
+):
     prime = 997
     assert (
         strobe_w_min_offset > 0
@@ -256,8 +276,12 @@ rs_per_seq = []
 for seq_emb in rounded_embeddings:
     amino_embeddings = []
     for amino_emb in seq_emb:
-        amino_emb = (amino_emb - np.min(amino_emb)) / (np.max(amino_emb) - np.min(amino_emb))
-        r = randstrobes(amino_emb, KSIZE, strobe_w_min_offset, strobe_w_max_offset, w)
+        amino_emb = (amino_emb - np.min(amino_emb)) / (
+            np.max(amino_emb) - np.min(amino_emb)
+        )
+        r = randstrobes(
+            amino_emb, KSIZE, strobe_w_min_offset, strobe_w_max_offset, w
+        )
         amino_embeddings += list(r.values())
     rs_per_seq.append(amino_embeddings)
 
@@ -319,7 +343,9 @@ for i in range(0, num_embeddings):
         s2 = shingles[j]
 
         # Calculate and store the actual Jaccard similarity.
-        JSim[getTriangleIndex(i, j)] = len(s1.intersection(s2)) / len(s1.union(s2))
+        JSim[getTriangleIndex(i, j)] = len(s1.intersection(s2)) / len(
+            s1.union(s2)
+        )
 
 maxShingleID = max([max(e) for e in shingles])
 numHashes = 10

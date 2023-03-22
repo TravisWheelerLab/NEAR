@@ -30,7 +30,9 @@ class ResidualBlock(nn.Module):
             dilation_rate = int(max(1, dilation_rate**shifted_layer_index))
         else:
             dilation_rate = 1
-        self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
+        self.num_bottleneck_units = math.floor(
+            resnet_bottleneck_factor * self.filters
+        )
         if typ == "1d":
             self.bn1 = torch.nn.BatchNorm1d(self.filters)
             # need to pad 'same', so output has the same size as input
@@ -200,7 +202,9 @@ class ResNet1dSequencePool(pl.LightningModule):
                         dots.to("cpu").numpy().astype(float),
                         interpolation="nearest",
                     )
-                    ax.set_title(f"min: {torch.min(dots).item():.3f} max: {torch.max(dots).item()}")
+                    ax.set_title(
+                        f"min: {torch.min(dots).item():.3f} max: {torch.max(dots).item()}"
+                    )
                     self.logger.experiment.add_figure(
                         f"image", plt.gcf(), global_step=self.global_step
                     )

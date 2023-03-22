@@ -116,14 +116,18 @@ class SequenceVAE(pl.LightningModule):
 
         sigma_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
-                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
         mu_mlp_list = [
             torch.nn.Linear(
-                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
-                self.res_block_n_filters * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
+                self.res_block_n_filters
+                * (self.initial_seq_len // 2**self.downsample_steps),
             ),
         ]
 
@@ -202,7 +206,9 @@ class SequenceVAE(pl.LightningModule):
         if self.apply_cnn_loss:
             # use the CNN!
             embeds = self.cnn_model(original_features)
-            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
+            recon_embeds = self.cnn_model(
+                torch.nn.functional.softmax(recon, dim=1)
+            )
             # # l2 loss on diag.
             e1 = torch.cat(torch.unbind(embeds, dim=0))
             e2 = torch.cat(torch.unbind(recon_embeds, dim=0))
@@ -224,7 +230,9 @@ class SequenceVAE(pl.LightningModule):
 
             recon = torch.nn.functional.normalize(recon, dim=-1)
 
-            recon_mutated = torch.nn.functional.normalize(recon_mutated, dim=-1)
+            recon_mutated = torch.nn.functional.normalize(
+                recon_mutated, dim=-1
+            )
 
             # fmt: off
             loss += self.supcon(torch.cat((recon_mutated.unsqueeze(1), recon.unsqueeze(1)), dim=1))
@@ -242,11 +250,18 @@ class SequenceVAE(pl.LightningModule):
             with torch.no_grad():
                 fig, ax = plt.subplots(ncols=2)
                 ax[0].imshow(
-                    torch.nn.functional.softmax(e1, dim=1).to("cpu").numpy().astype(float),
+                    torch.nn.functional.softmax(e1, dim=1)
+                    .to("cpu")
+                    .numpy()
+                    .astype(float),
                     interpolation="nearest",
                 )
-                ax[1].imshow(e2.to("cpu").numpy().astype(float), interpolation="nearest")
-                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
+                ax[1].imshow(
+                    e2.to("cpu").numpy().astype(float), interpolation="nearest"
+                )
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
 
         return loss
 
@@ -304,10 +319,14 @@ class SequenceVAEWithIndels(SequenceVAE):
 
         if self.apply_cnn_loss:
             embeds = self.cnn_model(concat_features)
-            recon_embeds = self.cnn_model(torch.nn.functional.softmax(recon, dim=1))
+            recon_embeds = self.cnn_model(
+                torch.nn.functional.softmax(recon, dim=1)
+            )
             # recall this is on concatenated features for performance
             embeds1, embeds2 = torch.split(embeds, embeds.shape[0] // 2)
-            recon_embeds1, recon_embeds2 = torch.split(recon_embeds, embeds.shape[0] // 2)
+            recon_embeds1, recon_embeds2 = torch.split(
+                recon_embeds, embeds.shape[0] // 2
+            )
             #
             # i have to split these guys in two again
             # # l2 loss on diag.
@@ -322,7 +341,9 @@ class SequenceVAEWithIndels(SequenceVAE):
             loss += dists[labelmat].sum()
 
         if self.apply_contrastive_loss:
-            features1, features2 = torch.split(concat_features, concat_features.shape[0] // 2)
+            features1, features2 = torch.split(
+                concat_features, concat_features.shape[0] // 2
+            )
             recon1, recon2 = torch.split(recon, concat_features.shape[0] // 2)
             e1 = torch.cat(torch.unbind(features1, dim=-1))
             e2 = torch.cat(torch.unbind(recon2, dim=-1))
@@ -338,7 +359,9 @@ class SequenceVAEWithIndels(SequenceVAE):
 
         if self.global_step % self.log_interval == 0:
 
-            e1 = torch.cat(torch.unbind(torch.nn.functional.softmax(recon, dim=1), dim=-1))[:200]
+            e1 = torch.cat(
+                torch.unbind(torch.nn.functional.softmax(recon, dim=1), dim=-1)
+            )[:200]
             e2 = torch.cat(torch.unbind(concat_features, dim=-1))[:200]
 
             with torch.no_grad():
@@ -352,8 +375,12 @@ class SequenceVAEWithIndels(SequenceVAE):
                     e1.to("cpu").numpy().astype(float),
                     interpolation="nearest",
                 )
-                ax[1].imshow(e2.to("cpu").numpy().astype(float), interpolation="nearest")
-                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
+                ax[1].imshow(
+                    e2.to("cpu").numpy().astype(float), interpolation="nearest"
+                )
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
 
         return loss
 

@@ -47,7 +47,9 @@ class HierarchicalMeanPool(pl.LightningModule):
         for i in range(self.n_res_blocks):
 
             if (i + 1) % 3 == 0:
-                layer_list.append(torch.nn.AvgPool1d(self.pool_factors[i // 3]))
+                layer_list.append(
+                    torch.nn.AvgPool1d(self.pool_factors[i // 3])
+                )
 
             layer_list.append(
                 ResConv(
@@ -61,9 +63,13 @@ class HierarchicalMeanPool(pl.LightningModule):
         self.embedding_trunk = torch.nn.Sequential(*layer_list)
 
         mlp_list = [
-            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+            torch.nn.Conv1d(
+                self.res_block_n_filters, self.res_block_n_filters, 1
+            ),
             torch.nn.ELU(),
-            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
+            torch.nn.Conv1d(
+                self.res_block_n_filters, self.res_block_n_filters, 1
+            ),
         ]
 
         self.mlp = torch.nn.Sequential(*mlp_list)
@@ -82,7 +88,9 @@ class HierarchicalMeanPool(pl.LightningModule):
         features, masks, labelvecs = batch
         embeddings = self.forward(features)
 
-        e1, e2 = torch.split(embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0)
+        e1, e2 = torch.split(
+            embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
+        )
         e1 = torch.cat(torch.unbind(e1, dim=0))
         e2 = torch.cat(torch.unbind(e2, dim=0))
         e1 = torch.nn.functional.normalize(e1, dim=-1)
@@ -93,15 +101,23 @@ class HierarchicalMeanPool(pl.LightningModule):
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
                 plt.imshow(
-                    torch.matmul(e1, e2.T).to("cpu").detach().numpy().astype(float),
+                    torch.matmul(e1, e2.T)
+                    .to("cpu")
+                    .detach()
+                    .numpy()
+                    .astype(float),
                     interpolation="nearest",
                     vmin=-1,
                     vmax=1,
                 )
                 plt.colorbar()
-                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
+                self.logger.experiment.add_figure(
+                    f"image", plt.gcf(), global_step=self.global_step
+                )
 
-        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
+        loss = self.loss_func(
+            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
+        )
         return loss
 
     def training_step(self, batch, batch_nb):

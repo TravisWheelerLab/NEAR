@@ -42,7 +42,9 @@ def emit_and_inject_labels(
     for fasta_file in fasta_files:
         # get neighborhood labels
         labels, _ = utils.fasta_from_file(fasta_file)
-        neighborhoods = [utils.parse_labels(labelset)[1:] for labelset in labels]
+        neighborhoods = [
+            utils.parse_labels(labelset)[1:] for labelset in labels
+        ]
         neighborhoods_ = []
         for neighborhood_label in neighborhoods:
             if len(neighborhood_label) > 1:
@@ -62,22 +64,34 @@ def emit_and_inject_labels(
                 # create hmm with correct --ere value (relative entropy)
                 # the default is 0.59, per hmmer user guide.
 
-                outf = os.path.join(output_directory, family_name + "_emission.fa")
+                outf = os.path.join(
+                    output_directory, family_name + "_emission.fa"
+                )
                 if os.path.isfile(outf):
-                    pfunc(f"Emission sequences already generated for {family_name}")
+                    pfunc(
+                        f"Emission sequences already generated for {family_name}"
+                    )
                     continue
 
                 if relent != 0.59:
-                    subprocess.call(f"hmmbuild --ere {relent} {tmp_hmm_file} {ali_file}".split())
+                    subprocess.call(
+                        f"hmmbuild --ere {relent} {tmp_hmm_file} {ali_file}".split()
+                    )
                 else:
-                    subprocess.call(f"hmmbuild {tmp_hmm_file} {ali_file}".split())
+                    subprocess.call(
+                        f"hmmbuild {tmp_hmm_file} {ali_file}".split()
+                    )
 
                 tmp_emission_path = random_filename(".")
                 if os.path.isfile(tmp_hmm_file):
 
-                    cmd = f"hmmemit -o {tmp_emission_path} -N {n} {tmp_hmm_file}"
+                    cmd = (
+                        f"hmmemit -o {tmp_emission_path} -N {n} {tmp_hmm_file}"
+                    )
                     subprocess.call(cmd.split())
-                    labels, sequences = utils.fasta_from_file(tmp_emission_path)
+                    labels, sequences = utils.fasta_from_file(
+                        tmp_emission_path
+                    )
 
                     with open(outf, "w") as dst:
                         for label, sequence in zip(labels, sequences):
@@ -168,7 +182,9 @@ def parse_domtblout(domtbl):
 
     df = df.dropna()
     # "-" is the empty label
-    df.loc[df["description"] != "-", "target_name"] = df["target_name"] + " " + df["description"]
+    df.loc[df["description"] != "-", "target_name"] = (
+        df["target_name"] + " " + df["description"]
+    )
 
     return df
 
@@ -192,7 +208,9 @@ def create_parser():
         "-adb", "--alidb", help="database of alignments in stockholm format"
     )
     pipeline_parser.add_argument("-db", "--hmmdb", default=None)
-    pipeline_parser.add_argument("-e", "--evalue_threshold", type=float, default=1e-5)
+    pipeline_parser.add_argument(
+        "-e", "--evalue_threshold", type=float, default=1e-5
+    )
 
     split_parser = subparsers.add_parser(name="split", add_help=False)
     split_parser.add_argument("-a", "--aligned_fasta_file", type=str)
@@ -228,26 +246,41 @@ def create_parser():
 
     train_hdb_parser = subparsers.add_parser(
         "hdb",
-        description="extract training alignment from the alidb and" " create a new hmm",
+        description="extract training alignment from the alidb and"
+        " create a new hmm",
     )
-    train_hdb_parser.add_argument("fasta_file", help="fasta file containing train sequences")
+    train_hdb_parser.add_argument(
+        "fasta_file", help="fasta file containing train sequences"
+    )
     train_hdb_parser.add_argument("alidb", help="alignment database")
     train_hdb_parser.add_argument("-o", "--overwrite", action="store_true")
 
     emission_parser = subparsers.add_parser("emit")
-    emission_parser.add_argument("hmm_file", help="hmm file to emit sequences from")
-    emission_parser.add_argument("output_directory", help="where to save the emitted sequences")
-    emission_parser.add_argument("n", type=int, help="number of sequences to emit")
+    emission_parser.add_argument(
+        "hmm_file", help="hmm file to emit sequences from"
+    )
+    emission_parser.add_argument(
+        "output_directory", help="where to save the emitted sequences"
+    )
+    emission_parser.add_argument(
+        "n", type=int, help="number of sequences to emit"
+    )
 
     injection_parser = subparsers.add_parser(
         "inject",
         description="generate neighborhood emission sequences from the neighborhood labels contained in"
         " fasta_files.",
     )
-    injection_parser.add_argument("n", help="how many emission sequences to generate")
+    injection_parser.add_argument(
+        "n", help="how many emission sequences to generate"
+    )
     injection_parser.add_argument("fasta_files", nargs="+")
-    injection_parser.add_argument("output_directory", help="where to save the emitted sequences")
-    injection_parser.add_argument("ali_directory", help="where the .sto files are saved")
+    injection_parser.add_argument(
+        "output_directory", help="where to save the emitted sequences"
+    )
+    injection_parser.add_argument(
+        "ali_directory", help="where the .sto files are saved"
+    )
     injection_parser.add_argument(
         "--relent",
         default=0.59,
@@ -287,7 +320,9 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df):
             else:
                 target_label = label
 
-            assigned_labels = domtblout_df.loc[domtblout_df["target_name"] == target_label]
+            assigned_labels = domtblout_df.loc[
+                domtblout_df["target_name"] == target_label
+            ]
 
             assigned_labels = assigned_labels.sort_values(["e_value"])
 
@@ -295,10 +330,14 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df):
                 # why are some sequences not classified? They're in Pfam-seed,
                 # which means they're manually curated to be part of a family.
                 # or the hmmdb can't find them.
-                pfunc(f"sequence named {target_label} not found in classification on {fasta_in}")
+                pfunc(
+                    f"sequence named {target_label} not found in classification on {fasta_in}"
+                )
                 target_label = target_label.split()[0]
                 # Sometimes the names don't have a description, and aren't found.
-                assigned_labels = domtblout_df.loc[domtblout_df["target_name"] == target_label]
+                assigned_labels = domtblout_df.loc[
+                    domtblout_df["target_name"] == target_label
+                ]
 
                 if len(assigned_labels) == 0:
                     # pfunc(
@@ -319,7 +358,9 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df):
                 assigned_labels["to"],
             ):
                 if "PF" not in seq_label:
-                    raise ValueError(f"Pfam accession ID not found in labels in {domtblout_df}")
+                    raise ValueError(
+                        f"Pfam accession ID not found in labels in {domtblout_df}"
+                    )
 
                 if prev_evalue is None:
                     prev_evalue = float(e_value)
@@ -327,14 +368,18 @@ def labels_from_file(fasta_in, fasta_out, domtblout_df):
                     raise ValueError("Unsorted e-values. Please fix.")
 
                 # removed e-value thresholding (should be done at train time)
-                fasta_header += f" {seq_label} ({begin_coord} {end_coord} {e_value})"
+                fasta_header += (
+                    f" {seq_label} ({begin_coord} {end_coord} {e_value})"
+                )
 
             if len(fasta_header) != init_len:
                 fasta_header += "\n" + sequence + "\n"
                 dst.write(fasta_header)
 
 
-def cluster_and_split_sequences(aligned_fasta_file, clustered_output_directory, pid):
+def cluster_and_split_sequences(
+    aligned_fasta_file, clustered_output_directory, pid
+):
     """
     Use carbs (https://github.com/TravisWheelerLab/carbs) to split the sequences in the aligned fasta file at
     percent identity pid.
@@ -375,7 +420,9 @@ def label_with_hmmdb(fasta_file, fasta_outfile, hmmdb, overwrite=False):
     print(f"domtblout {domtblout_path}")
 
     if overwrite or not os.path.isfile(domtblout_path):
-        print(f"running hmmsearch with {hmmdb}, {fasta_file}, dumping to {domtblout_path}")
+        print(
+            f"running hmmsearch with {hmmdb}, {fasta_file}, dumping to {domtblout_path}"
+        )
         subprocess.call(
             f"hmmsearch -o /dev/null --domtblout {domtblout_path} {hmmdb} {fasta_file}".split()
         )
@@ -398,7 +445,9 @@ def extract_ali_and_create_hmm(fasta_file, alidb, overwrite=False):
         family_name = os.path.basename(fasta_file)
         family_name = family_name[: family_name.find(".")]
         train_alignment_temp_file = random_filename()
-        cmd = f"esl-afetch -o {train_alignment_temp_file} {alidb} {family_name}"
+        cmd = (
+            f"esl-afetch -o {train_alignment_temp_file} {alidb} {family_name}"
+        )
         assert subprocess.call(cmd.split()) == 0
 
         train_name_file = random_filename()
@@ -455,7 +504,9 @@ class Generator:
 
         # split and cluster these afas using a slurm array job # requiring a slurm template.
         job_id_to_wait_for = self.split_afa_array_job()
-        job_id_to_wait_for = self.extract_training_alignments_and_build_hmms(job_id_to_wait_for)
+        job_id_to_wait_for = self.extract_training_alignments_and_build_hmms(
+            job_id_to_wait_for
+        )
         job_id_to_wait_for = self.concatenate_hmms(job_id_to_wait_for)
         job_id_to_wait_for = self.label_with_hmm(job_id_to_wait_for)
         self.delete(job_id_to_wait_for)
@@ -476,7 +527,9 @@ class Generator:
         afa_files = glob(os.path.join(self.aligned_fasta_directory, "*.afa"))
         self._dump_data(random_f, afa_files)
 
-        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(afa_files)))
+        slurm_script = array_job_template.replace(
+            "ARRAY_JOBS", str(len(afa_files))
+        )
         slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_f)
         run_cmd = (
             f"/home/tc229954/anaconda/envs/prefilter/bin/python "
@@ -497,13 +550,19 @@ class Generator:
 
     def extract_training_alignments_and_build_hmms(self, jobid_to_wait_for):
 
-        train_names = glob(os.path.join(self.clustered_output_directory, "*train.fa"))
+        train_names = glob(
+            os.path.join(self.clustered_output_directory, "*train.fa")
+        )
         random_train_fasta_file = self._random_file(".")
 
         self._dump_data(random_train_fasta_file, train_names)
 
-        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(train_names)))
-        slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_train_fasta_file)
+        slurm_script = array_job_template.replace(
+            "ARRAY_JOBS", str(len(train_names))
+        )
+        slurm_script = slurm_script.replace(
+            "ARRAY_INPUT_FILE", random_train_fasta_file
+        )
 
         # slurm script to build the hmms
         run_cmd = (
@@ -531,7 +590,9 @@ class Generator:
     def concatenate_hmms(self, jobid_to_wait_for):
         jobid = None
         if self.hmmdb is None:
-            output_hmm_file = f"{self.clustered_output_directory}/Pfam-{self.pid}.hmm"
+            output_hmm_file = (
+                f"{self.clustered_output_directory}/Pfam-{self.pid}.hmm"
+            )
             if os.path.isfile(output_hmm_file):
                 pfunc(
                     f"Found concatenation of hmms at {output_hmm_file}. Continuing on to next step without recreating."
@@ -552,7 +613,9 @@ class Generator:
 
             self.hmmdb = output_hmm_file
         else:
-            pfunc(f"Using {self.hmmdb} for labeling instead of concatenating traing hmms.")
+            pfunc(
+                f"Using {self.hmmdb} for labeling instead of concatenating traing hmms."
+            )
         return jobid
 
     def label_with_hmm(self, jobid_to_wait_for):
@@ -563,7 +626,9 @@ class Generator:
         random_f = self._random_file(".")
         self._dump_data(random_f, fa_files)
 
-        slurm_script = array_job_template.replace("ARRAY_JOBS", str(len(fa_files)))
+        slurm_script = array_job_template.replace(
+            "ARRAY_JOBS", str(len(fa_files))
+        )
         slurm_script = slurm_script.replace("ARRAY_INPUT_FILE", random_f)
         run_cmd = (
             f"/home/tc229954/anaconda/envs/prefilter/bin/python "
@@ -639,7 +704,9 @@ if __name__ == "__main__":
             os.path.basename(program_args.fasta_file),
         )
         os.makedirs(program_args.fasta_output_directory, exist_ok=True)
-        label_with_hmmdb(program_args.fasta_file, fasta_outf, program_args.hmmdb)
+        label_with_hmmdb(
+            program_args.fasta_file, fasta_outf, program_args.hmmdb
+        )
     elif program_args.command == "hdb":
         extract_ali_and_create_hmm(
             program_args.fasta_file, program_args.alidb, program_args.overwrite

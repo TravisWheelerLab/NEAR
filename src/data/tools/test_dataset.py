@@ -6,7 +6,10 @@ import pytorch_lightning as pl
 import torch
 
 from src import models
-from src.datasets.alignmentgenerator import AlignmentGeneratorWithIndels, AlignmentGenerator
+from src.datasets.alignmentgenerator import (
+    AlignmentGeneratorWithIndels,
+    AlignmentGenerator,
+)
 from src.utils import pluginloader
 from src.utils.losses import NpairLoss, SupConLoss
 
@@ -38,7 +41,9 @@ def supconloss(embeddings, labels_1=None, labels_2=None, mask=None):
         emb2 = torch.nn.functional.normalize(emb2, dim=-1)
     loss = SupConLoss()
 
-    return loss(torch.cat((emb1.unsqueeze(1), emb2.unsqueeze(1)), dim=1), mask=mask)
+    return loss(
+        torch.cat((emb1.unsqueeze(1), emb2.unsqueeze(1)), dim=1), mask=mask
+    )
 
 
 def npairsloss(embeddings, mask=None, a_indices=None, p_indices=None):
@@ -68,14 +73,18 @@ if __name__ == "__main__":
     TEST_GAPPED = True
 
     model_dict = {
-        m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
+        m.__name__: m
+        for m in pluginloader.load_plugin_classes(models, pl.LightningModule)
     }
 
     model_class = model_dict["ResNet1d"]
     DEVICE = "cuda"
     # device = "cpu"
     model = model_class(
-        learning_rate=1e-5, log_interval=100, in_channels=20, res_block_n_filters=256
+        learning_rate=1e-5,
+        log_interval=100,
+        in_channels=20,
+        res_block_n_filters=256,
     )
     print("Loaded model")
 
@@ -102,7 +111,9 @@ if __name__ == "__main__":
 
     if TEST_GAPPED:
         ALI_PATH = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
-        train_dataset_indels = AlignmentGeneratorWithIndels(ALI_PATH, seq_len=128)
+        train_dataset_indels = AlignmentGeneratorWithIndels(
+            ALI_PATH, seq_len=128
+        )
 
         train_dataloader_indels = torch.utils.data.DataLoader(
             train_dataset_indels,
@@ -111,7 +122,10 @@ if __name__ == "__main__":
             num_workers=6,
             drop_last=True,
         )
-        val_dataset_indels = AlignmentGeneratorWithIndels("/xdisk/twheeler/daphnedemekas/valpaths2.txt", seq_len=128)
+
+        val_dataset_indels = AlignmentGeneratorWithIndels(
+            "/xdisk/twheeler/daphnedemekas/valpaths2.txt", seq_len=128
+        )
 
         val_dataloader_indels = torch.utils.data.DataLoader(
             val_dataset_indels,
@@ -120,9 +134,19 @@ if __name__ == "__main__":
             num_workers=6,
             drop_last=True,
         )
-        raise
+        dataiter_indels = iter(val_dataloader_indels)
+        for i in range(len(dataiter_indels)):
+            (
+                seq1,
+                feature1_indices,
+                seq2,
+                feature2_indices,
+            ) = next(dataiter_indels)
+            print(i)
 
-        dataiter_indels = iter(train_dataloader_indels)
+        while True:
+            dataiter_indels = iter(train_dataloader_indels)
+
         (
             seq1,
             feature1_indices,
@@ -149,7 +173,9 @@ if __name__ == "__main__":
 
         features_indels = torch.cat([seq1, seq2], dim=0)
         embeddings_indels = model(features_indels)
-        npairs_indels = npairsloss(embeddings_indels, labelmat, e1_indices, e2_indices)
+        npairs_indels = npairsloss(
+            embeddings_indels, labelmat, e1_indices, e2_indices
+        )
 
         print("Indels")
         print(npairs_indels)
