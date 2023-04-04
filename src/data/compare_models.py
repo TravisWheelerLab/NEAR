@@ -27,12 +27,12 @@ import pickle
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("query_id", type=int, default=4)
-parser.add_argument("--models", nargs="+", default=["align", "blosum"])
-parser.add_argument("--modes", nargs="+", default=["max", "normal"])
-parser.add_argument("--lengths", action=argparse.BooleanOptionalValue)
+parser.add_argument("--query_id", type=int, default=4)
+parser.add_argument("--models",type = str, default=["ABK"])
+parser.add_argument("--modes", type = str,default=["MNF"])
+parser.add_argument("--lengths", action='store_true')
 
-args = parser.parse_args("4 --lengths")
+args = parser.parse_args()
 
 
 def load_hmmer_hits(query_id: int = 4):
@@ -112,10 +112,10 @@ class Results:
         sorted_alignment_pairs_path: str,
         temp_data_file: str,
         roc_filepath: str,
-        plot_roc: bool = True,
+        plot_roc: bool = False,
         num_pos_per_evalue: list = None,
         num_hits: int = None,
-        plot_evalue_means: bool = True,
+        plot_evalue_means: bool = False,
     ):
         """evaluates a given model"""
 
@@ -127,18 +127,17 @@ class Results:
             self.numhits,
         ) = get_data(model_results_path, hmmer_hits_dict, savedir=data_savedir)
 
-        if plot_evalue_means:
-            plot_mean_e_values(
-                self.similarities,
-                self.e_values,
-                self.biases,
-                min_threshold=0,
-                max_threshold=np.max(self.similarities),
-                outputfilename=evaluemeansfile,
-                plot_stds=True,
-                plot_lengths=True,
-                title=evaluemeanstitle,
-            )
+        plot_mean_e_values(
+            self.similarities,
+            self.e_values,
+            self.biases,
+            min_threshold=0,
+            max_threshold=np.max(self.similarities),
+            outputfilename=evaluemeansfile,
+            plot_stds=True,
+            plot_lengths=True,
+            title=evaluemeanstitle,
+        )
         if plot_roc:
             generate_roc_from_sorted_pairs(
                 model_results_path,
@@ -154,7 +153,7 @@ class Results:
 def evaluate(
     query_id=4,
     models: list = ["align", "blosum", "kmer"],
-    modes: list = ["normal", "max"],
+    modes: list = ["normal", "max", "flat","scann"],
     lengths: bool = True,
 ):
     """Main function for evaluation"""
@@ -176,14 +175,14 @@ def evaluate(
 
                 print("Parsing Alignment Model IVF Query 4 Normal")
                 _ = Results(**align_ivf_normal_inputs_4)
-            if "flat" in modes:
-                align_ivf_flat_inputs = load_alignment_inputs(
-                    all_hits_max, "flat"
+            if "scann" in modes:
+                align_ivf_scann_inputs = load_alignment_inputs(
+                    all_hits_max, "scann"
                 )
-                print("Parsing Alignment Model Flat Query 4 Normal")
+                print("Parsing Alignment Model Scann Query 4 Normal")
 
-                _ = Results(**align_ivf_flat_inputs)
-
+                _ = Results(**align_ivf_scann_inputs)
+	
         if "blosum" in models:
             if "normal" in modes:
                 blosum_ivf_normal_inputs = load_blosum_inputs(
@@ -207,14 +206,14 @@ def evaluate(
                 kmer_inputs = load_kmer_inputs(all_hits_max, "max")
                 print("Parsing Alignment Model KMER Max")
                 alignment_model_kmer_max = Results(
-                    **kmer_inputs, plot_roc=False
+                    **kmer_inputs
                 )
             if "normal" in modes:
                 kmer_inputs_normal = load_kmer_inputs(
                     all_hits_normal, "normal"
                 )
                 print("Parsing Alignment Model KMER Normal")
-                _ = Results(**kmer_inputs_normal, plot_roc=False)
+                _ = Results(**kmer_inputs_normal)
 
         if lengths:
             plot_lengths(
@@ -223,69 +222,88 @@ def evaluate(
                 alignment_model_kmer_max.similarities,
             )
 
-    elif query_id == 0:
-        all_hits_max_0, all_hits_normal_0 = load_hmmer_hits(query_id)
-        align_ivf_max_inputs_0 = {
-            "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
-            "hmmer_hits_dict": all_hits_max_0,
-            "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0",
-            "evaluemeansfile": "evaluemeans_align_ivf",
-            "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Max",
-            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0.pkl",
-            "temp_data_file": ALIGNMENT_MODEL_IVF_0_MAX_DATAFILE,
-            "roc_filepath": "ResNet1d/eval_align_ivf_roc_0.png",
-            "num_pos_per_evalue": [352617, 810152, 1105290, 2667980],
-            "num_hits": 954905307,
-            "plot_roc": True,
-        }
+    # elif query_id == 0:
+    #     all_hits_max_0, all_hits_normal_0 = load_hmmer_hits(query_id)
+    #     align_ivf_max_inputs_0 = {
+    #         "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
+    #         "hmmer_hits_dict": all_hits_max_0,
+    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0",
+    #         "evaluemeansfile": "evaluemeans_align_ivf",
+    #         "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Max",
+    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0.pkl",
+    #         "temp_data_file": ALIGNMENT_MODEL_IVF_0_MAX_DATAFILE,
+    #         "roc_filepath": "ResNet1d/eval_align_ivf_roc_0.png",
+    #         "num_pos_per_evalue": [352617, 810152, 1105290, 2667980],
+    #         "num_hits": 954905307,
+    #         "plot_roc": True,
+    #     }
 
-        align_ivf_normal_inputs_0 = {
-            "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
-            "hmmer_hits_dict": all_hits_normal_0,
-            "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0_normal",
-            "evaluemeansfile": "evaluemeans_align_ivf_normal_0",
-            "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Normal",
-            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0_normal.pkl",
-            "temp_data_file": ALIGNMENT_MODEL_IVF_0_NORMAL_DATAFILE,
-            "roc_filepath": "ResNet1d/eval_align_ivf_roc_normal_0.png",
-            "num_pos_per_evalue": [352447, 763108, 794484, 798858],
-            "num_hits": 954905307,
-            "plot_roc": True,
-        }
+    #     align_ivf_normal_inputs_0 = {
+    #         "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
+    #         "hmmer_hits_dict": all_hits_normal_0,
+    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0_normal",
+    #         "evaluemeansfile": "evaluemeans_align_ivf_normal_0",
+    #         "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Normal",
+    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0_normal.pkl",
+    #         "temp_data_file": ALIGNMENT_MODEL_IVF_0_NORMAL_DATAFILE,
+    #         "roc_filepath": "ResNet1d/eval_align_ivf_roc_normal_0.png",
+    #         "num_pos_per_evalue": [352447, 763108, 794484, 798858],
+    #         "num_hits": 954905307,
+    #         "plot_roc": True,
+    #     }
 
-        kmer_inputs = {
-            "model_results_path": KMER_MODEL_RESULTS_PATH,
-            "hmmer_hits_dict": all_hits_max_0,
-            "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_max",
-            "evaluemeansfile": "evaluemeans_align_kmer_max",
-            "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Max",
-            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_max.pkl",
-            "temp_data_file": KMER_MODEL_DATAFILE,
-            "roc_filepath": "ResNet1d/eval/align_kmer_roc.png",
-        }
+    #     kmer_inputs = {
+    #         "model_results_path": KMER_MODEL_RESULTS_PATH,
+    #         "hmmer_hits_dict": all_hits_max_0,
+    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_max",
+    #         "evaluemeansfile": "evaluemeans_align_kmer_max",
+    #         "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Max",
+    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_max.pkl",
+    #         "temp_data_file": KMER_MODEL_DATAFILE,
+    #         "roc_filepath": "ResNet1d/eval/align_kmer_roc.png",
+    #     }
 
-        kmer_inputs_normal = {
-            "model_results_path": KMER_MODEL_RESULTS_PATH,
-            "hmmer_hits_dict": all_hits_normal_0,
-            "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_normal",
-            "evaluemeansfile": "evaluemeans_align_kmer_normal",
-            "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Normal",
-            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_normal.pkl",
-            "temp_data_file": KMER_MODEL_DATAFILE_NORMAL,
-            "roc_filepath": "ResNet1d/eval/align_kmer_roc_normal.png",
-        }
+    #     kmer_inputs_normal = {
+    #         "model_results_path": KMER_MODEL_RESULTS_PATH,
+    #         "hmmer_hits_dict": all_hits_normal_0,
+    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_normal",
+    #         "evaluemeansfile": "evaluemeans_align_kmer_normal",
+    #         "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Normal",
+    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_normal.pkl",
+    #         "temp_data_file": KMER_MODEL_DATAFILE_NORMAL,
+    #         "roc_filepath": "ResNet1d/eval/align_kmer_roc_normal.png",
+    #     }
 
-        print("Parsing Alignment Model KMER Normal")
-        _ = Results(**kmer_inputs_normal, plot_roc=False)
+    #     print("Parsing Alignment Model KMER Normal")
+    #     _ = Results(**kmer_inputs_normal, plot_roc=False)
 
-        print("Parsing Alignment Model KMER Max")
-        _ = Results(**kmer_inputs, plot_roc=False)
+    #     print("Parsing Alignment Model KMER Max")
+    #     _ = Results(**kmer_inputs, plot_roc=False)
 
-        print("Parsing Alignment Model IVF Query 0")
-        _ = Results(**align_ivf_normal_inputs_0)
+    #     print("Parsing Alignment Model IVF Query 0")
+    #     _ = Results(**align_ivf_normal_inputs_0)
 
-        print("Parsing Alignment Model IVF Query 0 - Max")
-        _ = Results(**align_ivf_max_inputs_0)
+    #     print("Parsing Alignment Model IVF Query 0 - Max")
+    #     _ = Results(**align_ivf_max_inputs_0)
 
+modelinitials = args.models
+modeinitials = args.modes
 
-evaluate(args.query_id, args.models, args.modes, args.lengths)
+models = []
+modes = []
+if 'A' in modelinitials:
+    models.append("align")
+if 'B' in modelinitials:
+    models.append('blosum')
+if 'K' in modelinitials:
+    models.append('kmer')
+
+if 'M' in modeinitials:
+    modes.append('max')
+if 'N' in modeinitials:
+    modes.append('normal')
+if 'F' in modeinitials:
+    modes.append('flat')
+if 'S' in modeinitials:
+    modes.append('scann')
+evaluate(args.query_id, models, modes, lengths = args.lengths)

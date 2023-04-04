@@ -8,9 +8,7 @@ import numpy as np
 import pickle
 from src.data.utils import get_evaluation_data
 import pdb
-
 COLORS = ["r", "c", "g", "k"]
-
 
 def plot_mean_e_values(
     distance_list: list,
@@ -56,36 +54,16 @@ def plot_mean_e_values(
     plt.scatter(thresholds, means, c=mean_bias, cmap="Greens", s=scatter_size)
     plt.plot(thresholds, means)
     if plot_stds:
-        plt.fill_between(
-            thresholds,
-            np.array(means) - np.array(stds) / 2,
-            np.array(means) + np.array(stds) / 2,
-            alpha=0.5,
-        )
+        plt.fill_between(thresholds,np.array(means) - np.array(stds) / 2,np.array(means) + np.array(stds) / 2,alpha=0.5,)
     if plot_lengths:
-        plt.fill_between(
-            thresholds,
-            np.array(means) - np.array(lengths),
-            np.array(means) + np.array(lengths),
-            alpha=0.5,
-            color="orange",
-        )
+        plt.fill_between(thresholds,np.array(means) - np.array(lengths),np.array(means) + np.array(lengths),alpha=0.5,color="orange",)
     plt.title(title)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
     plt.savefig(f"ResNet1d/eval/{outputfilename}.png")
 
-
 def plot_lengths(distance_list1, distance_list2, distance_list3):
-    thresholds = np.linspace(
-        0,
-        max(
-            np.max(distance_list1),
-            np.max(distance_list2),
-            np.max(distance_list3),
-        ),
-        100,
-    )
+    thresholds = np.linspace(0, max(np.max(distance_list1),np.max(distance_list2),np.max(distance_list3)), 100)
     all_distance1 = np.array(distance_list1)
     all_distance2 = np.array(distance_list2)
     all_distance3 = np.array(distance_list3)
@@ -100,17 +78,14 @@ def plot_lengths(distance_list1, distance_list2, distance_list3):
         lengths1.append(len(idx1))
         lengths2.append(len(idx2))
         lengths3.append(len(idx3))
-    plt.plot(lengths1, label="Alignment Model")
-    plt.plot(lengths2, label="Blosum Model")
-    plt.plot(lengths3, label="K-mer model")
-    plt.xlabel("Similarity threshold")
+    plt.plot(thresholds, lengths1, label = 'Alignment Model')
+    plt.plot(thresholds, lengths2, label = 'Blosum Model')
+    plt.plot(thresholds, lengths3, label = 'K-mer model')
+    plt.xlabel('Similarity threshold')
     plt.ylabel("Number of hits above threshold")
-    plt.title(
-        "Number of hits at different similarity thresholds across models"
-    )
+    plt.title("Number of hits at different similarity thresholds across models")
     plt.legend()
-    plt.savefig("ResNed1d/eval/lengths.png")
-
+    plt.savefig("ResNet1d/eval/lengths.png")
 
 def plot_roc_curve(
     figure_path: str,
@@ -135,8 +110,10 @@ def plot_roc_curve(
     _, axis = plt.subplots(figsize=(10, 10))
     axis.set_title(f"{os.path.splitext(os.path.basename(figure_path))[0]}")
 
-    num_positives = [0] * num_thresholds
-    num_decoys = [0] * num_thresholds
+
+    num_positives = [0]*num_thresholds
+    num_decoys = [0]*num_thresholds
+
 
     filtrations = []
     recalls = []
@@ -153,38 +130,24 @@ def plot_roc_curve(
                 num_positives[i] += 1
             elif classnames[i] == "D":
                 num_decoys[i] += 1
-        filtration = [
-            100 * (1 - (num_decoys[i] / numhits))
-            for i in range(num_thresholds)
-        ]
-        if filtration > 75:
-            continue
+        filtration = [num_decoys[i] / numhits for i in range(num_thresholds)]
 
-        if idx % 50000 == 0:
+        if idx % 50000 == 0 and (100 * (1 - filtration[0]) > 75):
+            recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
+
             # print(
             #     f"num_Ps: {num_positives},  num_Ds: {num_decoys},  \
             #         recall: {[100 * (recall[i]) for i in range(num_thresholds)]}, filtration: {[100 * (1 - filtration[i]) for i in range(num_thresholds)]}"
             # )
 
-            filtrations.append(filtration)
-            recalls.append(
-                [
-                    100 * (num_positives[i] / numpos_per_evalue[i])
-                    for i in range(num_thresholds)
-                ]
-            )
-
+            filtrations.append([100 * (1 - filtration[i]) for i in range(num_thresholds)])
+            recalls.append([100 * recall[i] for i in range(num_thresholds)])
+    
     datafile.close()
     for i in range(num_thresholds):
-        axis.plot(
-            np.array(filtrations)[:, i],
-            np.array(recalls)[:, i],
-            f"{COLORS[i]}--",
-            linewidth=2,
-            label=evalue_thresholds[i],
-        )
+        axis.plot(np.array(filtrations)[:,i], np.array(recalls)[:,i], f"{COLORS[i]}--", linewidth=2, label=evalue_thresholds[i])
 
-    axis.plot([75, 100], [75, 0], "k--", linewidth=2)
+    #axis.plot([75, 100], [25, 0], "k--", linewidth=2)
     datafile.close()
 
     axis.set_xlabel("filtration")
@@ -192,7 +155,6 @@ def plot_roc_curve(
     plt.legend()
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
-
 
 def plot_roc_curve_old(
     figure_path: str,
@@ -236,6 +198,7 @@ def plot_roc_curve_old(
                 num_decoys += 1
                 filtration = num_decoys / numhits
 
+
             if recall is not None and filtration is not None:
                 if idx % 10000 == 0:
                     if idx % 50000:
@@ -246,13 +209,7 @@ def plot_roc_curve_old(
                     filtrations.append(100 * (1 - filtration))
                     recalls.append(100 * recall)
         datafile.close()
-        axis.plot(
-            filtrations,
-            recalls,
-            f"{COLORS[i]}--",
-            linewidth=2,
-            label=evalue_threshold,
-        )
+        axis.plot(filtrations, recalls, f"{COLORS[i]}--", linewidth=2, label=evalue_threshold)
 
     axis.plot([0, 100], [100, 0], "k--", linewidth=2)
     datafile.close()
@@ -264,21 +221,19 @@ def plot_roc_curve_old(
     plt.close()
 
 
-def get_sorted_pairs(
-    modelhitsfile: str, sorted_pairs_file: str
-) -> Tuple[list, list]:
+def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, list]:
     """parses the output file from our model
     and returns a list of scores and query-target
     pairs for the results that are also in hmmer hits"""
     all_scores = []
     all_pairs = []
-    if os.path.exists(sorted_pairs_file):
-        print("Found sorted pairs")
-        with open(sorted_pairs_file, "rb") as pairs:
-            sorted_pairs = pickle.load(pairs)
-        return sorted_pairs
+    # if os.path.exists(sorted_pairs_file):
+    #     print("Found sorted pairs")
+    #     with open(sorted_pairs_file, "rb") as pairs:
+    #         sorted_pairs = pickle.load(pairs)
+    #     return sorted_pairs
 
-    print("Iterating..")
+    print('Iterating..')
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
         queryname = queryhits.strip(".txt")
         # if queryname not in hmmerhits.keys():modu
@@ -296,14 +251,14 @@ def get_sorted_pairs(
                 all_scores.append(score)
 
                 all_pairs.append((queryname, target))
-
+    
     sortedidx = np.argsort(all_scores)[::-1]
     del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
     del all_pairs
-    print(f"Saving scores file {sorted_pairs_file}")
-    with open(sorted_pairs_file, "wb") as pairsfile:
-        pickle.dump(sorted_pairs, pairsfile)
+    # print(f"Saving scores file {sorted_pairs_file}")
+    # with open(sorted_pairs_file, "wb") as pairsfile:
+    #     pickle.dump(sorted_pairs, pairsfile)
     return sorted_pairs
 
 
@@ -356,64 +311,35 @@ def write_datafile(
 
     return numpos_per_evalue, numhits
 
-
-def generate_roc_from_sorted_pairs(
-    modelhitsfile,
-    sortedpairsfile: str,
-    filename: str,
-    hmmerhits: dict,
-    figure_path: str,
-    numpos_per_evalue=None,
-    numhits=None,
-):
+def generate_roc_from_sorted_pairs(modelhitsfile, sortedpairsfile: str, filename: str, hmmerhits: dict, figure_path: str, numpos_per_evalue = None, numhits = None):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
-    if not os.path.exists(sortedpairsfile):
-        sorted_pairs = get_sorted_pairs(modelhitsfile, sortedpairsfile)
-    else:
-        with open(sortedpairsfile, "rb") as file:
-            sorted_pairs = pickle.load(file)
-        print("opened file")
+    if os.path.exists(filename) and numpos_per_evalue is not None and numhits is not None:
+        print("Found existing file data.. plotting ROC curve.")
+        plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
+        return None 
+    sorted_pairs = get_sorted_pairs(modelhitsfile, sortedpairsfile)
 
-        if os.path.exists(filename):
-            if numpos_per_evalue is not None and numhits is not None:
-                print("Found existing file data.. plotting ROC curve.")
-                plot_roc_curve(
-                    figure_path, numpos_per_evalue, numhits, filename=filename
-                )
-                return None
-            os.remove(filename)
-
-    numpos_per_evalue, numhits = write_datafile(
-        sorted_pairs,
-        hmmerhits,
-        evalue_thresholds=[1e-10, 1e-1, 1, 10],
-        filename=filename,
-    )
+    numpos_per_evalue, numhits= write_datafile(
+            sorted_pairs, hmmerhits, evalue_thresholds=[1e-10, 1e-1, 1, 10], filename=filename
+        )
 
     print("Wrote files")
     print(f"Num pos per evalue: {numpos_per_evalue}")
     print(f"Num hits: {numhits}")
     plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
 
-
-def get_outliers_and_inliers(
-    all_similarities: list,
-    all_e_values: list,
-    all_targets: list,
-    querysequences_max,
-    targetsequences_max,
-):
+def get_outliers_and_inliers(all_similarities: list, all_e_values: list, all_targets: list, querysequences_max, targetsequences_max):
     """Writes outliers and inliers to a text file
     where outliers are defined as our hits that have large similairty
     but high e value"""
     d_idxs = np.where(all_similarities > 150)[0]
 
-    # e_vals = all_e_values[d_idxs]
+    #e_vals = all_e_values[d_idxs]
 
-    # outliers = np.where(e_vals > 1)[0]
+    #outliers = np.where(e_vals > 1)[0]
 
-    # outlier_idx = d_idxs[outliers]
+    #outlier_idx = d_idxs[outliers]
     outlier_idx = d_idxs
 
     with open("outliers.txt", "w", encoding="utf-8") as outliers_file:
@@ -424,9 +350,7 @@ def get_outliers_and_inliers(
             outliers_file.write("Target" + "\n" + str(pair[1]) + "\n")
             outliers_file.write(targetsequences_max[pair[1]] + "\n")
 
-            outliers_file.write(
-                "Predicted Similarity: " + str(all_similarities[idx]) + "\n"
-            )
+            outliers_file.write("Predicted Similarity: " + str(all_similarities[idx]) + "\n")
             outliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")
 
     # loge = np.ma.masked_invalid(np.log10(all_e_values))
@@ -444,27 +368,19 @@ def get_outliers_and_inliers(
     #         inliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")
 
 
-def get_data(hits_path: str, all_hits_max: dict, savedir=None):
+def get_data(hits_path: str, all_hits_max:dict, savedir = None):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
-    if savedir is not None and os.path.exists(
-        f"{savedir}/all_similarities.npy"
-    ):
+    if savedir is not None and os.path.exists(f'{savedir}/all_similarities.npy'):
         all_similarities = np.load(f"{savedir}/all_similarities.npy")
         all_e_values = np.load(f"{savedir}/all_e_values.npy")
         all_biases = np.load(f"{savedir}/all_biases.npy")
-        # all_targets = np.load(f"{savedir}/all_targets.npy")
+        #all_targets = np.load(f"{savedir}/all_targets.npy")
 
         with open(f"{savedir}/hits_dict.pkl", "rb") as file:
             similarity_hits_dict = pickle.load(file)
-        return (
-            similarity_hits_dict,
-            all_similarities,
-            all_e_values,
-            all_biases,
-            len(all_similarities),
-        )
+        return similarity_hits_dict, all_similarities, all_e_values, all_biases, len(all_similarities)
 
     similarity_hits_dict = {}
     all_similarities = []
@@ -494,81 +410,47 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
                 all_biases.append(all_hits_max[queryname][target][2])
                 all_targets.append((queryname, target))
 
+    
     if savedir is not None:
         if not os.path.exists(savedir):
             os.mkdir(savedir)
         print(f"Saving to {savedir}:")
-        np.save(
-            f"{savedir}/all_similarities",
-            np.array(all_similarities),
-            allow_pickle=True,
-        )
-        np.save(
-            f"{savedir}/all_biases", np.array(all_biases), allow_pickle=True
-        )
-        np.save(
-            f"{savedir}/all_e_values",
-            np.array(all_e_values),
-            allow_pickle=True,
-        )
-        np.save(
-            f"{savedir}/all_targets", np.array(all_targets), allow_pickle=True
-        )
+        np.save(f"{savedir}/all_similarities", np.array(all_similarities), allow_pickle=True)
+        np.save(f"{savedir}/all_biases", np.array(all_biases), allow_pickle=True)
+        np.save(f"{savedir}/all_e_values", np.array(all_e_values), allow_pickle=True)
+        np.save(f"{savedir}/all_targets", np.array(all_targets), allow_pickle=True)
 
         with open(f"{savedir}/hits_dict.pkl", "wb") as file:
             pickle.dump(similarity_hits_dict, file)
 
-    numhits = np.sum(
-        [
-            len(similarity_hits_dict[q])
-            for q in list(similarity_hits_dict.keys())
-        ]
-    )
+    numhits = np.sum([len(similarity_hits_dict[q]) for q in list(similarity_hits_dict.keys())])
     print(f"Got {numhits} total hits from our model")
-    return (
-        similarity_hits_dict,
-        all_similarities,
-        all_e_values,
-        all_biases,
-        numhits,
-    )  # , all_targets
+    return similarity_hits_dict, all_similarities, all_e_values, all_biases, numhits#, all_targets
 
 
 if __name__ == "__main__":
     QUERY_FILENUM = 4
 
-    (
-        querysequences_max,
-        targetsequences_max,
-        all_hits_max,
-    ) = get_evaluation_data(
+    querysequences_max, targetsequences_max, all_hits_max = get_evaluation_data(
         "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
         query_id=QUERY_FILENUM,
     )
 
-    (
-        querysequences_normal,
-        targetsequences_normal,
-        all_hits_normal,
-    ) = get_evaluation_data(
+    querysequences_normal, targetsequences_normal, all_hits_normal = get_evaluation_data(
         "/xdisk/twheeler/daphnedemekas/phmmer_normal_results",
         query_id=QUERY_FILENUM,
     )
 
-    BLMODEL_RESULTS_PATH_FLAT = "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
-
-    TEMP_DATA_FILE = (
-        "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits.txt"
+    BLMODEL_RESULTS_PATH_FLAT = (
+        "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
     )
+
+
+    TEMP_DATA_FILE = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits.txt"
 
     # similarity_hits_dict, all_similarities, all_e_values, all_biases, _ = get_data(hits_path)
 
-    generate_roc(
-        TEMP_DATA_FILE,
-        ALIGNMENT_MODEL_RESULTS_PATH_IVF,
-        all_hits_max,
-        "ResNet1d/blosum_eval/alignment_IVF_roc.png",
-    )
+    generate_roc(TEMP_DATA_FILE, ALIGNMENT_MODEL_RESULTS_PATH_IVF, all_hits_max, "ResNet1d/blosum_eval/alignment_IVF_roc.png")
 
     # all_similarities = np.load("all_similarities.npy")
     # all_e_values = np.load("all_e_values.npy")

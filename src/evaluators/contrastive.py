@@ -38,7 +38,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             .T
         )
 
-    def _setup_targets_for_faiss(
+    def _setup_targets_for_search(
         self,
         target_embeddings: List[torch.Tensor],
         target_names: List[str],

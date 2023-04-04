@@ -242,7 +242,7 @@ class UniRefEvaluator(Evaluator):
         )
         del self.query_seqs
 
-        self._setup_targets_for_faiss(target_embeddings, target_names)
+        self._setup_targets_for_search(target_embeddings, target_names)
 
         model_hits, _, _ = self.filter(query_embeddings, query_names)
 

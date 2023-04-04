@@ -3,7 +3,7 @@ import os
 import pdb
 from typing import List, Tuple
 
-# import scann
+import scann
 import numpy as np
 import torch
 
@@ -35,7 +35,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
             .T
         )
 
-    def _setup_targets_for_skann(
+    def _setup_targets_for_search(
         self,
         target_embeddings: List[torch.Tensor],
         target_names: List[str],
@@ -74,16 +74,17 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
                 unrolled_targets, dim=-1
             )
 
-        n = unrolled_targets.shape[-1]
+        n = unrolled_targets.shape[0]
 
         num_partitions = int(np.sqrt(n))
+        print(f"Number of targets: {n}")
         print(f"Number of leaves: {num_partitions}")
 
         self.searcher = (
-            scann.scann_ops_pybind.builer(unrolled_targets, 10, "dot_product")
+            scann.scann_ops_pybind.builder(unrolled_targets, 10, "dot_product")
             .tree(
                 num_leaves=num_partitions,
-                num_leaves_to_search=num_partitions // 20,
+                num_leaves_to_search=num_partitions // 10,
                 training_sample_size=250000,
             )
             .score_ah(2, anisotropic_quantization_threshold=0.2)
@@ -124,7 +125,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        scores_array, indices_array = self.searcher.search_batched(
+        indices_array, scores_array = self.searcher.search_batched(
             query_embedding.contiguous()
         )
         # remove stuff that's under/over the threshold
@@ -136,7 +137,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         # distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
         # for each amino, the 1000 target aminos that are closest to that amino
         scores, indices = self.filter_scores(
-            scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
+            scores_array, indices_array
         )
 
         # for distance, name in zip(
