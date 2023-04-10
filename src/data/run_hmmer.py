@@ -100,8 +100,10 @@ def run_phmmer_max(q_fnum: int, t_fnum: int):
         stdout_file.close()
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("task_id")
-args = parser.parse_args()
+if __name__ == "__main__":
 
-main_evaluation(args.task_id)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("task_id")
+    args = parser.parse_args()
+
+    main_evaluation(args.task_id)

@@ -20,7 +20,7 @@ def plot_mean_e_values(
     max_threshold: int = 300,
     outputfilename: str = "evaluemeans",
     plot_stds: bool = True,
-    plot_lengths: bool = True,
+    _plot_lengths: bool = True,
     title: str = "",
     scatter_size: int = 1,
 ):
@@ -62,7 +62,7 @@ def plot_mean_e_values(
             np.array(means) + np.array(stds) / 2,
             alpha=0.5,
         )
-    if plot_lengths:
+    if _plot_lengths:
         plt.fill_between(
             thresholds,
             np.array(means) - np.array(lengths),
@@ -297,24 +297,23 @@ def generate_roc_from_sorted_pairs(
     plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
 
 
-def get_outliers_and_inliers(
+def get_outliers(
     all_similarities: list,
     all_e_values: list,
     all_targets: list,
     querysequences_max,
     targetsequences_max,
 ):
-    """Writes outliers and inliers to a text file
+    """Writes outliers to a text file
     where outliers are defined as our hits that have large similairty
     but high e value"""
     d_idxs = np.where(all_similarities > 150)[0]
 
-    # e_vals = all_e_values[d_idxs]
+    e_vals = all_e_values[d_idxs]
 
-    # outliers = np.where(e_vals > 1)[0]
+    outliers = np.where(e_vals > 1)[0]
 
-    # outlier_idx = d_idxs[outliers]
-    outlier_idx = d_idxs
+    outlier_idx = d_idxs[outliers]
 
     with open("outliers.txt", "w", encoding="utf-8") as outliers_file:
         for idx in outlier_idx:
@@ -326,20 +325,6 @@ def get_outliers_and_inliers(
 
             outliers_file.write("Predicted Similarity: " + str(all_similarities[idx]) + "\n")
             outliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")
-
-    # loge = np.ma.masked_invalid(np.log10(all_e_values))
-    # idxs = np.where(loge < -250)[0]
-
-    # with open("inliers.txt", "w", encoding="utf-8") as inliers_file:
-    #     for idx in idxs:
-    #         pair = all_targets[idx]
-    #         inliers_file.write("Query" + "\n" + str(pair[0]) + "\n")
-    #         inliers_file.write(querysequences_max[pair[0]] + "\n")
-    #         inliers_file.write("Target" + "\n" + str(pair[1]) + "\n")
-    #         inliers_file.write(targetsequences_max[pair[1]] + "\n")
-
-    #         inliers_file.write("Predicted Similarity: " + str(all_similarities[idx]) + "\n")
-    #         inliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")
 
 
 def get_data(hits_path: str, all_hits_max: dict, savedir=None):
@@ -410,35 +395,4 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         all_e_values,
         all_biases,
         numhits,
-    )  # , all_targets
-
-
-if __name__ == "__main__":
-    QUERY_FILENUM = 4
-
-    querysequences_max, targetsequences_max, all_hits_max = get_evaluation_data(
-        "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=QUERY_FILENUM,
     )
-
-    querysequences_normal, targetsequences_normal, all_hits_normal = get_evaluation_data(
-        "/xdisk/twheeler/daphnedemekas/phmmer_normal_results", query_id=QUERY_FILENUM,
-    )
-
-    BLMODEL_RESULTS_PATH_FLAT = (
-        "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
-    )
-
-    TEMP_DATA_FILE = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits.txt"
-
-    # similarity_hits_dict, all_similarities, all_e_values, all_biases, _ = get_data(hits_path)
-
-    generate_roc(
-        TEMP_DATA_FILE,
-        ALIGNMENT_MODEL_RESULTS_PATH_IVF,
-        all_hits_max,
-        "ResNet1d/blosum_eval/alignment_IVF_roc.png",
-    )
-
-    # all_similarities = np.load("all_similarities.npy")
-    # all_e_values = np.load("all_e_values.npy")
-    # all_biases = np.load("all_biases.npy")

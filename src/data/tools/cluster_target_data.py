@@ -13,14 +13,13 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
     t = 0
 
     # open to create
-    trainseqs = open(trainsequences, "w")
-    valseqs = open(evalsequences, "w")
+    # trainseqs = open(trainsequences, "w")
+    # valseqs = open(evalsequences, "w")
 
-    trainseqs.close()
-    valseqs.close()
+    # trainseqs.close()
+    # valseqs.close()
 
-    for targetfasta in os.listdir(target_fastas_dir):
-        t += 1
+    for targetfasta in [target_fastas_dir]:
         targetfastapath = os.path.join(target_fastas_dir, targetfasta)
         clusterpath = f"{clustered_target_dir}/clusters_{t}"
         if not os.path.exists(clusterpath):
@@ -71,14 +70,22 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
 
         shutil.rmtree(clusterpath)
 
+        t += 1
+
 
 if __name__ == "__main__":
-    with open("config.yaml", "r") as file:
+    with open("prefilter/config.yaml", "r") as file:
         config = yaml.safe_load(file)
 
+    # main(
+    #     config["traintargetspath"],
+    #     config["evaltargetspath"],
+    #     config["targetclusterdir"],
+    #     config["targetfastasdir"],
+    # )
     main(
         config["traintargetspath"],
         config["evaltargetspath"],
         config["targetclusterdir"],
-        config["targetfastasdir"],
+        "/xdisk/twheeler/daphnedemekas/prefilter/uniref/split_subset/targets/targets_0.fa",
     )

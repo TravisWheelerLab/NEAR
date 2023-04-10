@@ -24,14 +24,6 @@ import os
 import pickle
 import argparse
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--query_id", type=int, default=4)
-parser.add_argument("--models", type=str, default=["ABK"])
-parser.add_argument("--modes", type=str, default=["MNF"])
-parser.add_argument("--lengths", action="store_true")
-
-args = parser.parse_args()
-
 
 def load_hmmer_hits(query_id: int = 4):
     """Loads pre-saved hmmer hits dictionaries for a given
@@ -192,89 +184,34 @@ def evaluate(
                 alignment_model_kmer_max.similarities,
             )
 
-    # elif query_id == 0:
-    #     all_hits_max_0, all_hits_normal_0 = load_hmmer_hits(query_id)
-    #     align_ivf_max_inputs_0 = {
-    #         "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
-    #         "hmmer_hits_dict": all_hits_max_0,
-    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0",
-    #         "evaluemeansfile": "evaluemeans_align_ivf",
-    #         "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Max",
-    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0.pkl",
-    #         "temp_data_file": ALIGNMENT_MODEL_IVF_0_MAX_DATAFILE,
-    #         "roc_filepath": "ResNet1d/eval_align_ivf_roc_0.png",
-    #         "num_pos_per_evalue": [352617, 810152, 1105290, 2667980],
-    #         "num_hits": 954905307,
-    #         "plot_roc": True,
-    #     }
 
-    #     align_ivf_normal_inputs_0 = {
-    #         "model_results_path": ALIGNMENT_MODEL_RESULTS_PATH_IVF_0,
-    #         "hmmer_hits_dict": all_hits_normal_0,
-    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/alignment_model_ivf_0_normal",
-    #         "evaluemeansfile": "evaluemeans_align_ivf_normal_0",
-    #         "evaluemeanstitle": "Correlation in ALIGN IVF model - HMMER Normal",
-    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_ivf_pairs_0_normal.pkl",
-    #         "temp_data_file": ALIGNMENT_MODEL_IVF_0_NORMAL_DATAFILE,
-    #         "roc_filepath": "ResNet1d/eval_align_ivf_roc_normal_0.png",
-    #         "num_pos_per_evalue": [352447, 763108, 794484, 798858],
-    #         "num_hits": 954905307,
-    #         "plot_roc": True,
-    #     }
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--query_id", type=int, default=4)
+    parser.add_argument("--models", type=str, default=["ABK"])
+    parser.add_argument("--modes", type=str, default=["MNF"])
+    parser.add_argument("--lengths", action="store_true")
 
-    #     kmer_inputs = {
-    #         "model_results_path": KMER_MODEL_RESULTS_PATH,
-    #         "hmmer_hits_dict": all_hits_max_0,
-    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_max",
-    #         "evaluemeansfile": "evaluemeans_align_kmer_max",
-    #         "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Max",
-    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_max.pkl",
-    #         "temp_data_file": KMER_MODEL_DATAFILE,
-    #         "roc_filepath": "ResNet1d/eval/align_kmer_roc.png",
-    #     }
+    args = parser.parse_args()
 
-    #     kmer_inputs_normal = {
-    #         "model_results_path": KMER_MODEL_RESULTS_PATH,
-    #         "hmmer_hits_dict": all_hits_normal_0,
-    #         "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_normal",
-    #         "evaluemeansfile": "evaluemeans_align_kmer_normal",
-    #         "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Normal",
-    #         "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_normal.pkl",
-    #         "temp_data_file": KMER_MODEL_DATAFILE_NORMAL,
-    #         "roc_filepath": "ResNet1d/eval/align_kmer_roc_normal.png",
-    #     }
+    modelinitials = args.models
+    modeinitials = args.modes
 
-    #     print("Parsing Alignment Model KMER Normal")
-    #     _ = Results(**kmer_inputs_normal, plot_roc=False)
+    models = []
+    modes = []
+    if "A" in modelinitials:
+        models.append("align")
+    if "B" in modelinitials:
+        models.append("blosum")
+    if "K" in modelinitials:
+        models.append("kmer")
 
-    #     print("Parsing Alignment Model KMER Max")
-    #     _ = Results(**kmer_inputs, plot_roc=False)
-
-    #     print("Parsing Alignment Model IVF Query 0")
-    #     _ = Results(**align_ivf_normal_inputs_0)
-
-    #     print("Parsing Alignment Model IVF Query 0 - Max")
-    #     _ = Results(**align_ivf_max_inputs_0)
-
-
-modelinitials = args.models
-modeinitials = args.modes
-
-models = []
-modes = []
-if "A" in modelinitials:
-    models.append("align")
-if "B" in modelinitials:
-    models.append("blosum")
-if "K" in modelinitials:
-    models.append("kmer")
-
-if "M" in modeinitials:
-    modes.append("max")
-if "N" in modeinitials:
-    modes.append("normal")
-if "F" in modeinitials:
-    modes.append("flat")
-if "S" in modeinitials:
-    modes.append("scann")
-evaluate(args.query_id, models, modes, lengths=args.lengths)
+    if "M" in modeinitials:
+        modes.append("max")
+    if "N" in modeinitials:
+        modes.append("normal")
+    if "F" in modeinitials:
+        modes.append("flat")
+    if "S" in modeinitials:
+        modes.append("scann")
+    evaluate(args.query_id, models, modes, lengths=args.lengths)

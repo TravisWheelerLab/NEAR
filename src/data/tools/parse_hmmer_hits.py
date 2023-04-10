@@ -23,6 +23,7 @@ def parse_eval_hmmer_hits(
     save_dir=None,
     evaltargetfastafile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargets.fa",
 ):
+    """Parses hmmer hits from .hits files and saves as a pickled dictionary"""
     query_id = str(query_id)
 
     hmmerhits = HmmerHits(dir_path=hmmer_dirpath)

@@ -16,20 +16,14 @@ logger.setLevel(logging.INFO)
 with open("config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-with open(config["traintargetspath"], "rb") as train_target_file:
-    train_targets = train_target_file.read().splitlines()
-with open(config["evaltargetspath"], "rb") as val_target_file:
-    val_targets = val_target_file.read().splitlines()
+with open(config["traintargetspath"], "r") as train_target_file:
+    train_targets = [t.strip("\n") for t in train_target_file.readlines()]
+with open(config["evaltargetspath"], "r") as val_target_file:
+    val_targets = [t.strip("\n") for t in val_target_file.readlines()]
 
 
 def main(task_id=None):
     """Generate alignments for a given task id"""
-    if task_id is None:
-        for q in [1, 2, 3]:
-            t = 0
-            print("Parsing stdout for q %s, t %s", q, t)
-            parse_stdout(q, t)
-        return None
 
     task_id = int(task_id)
     logger.info("Task ID: %s", task_id)
@@ -57,9 +51,6 @@ def parse_stdout(q_fnum, t_fnum):
     dirpath1 = f"{train_root}/{q_fnum}"
     dirpath2 = f"{train_root}/{q_fnum}/{t_fnum}"
 
-    # if len(os.listdir(dirpath2)) != 0:
-    #     print("Already have these alignments")
-    #     sys.exit()
     queryfile = f"uniref/split_subset/queries/queries_{q_fnum}.fa"
     queryfasta = FastaFile(queryfile)
     querysequences = queryfasta.data
@@ -81,23 +72,17 @@ def parse_stdout(q_fnum, t_fnum):
     result = SearchIO.parse(stdout_path, "hmmer3-text")
 
     for qresult in tqdm.tqdm(result):
-        # print("Search %s has %i hits" % (qresult.id, len(qresult)))
         query_id = qresult.id
-        # result_dict[query_id] = {}
         for hit in qresult:
             target_id = hit.id
 
             if hit.evalue > 10:
-                # print("E value > 10, skipping.")
                 continue
 
-            # result_dict[query_id][target_id] = []
             if target_id in train_targets and hit.evalue < 1:
-                # if query_id != 0:
                 alignment_file_path = f"{train_root}/{q_fnum}/{t_fnum}/{train_idx}.txt"
                 train_idx += 1
             elif target_id in val_targets:
-                # if query_id == 0:
                 alignment_file_path = f"{val_root}/{q_fnum}/{t_fnum}/{val_idx}.txt"
                 val_idx += 1
             else:

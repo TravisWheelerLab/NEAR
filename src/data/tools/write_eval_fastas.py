@@ -1,7 +1,7 @@
+"""Creates one big fasta file with all the evaluation target data"""
+
 import os
-from src.data.hmmerhits import FastaFile
 import tqdm
-import pdb
 
 evaluation_targets_file = "/xdisk/twheeler/daphnedemekas/targetdataseqs/eval.txt"
 
