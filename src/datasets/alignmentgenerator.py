@@ -316,7 +316,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         ali_path: path to alignments
         seq_len: fixed sequence length"""
 
-        with open(ali_path, "rb") as file:
+        with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
