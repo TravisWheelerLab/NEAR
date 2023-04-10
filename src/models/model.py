@@ -131,11 +131,7 @@ class ResNet(DotProdModel):
 
         layers = [
             nn.Conv1d(
-                start_emb,
-                emb_dim,
-                first_kernel,
-                padding=padding,
-                padding_mode=padding_mode,
+                start_emb, emb_dim, first_kernel, padding=padding, padding_mode=padding_mode,
             ),
             activation(),
         ]
@@ -154,17 +150,9 @@ class ResNet(DotProdModel):
             )
             # layers.append(nn.Dropout(0.1))
 
-        layers.append(
-            nn.Conv1d(
-                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
-            )
-        )
+        layers.append(nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode))
         layers.append(activation())
-        layers.append(
-            nn.Conv1d(
-                emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode
-            )
-        )
+        layers.append(nn.Conv1d(emb_dim, emb_dim, 1, padding=padding, padding_mode=padding_mode))
 
         self.layers = nn.Sequential(*layers)
 

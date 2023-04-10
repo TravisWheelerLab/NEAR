@@ -101,12 +101,7 @@ def load_model(model_path, hyperparams, device):
 
 
 def create_faiss_index(
-    embeddings,
-    embed_dim,
-    index_string,
-    nprobe,
-    device="cpu",
-    distance_metric="cosine",
+    embeddings, embed_dim, index_string, nprobe, device="cpu", distance_metric="cosine",
 ):
 
     log.info(f"using index with {distance_metric} metric.")
@@ -120,9 +115,7 @@ def create_faiss_index(
     if index_string == "Flat":
         if distance_metric == "cosine":
             log.info("Using normalized embeddings for cosine metric.")
-            index = faiss.index_factory(
-                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
-            )
+            index = faiss.index_factory(embed_dim, index_string, faiss.METRIC_INNER_PRODUCT)
         else:
             index = faiss.index_factory(embed_dim, index_string)
 
@@ -144,9 +137,7 @@ def create_faiss_index(
     else:
         if distance_metric == "cosine":
             log.info("Normalizing embeddings for use with cosine metric.")
-            index = faiss.index_factory(
-                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
-            )
+            index = faiss.index_factory(embed_dim, index_string, faiss.METRIC_INNER_PRODUCT)
         else:
             index = faiss.index_factory(embed_dim, index_string)
 
@@ -209,12 +200,7 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
 
     if "(" in labelstring:
         # labelstring: ACC_ID (BEGIN END E_VALUE)
-        labels = (
-            labelstring[begin_char + 1 :]
-            .replace(")", "")
-            .replace("(", "")
-            .split(" ")
-        )
+        labels = labelstring[begin_char + 1 :].replace(")", "").replace("(", "").split(" ")
         labels = list(filter(len, labels))
         labelset = []
 
@@ -387,9 +373,7 @@ def parse_tblout(tbl):
     df = df.dropna()
 
     # "-" is the empty label
-    df["target_name"].loc[df["description"] != "-"] = (
-        df["target_name"] + " " + df["description"]
-    )
+    df["target_name"].loc[df["description"] != "-"] = df["target_name"] + " " + df["description"]
 
     return df
 
@@ -402,9 +386,7 @@ class AAIndexFFT:
         self.mapping[key] = value
 
     def __getitem__(self, protein):
-        encoded = torch.fft.fft(
-            torch.as_tensor([self.mapping[p] for p in protein])
-        )
+        encoded = torch.fft.fft(torch.as_tensor([self.mapping[p] for p in protein]))
         return encoded
 
 

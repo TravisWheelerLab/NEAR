@@ -22,9 +22,7 @@ def _save(fpath, arr):
 
 def calc_unique(x, dim=-1):
     unique, inverse = torch.unique(x, return_inverse=True, dim=dim)
-    perm = torch.arange(
-        inverse.size(dim), dtype=inverse.dtype, device=inverse.device
-    )
+    perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([dim]), perm.flip([dim])
     return (
         unique,
@@ -66,9 +64,7 @@ class NpairLoss(nn.Module):
     #     loss = loss_ce + self.l2_reg*l2_loss*0.25
     #     return loss
     def forward(self, anchor, positive, target, a_indices, p_indices):
-        device = (
-            torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
-        )
+        device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
         batch_size = anchor.size(0)
         if target is None:
             target = torch.eye(batch_size, dtype=torch.float32).to(device)
@@ -77,13 +73,11 @@ class NpairLoss(nn.Module):
         loss_ce = cross_entropy(logit, target)
 
         if a_indices is not None:
-            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(
-                a_indices
-            ) + torch.sum(positive[p_indices] ** 2) / len(p_indices)
+            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(a_indices) + torch.sum(
+                positive[p_indices] ** 2
+            ) / len(p_indices)
         else:
-            l2_loss = (
-                torch.sum(anchor**2) + torch.sum(positive**2)
-            ) / batch_size
+            l2_loss = (torch.sum(anchor ** 2) + torch.sum(positive ** 2)) / batch_size
 
         loss = loss_ce + self.l2_reg * l2_loss * 0.25
         return loss
@@ -93,9 +87,7 @@ class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
 
-    def __init__(
-        self, temperature=0.07, contrast_mode="all", base_temperature=0.07
-    ):
+    def __init__(self, temperature=0.07, contrast_mode="all", base_temperature=0.07):
         super().__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
@@ -106,7 +98,8 @@ class SupConLoss(nn.Module):
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
         Args:
-            features: hidden vector of shape [bsz, 2, ...].
+            features: hidden vector of shape [bsz, n_views, ...].
+            Let n_views = 1
             labels: ground truth of shape [bsz].
             mask: contrastive mask of shape [bsz, bsz], mask_{i,j}=1 if sample j
                 has the same class as sample i. Can be asymmetric.
@@ -114,19 +107,17 @@ class SupConLoss(nn.Module):
             A loss scalar.
 
         """
-        device = (
-            torch.device("cuda") if features.is_cuda else torch.device("cpu")
-        )
+        device = torch.device("cuda") if features.is_cuda else torch.device("cpu")
 
         if len(features.shape) < 3:
             raise ValueError(
-                "`features` needs to be [bsz, n_views, ...],"
-                "at least 3 dimensions are required"
+                "`features` needs to be [bsz, n_views, ...]," "at least 3 dimensions are required"
             )
         if len(features.shape) > 3:
             features = features.view(features.shape[0], features.shape[1], -1)
 
         batch_size = features.shape[0]
+
         if labels is not None and mask is not None:
             raise ValueError("Cannot define both `labels` and `mask`")
         elif labels is None and mask is None:
@@ -134,9 +125,7 @@ class SupConLoss(nn.Module):
         elif labels is not None:
             labels = labels.contiguous().view(-1, 1)
             if labels.shape[0] != batch_size:
-                raise ValueError(
-                    "Num of labels does not match num of features"
-                )
+                raise ValueError("Num of labels does not match num of features")
             mask = torch.eq(labels, labels.T).float().to(device)
         else:
             mask = mask.float().to(device)
@@ -151,6 +140,7 @@ class SupConLoss(nn.Module):
             anchor_count = contrast_count
         else:
             raise ValueError("Unknown mode: {}".format(self.contrast_mode))
+
         # compute logits
         anchor_dot_contrast = torch.div(
             torch.matmul(anchor_feature, contrast_feature.T), self.temperature
@@ -158,19 +148,15 @@ class SupConLoss(nn.Module):
         # for numerical stability
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
+        # pdb.set_trace()
 
         # tile mask
-        mask = mask.repeat(anchor_count, contrast_count)
-        # indices = torch.where(mask.sum(1)!=0) #there are cases such as additions in which we
-        # don't want to treat the features as pos or neg, ignore entirely
-        # logits = logits[indices]
-        # mask = mask[indices]
-
-        # mask-out self-contrast cases (put zeros on the diagonal)
+        # mask = mask.repeat(anchor_count, contrast_count)
+        # mask-out self-contrast cases
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
-            torch.arange(len(batch_size)).view(-1, 1).to(device),
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
             0,
         )
         mask = mask * logits_mask
@@ -179,14 +165,15 @@ class SupConLoss(nn.Module):
         exp_logits = torch.exp(logits) * logits_mask
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
 
+        values = torch.where(mask.sum(1) == 1)[0]
+        batch_size = len(values)
+
         # compute mean of log-likelihood over positive
-        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+        mean_log_prob_pos = (mask * log_prob).sum(1)[values]
+
         # loss
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
-        loss = loss.nanmean()
-
-        # loss = loss.view(anchor_count, batch_size).nanmean()
-
+        loss = loss.view(anchor_count, batch_size).nanmean()
         return loss
 
 

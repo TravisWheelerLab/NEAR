@@ -16,8 +16,6 @@ from src.data.eval_data_config import (
     load_kmer_inputs,
     all_hits_max_file_4,
     all_hits_normal_file_4,
-    all_hits_max_file_0,
-    all_hits_normal_file_0,
 )
 import pdb
 import numpy as np
@@ -28,9 +26,9 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--query_id", type=int, default=4)
-parser.add_argument("--models",type = str, default=["ABK"])
-parser.add_argument("--modes", type = str,default=["MNF"])
-parser.add_argument("--lengths", action='store_true')
+parser.add_argument("--models", type=str, default=["ABK"])
+parser.add_argument("--modes", type=str, default=["MNF"])
+parser.add_argument("--lengths", action="store_true")
 
 args = parser.parse_args()
 
@@ -44,12 +42,6 @@ def load_hmmer_hits(query_id: int = 4):
         with open(all_hits_normal_file_4 + ".pkl", "rb") as file:
             all_hits_normal_4 = pickle.load(file)
         return all_hits_max_4, all_hits_normal_4
-    elif query_id == 0:
-        with open(all_hits_max_file_0, "rb") as file:
-            all_hits_max_0 = pickle.load(file)
-        with open(all_hits_normal_file_0, "rb") as file:
-            all_hits_normal_0 = pickle.load(file)
-        return all_hits_max_0, all_hits_normal_0
     else:
         raise Exception(f"No evaluation data for given query id {query_id}")
 
@@ -81,15 +73,9 @@ def get_overlap(all_hits_max: dict, all_hits_normal: dict):
             else:
                 num_overlap += 1
 
-    print(
-        f"Num missing from HMMER Max that are in HMMER Normal: {num_missing}"
-    )
-    print(
-        f"Number overlapping in both HMMER Max and HMMER Normal: {num_overlap}"
-    )
-    print(
-        f"Number of hits in HMMER Max not in HMMER Normal: {len(hmmer_normal)}"
-    )
+    print(f"Num missing from HMMER Max that are in HMMER Normal: {num_missing}")
+    print(f"Number overlapping in both HMMER Max and HMMER Normal: {num_overlap}")
+    print(f"Number of hits in HMMER Max not in HMMER Normal: {len(hmmer_normal)}")
 
     return (
         hmmer_normal,
@@ -119,13 +105,9 @@ class Results:
     ):
         """evaluates a given model"""
 
-        (
-            self.hits_dict,
-            self.similarities,
-            self.e_values,
-            self.biases,
-            self.numhits,
-        ) = get_data(model_results_path, hmmer_hits_dict, savedir=data_savedir)
+        (self.hits_dict, self.similarities, self.e_values, self.biases, self.numhits,) = get_data(
+            model_results_path, hmmer_hits_dict, savedir=data_savedir
+        )
 
         plot_mean_e_values(
             self.similarities,
@@ -153,7 +135,7 @@ class Results:
 def evaluate(
     query_id=4,
     models: list = ["align", "blosum", "kmer"],
-    modes: list = ["normal", "max", "flat","scann"],
+    modes: list = ["normal", "max", "flat", "scann"],
     lengths: bool = True,
 ):
     """Main function for evaluation"""
@@ -164,30 +146,22 @@ def evaluate(
             if "max" in modes:
                 print("Parsing Alignment Model IVF Query 4 Max")
 
-                align_ivf_max_inputs_4 = load_alignment_inputs(
-                    all_hits_max, "max"
-                )
+                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max")
                 alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
             if "normal" in modes:
-                align_ivf_normal_inputs_4 = load_alignment_inputs(
-                    all_hits_normal, "normal"
-                )
+                align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal")
 
                 print("Parsing Alignment Model IVF Query 4 Normal")
                 _ = Results(**align_ivf_normal_inputs_4)
             if "scann" in modes:
-                align_ivf_scann_inputs = load_alignment_inputs(
-                    all_hits_max, "scann"
-                )
+                align_ivf_scann_inputs = load_alignment_inputs(all_hits_max, "scann")
                 print("Parsing Alignment Model Scann Query 4 Normal")
 
                 _ = Results(**align_ivf_scann_inputs)
-	
+
         if "blosum" in models:
             if "normal" in modes:
-                blosum_ivf_normal_inputs = load_blosum_inputs(
-                    all_hits_normal, "normal"
-                )
+                blosum_ivf_normal_inputs = load_blosum_inputs(all_hits_normal, "normal")
                 print("Parsing Blosum Model IVF")
                 _ = Results(**blosum_ivf_normal_inputs)
             if "max" in modes:
@@ -205,13 +179,9 @@ def evaluate(
             if "max" in modes:
                 kmer_inputs = load_kmer_inputs(all_hits_max, "max")
                 print("Parsing Alignment Model KMER Max")
-                alignment_model_kmer_max = Results(
-                    **kmer_inputs
-                )
+                alignment_model_kmer_max = Results(**kmer_inputs)
             if "normal" in modes:
-                kmer_inputs_normal = load_kmer_inputs(
-                    all_hits_normal, "normal"
-                )
+                kmer_inputs_normal = load_kmer_inputs(all_hits_normal, "normal")
                 print("Parsing Alignment Model KMER Normal")
                 _ = Results(**kmer_inputs_normal)
 
@@ -286,24 +256,25 @@ def evaluate(
     #     print("Parsing Alignment Model IVF Query 0 - Max")
     #     _ = Results(**align_ivf_max_inputs_0)
 
+
 modelinitials = args.models
 modeinitials = args.modes
 
 models = []
 modes = []
-if 'A' in modelinitials:
+if "A" in modelinitials:
     models.append("align")
-if 'B' in modelinitials:
-    models.append('blosum')
-if 'K' in modelinitials:
-    models.append('kmer')
+if "B" in modelinitials:
+    models.append("blosum")
+if "K" in modelinitials:
+    models.append("kmer")
 
-if 'M' in modeinitials:
-    modes.append('max')
-if 'N' in modeinitials:
-    modes.append('normal')
-if 'F' in modeinitials:
-    modes.append('flat')
-if 'S' in modeinitials:
-    modes.append('scann')
-evaluate(args.query_id, models, modes, lengths = args.lengths)
+if "M" in modeinitials:
+    modes.append("max")
+if "N" in modeinitials:
+    modes.append("normal")
+if "F" in modeinitials:
+    modes.append("flat")
+if "S" in modeinitials:
+    modes.append("scann")
+evaluate(args.query_id, models, modes, lengths=args.lengths)

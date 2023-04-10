@@ -27,28 +27,22 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         self.num_random_matrices = 1
         self.random_matrices = [
-            torch.randn(
-                size=(self.embedding_dimension, self.embedding_dimension)
-            )
+            torch.randn(size=(self.embedding_dimension, self.embedding_dimension))
             for i in range(self.num_random_matrices)
         ]  # should these be between 0 and 1 since we just normalized? yes they are random normal...
 
         self.W = 15
-        self.step_size = 15
+        self.step_size = 10
 
     def transform(self, sequence_embeddings: List[torch.Tensor]):
         transformed_sequence_embeddings = []
 
-        for (
-            sequence_embedding
-        ) in sequence_embeddings:  # dim = sequence len, amino embedding
+        for sequence_embedding in sequence_embeddings:  # dim = sequence len, amino embedding
             sequence_embedding = sequence_embedding.unsqueeze(1)
             n = nn.InstanceNorm1d(sequence_embedding.shape[0])
             normalized_embedding = n(sequence_embedding)
             for random_matrix in self.random_matrices:
-                transformed_embedding = torch.mm(
-                    normalized_embedding.squeeze(1), random_matrix
-                )
+                transformed_embedding = torch.mm(normalized_embedding.squeeze(1), random_matrix)
                 transformed_sequence_embeddings.append(transformed_embedding)
             # for amino_embedding in sequence_embedding:
             #     transformed_amino_embeddings = []
@@ -58,58 +52,25 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
             #         transformed_amino_embeddings.append(transformed_embedding)
 
             #     transformed_sequence_embeddings.append(transformed_amino_embeddings)
-        return (
-            transformed_sequence_embeddings  # list of tensors of shape 506,256
-        )
-
-    def find_maximizers(self, transformed_embeddings: torch.Tensor):
-        """
-        Input: one transformed sequence embedding of size embedding dimension"""
-        for transformed_embeddings in transformed_embeddings:
-            windowed_embedding = transformed_embeddings.unfold(
-                0, self.W, self.step_size
-            )  # num_windows, W
-            indices = [
-                i
-                for i in itertools.product(range(self.W), range(self.W))
-                if i[0] != i[1]
-            ]
-
-            maximizers = []
-            products = []
-
-            for window in windowed_embedding:
-                max_prod = 0
-                optimal_pair = None
-                # all versus all products
-                for pair in indices:
-                    prod = torch.dot(window[:, pair[0]], window[:, pair[1]])
-                    if prod > max_prod:
-                        max_prod = prod
-                        optimal_pair = pair
-                maximizers.append(optimal_pair)
-                products.append(max_prod)
-
-        return products, maximizers
+        return transformed_sequence_embeddings  # list of tensors of shape 506,256
 
     def reduce(self, sequence_embeddings: List[torch.Tensor]):
         """I think right now i'm just gonna put both pairs in without keeping track of
         the fact that they are pairs.. but i should rethink this. when we do search maybe we only want
         to do a distance for each pair
 
-        also maybe want to see whether i can plug 2d vectors into FAISS"""
-        indices = [
-            i
-            for i in itertools.product(range(self.W), range(self.W))
-            if i[0] != i[1]
-        ]
+        also maybe want to see whether i can plug 2d vectors into FAISS 
+        
+        The reduction takes a list of sequence embeddinigs of the embedding dim
+        and reduces them by creating windows of length W
+        and calculating the cosine similarity of each pair of windows 
+        and returning the pairs with the smallest similarity"""
+        indices = [i for i in itertools.product(range(self.W), range(self.W)) if i[0] != i[1]]
 
         sequence_minimizers = []
         for embedding in tqdm.tqdm(sequence_embeddings):
             windowed_embedding = embedding.unfold(0, self.W, self.step_size)
-            minimizers = torch.Tensor(
-                len(windowed_embedding), 2, windowed_embedding[0].shape[0]
-            )
+            minimizers = torch.Tensor(len(windowed_embedding), 2, windowed_embedding[0].shape[0])
             for idx, window in enumerate(windowed_embedding):
                 optimal_pair = None
                 min_sim = 10000
@@ -117,25 +78,19 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
                     A = window[:, pair[0]]
                     B = window[:, pair[1]]
                     cos_sim = torch.dot(A, B) / (torch.norm(A) * torch.norm(B))
-                    if cos_sim < min_sim:
+                    if torch.abs(cos_sim) < min_sim:
                         min_sim = cos_sim
                         optimal_pair = torch.stack((A, B))
                 minimizers[idx] = optimal_pair
             sequence_minimizers.append(
-                minimizers.reshape(
-                    len(windowed_embedding) * 2, windowed_embedding[0].shape[0]
-                )
+                minimizers.reshape(len(windowed_embedding) * 2, windowed_embedding[0].shape[0])
             )
 
         return sequence_minimizers
 
     @torch.no_grad()
     def _calc_embeddings(
-        self,
-        sequence_data: dict,
-        model_class,
-        apply_random_sequence: bool,
-        max_seq_length=512,
+        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -147,12 +102,8 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         sequences = list(sequence_data.values())
 
         logger.info("Filtering sequences by length...")
-        filtered_names, embeddings = self.filter_sequences_by_length(
-            names,
-            sequences,
-            model_class,
-            apply_random_sequence,
-            max_seq_length,
+        filtered_names, embeddings, lengths = self.filter_sequences_by_length(
+            names, sequences, model_class, apply_random_sequence, max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)
@@ -163,7 +114,7 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         print("Reducing...")
         embeddings_minimized = self.reduce(embeddings)
 
-        return filtered_names, embeddings_minimized
+        return filtered_names, embeddings_minimized, lengths
 
     def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
@@ -178,7 +129,17 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         print(f"Found {(len(self.target_seqs))} targets")
 
-        target_names, target_embeddings = self._calc_embeddings(
+        print("Embedding queries...")
+        query_names, query_embeddings, _ = self._calc_embeddings(
+            sequence_data=self.query_seqs,
+            model_class=model_class,
+            apply_random_sequence=self.add_random_sequence,
+            max_seq_length=self.max_seq_length,
+        )
+        del self.query_seqs
+
+        print("Embedding targets...")
+        target_names, target_embeddings, target_lengths = self._calc_embeddings(
             sequence_data=self.target_seqs,
             model_class=model_class,
             apply_random_sequence=False,
@@ -187,19 +148,8 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         del self.target_seqs  # remove from memory
 
-        query_names, query_embeddings = self._calc_embeddings(
-            sequence_data=self.query_seqs,
-            model_class=model_class,
-            apply_random_sequence=self.add_random_sequence,
-            max_seq_length=self.max_seq_length,
-        )
-        del self.query_seqs
-
-        self._setup_targets_for_faiss(target_embeddings, target_names)
+        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
 
         model_hits, _, _ = self.filter(query_embeddings, query_names)
-
-        self.denom = len(query_names) * len(target_names)
-        self.num_queries = len(query_names)
 
         return model_hits

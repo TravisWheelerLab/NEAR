@@ -42,27 +42,17 @@ def plot_roc_curve(
         recalls = []
         for threshold in tqdm.tqdm(distances):
             recall, total_hits = recall_and_filtration(
-                our_hits,
-                max_hmmer_hits,
-                threshold,
-                comp_func,
-                evalue_threshold,
+                our_hits, max_hmmer_hits, threshold, comp_func, evalue_threshold,
             )
 
             filtration = 100 * (1.0 - (total_hits / denom))
             filtrations.append(filtration)
             recalls.append(recall)
-            print(
-                f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}"
-            )
+            print(f"recall: {recall:.3f}, filtration: {filtration:.3f}, threshold: {threshold:.3f}")
 
         ax.scatter(filtrations, recalls, c=COLORS[i], marker="o")
         ax.plot(
-            filtrations,
-            recalls,
-            f"{COLORS[i]}--",
-            linewidth=2,
-            label=evalue_threshold,
+            filtrations, recalls, f"{COLORS[i]}--", linewidth=2, label=evalue_threshold,
         )
 
     ax.plot([0, 100], [100, 0], "k--", linewidth=2)
@@ -75,9 +65,7 @@ def plot_roc_curve(
     plt.close()
 
 
-def recall_and_filtration(
-    our_hits, hmmer_hits, distance_threshold, comp_func, evalue_threshold
-):
+def recall_and_filtration(our_hits, hmmer_hits, distance_threshold, comp_func, evalue_threshold):
     """Function to calculate recall and filtration for a given
     disance threshold"""
     match_count = 0

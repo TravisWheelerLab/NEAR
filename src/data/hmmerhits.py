@@ -68,9 +68,7 @@ class HmmerHits:
         and returns a FastaFile object with the data
         for these target sequences"""
         target_fasta = FastaFile(
-            os.path.join(
-                self.root, "split_subset", "targets", f"targets_{dirnum}.fa"
-            )
+            os.path.join(self.root, "split_subset", "targets", f"targets_{dirnum}.fa")
         )
         return target_fasta
 
@@ -79,13 +77,11 @@ class HmmerHits:
         and returns a FastaFile object with the data
         for these query sequences"""
         query_fasta = FastaFile(
-            os.path.join(
-                self.root, "split_subset", "queries", f"queries_{dirnum}.fa"
-            )
+            os.path.join(self.root, "split_subset", "queries", f"queries_{dirnum}.fa")
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str) -> Tuple[dict, np.array]:
+    def parse_hits_file(self, hits_file: str, filtered_targets=None) -> Tuple[dict, np.array]:
         """parses a HMMER hits file
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
@@ -100,19 +96,14 @@ class HmmerHits:
                 print(f"Found an oddly formatted row: {row}")
                 continue
             target_name = row_info[0]
+            if filtered_targets is not None and target_name not in filtered_targets:
+                continue
             assert "UniRef90" in target_name
 
             query_name = row_info[2]
             assert "UniRef90" in query_name
 
-            (
-                e_value_full,
-                score_full,
-                bias_full,
-                e_value_best,
-                score_best,
-                bias_best,
-            ) = (
+            (e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,) = (
                 row_info[4],
                 row_info[5],
                 row_info[6],
@@ -121,14 +112,7 @@ class HmmerHits:
                 row_info[9],
             )
             data = np.array(
-                [
-                    e_value_full,
-                    score_full,
-                    bias_full,
-                    e_value_best,
-                    score_best,
-                    bias_best,
-                ]
+                [e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,]
             ).astype("float64")
 
             if query_name in data_dict:
@@ -156,7 +140,7 @@ class HmmerHits:
         """
 
         hits_dict = self.parse_hits_file(
-            f"{directory}/{query_num}/{target_num}/hits.tblout"
+            f"{directory}/{query_num}/{target_num}/hits.tblout", filtered_targets
         )
 
         return hits_dict

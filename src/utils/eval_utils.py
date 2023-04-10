@@ -44,9 +44,7 @@ def calculate_maximum_scoring_path(dot_products, image_filename):
     scores[:, 0] = dot_products[:, 0]
     scores[0, :] = dot_products[0, :]
 
-    best_path = torch.zeros(
-        (scores.shape[0], scores.shape[1], 2), dtype=torch.int
-    )
+    best_path = torch.zeros((scores.shape[0], scores.shape[1], 2), dtype=torch.int)
     # for each row
     for i in range(1, scores.shape[0]):
         # for each column
@@ -108,69 +106,46 @@ def _compute_count_mat_and_similarities(
     if isinstance(label_to_analyze, torch.Tensor):
         label_to_analyze = label_to_analyze.item()
 
-    representative_embedding = representative_embeddings[
-        representative_labels == label_to_analyze
-    ]
-    representative_embedding_start_point = np.where(
-        representative_labels == label_to_analyze
-    )
+    representative_embedding = representative_embeddings[representative_labels == label_to_analyze]
+    representative_embedding_start_point = np.where(representative_labels == label_to_analyze)
     if pretrained_transformer:
         similarities = torch.matmul(
-            query_sequence,
-            representative_embedding.T.to(query_sequence.device),
+            query_sequence, representative_embedding.T.to(query_sequence.device),
         )
     else:
         similarities = torch.cdist(
             query_sequence, representative_embedding.to(query_sequence.device)
         )
 
-    count_mat = np.zeros(
-        (query_sequence.shape[0], representative_embedding.shape[0])
-    )
+    count_mat = np.zeros((query_sequence.shape[0], representative_embedding.shape[0]))
 
     if len(representative_embedding_start_point):
-        representative_embedding_start_point = (
-            representative_embedding_start_point[0][0]
-        )
+        representative_embedding_start_point = representative_embedding_start_point[0][0]
     else:
         pdb.set_trace()
         return count_mat, similarities
 
     for i, amino_acid in enumerate(query_sequence):
         distances, match_indices = search_index_device_aware(
-            representative_index,
-            amino_acid.unsqueeze(0),
-            index_device,
-            n_neighbors=n_neighbors,
+            representative_index, amino_acid.unsqueeze(0), index_device, n_neighbors=n_neighbors,
         )
         # if there's a match to the predicted label
         for match_index in match_indices[0]:
             if representative_labels[match_index] == label_to_analyze:
-                offset_index = (
-                    match_index - representative_embedding_start_point
-                )
+                offset_index = match_index - representative_embedding_start_point
                 count_mat[i, offset_index] += 1
 
     return count_mat, similarities
 
 
 def most_common_matches(
-    faiss_index,
-    cluster_representative_labels,
-    normalized_query_embedding,
-    neighbors,
-    device,
+    faiss_index, cluster_representative_labels, normalized_query_embedding, neighbors, device,
 ):
     distances, match_indices = search_index_device_aware(
-        faiss_index,
-        normalized_query_embedding.to(device),
-        device,
-        n_neighbors=neighbors,
+        faiss_index, normalized_query_embedding.to(device), device, n_neighbors=neighbors,
     )
     if "cuda" in device:
-        matches = cluster_representative_labels[
-            match_indices.ravel().cpu().numpy()
-        ]
+        matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
     else:
         matches = cluster_representative_labels[match_indices.ravel()]
 
@@ -181,9 +156,7 @@ def most_common_matches(
 
 def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
     if device == "cpu":
-        distances, match_indices = faiss_index.search(
-            embedding.to("cpu").numpy(), k=n_neighbors
-        )
+        distances, match_indices = faiss_index.search(embedding.to("cpu").numpy(), k=n_neighbors)
     else:
         distances, match_indices = faiss_index.search(embedding, k=n_neighbors)
     # strip dummy dimension
@@ -192,21 +165,13 @@ def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
 
 @torch.no_grad()
 def compute_cluster_representative_embeddings(
-    representative_sequences,
-    representative_labels,
-    trained_model,
-    normalize,
-    device,
+    representative_sequences, representative_labels, trained_model, normalize, device,
 ):
     # create representative tensor for raw sequences.
     # what, I'm not batching?
     representative_embeddings = []
     for rep_seq in representative_sequences:
-        embed = (
-            trained_model(rep_seq.unsqueeze(0).to(device))
-            .transpose(-1, -2)
-            .contiguous()
-        )
+        embed = trained_model(rep_seq.unsqueeze(0).to(device)).transpose(-1, -2).contiguous()
         representative_embeddings.append(embed.squeeze())
 
     assert len(representative_embeddings) == len(representative_labels)
@@ -219,9 +184,7 @@ def compute_cluster_representative_embeddings(
     representative_embeddings = torch.cat(representative_embeddings)
     if normalize:
         print("Normalizing...")
-        representative_embeddings = torch.nn.functional.normalize(
-            representative_embeddings, dim=-1
-        )
+        representative_embeddings = torch.nn.functional.normalize(representative_embeddings, dim=-1)
 
     return representative_embeddings, representative_labels
 
@@ -322,15 +285,11 @@ def recall_at_pid_thresholds(
 
     for j, (features, alis, labels, sequences) in enumerate(query_dataset):
         if pretrained_transformer:
-            embeddings = trained_model(
-                features.to(device), repr_layers=[33], return_contacts=False
-            )
+            embeddings = trained_model(features.to(device), repr_layers=[33], return_contacts=False)
 
             embed = []
             for k, seq in enumerate(sequences):
-                embed.append(
-                    embeddings["representations"][33][k, 1 : len(seq) + 1]
-                )
+                embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
             embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
@@ -339,19 +298,11 @@ def recall_at_pid_thresholds(
 
         for label, sequence, gapped_sequence in zip(labels, embeddings, alis):
             total_sequences += 1
-            sequence = torch.nn.functional.normalize(
-                sequence, dim=-1
-            ).contiguous()
-            train_alignment = query_dataset.dataset.label_to_seed_alignment[
-                label
-            ]
+            sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
+            train_alignment = query_dataset.dataset.label_to_seed_alignment[label]
             pid = calculate_pid(gapped_sequence, train_alignment)
             predicted_labels, counts = most_common_matches(
-                cluster_rep_index,
-                cluster_rep_labels,
-                sequence,
-                n_neighbors,
-                index_device,
+                cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, index_device,
             )
             # get percent identity;
             # return
@@ -400,45 +351,29 @@ def visualize_prediction_patterns(
     image_idx = 0
     for features, labels, gapped_sequences in query_dataset:
         if pretrained_transformer:
-            embeddings = trained_model(
-                features.to(device), repr_layers=[33], return_contacts=False
-            )
+            embeddings = trained_model(features.to(device), repr_layers=[33], return_contacts=False)
 
             embed = []
             for k, seq in enumerate(gapped_sequences):
-                embed.append(
-                    embeddings["representations"][33][k, 1 : len(seq) + 1]
-                )
+                embed.append(embeddings["representations"][33][k, 1 : len(seq) + 1])
             embeddings = embed
         else:
             embeddings = trained_model(features.to(device)).transpose(-1, -2)
 
         for feat_idx, (label, sequence) in enumerate(zip(labels, embeddings)):
             if normalize:
-                sequence = torch.nn.functional.normalize(
-                    sequence, dim=-1
-                ).contiguous()
+                sequence = torch.nn.functional.normalize(sequence, dim=-1).contiguous()
             else:
                 sequence = sequence.contiguous()
 
             predicted_labels, counts = most_common_matches(
-                cluster_rep_index,
-                cluster_rep_labels,
-                sequence,
-                n_neighbors,
-                index_device,
+                cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, index_device,
             )
             predicted_labels = predicted_labels[np.argsort(counts)]
             # now, get the dp matrix going.
-            top_pred_embedding = cluster_rep_embeddings[
-                cluster_rep_labels == predicted_labels[-1]
-            ]
-            dots = torch.matmul(
-                top_pred_embedding.to(sequence.device), sequence.T
-            )
-            top_pred_seq = cluster_rep_gapped_seqs[
-                predicted_labels[-1]
-            ].replace(".", "")
+            top_pred_embedding = cluster_rep_embeddings[cluster_rep_labels == predicted_labels[-1]]
+            dots = torch.matmul(top_pred_embedding.to(sequence.device), sequence.T)
+            top_pred_seq = cluster_rep_gapped_seqs[predicted_labels[-1]].replace(".", "")
             if pretrained_transformer:
                 query_gapped_seq = gapped_sequences[feat_idx].replace(".", "")
             else:
@@ -446,12 +381,8 @@ def visualize_prediction_patterns(
 
             jj = image_idx
 
-            fpath = (
-                f"transformer/transformer_{predicted_labels[-1] == label}_{jj}"
-            )
-            calculate_maximum_scoring_path(
-                dots.to("cpu"), image_filename=fpath + ".png"
-            )
+            fpath = f"transformer/transformer_{predicted_labels[-1] == label}_{jj}"
+            calculate_maximum_scoring_path(dots.to("cpu"), image_filename=fpath + ".png")
             with open(f"query_{jj}.fa", "w") as dst:
                 dst.write(">query\n")
                 dst.write(f"{query_gapped_seq}\n")
@@ -465,33 +396,21 @@ def visualize_prediction_patterns(
                 # i want a bunch of false matches and then the true one.
                 fig, ax = plt.subplots(ncols=2, nrows=5, figsize=(13, 10))
                 for kk, lab in enumerate(predicted_labels[::-1][:10]):
-                    rep_embedding = cluster_rep_embeddings[
-                        cluster_rep_labels == lab
-                    ]
-                    l2s = torch.matmul(
-                        sequence, rep_embedding.to(sequence.device).T
-                    )
+                    rep_embedding = cluster_rep_embeddings[cluster_rep_labels == lab]
+                    l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
                     ax[kk % 5, kk // 5].imshow(
-                        l2s.to("cpu"),
-                        cmap="PiYG",
+                        l2s.to("cpu"), cmap="PiYG",
                     )
-                    ax[kk % 5, kk // 5].set_title(
-                        f"{kk + 1} ranked match. {lab == label} match."
-                    )
+                    ax[kk % 5, kk // 5].set_title(f"{kk + 1} ranked match. {lab == label} match.")
                     ax[kk % 5, kk // 5].set_xticks([])
                     ax[kk % 5, kk // 5].set_yticks([])
 
-                rep_embedding = cluster_rep_embeddings[
-                    cluster_rep_labels == label
-                ]
+                rep_embedding = cluster_rep_embeddings[cluster_rep_labels == label]
 
-                l2s = torch.matmul(
-                    sequence, rep_embedding.to(sequence.device).T
-                )
+                l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
 
                 ax[kk % 5, kk // 5].imshow(
-                    l2s.to("cpu"),
-                    cmap="PiYG",
+                    l2s.to("cpu"), cmap="PiYG",
                 )
                 ax[kk % 5, kk // 5].set_xticks([])
                 ax[kk % 5, kk // 5].set_yticks([])
@@ -509,13 +428,11 @@ def visualize_prediction_patterns(
 
                 if predicted_labels[-1] == label:
                     plt.savefig(
-                        f"{image_path}/dots_true_hit_{image_idx}.png",
-                        bbox_inches="tight",
+                        f"{image_path}/dots_true_hit_{image_idx}.png", bbox_inches="tight",
                     )
                 else:
                     plt.savefig(
-                        f"{image_path}/dots_false_hit_{image_idx}.png",
-                        bbox_inches="tight",
+                        f"{image_path}/dots_false_hit_{image_idx}.png", bbox_inches="tight",
                     )
 
                 image_idx += 1
@@ -524,9 +441,7 @@ def visualize_prediction_patterns(
 
             predicted_label = predicted_labels[-1]
             second_label = predicted_labels[-2]
-            representative_gapped_seq = cluster_rep_gapped_seqs[
-                predicted_label
-            ]
+            representative_gapped_seq = cluster_rep_gapped_seqs[predicted_label]
             query_gapped_seq = ""
 
             first_cmat, first_sim = _compute_count_mat_and_similarities(
@@ -561,8 +476,7 @@ def visualize_prediction_patterns(
                 plt.title("self-similarity")
                 plt.colorbar()
                 plt.savefig(
-                    f"{image_path}/no_mlp_self_{unique_name}.png",
-                    bbox_inches="tight",
+                    f"{image_path}/no_mlp_self_{unique_name}.png", bbox_inches="tight",
                 )
                 plt.close()
 
@@ -575,9 +489,7 @@ def visualize_prediction_patterns(
                     ax[0, 0].imshow(first_sim.to("cpu"), cmap="PiYG")
                 ax[0, 0].set_title("dots")
 
-                ax[0, 1].set_title(
-                    f"true hit. n hits to sequence: {np.sum(first_cmat):.3f}"
-                )
+                ax[0, 1].set_title(f"true hit. n hits to sequence: {np.sum(first_cmat):.3f}")
                 ax[0, 1].imshow(first_cmat)
                 if pretrained_transformer:
                     ax[1, 0].imshow(second_sim.to("cpu"), cmap="PiYG")
@@ -585,14 +497,10 @@ def visualize_prediction_patterns(
                     ax[1, 0].imshow(second_sim.to("cpu"), cmap="PiYG")
                 ax[1, 0].set_title("dots")
 
-                ax[1, 1].set_title(
-                    f"second hit. n hits to sequence: {np.sum(second_cmat):.3f}"
-                )
+                ax[1, 1].set_title(f"second hit. n hits to sequence: {np.sum(second_cmat):.3f}")
                 ax[1, 1].imshow(second_cmat)
 
-                plt.savefig(
-                    f"{image_path}/true_{unique_name}.png", bbox_inches="tight"
-                )
+                plt.savefig(f"{image_path}/true_{unique_name}.png", bbox_inches="tight")
                 save_string_sequences(
                     f"{image_path}/true_{unique_name}.fa",
                     representative_gapped_seq,
@@ -653,8 +561,7 @@ def visualize_prediction_patterns(
                 )
                 ax[2, 1].imshow(true_cmat)
                 plt.savefig(
-                    f"{image_path}/false_{unique_name}.png",
-                    bbox_inches="tight",
+                    f"{image_path}/false_{unique_name}.png", bbox_inches="tight",
                 )
 
                 true_gapped_seq = cluster_rep_gapped_seqs[label]

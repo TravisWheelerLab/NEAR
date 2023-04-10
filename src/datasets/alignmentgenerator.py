@@ -4,6 +4,7 @@ import torch
 from src import utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
+import pdb
 
 
 class AlignmentGenerator(DataModule):
@@ -37,7 +38,7 @@ class AlignmentGenerator(DataModule):
         seq_len: fixed sequence length"""
 
         with open(ali_path, "r") as file:
-            self.alignment_file_paths = file.readlines()
+            self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -64,12 +65,8 @@ class AlignmentGenerator(DataModule):
         seq1, seq2 = self.parse_alignment(alignment_path)
         assert len(seq1) == len(seq2)
 
-        seq1_dots_and_dashes = [
-            i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"
-        ]
-        seq2_dots_and_dashes = [
-            i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"
-        ]
+        seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
+        seq2_dots_and_dashes = [i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"]
 
         clean_seq1 = ""
         clean_seq2 = ""
@@ -92,12 +89,10 @@ class AlignmentGenerator(DataModule):
             seq2 = addition1 + seq2
             seq1 = addition2 + seq1
 
-        return utils.encode_string_sequence(
-            seq1
-        ), utils.encode_string_sequence(seq2)
+        return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
 
 
-class AlignmentGeneratorWithIndels(DataModule):
+class AlignmentGeneratorWithIndels_(DataModule):
     """Alignment generator with insertions and deletions"""
 
     def __init__(self, ali_path, seq_len, training=True):
@@ -144,12 +139,8 @@ class AlignmentGeneratorWithIndels(DataModule):
         length = len(seq1)
 
         # indices of dots and dashes
-        seq1_dots_and_dashes = [
-            i for i in range(length) if seq1[i] == "." or seq1[i] == "-"
-        ]
-        seq2_dots_and_dashes = [
-            i for i in range(length) if seq2[i] == "." or seq2[i] == "-"
-        ]
+        seq1_dots_and_dashes = [i for i in range(length) if seq1[i] == "." or seq1[i] == "-"]
+        seq2_dots_and_dashes = [i for i in range(length) if seq2[i] == "." or seq2[i] == "-"]
 
         # keep track of indices of aligned aminos
         # put 'nan' in where amino has no aligned amino in corresponding sequence
@@ -191,10 +182,7 @@ class AlignmentGeneratorWithIndels(DataModule):
         this helps maintain context in the CNN"""
         addition_left = full_seq[subseq_index - left_padding : subseq_index]
         addition_right = full_seq[
-            subseq_index
-            + len(sequence) : subseq_index
-            + len(sequence)
-            + right_padding
+            subseq_index + len(sequence) : subseq_index + len(sequence) + right_padding
         ]
         sequence = addition_left + sequence + addition_right
         assert (
@@ -204,9 +192,7 @@ class AlignmentGeneratorWithIndels(DataModule):
 
         return sequence, indices
 
-    def fix_sequence_length(
-        self, sequence: str, indices: list, full_seq: str, value=float("nan")
-    ):
+    def fix_sequence_length(self, sequence: str, indices: list, full_seq: str, value=float("nan")):
         """Currently we are padding sequences that are less
         than sequence length with randomly generated string sequence
         according to a background distribution.
@@ -225,9 +211,7 @@ class AlignmentGeneratorWithIndels(DataModule):
             seq_chop = self.seq_len - len(sequence)
             subseq_index = full_seq.find(sequence)
             half = seq_chop // 2
-            if (
-                len(full_seq) >= self.seq_len
-            ):  # we can get all our padding from the full sequence
+            if len(full_seq) >= self.seq_len:  # we can get all our padding from the full sequence
                 if (seq_chop) % 2 == 0:  # chop sequence is even
                     addition_left_amt = half
                     addition_right_amt = half
@@ -237,8 +221,7 @@ class AlignmentGeneratorWithIndels(DataModule):
 
                 if (
                     subseq_index >= addition_left_amt
-                    and len(full_seq) - (subseq_index + len(sequence))
-                    >= addition_right_amt
+                    and len(full_seq) - (subseq_index + len(sequence)) >= addition_right_amt
                 ):
                     sequence, indices = self.pad_sequence(
                         sequence,
@@ -251,9 +234,7 @@ class AlignmentGeneratorWithIndels(DataModule):
                     return sequence, indices
 
                 if subseq_index < addition_left_amt:
-                    addition_right_amt = addition_right_amt + (
-                        addition_left_amt - subseq_index
-                    )
+                    addition_right_amt = addition_right_amt + (addition_left_amt - subseq_index)
                     addition_left_amt = subseq_index
 
                     sequence, indices = self.pad_sequence(
@@ -267,13 +248,9 @@ class AlignmentGeneratorWithIndels(DataModule):
                     return sequence, indices
 
                 if len(full_seq) - (subseq_index + len(sequence)) < half:
-                    addition_right_amt = len(full_seq) - (
-                        subseq_index + len(sequence)
-                    )
+                    addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
 
-                    addition_left_amt = (
-                        self.seq_len - addition_right_amt - len(sequence)
-                    )
+                    addition_left_amt = self.seq_len - addition_right_amt - len(sequence)
                     sequence, indices = self.pad_sequence(
                         sequence,
                         indices,
@@ -297,12 +274,7 @@ class AlignmentGeneratorWithIndels(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence,
-                indices,
-                subseq_index,
-                full_seq,
-                addition_left_amt,
-                addition_right_amt,
+                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -316,23 +288,13 @@ class AlignmentGeneratorWithIndels(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
-        seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(
-            alignment_path
-        )
+        seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
-        seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(
-            seq1_raw, seq2_raw
-        )
-        seq1, seq1_indices = self.fix_sequence_length(
-            seq1, seq1_indices, seq1_full
-        )
-        seq2, seq2_indices = self.fix_sequence_length(
-            seq2, seq2_indices, seq2_full
-        )
+        seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)
+        seq1, seq1_indices = self.fix_sequence_length(seq1, seq1_indices, seq1_full)
+        seq2, seq2_indices = self.fix_sequence_length(seq2, seq2_indices, seq2_full)
 
-        assert (
-            len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2)
-        ), print(
+        assert len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2), print(
             f"Not all the same length! {idx} {seq1} {seq1_full} {seq2} {seq2_full}"
         )
 
@@ -344,3 +306,266 @@ class AlignmentGeneratorWithIndels(DataModule):
             seq2_m.float(),
             torch.as_tensor(seq2_indices).float(),
         )  # , seq1, seq2, seq1_raw, seq2_raw
+
+
+class AlignmentGeneratorIndelsMultiPos(DataModule):
+    """Alignment generator with insertions and deletions"""
+
+    def __init__(self, ali_path, seq_len, training=True):
+        """Arguments:
+        ali_path: path to alignments
+        seq_len: fixed sequence length"""
+
+        with open(ali_path, "rb") as file:
+            self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+        print(f"Found {len(self.alignment_file_paths)} alignment files")
+
+        self.training = training
+        self.seq_len = seq_len
+
+    def __len__(self):
+        """Number of alignment files"""
+        return len(self.alignment_file_paths)
+
+    def collate_fn(self):
+        """What is returned when getting a batch
+        if None, defaults to the return of __getitem__()"""
+        return None
+
+    def parse_alignment(self, alignment_file: str):
+        """Returns the aligned query and target
+        sequences from an alignment file"""
+        with open(alignment_file, "r") as file:
+            lines = file.readlines()
+            if len(lines) < 3:
+                print(f"Alignment file: {alignment_file} has no sequences")
+            subsequences = []
+            fullsequences = []
+            for line in lines[1:]:
+                if line[0] == "<":
+                    subsequences.append(line.strip("\n").strip("<").upper())
+                else:
+                    fullsequences.append(line.strip("\n").upper())
+
+            return subsequences, fullsequences
+
+    def parse_indels(self, subsequences: list):
+        """
+        Removes dots and dashes
+        and keeps track of where the indels are so that
+        we can then apply a mask on the loss function
+        """
+        length = len(subsequences[0])  # input is raw, same length
+
+        seq_dots_and_dashes = []
+        for subsequence in subsequences:
+            seq_dots_and_dashes.append(
+                [i for i in range(length) if subsequence[i] == "." or subsequence[i] == "-"]
+            )
+
+        subsequence_indices = []
+        for idx in range(len(subsequences)):
+            seq_indices = []
+            other_dots_and_dashes = [
+                seq_dots_and_dashes[i] for i in range(len(seq_dots_and_dashes)) if i != idx
+            ]
+            for i in range(length):
+                index = True
+                if i in seq_dots_and_dashes[idx]:
+                    continue
+                for ds in other_dots_and_dashes:
+                    if i in ds:
+                        index = False
+                if index:
+                    seq_indices.append(i)
+                else:
+                    seq_indices.append(float("nan"))
+            subsequence_indices.append(seq_indices)
+
+        subseqs_without_gaps = [seq.replace("-", "").replace(".", "") for seq in subsequences]
+        return subseqs_without_gaps, subsequence_indices
+
+    def pad_sequence(
+        self,
+        sequence: str,
+        indices: list,
+        subseq_index: int,
+        full_seq: str,
+        left_padding: int,
+        right_padding: int,
+        value=float("nan"),
+    ):
+        """Pads the sequence so that it has length self.seq_len
+        We use the full sequence to pad around the subequence,
+        this helps maintain context in the CNN"""
+        addition_left = full_seq[subseq_index - left_padding : subseq_index]
+        addition_right = full_seq[
+            subseq_index + len(sequence) : subseq_index + len(sequence) + right_padding
+        ]
+        sequence = addition_left + sequence + addition_right
+        assert (
+            full_seq.find(sequence) != -1
+        ), f"new sequence {sequence} is not part of full sequence + \n + {full_seq}"
+        indices = [value] * left_padding + indices + [value] * right_padding
+
+        return sequence, indices
+
+    def fix_sequence_length(self, sequence: str, indices: list, full_seq: str, value=float("nan")):
+        """Currently we are padding sequences that are less
+        than sequence length with randomly generated string sequence
+        according to a background distribution.
+        However we put in 'nan' in the indices so these aminos will not
+        be aligned in the loss function
+        if the sequence is longer than the sequence length then
+        we can just chop them"""
+
+        # pdb.set_trace()
+
+        sequence_length = self.seq_len
+        if len(sequence) >= sequence_length:
+            sequence = sequence[:sequence_length]
+            indices = indices[:sequence_length]
+            return sequence, indices
+
+        if len(sequence) < sequence_length:
+            seq_chop = self.seq_len - len(sequence)
+            subseq_index = full_seq.find(sequence)
+            half = seq_chop // 2
+            if len(full_seq) >= self.seq_len:  # we can get all our padding from the full sequence
+                if (seq_chop) % 2 == 0:  # chop sequence is even
+                    addition_left_amt = half
+                    addition_right_amt = half
+                else:
+                    addition_left_amt = half
+                    addition_right_amt = half + 1
+
+                if (
+                    subseq_index >= addition_left_amt
+                    and len(full_seq) - (subseq_index + len(sequence)) >= addition_right_amt
+                ):
+                    sequence, indices = self.pad_sequence(
+                        sequence,
+                        indices,
+                        subseq_index,
+                        full_seq,
+                        addition_left_amt,
+                        addition_right_amt,
+                    )
+                    return sequence, indices
+
+                if subseq_index < addition_left_amt:
+                    addition_right_amt = addition_right_amt + (addition_left_amt - subseq_index)
+                    addition_left_amt = subseq_index
+
+                    sequence, indices = self.pad_sequence(
+                        sequence,
+                        indices,
+                        subseq_index,
+                        full_seq,
+                        addition_left_amt,
+                        addition_right_amt,
+                    )
+                    return sequence, indices
+
+                if len(full_seq) - (subseq_index + len(sequence)) < half:
+                    addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
+
+                    addition_left_amt = self.seq_len - addition_right_amt - len(sequence)
+                    sequence, indices = self.pad_sequence(
+                        sequence,
+                        indices,
+                        subseq_index,
+                        full_seq,
+                        addition_left_amt,
+                        addition_right_amt,
+                    )
+                    return sequence, indices
+                addition_left_amt = half + 1
+                addition_right_amt = half
+                sequence, indices = self.pad_sequence(
+                    sequence,
+                    indices,
+                    subseq_index,
+                    full_seq,
+                    addition_left_amt,
+                    addition_right_amt,
+                )
+                return sequence, indices
+            addition_left_amt = subseq_index
+            addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
+            sequence, indices = self.pad_sequence(
+                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+            )
+            seq_chop = self.seq_len - len(sequence)
+
+            addition = generate_string_sequence(seq_chop)
+            sequence = sequence + addition
+            indices = indices + [value] * seq_chop
+
+            return sequence, indices
+
+    def collate_fn(self):
+        def pad(batch):
+            """
+            Pad batches with views as a dim.
+            Input: [n_viewsx...]
+            :param batch: list of np.ndarrays encoding protein sequences/logos
+            :type batch: List[np.ndarray]
+            :return: torch.tensor
+            :rtype: torch.tensor
+            """
+            seqs = [torch.stack(b[0]) for b in batch]
+
+            seqs = torch.concatenate(seqs, dim=0)
+
+            labels = []
+
+            for batch_idx in range(len(batch)):
+                batch_labels = batch[batch_idx][1]
+                for label_idx in range(len(batch_labels)):
+                    batch_labels[label_idx] += batch_idx * self.seq_len
+                labels += batch_labels
+
+            return seqs, labels
+
+        return pad
+
+    def __getitem__(self, idx: int):
+        """Gets the sequences as indices for a batch"""
+
+        alignment_path = self.alignment_file_paths[idx].strip("\n")
+        subsequences, fullsequences = self.parse_alignment(alignment_path)
+        if len(subsequences) == 0:
+            return self.__getitem(idx + 1)
+
+        subseqs_without_gaps, subsequence_indices = self.parse_indels(subsequences)
+        # pdb.set_trace()
+
+        sequences = []
+        indices = []
+
+        for idx in range(len(subsequences)):
+            subseq = subseqs_without_gaps[idx]
+            subseq_indices = subsequence_indices[idx]
+            fullseq = fullsequences[idx]
+            seq, seq_indices = self.fix_sequence_length(subseq, subseq_indices, fullseq)
+            sequences.append(seq)
+            indices.append(seq_indices)
+
+            assert len(seq) == self.seq_len
+
+            assert len(seq_indices) == self.seq_len
+        # assert (
+        #     len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2)
+        # ), print(
+        #     f"Not all the same length! {idx} {seq1} {seq1_full} {seq2} {seq2_full}"
+        # )
+
+        encoded_sequences = [utils.encode_string_sequence(seq) for seq in sequences]
+        torch_indices = [torch.as_tensor(seq_indices) for seq_indices in indices]
+
+        if len(encoded_sequences) > 20:
+            encoded_sequences = encoded_sequences[:20]
+            torch_indices = torch_indices[:20]
+
+        return encoded_sequences, torch_indices

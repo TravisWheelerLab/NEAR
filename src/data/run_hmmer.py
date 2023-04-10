@@ -58,10 +58,7 @@ def run_phmmer(q_fnum: int, t_fnum: int):
         check=True,
     )
     print(
-        "Saving stdout to '%s/phmmer_normal_results/stdouts/%s-%s.txt'",
-        root,
-        q_fnum,
-        t_fnum,
+        "Saving stdout to '%s/phmmer_normal_results/stdouts/%s-%s.txt'", root, q_fnum, t_fnum,
     )
 
     with open(
@@ -91,10 +88,7 @@ def run_phmmer_max(q_fnum: int, t_fnum: int):
         check=True,
     )
     print(
-        "Saving stdout to '%s/phmmer_max_results/stdouts/%s-%s.txt'",
-        root,
-        q_fnum,
-        t_fnum,
+        "Saving stdout to '%s/phmmer_max_results/stdouts/%s-%s.txt'", root, q_fnum, t_fnum,
     )
 
     with open(

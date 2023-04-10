@@ -27,12 +27,10 @@ class ResidualBlock(nn.Module):
 
         shifted_layer_index = layer_index - first_dilated_layer + 1
         if dilation_rate is not None:
-            dilation_rate = int(max(1, dilation_rate**shifted_layer_index))
+            dilation_rate = int(max(1, dilation_rate ** shifted_layer_index))
         else:
             dilation_rate = 1
-        self.num_bottleneck_units = math.floor(
-            resnet_bottleneck_factor * self.filters
-        )
+        self.num_bottleneck_units = math.floor(resnet_bottleneck_factor * self.filters)
         if typ == "1d":
             self.bn1 = torch.nn.BatchNorm1d(self.filters)
             # need to pad 'same', so output has the same size as input
@@ -49,10 +47,7 @@ class ResidualBlock(nn.Module):
             # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
             # linear transformation) No padding needed sin
             self.conv2 = torch.nn.Conv1d(
-                self.num_bottleneck_units,
-                self.filters,
-                kernel_size=1,
-                dilation=1,
+                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1,
             )
         else:
             self.bn1 = torch.nn.BatchNorm2d(self.filters)
@@ -70,10 +65,7 @@ class ResidualBlock(nn.Module):
             # project back up to a larger number of self.filters w/ a kernel size of 1 (a local
             # linear transformation) No padding needed sin
             self.conv2 = torch.nn.Conv2d(
-                self.num_bottleneck_units,
-                self.filters,
-                kernel_size=1,
-                dilation=1,
+                self.num_bottleneck_units, self.filters, kernel_size=1, dilation=1,
             )
 
     def _forward(self, x):
@@ -199,12 +191,9 @@ class ResNet1dSequencePool(pl.LightningModule):
                 with torch.no_grad():
                     fig, ax = plt.subplots(ncols=1)
                     ax.imshow(
-                        dots.to("cpu").numpy().astype(float),
-                        interpolation="nearest",
+                        dots.to("cpu").numpy().astype(float), interpolation="nearest",
                     )
-                    ax.set_title(
-                        f"min: {torch.min(dots).item():.3f} max: {torch.max(dots).item()}"
-                    )
+                    ax.set_title(f"min: {torch.min(dots).item():.3f} max: {torch.max(dots).item()}")
                     self.logger.experiment.add_figure(
                         f"image", plt.gcf(), global_step=self.global_step
                     )

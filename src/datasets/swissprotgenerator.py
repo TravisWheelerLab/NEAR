@@ -27,9 +27,7 @@ def sanitize_sequence(sequence):
             "U",
             "O",
         ):  # ambiguous aminos -- replacing them with some other amino from backgorund distribution
-            sampled_char = utils.amino_alphabet[
-                utils.amino_distribution.sample().item()
-            ]
+            sampled_char = utils.amino_alphabet[utils.amino_distribution.sample().item()]
             sanitized.append(sampled_char)
             logger.debug("Replacing <X, U, O> with %s", sampled_char)
         elif char == "B":  # can be either D or N
@@ -140,14 +138,11 @@ class SwissProtGenerator(SwissProtLoader):
         )  # map amino to int identity
 
         n_subs = int(  # NOte: we are potentially replacing with the same thing
-            len(sequence)
-            * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
+            len(sequence) * self.sub_probs[np.random.randint(0, len(self.sub_probs))]
         )
 
         seq2 = utils.mutate_sequence(
-            sequence=sequence,
-            substitutions=n_subs,
-            sub_distributions=self.sub_dists,
+            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         seq2 = utils.encode_tensor_sequence(seq2)  # 20x256

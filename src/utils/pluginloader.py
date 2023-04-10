@@ -46,16 +46,12 @@ def load_plugin_classes(
     plugins: Set[Type[T]] = set()
 
     # Iterate all modules in specified directory using pkgutil, importing them if they are not in sys.modules
-    for importer, mod_name, ispkg in pkgutil.iter_modules(
-        [path], rel_path + "."
-    ):
+    for importer, mod_name, ispkg in pkgutil.iter_modules([path], rel_path + "."):
         # If the module name is not in system modules or the reload flag is set to true, perform a full load of the
         # modules...
         if (mod_name not in sys.modules) or do_reload:
             try:
-                sub_module = importer.find_module(mod_name).load_module(
-                    mod_name
-                )
+                sub_module = importer.find_module(mod_name).load_module(mod_name)
                 sys.modules[mod_name] = sub_module
             except Exception as e:
                 print(e)
@@ -72,9 +68,7 @@ def load_plugin_classes(
 
         # Now we check if the module is a package, and if so, recursively call this method
         if ispkg:
-            plugins = plugins | load_plugin_classes(
-                sub_module, plugin_metaclass, do_reload
-            )
+            plugins = plugins | load_plugin_classes(sub_module, plugin_metaclass, do_reload)
         else:
             # Otherwise we begin looking for plugin classes
             for item in dir(sub_module):

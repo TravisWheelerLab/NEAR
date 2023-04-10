@@ -39,7 +39,7 @@ class UniRefEvaluator(Evaluator):
         max_seq_length=512,
         evalue_threshold=1,
         add_random_sequence=False,
-        nprobe=10,
+        nprobe=5,
         distance_threshold=0,
         normalize_embeddings=False,
         index_string="Flat",
@@ -83,9 +83,7 @@ class UniRefEvaluator(Evaluator):
         self.target_seqs: dict = target_seqs
         self.max_hmmer_hits: dict = hmmer_hits_max
 
-        self.encoding_func = (
-            encode_string_sequence if encoding_func is None else encoding_func
-        )
+        self.encoding_func = encode_string_sequence if encoding_func is None else encoding_func
         self.add_random_sequence: bool = add_random_sequence
         self.figure_path: str = figure_path
         self.nprobe: int = nprobe
@@ -104,14 +102,10 @@ class UniRefEvaluator(Evaluator):
         self.output_path = output_path
 
         if self.normalize_embeddings:
-            logger.info(
-                "Using comparison function >= threshold for filtration."
-            )
+            logger.info("Using comparison function >= threshold for filtration.")
             self.comp_func = np.greater_equal
         else:
-            logger.info(
-                "Using comparison function <= threshold for filtration."
-            )
+            logger.info("Using comparison function <= threshold for filtration.")
             self.comp_func = np.less_equal
 
         # root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
@@ -128,67 +122,64 @@ class UniRefEvaluator(Evaluator):
         """Filters the sequences by length thresholding given the
         minimum and maximum length threshold variables"""
         embeddings = []
+        lengths = []
 
         filtered_names = names.copy()
         num_removed = 0
         for name, sequence in tqdm.tqdm(zip(names, sequences)):
-            if max_seq_length >= len(sequence) >= self.minimum_seq_length:
-                if apply_random_sequence:
-                    # add 100 aminos on to the beginning
-                    random_seq = generate_string_sequence(100)
-                    embed = self.compute_embedding(
-                        random_seq + sequence, model_class
-                    )
-                else:
-                    embed = self.compute_embedding(sequence, model_class)
+            length = len(sequence)
+            if max_seq_length >= length >= self.minimum_seq_length:
+                # if apply_random_sequence:
+                # add 100 aminos on to the beginning
+                # random_seq = generate_string_sequence(100)
+                # embed = self.compute_embedding(
+                #     random_seq + sequence, model_class
+                # )
+                # else:
+                embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
                 embeddings.append(embed.to("cpu"))
+                lengths.append(length)
             else:
                 num_removed += 1
                 filtered_names.remove(name)
                 # filtered_sequences.remove(sequence)
-                logger.debug(
-                    f"Removing sequence {sequence} with length {len(sequence)}"
-                )
+                logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
         logger.info(f"removed {num_removed} sequences. ")
-        return filtered_names, embeddings
+        return filtered_names, embeddings, lengths
 
-    def filter_hmmer_hits(self, target_names: List[str]):
-        """Filters the max hmmer hits dict to include
-        only the targets that passed length thresolding
-        This is in order to keep our benchmarking consistent."""
+    # def filter_hmmer_hits(self, target_names: List[str]):
+    #     """Filters the max hmmer hits dict to include
+    #     only the targets that passed length thresolding
+    #     This is in order to keep our benchmarking consistent."""
 
-        init_len = sum([len(x) for x in self.max_hmmer_hits.values()])
-        print(f"Filtering HMMER hits")
-        filtered_hmmer_hits = {}
+    #     init_len = sum([len(x) for x in self.max_hmmer_hits.values()])
+    #     print(f"Filtering HMMER hits")
+    #     filtered_hmmer_hits = {}
 
-        # TODO: make this faster
-        num_missing = 0
-        for queryname, targethits in self.max_hmmer_hits.items():
-            hits_dict = {}
-            for targetname, hits in targethits.items():
-                if targetname in target_names:
-                    hits_dict[targetname] = hits
-                else:
-                    num_missing += 1
+    #     # TODO: make this faster
+    #     num_missing = 0
+    #     for queryname, targethits in self.max_hmmer_hits.items():
+    #         hits_dict = {}
+    #         for targetname, hits in targethits.items():
+    #             if targetname in target_names:
+    #                 hits_dict[targetname] = hits
+    #             else:
+    #                 num_missing += 1
 
-            filtered_hmmer_hits[queryname] = hits_dict
+    #         filtered_hmmer_hits[queryname] = hits_dict
 
-        self.max_hmmer_hits = filtered_hmmer_hits
+    #     self.max_hmmer_hits = filtered_hmmer_hits
 
-        new_len = sum([len(x) for x in self.max_hmmer_hits.values()])
-        logger.info(
-            f"Removed {init_len - new_len} entries from the hmmer hit dictionary"
-            f" since they didn't pass length thresholding."
-        )
+    #     new_len = sum([len(x) for x in self.max_hmmer_hits.values()])
+    #     logger.info(
+    #         f"Removed {init_len - new_len} entries from the hmmer hit dictionary"
+    #         f" since they didn't pass length thresholding."
+    #     )
 
     @torch.no_grad()
     def _calc_embeddings(
-        self,
-        sequence_data: dict,
-        model_class,
-        apply_random_sequence: bool,
-        max_seq_length=512,
+        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -200,17 +191,13 @@ class UniRefEvaluator(Evaluator):
         sequences = list(sequence_data.values())
 
         logger.info("Filtering sequences by length...")
-        filtered_names, embeddings = self.filter_sequences_by_length(
-            names,
-            sequences,
-            model_class,
-            apply_random_sequence,
-            max_seq_length,
+        filtered_names, embeddings, lengths = self.filter_sequences_by_length(
+            names, sequences, model_class, apply_random_sequence, max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)
 
-        return filtered_names, embeddings
+        return filtered_names, embeddings, lengths
 
     def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
@@ -225,7 +212,17 @@ class UniRefEvaluator(Evaluator):
 
         print(f"Found {(len(self.target_seqs))} targets")
 
-        target_names, target_embeddings = self._calc_embeddings(
+        print("Embedding queries...")
+        query_names, query_embeddings, _ = self._calc_embeddings(
+            sequence_data=self.query_seqs,
+            model_class=model_class,
+            apply_random_sequence=self.add_random_sequence,
+            max_seq_length=self.max_seq_length,
+        )
+        del self.query_seqs
+
+        print("Embedding targets...")
+        target_names, target_embeddings, target_lengths = self._calc_embeddings(
             sequence_data=self.target_seqs,
             model_class=model_class,
             apply_random_sequence=False,
@@ -234,15 +231,7 @@ class UniRefEvaluator(Evaluator):
 
         del self.target_seqs  # remove from memory
 
-        query_names, query_embeddings = self._calc_embeddings(
-            sequence_data=self.query_seqs,
-            model_class=model_class,
-            apply_random_sequence=self.add_random_sequence,
-            max_seq_length=self.max_seq_length,
-        )
-        del self.query_seqs
-
-        self._setup_targets_for_search(target_embeddings, target_names)
+        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
 
         model_hits, _, _ = self.filter(query_embeddings, query_names)
 
@@ -286,9 +275,7 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def filter(
-        self,
-        queries,
-        query_names,
+        self, queries, query_names,
     ):
         """Filters our hits based on
         distance to the query in the Faiiss

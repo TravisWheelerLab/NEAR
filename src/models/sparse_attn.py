@@ -35,9 +35,7 @@ class ResNetSparseAttention(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=20,
-            out_channels=self.res_block_n_filters,
-            kernel_size=1,
+            in_channels=20, out_channels=self.res_block_n_filters, kernel_size=1,
         )
 
         _list = []
@@ -57,22 +55,16 @@ class ResNetSparseAttention(pl.LightningModule):
         _transformer_list = []
         for _ in range(self.n_transformer_layers):
             transformer = torch.nn.TransformerEncoderLayer(
-                self.res_block_n_filters,
-                nhead=8,
-                dim_feedforward=2 * self.res_block_n_filters,
+                self.res_block_n_filters, nhead=8, dim_feedforward=2 * self.res_block_n_filters,
             )
             _transformer_list.append(transformer)
 
         # self.pos_unc = PositionalEncoding(self.res_block_n_filters * 2)
 
         mlp_list = [
-            torch.nn.Conv1d(
-                self.res_block_n_filters, self.res_block_n_filters, 1
-            ),
+            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(
-                self.res_block_n_filters, self.res_block_n_filters, 1
-            ),
+            torch.nn.Conv1d(self.res_block_n_filters, self.res_block_n_filters, 1),
         ]
 
         self.mlp = torch.nn.Sequential(*mlp_list)
@@ -93,13 +85,9 @@ class ResNetSparseAttention(pl.LightningModule):
 
     def _shared_step(self, batch):
         features, mutated_features, _ = batch
-        embeddings = self.forward(
-            torch.cat((features, mutated_features), dim=0)
-        )
+        embeddings = self.forward(torch.cat((features, mutated_features), dim=0))
 
-        e1, e2 = torch.split(
-            embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0
-        )
+        e1, e2 = torch.split(embeddings.transpose(-1, -2), embeddings.shape[0] // 2, dim=0)
         e1 = torch.cat(torch.unbind(e1, dim=0))
         e2 = torch.cat(torch.unbind(e2, dim=0))
         e1 = torch.nn.functional.normalize(e1, dim=-1)
@@ -109,21 +97,11 @@ class ResNetSparseAttention(pl.LightningModule):
 
             with torch.no_grad():
                 fig = plt.figure(figsize=(10, 10))
-                plt.imshow(
-                    torch.matmul(e1, e2.T)
-                    .to("cpu")
-                    .detach()
-                    .numpy()
-                    .astype(float)
-                )
+                plt.imshow(torch.matmul(e1, e2.T).to("cpu").detach().numpy().astype(float))
                 plt.colorbar()
-                self.logger.experiment.add_figure(
-                    f"image", plt.gcf(), global_step=self.global_step
-                )
+                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
 
-        loss = self.loss_func(
-            torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1)
-        )
+        loss = self.loss_func(torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1))
         return loss
 
     def training_step(self, batch, batch_nb):
@@ -136,8 +114,7 @@ class ResNetSparseAttention(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=self.learning_rate,
+            filter(lambda p: p.requires_grad, self.parameters()), lr=self.learning_rate,
         )
         # lr_schedule = torch.optim.lr_scheduler.StepLR(optim, step_size=15, gamma=0.5)
         return optim

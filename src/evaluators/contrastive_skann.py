@@ -26,19 +26,13 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         through the model forward function to get the embedding tensor"""
 
         return (
-            model_class(
-                encode_string_sequence(sequence)
-                .unsqueeze(0)
-                .to(self.model_device)
-            )
+            model_class(encode_string_sequence(sequence).unsqueeze(0).to(self.model_device))
             .squeeze()
             .T
         )
 
     def _setup_targets_for_search(
-        self,
-        target_embeddings: List[torch.Tensor],
-        target_names: List[str],
+        self, target_embeddings: List[torch.Tensor], target_names: List[str],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
@@ -47,13 +41,9 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         logger.info(f"Original DB size: {sum(lengths)}")
         unrolled_targets = []
 
-        for length, name, target in zip(
-            lengths, target_names, target_embeddings
-        ):
+        for length, name, target in zip(lengths, target_names, target_embeddings):
             # sample every N amino.
-            aminos = torch.cat(
-                [target[j].unsqueeze(0) for j in range(length)], dim=0
-            )
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
 
             self.unrolled_names.extend(
                 [name] * length
@@ -65,14 +55,10 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
             unrolled_targets, dim=0
         )  # (num targets x amino per target) x 256
 
-        logger.info(
-            f"Number of aminos in target DB: {unrolled_targets.shape[0]}"
-        )
+        logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
-            unrolled_targets = torch.nn.functional.normalize(
-                unrolled_targets, dim=-1
-            )
+            unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
         n = unrolled_targets.shape[0]
 
@@ -125,9 +111,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        indices_array, scores_array = self.searcher.search_batched(
-            query_embedding.contiguous()
-        )
+        indices_array, scores_array = self.searcher.search_batched(query_embedding.contiguous())
         # remove stuff that's under/over the threshold
 
         """ BASED ON MY UNDERSTANDING 
@@ -136,18 +120,13 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         # indices = indices_array[self.comp_func(distances_array, self.distance_threshold)]
         # distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
         # for each amino, the 1000 target aminos that are closest to that amino
-        scores, indices = self.filter_scores(
-            scores_array, indices_array
-        )
+        scores, indices = self.filter_scores(scores_array, indices_array)
 
         # for distance, name in zip(
         #     distances.ravel().to("cpu").numpy(),
         #     self.unrolled_names[indices.ravel().to("cpu").numpy()],
         # ):
-        for distance, name in zip(
-            scores,
-            self.unrolled_names[indices],
-        ):
+        for distance, name in zip(scores, self.unrolled_names[indices],):
             # filtered_list.append((name, distance))
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
