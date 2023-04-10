@@ -1,0 +1,19 @@
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.scripts]
+prefilter = "prefilter:main"
+
+[tool.flit.metadata]
+module = "prefilter"
+author = "Thomas Colligan"
+maintainer = "Thomas Colligan"
+maintainer-email = "thomas.colligan@umontana.edu"
+home-page = "https://github.com/TravisWheelerLab/prefilter"
+description-file = "README.md"
+
+[tool.flit.sdist]
+exclude = [
+    ".gitignore",
+]
