@@ -5,6 +5,7 @@ from src import utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 import pdb
+import random
 
 
 class AlignmentGenerator(DataModule):
@@ -39,6 +40,8 @@ class AlignmentGenerator(DataModule):
 
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            if training is False:
+                self.alignment_file_paths = random.sample(self.alignment_file_paths, 30000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -318,6 +321,8 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
 
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            if training is False:
+                self.alignment_file_paths = random.sample(self.alignment_file_paths, 30000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -536,7 +541,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
         subsequences, fullsequences = self.parse_alignment(alignment_path)
         if len(subsequences) == 0:
-            return self.__getitem(idx + 1)
+            return self.__getitem__(idx + 1)
 
         subseqs_without_gaps, subsequence_indices = self.parse_indels(subsequences)
         # pdb.set_trace()

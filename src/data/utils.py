@@ -30,8 +30,8 @@ def get_evaluation_data_old(
     hitsdirpath=None,
     query_id=4,
     save_dir=None,
-    targethitsfile="evaltargethmmerhits.pkl",
-    evaltargetfastafile="data/evaluationtargets.fa",
+    targethitsfile="/xdisk/twheeler/daphnedemekas/prefilter/evaltargethmmerhits.pkl",
+    evaltargetfastafile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargets.fa",
 ) -> Tuple[dict, dict, dict]:
     """Taking advantage of our current data structure of nested directories
     holding fasta files to quickly get all hmmer hits and sequence dicts for all

@@ -2,7 +2,7 @@ import subprocess
 import os
 import shutil
 import tqdm
-
+import argparse
 import yaml
 
 
@@ -12,14 +12,7 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
     Requires UCLUST to be installed"""
     t = 0
 
-    # open to create
-    # trainseqs = open(trainsequences, "w")
-    # valseqs = open(evalsequences, "w")
-
-    # trainseqs.close()
-    # valseqs.close()
-
-    for targetfasta in [target_fastas_dir]:
+    for targetfasta in os.listdir(target_fastas_dir):
         targetfastapath = os.path.join(target_fastas_dir, targetfasta)
         clusterpath = f"{clustered_target_dir}/clusters_{t}"
         if not os.path.exists(clusterpath):
@@ -53,7 +46,7 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
         i = 0
         j = 0
         for seqlist in clustered_seqnames:
-            if i < numseqs * 0.8:
+            if i < numseqs * 0.85:
                 for seq in seqlist:
                     trainseqs.write(seq + "\n")
                     i += 1
@@ -74,18 +67,36 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
 
 
 if __name__ == "__main__":
-    with open("prefilter/config.yaml", "r") as file:
-        config = yaml.safe_load(file)
 
-    # main(
-    #     config["traintargetspath"],
-    #     config["evaltargetspath"],
-    #     config["targetclusterdir"],
-    #     config["targetfastasdir"],
-    # )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target_fasta")
+    parser.add_argument("--cluster_savedir")
+    parser.add_argument("--train_savepath")
+    parser.add_argument("--eval_savepath")
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.train_savepath):
+        trainseqs = open(args.train_savepath, "w")
+        trainseqs.close()
+    if not os.path.exists(args.eval_savepath):
+        valseqs = open(args.eval_savepath, "w")
+        valseqs.close()
+
+    if not os.path.exists(args.cluster_savedir):
+        print(f"Making target directory {args.cluster_savedir}")
+        os.mkdir(args.cluster_savedir)
+
+    assert os.path.exists("./usearch"), "Usearch needs to be installed to your home directory \
+        in order to run this script. Please install Usearch or otherwise change the command to point \
+        to where Usearch is located on your machine. For more information see README."
+
+
+
     main(
-        config["traintargetspath"],
-        config["evaltargetspath"],
-        config["targetclusterdir"],
-        "/xdisk/twheeler/daphnedemekas/prefilter/uniref/split_subset/targets/targets_0.fa",
+        args.train_savepath,
+        args.eval_savepath,
+        args.cluster_savedir,
+        args.target_fasta
     )
+

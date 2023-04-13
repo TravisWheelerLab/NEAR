@@ -14,6 +14,7 @@ from src.data.eval_data_config import (
     load_alignment_inputs,
     load_blosum_inputs,
     load_kmer_inputs,
+    load_knn_inputs,
     all_hits_max_file_4,
     all_hits_normal_file_4,
 )
@@ -109,7 +110,7 @@ class Results:
             max_threshold=np.max(self.similarities),
             outputfilename=evaluemeansfile,
             plot_stds=True,
-            plot_lengths=True,
+            _plot_lengths=True,
             title=evaluemeanstitle,
         )
         if plot_roc:
@@ -177,6 +178,15 @@ def evaluate(
                 print("Parsing Alignment Model KMER Normal")
                 _ = Results(**kmer_inputs_normal)
 
+        if "knn" in models:
+            if "max" in modes:
+                kmer_inputs = load_knn_inputs(all_hits_max, "max")
+                print("Parsing Alignment Model KNN Max")
+                alignment_model_kmer_max = Results(**kmer_inputs)
+            if "normal" in modes:
+                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal")
+                print("Parsing Alignment Model KNN Normal")
+                _ = Results(**kmer_inputs_normal)
         if lengths:
             plot_lengths(
                 alignment_model_ivf_max.similarities,
@@ -203,9 +213,10 @@ if __name__ == "__main__":
         models.append("align")
     if "B" in modelinitials:
         models.append("blosum")
-    if "K" in modelinitials:
-        models.append("kmer")
-
+    # if "K" in modelinitials:
+    #     models.append("kmer")
+    if "KN" in modelinitials:
+        models.append("knn")
     if "M" in modeinitials:
         modes.append("max")
     if "N" in modeinitials:

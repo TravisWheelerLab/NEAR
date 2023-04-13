@@ -21,6 +21,57 @@ logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
 
 
+def filter_sequences_by_length(
+        names: List[str],
+        sequences: List[str],
+        model_class,
+        model_device = 'cpu',
+        max_seq_length = 512, 
+        minimum_seq_length = 0,
+    ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+        """Filters the sequences by length thresholding given the
+        minimum and maximum length threshold variables"""
+        embeddings = []
+        lengths = []
+
+        filtered_names = names.copy()
+        num_removed = 0
+        for name, sequence in zip(names, sequences):
+            length = len(sequence)
+            if max_seq_length >= length >= minimum_seq_length:
+                embed = (model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
+                        .squeeze()
+                        .T)
+                # return: seq_lenxembed_dim shape
+                embeddings.append(embed.to("cpu"))
+                lengths.append(length)
+            else:
+                num_removed += 1
+                filtered_names.remove(name)
+                # filtered_sequences.remove(sequence)
+        return filtered_names, embeddings, lengths
+
+@torch.no_grad()
+def _calc_embeddings(data) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+    """Calculates the embeddings for the sequences by
+    calling the model forward function. Filters the sequences by max/min
+    sequence length and returns the filtered sequences/names and embeddings
+
+    Returns [names], [sequences], [embeddings]"""
+    
+    sequence_data, model_class = data
+
+    names = list(sequence_data.keys())
+    sequences = list(sequence_data.values())
+
+    filtered_names, embeddings, lengths = filter_sequences_by_length(
+        names, sequences, model_class
+    )
+
+    return filtered_names, embeddings, lengths
+
+
+
 class UniRefEvaluator(Evaluator):
     """The superclass for all evaluators that are based on the UniRef dataset.
     This version of this class takes in dictionaries of sequence data, target data
@@ -45,6 +96,7 @@ class UniRefEvaluator(Evaluator):
         index_string="Flat",
         index_device="cpu",
         output_path="",
+        num_threads = 16
     ):
         """
         Args:
@@ -100,6 +152,7 @@ class UniRefEvaluator(Evaluator):
         self.distance_threshold = float(distance_threshold)
         self.evalue_threshold = evalue_threshold
         self.output_path = output_path
+        self.num_threads = num_threads
 
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -136,9 +189,9 @@ class UniRefEvaluator(Evaluator):
                 #     random_seq + sequence, model_class
                 # )
                 # else:
-                embed = self.compute_embedding(sequence, model_class)
+                #embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
-                embeddings.append(embed.to("cpu"))
+                #embeddings.append(embed.to("cpu"))
                 lengths.append(length)
             else:
                 num_removed += 1
@@ -180,7 +233,7 @@ class UniRefEvaluator(Evaluator):
     @torch.no_grad()
     def _calc_embeddings(
         self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
-    ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+    ) -> Tuple[List[str], List[torch.Tensor],List[str]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
         sequence length and returns the filtered sequences/names and embeddings
@@ -198,6 +251,20 @@ class UniRefEvaluator(Evaluator):
         assert len(filtered_names) == len(embeddings)
 
         return filtered_names, embeddings, lengths
+
+    def evaluate_multiprocessing(self, query_names, query_embeddings, target_names, target_embeddings, target_lengths) -> dict:
+        """Evaluation pipeline.
+
+        runs Faiss clustering and filtering and returns a dictionary of the model's hits.
+        """
+
+        print(f"Found {(len(self.target_seqs))} targets")
+
+        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
+
+        self.filter(query_embeddings, query_names)
+
+
 
     def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
@@ -228,24 +295,22 @@ class UniRefEvaluator(Evaluator):
             apply_random_sequence=False,
             max_seq_length=self.max_seq_length,
         )
+        torch.save(target_embeddings, "target_embeddings.pt")
+        
+        for item in target_names:
+            file.write(item+"\n")
+        file.close()
+        file = open('target_lengths.txt','w')
+        for item in target_lengths:
+            file.write(item+"\n")
+        file.close()
+
 
         del self.target_seqs  # remove from memory
 
         self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
 
-        model_hits, _, _ = self.filter(query_embeddings, query_names)
-
-        # self.denom = len(query_names) * len(target_names)
-        # self.num_queries = len(query_names)
-        # self.filter_hmmer_hits(target_names)
-        # generate_roc(
-        #     filename="data.txt",
-        #     modelhitsfile=self.output_path,
-        #     hmmerhits=self.max_hmmer_hits,
-        #     figure_path=self.figure_path,
-        # )
-
-        return model_hits
+        self.filter(query_embeddings, query_names)
 
     def compute_embedding(self, sequence, model_class):
         """This gets called from within the calculate embedding function
@@ -275,12 +340,11 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def filter(
-        self, queries, query_names,
+        self, queries, query_names
     ):
         """Filters our hits based on
         distance to the query in the Faiiss
         cluster space"""
-        qdict = dict()
 
         logger.info("Beginning search.")
 
@@ -290,29 +354,34 @@ class UniRefEvaluator(Evaluator):
             os.mkdir(self.output_path)
 
         print(self.output_path)
-
+        print(f"Number of queries: {len(queries)}")
+        search_time, filter_time, aggregate_time = 0, 0, 0
+        all_filtered_scores = {}
         for i in tqdm.tqdm(range(len(queries))):
-            if os.path.exists(f"{self.output_path}/{query_names[i]}.txt"):
-                continue
-            f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
-            f.write("Name     Distance" + "\n")
 
-            logger.debug(f"{i / (len(queries)):.3f}")
+            # f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
+            # f.write("Name     Distance" + "\n")
 
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
-            else:
-                qval = queries[i]
+            qval = torch.nn.functional.normalize(queries[i], dim=-1)
 
-            filtered_scores = self.search(qval)
-            for name, distance in filtered_scores.items():
-                f.write(f"{name}     {distance}" + "\n")
-            f.close()
+            filtered_scores, search_time, filter_time, aggregate_time = self.search(qval, search_time, filter_time, aggregate_time)
+            all_filtered_scores[i] = filtered_scores
+            # for name, distance in filtered_scores.items():
+            #     f.write(f"{name}     {distance}" + "\n")
+            # f.close()
 
-            qdict[query_names[i]] = filtered_scores
 
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")
+        logger.info(f"Search time: {search_time}.")
+        logger.info(f"Filter time: {filter_time}.")
+        logger.info(f"Aggregate time: {aggregate_time}.")
 
-        return qdict, loop_time / i, loop_time
+        print("Writing results to file...")
+        for query_idx, score in all_filtered_scores.items():
+            f = open(f"{self.output_path}/{query_names[query_idx]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+            for name, distance in score.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()

@@ -1,10 +1,20 @@
 """Write paths to training and evaluation data to a file"""
 import os
 
+with open("config.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+t_alignments_multipos = config["trainalignmentsmultipos"]
+e_alignments_multipos = config["evalalignmentsmultipos"]
+t_alignments = config["trainalignmentspath"]
+e_alignments = config["evalalignmentspath"]
+queryfastasdir = config["queryfastasdir"]
+targetfastasdir = config["targetfastasdir"]
+
 
 def single_positive_paths():
 
-    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments"
+    TRAIN_DIR = t_alignments
 
     with open("/xdisk/twheeler/daphnedemekas/train_paths.txt", "w", encoding="utf-8") as tpaths:
 
@@ -29,10 +39,10 @@ def single_positive_paths():
 
 
 def multi_positive_paths():
-    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments-multipos"
+    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments-multipos2"
 
     with open(
-        "/xdisk/twheeler/daphnedemekas/train_paths-multipos.txt", "w", encoding="utf-8"
+        "/xdisk/twheeler/daphnedemekas/train_paths-multipos.txt", "w"
     ) as tpaths:
 
         print("Writing train paths")
@@ -43,7 +53,7 @@ def multi_positive_paths():
                 for f in files:
                     tpaths.write(f"{TRAIN_DIR}/{Q}/{T}/{f}" + "\n")
 
-    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments-multipos"
+    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2"
 
     with open(
         "/xdisk/twheeler/daphnedemekas/valpaths-multipos.txt", "w", encoding="utf-8"
@@ -57,5 +67,5 @@ def multi_positive_paths():
                     valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
 
 
-single_positive_paths()
+#single_positive_paths()
 multi_positive_paths()

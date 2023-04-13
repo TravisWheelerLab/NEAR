@@ -4,16 +4,27 @@ import tqdm
 from src.data.hmmerhits import FastaFile
 import argparse
 import itertools
+import yaml 
 
+
+with open("config.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+t_alignments_multipos = config["trainalignmentsmultipos"]
+e_alignments_multipos = config["evalalignmentsmultipos"]
+t_alignments = config["trainalignmentspath"]
+e_alignments = config["evalalignmentspath"]
+queryfastasdir = config["queryfastasdir"]
+targetfastasdir = config["targetfastasdir"]
 
 def get_full_sequences(query_num, target_num, query, target):
-    queryfile = f"uniref/split_subset/queries/queries_{query_num}.fa"
+    queryfile = f"{queryfastasdir}/queries_{query_num}.fa"
     queryfasta = FastaFile(queryfile)
     # all_hits = {}
     querysequences = queryfasta.data
     targetsequences = {}
 
-    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{target_num}.fa")
+    targetfasta = FastaFile(f"{targetfastasdir}/targets_{target_num}.fa")
     targetdata = targetfasta.data
     targetsequences.update(targetdata)
 
@@ -26,7 +37,7 @@ def get_full_sequences(query_num, target_num, query, target):
     return query_sequence, target_sequence
 
 
-def get_training_data(target_num, query_num, path):
+def get_training_data(path):
 
     files = os.listdir(path)
 
@@ -45,11 +56,7 @@ def get_training_data(target_num, query_num, path):
         target = query_and_target.split()[-1].strip("\n")
         queryseq = text[1].strip("\n")
         targetseq = text[2].strip("\n")
-        # if len(text) < 4:
-        #     fullquery, fulltarget = get_full_sequences(query_num, target_num, query, target)
-        #     if fullquery is None:
-        #         continue
-        # else:
+
         fullquery = text[3].strip("\n")
         fulltarget = text[4].strip("\n")
 
@@ -129,22 +136,22 @@ def main_train(task_id):
 
     print(f"Collecting training data for target num {target_num} and query num {query_num}")
 
-    training_data_path = f"/xdisk/twheeler/daphnedemekas/train-alignments/{query_num}/{target_num}"
+    training_data_path = f"{t_alignments}/{query_num}/{target_num}"
     new_training_data_path = (
-        f"/xdisk/twheeler/daphnedemekas/train-alignments-multipos2/{query_num}/{target_num}"
+        f"{t_alignments_multipos}/{query_num}/{target_num}"
     )
 
-    if not os.path.exists(f"/xdisk/twheeler/daphnedemekas/train-alignments-multipos2/{query_num}"):
-        os.mkdir(f"/xdisk/twheeler/daphnedemekas/train-alignments-multipos2/{query_num}")
+    if not os.path.exists(f"{t_alignments_multipos}/{query_num}"):
+        os.mkdir(f"{t_alignments_multipos}/{query_num}")
 
     if not os.path.exists(
-        f"/xdisk/twheeler/daphnedemekas/train-alignments-multipos2/{query_num}/{target_num}"
+        f"{t_alignments_multipos}/{query_num}/{target_num}"
     ):
         os.mkdir(
-            f"/xdisk/twheeler/daphnedemekas/train-alignments-multipos2/{query_num}/{target_num}"
+            f"{t_alignments_multipos}/{query_num}/{target_num}"
         )
 
-    training_data = get_training_data(target_num, query_num, training_data_path)
+    training_data = get_training_data(training_data_path)
     write_new_data_with_matches(new_training_data_path, training_data)
 
 
@@ -157,21 +164,21 @@ def main_eval(task_id):
     target_num = eval_target_queries[int(task_id) - 1][0]
     query_num = eval_target_queries[int(task_id) - 1][1]
 
-    eval_data_path = f"/xdisk/twheeler/daphnedemekas/eval-alignments/{query_num}/{target_num}"
+    eval_data_path = f"{e_alignments}/{query_num}/{target_num}"
     new_training_data_path = (
-        f"/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2/{query_num}/{target_num}"
+        f"{e_alignments_multipos}/{query_num}/{target_num}"
     )
-    if not os.path.exists(f"/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2/{query_num}"):
-        os.mkdir(f"/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2/{query_num}")
+    if not os.path.exists(f"{e_alignments_multipos}/{query_num}"):
+        os.mkdir(f"{e_alignments_multipos}/{query_num}")
 
     if not os.path.exists(
-        f"/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2/{query_num}/{target_num}"
+        f"{e_alignments_multipos}/{query_num}/{target_num}"
     ):
         os.mkdir(
-            f"/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2/{query_num}/{target_num}"
+            f"{e_alignments_multipos}/{query_num}/{target_num}"
         )
 
-    eval_data = get_training_data(target_num, query_num, eval_data_path)
+    eval_data = get_training_data(eval_data_path)
     write_new_data_with_matches(new_training_data_path, eval_data)
 
 

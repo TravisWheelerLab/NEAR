@@ -18,11 +18,13 @@ with open("config.yaml", "r") as file:
 
 with open(config["traintargetspath"], "r") as train_target_file:
     train_targets = [t.strip("\n") for t in train_target_file.readlines()]
+    print(f"Found {len(train_targets)} train targets")
 with open(config["evaltargetspath"], "r") as val_target_file:
     val_targets = [t.strip("\n") for t in val_target_file.readlines()]
+    print(f"Found {len(val_targets)} val targets")
 
 
-def main(task_id=None):
+def parse_by_task(task_id=None):
     """Generate alignments for a given task id"""
 
     task_id = int(task_id)
@@ -39,7 +41,7 @@ def main(task_id=None):
     logger.info("Parsing stdout for q %s, t %s", query_filenum, target_filenum)
 
     parse_stdout(query_filenum, target_filenum)
-
+    
 
 def parse_stdout(q_fnum, t_fnum):
     """Parse the saved off stdout files from running hmmer"""
@@ -76,10 +78,10 @@ def parse_stdout(q_fnum, t_fnum):
         for hit in qresult:
             target_id = hit.id
 
-            if hit.evalue > 10:
+            if hit.evalue > 1:
                 continue
 
-            if target_id in train_targets and hit.evalue < 1:
+            if target_id in train_targets:
                 alignment_file_path = f"{train_root}/{q_fnum}/{t_fnum}/{train_idx}.txt"
                 train_idx += 1
             elif target_id in val_targets:
@@ -101,10 +103,54 @@ def parse_stdout(q_fnum, t_fnum):
                     alignment_file.write(fullseq2 + "\n")
 
 
+
+def get_evaluation_alignment_data():
+    queryfasta = FastaFile("uniref/split_subset/queries/queries_4.fa")
+    querysequences = queryfasta.data
+
+
+    for t_fnum in tqdm.tqdm(range(45)):
+        stdout_path = f"{config['hmmer_stdout_path']}/4-{t_fnum}.txt"
+        result = SearchIO.parse(stdout_path, "hmmer3-text")
+        targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t_fnum}.fa")
+        targetsequences = targetfasta.data
+        for qresult in tqdm.tqdm(result):
+            query_id = qresult.id
+            for hit in qresult:
+                target_id = hit.id
+
+                if hit.evalue > 1:
+                    continue
+                if target_id in val_targets:
+                    for hsp in hit:
+                        alignments = hsp.aln
+                        seq1 = str(alignments[0].seq)
+                        seq2 = str(alignments[1].seq)
+                        fullseq1 = querysequences[query_id]
+                        fullseq2 = targetsequences[target_id]
+
+                        if len(seq1) / len(fullseq1) >= 0.9 and len(seq2) / len(fullseq2) >= 0.9:
+                            alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/over-90"
+                        elif len(seq1) / len(fullseq1) <= 0.5 or len(seq2) / len(fullseq2) <= 0.5:
+                            alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/under-50"
+                        else:
+                            alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/between"
+
+                        queries = open(f'{alignment_file_dir}/queries.fa','a')
+                        queries.write(">" + query_id + " " + "\n")
+                        queries.write(fullseq1 + "\n")
+                        queries.close()
+                        targets = open(f'{alignment_file_dir}/targets.fa','a')
+                        targets.write(">" + target_id + " " + "\n")
+                        targets.write(fullseq2 + "\n")
+                        targets.close()
+
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("task_id")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("task_id")
+    # args = parser.parse_args()
 
-    main(args.task_id)
+    # parse_by_task(args.task_id)
+
+    get_evaluation_alignment_data()

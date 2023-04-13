@@ -23,7 +23,7 @@ ALIGNMENT_MODEL_RESULTS_PATH_SCANN = (
     "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-scann"
 )
 KMER_MODEL_RESULTS_PATH = (
-    "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-kmer"
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/strobemerW20S10"
 )
 
 ALIGNMENT_MODEL_IVF_0_MAX_DATAFILE = (
@@ -56,6 +56,32 @@ BLOSUM_MODEL_IVF_NORMAL_DATAFILE = (
 
 KMER_MODEL_DATAFILE = "/xdisk/twheeler/daphnedemekas/temp_files/kmer_data.txt"
 KMER_MODEL_DATAFILE_NORMAL = "/xdisk/twheeler/daphnedemekas/temp_files/kmer_data_normal.txt"
+
+def load_knn_inputs(hits, mode):
+    if mode == "max":
+        return {
+            "model_results_path": "/xdisk/twheeler/daphnedemekas/prefilter-output/knn-for-homology",
+            "hmmer_hits_dict": hits,
+            "data_savedir": "/xdisk/twheeler/daphnedemekas/knnmax",
+            "evaluemeansfile": "evaluemeans_knn_maxflat",
+            "evaluemeanstitle": "Correlation in KNN model - HMMER Max",
+            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_knn_max.pkl",
+            "temp_data_file": "/xdisk/twheeler/daphnedemekas/temp_files/knnmax.txt",
+            "roc_filepath": "ResNet1d/eval/knnrocflat_max.png",
+            "plot_roc": True,
+        }  # "num_pos_per_evalue": [482667, 1105431, 1519838, 3722920], "num_hits":1341468330,  "plot_roc" : False}
+    elif mode == "normal":
+        return {
+            "model_results_path": "/xdisk/twheeler/daphnedemekas/prefilter-output/knn-for-homology",
+            "hmmer_hits_dict": hits,
+            "data_savedir": "/xdisk/twheeler/daphnedemekas/knnnormal",
+            "evaluemeansfile": "evaluemeans_knn_normalflat",
+            "evaluemeanstitle": "Correlation in KNN model - HMMER Normal",
+            "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_knn_normal.pkl",
+            "temp_data_file": "/xdisk/twheeler/daphnedemekas/temp_files/knnnormal.txt",
+            "roc_filepath": "ResNet1d/eval/knnrocflat_normal.png",
+            "plot_roc": True,
+        }  # "num_pos_per_evalue": [482384, 1038554, 1081989, 1088067], "num_hits":1341468330,  "plot_roc" : False}
 
 
 def load_alignment_inputs(hits, mode):
@@ -156,10 +182,11 @@ def load_kmer_inputs(hits, mode):
             "hmmer_hits_dict": hits,
             "data_savedir": "/xdisk/twheeler/daphnedemekas/kmer_model_max",
             "evaluemeansfile": "evaluemeans_align_kmer_max",
-            "evaluemeanstitle": "Correlation in ALIGN Kmer model - HMMER Max",
+            "evaluemeanstitle": "Correlation in ALIGN Strobemer model - HMMER Max",
             "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_max.pkl",
             "temp_data_file": KMER_MODEL_DATAFILE,
             "roc_filepath": "ResNet1d/eval/align_kmer_roc.png",
+            "plot_roc":True,
         }
     elif mode == "normal":
         return {
@@ -171,6 +198,7 @@ def load_kmer_inputs(hits, mode):
             "sorted_alignment_pairs_path": "/xdisk/twheeler/daphnedemekas/sorted_alignment_kmer_pairs_normal.pkl",
             "temp_data_file": KMER_MODEL_DATAFILE_NORMAL,
             "roc_filepath": "ResNet1d/eval/align_kmer_roc_normal.png",
+            "plot_roc":True,
         }
 
     else:

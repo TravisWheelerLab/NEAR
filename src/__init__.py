@@ -27,7 +27,8 @@ from src.utils.util import (
     load_evaluator_class,
     load_model_class,
 )
-
+from multiprocessing import Pool
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 @train_ex.config
 def _observer(log_dir, model_name):
@@ -127,8 +128,9 @@ def _log_verbosity(log_verbosity):
     logger.setLevel(log_verbosity)
 
 
-@evaluation_ex.main
-def evaluate(_config):
+def evaluate_multiprocessing(_config):
+    import itertools
+    from src.evaluators.uniref_evaluator import _calc_embeddings
     params = SimpleNamespace(**_config)
 
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -136,13 +138,73 @@ def evaluate(_config):
     model = params.model_class.load_from_checkpoint(
         checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
     ).to(params.device)
-    print("here")
+
 
     evaluator = params.evaluator_class(**params.evaluator_args)
+    evaluator.model_class = model
 
-    result = evaluator.evaluate(model_class=model)
-    # now, track output of this evaluation with DVC.
+    query_sequences = evaluator.query_seqs
+    params.logger.info("Splitting data into chunks")
 
+    q_chunk_size = len(query_sequences) // params.num_threads
+
+    target_embeddings = torch.load('target_embeddings.pt')
+    print(len(target_embeddings))
+    with open('target_names.txt','r') as f:
+        target_names = f.readlines()
+        target_names = [t.strip("\n") for t in target_names]
+    with open('target_lengths.txt','r') as f:
+        target_lengths = f.readlines()
+        lengths = [int(t.strip("\n")) for t in target_lengths]
+    
+    assert len(lengths) == len(target_names) == len(target_embeddings)
+
+
+    query_sequence_chunks = [(dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)), model) for i in range(0,len(query_sequences), q_chunk_size)]
+    del query_sequences 
+
+    pool = Pool(params.num_threads)
+
+    query_names = []
+    query_embeddings = []
+
+    params.logger.info("Embedding queries...")
+
+    start_time = time.time()
+
+    for result in pool.imap(_calc_embeddings, query_sequence_chunks):
+        n, e, _ = result
+        query_names.extend(n)
+        query_embeddings.extend(e)
+
+    # assert len(query_names) == len(query_embeddings)
+
+    loop_time = time.time() - start_time
+    params.logger.info(f"Query embedding took: {loop_time}.")
+    pool.terminate()
+    evaluator.evaluate_multiprocessing(query_names, query_embeddings, target_names, target_embeddings, lengths)
+
+    #result = evaluator.evaluate_multiprocessing(query_names, query_embeddings, target_names, target_embeddings, lengths)
+
+@evaluation_ex.main
+def evaluate(_config):
+
+    params = SimpleNamespace(**_config)
+
+    if params.device == 'cpu' and params.num_threads > 1:
+        evaluate_multiprocessing(_config)
+    else:
+
+        params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
+
+        model = params.model_class.load_from_checkpoint(
+            checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
+        ).to(params.device)
+        print("here")
+
+        evaluator = params.evaluator_class(**params.evaluator_args)
+
+        evaluator.evaluate(model_class=model)
 
 def train_main():
     train_ex.run_commandline()

@@ -215,34 +215,9 @@ class ResNet1dMultiPos(ResNet1d):
             -1, -2
         )  # batch_size x sequence_length x embedding_dimension
         e = torch.cat(torch.unbind(embeddings_transposed, dim=0)).unsqueeze(1)
+
+        e = torch.nn.functional.normalize(e, dim=-1)
         l = torch.stack(labels).flatten()
         loss = self.loss_func(e, l)
 
-        # e1, e2 = torch.split(
-        #     embeddings_transposed,
-        #     embeddings.shape[0] // 2,
-        #     dim=0,  # both are (batch_size /2 , sequence_length, embedding_dimension)
-        # )  # -- see datasets collate_fn
-        # e1 = torch.cat(torch.unbind(e1, dim=0))  # original seq embeddings
-        # e2 = torch.cat(torch.unbind(e2, dim=0))  # mutated seq embeddings
-        # # ((batch_size/2) * sequence_length) x embedding_dimension
-
-        # if self.global_step % self.log_interval == 0:
-        #     with torch.no_grad():
-        #         fig = plt.figure(figsize=(10, 10))
-        #         arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()
-        #         arr = arr.astype(float)
-        #         plt.imshow(arr)
-        #         plt.colorbar()
-        #         self.logger.experiment.add_figure(
-        #             f"image", plt.gcf(), global_step=self.global_step
-        #         )
-        # # loss = self.loss_func(
-        # #     torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1), mask = mask
-        # # )
-        # # input is ((batch_size/2) x 2 x embedding_dimension)
-
-        # loss = self.loss_func(
-        #     e1, e2, mask, e1_indices, e2_indices
-        # )  # input is ((batch_size/2) x 2 x embedding_dimension)
         return loss

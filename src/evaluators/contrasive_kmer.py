@@ -31,8 +31,8 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
             for i in range(self.num_random_matrices)
         ]  # should these be between 0 and 1 since we just normalized? yes they are random normal...
 
-        self.W = 15
-        self.step_size = 10
+        self.W = 10
+        self.step_size = 1
 
     def transform(self, sequence_embeddings: List[torch.Tensor]):
         transformed_sequence_embeddings = []
