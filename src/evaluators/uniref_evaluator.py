@@ -70,7 +70,33 @@ def _calc_embeddings(data) -> Tuple[List[str], List[str], List[torch.Tensor]]:
 
     return filtered_names, embeddings, lengths
 
+def evaluate2(query_seqs, model_class, evaluator, target_names, target_embeddings, target_lengths) -> dict:
+    """Evaluation pipeline.
 
+    Calculates embeddings for query and targets
+    If visactmaps is true, generates activation map plots given the target embeddings
+        (probably want to remove this feature)
+    Then runs Faiss clustering and filtering and returns a dictionary of the model's hits.
+    """
+    if hasattr(model_class, "initial_seq_len"):
+        evaluator.tile_size = model_class.initial_seq_len
+
+    print(f"Found {(len(evaluator.target_seqs))} targets")
+
+    print("Embedding queries...")
+    query_names, query_embeddings, _ = evaluator._calc_embeddings(
+        sequence_data=query_seqs,
+        model_class=model_class,
+        apply_random_sequence=evaluator.add_random_sequence,
+        max_seq_length=evaluator.max_seq_length,
+    )
+    del query_seqs
+
+    del evaluator.target_seqs  # remove from memory
+
+    evaluator._setup_targets_for_search(target_embeddings, target_names, target_lengths)
+
+    evaluator.filter(query_embeddings, query_names)
 
 class UniRefEvaluator(Evaluator):
     """The superclass for all evaluators that are based on the UniRef dataset.
@@ -166,10 +192,9 @@ class UniRefEvaluator(Evaluator):
 
     def filter_sequences_by_length(
         self,
+        model_class,
         names: List[str],
         sequences: List[str],
-        model_class,
-        apply_random_sequence: bool,
         max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Filters the sequences by length thresholding given the
@@ -189,9 +214,9 @@ class UniRefEvaluator(Evaluator):
                 #     random_seq + sequence, model_class
                 # )
                 # else:
-                #embed = self.compute_embedding(sequence, model_class)
+                embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
-                #embeddings.append(embed.to("cpu"))
+                embeddings.append(embed.to("cpu"))
                 lengths.append(length)
             else:
                 num_removed += 1
@@ -200,35 +225,6 @@ class UniRefEvaluator(Evaluator):
                 logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
         logger.info(f"removed {num_removed} sequences. ")
         return filtered_names, embeddings, lengths
-
-    # def filter_hmmer_hits(self, target_names: List[str]):
-    #     """Filters the max hmmer hits dict to include
-    #     only the targets that passed length thresolding
-    #     This is in order to keep our benchmarking consistent."""
-
-    #     init_len = sum([len(x) for x in self.max_hmmer_hits.values()])
-    #     print(f"Filtering HMMER hits")
-    #     filtered_hmmer_hits = {}
-
-    #     # TODO: make this faster
-    #     num_missing = 0
-    #     for queryname, targethits in self.max_hmmer_hits.items():
-    #         hits_dict = {}
-    #         for targetname, hits in targethits.items():
-    #             if targetname in target_names:
-    #                 hits_dict[targetname] = hits
-    #             else:
-    #                 num_missing += 1
-
-    #         filtered_hmmer_hits[queryname] = hits_dict
-
-    #     self.max_hmmer_hits = filtered_hmmer_hits
-
-    #     new_len = sum([len(x) for x in self.max_hmmer_hits.values()])
-    #     logger.info(
-    #         f"Removed {init_len - new_len} entries from the hmmer hit dictionary"
-    #         f" since they didn't pass length thresholding."
-    #     )
 
     @torch.no_grad()
     def _calc_embeddings(
@@ -244,8 +240,8 @@ class UniRefEvaluator(Evaluator):
         sequences = list(sequence_data.values())
 
         logger.info("Filtering sequences by length...")
-        filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-            names, sequences, model_class, apply_random_sequence, max_seq_length,
+        filtered_names, embeddings, lengths = self.filter_sequences_by_length(model_class,
+            names, sequences, max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)
@@ -264,6 +260,33 @@ class UniRefEvaluator(Evaluator):
 
         self.filter(query_embeddings, query_names)
 
+    def evaluate2(self,query_seqs, model_class, target_names, target_embeddings, target_lengths) -> dict:
+        """Evaluation pipeline.
+
+        Calculates embeddings for query and targets
+        If visactmaps is true, generates activation map plots given the target embeddings
+            (probably want to remove this feature)
+        Then runs Faiss clustering and filtering and returns a dictionary of the model's hits.
+        """
+        if hasattr(model_class, "initial_seq_len"):
+            self.tile_size = model_class.initial_seq_len
+
+        print(f"Found {(len(self.target_seqs))} targets")
+
+        print("Embedding queries...")
+        query_names, query_embeddings, _ = self._calc_embeddings(
+            sequence_data=query_seqs,
+            model_class=model_class,
+            apply_random_sequence=self.add_random_sequence,
+            max_seq_length=self.max_seq_length,
+        )
+        del query_seqs
+
+        del self.target_seqs  # remove from memory
+
+        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
+
+        self.filter(query_embeddings, query_names)
 
 
     def evaluate(self, model_class) -> dict:
@@ -295,15 +318,6 @@ class UniRefEvaluator(Evaluator):
             apply_random_sequence=False,
             max_seq_length=self.max_seq_length,
         )
-        torch.save(target_embeddings, "target_embeddings.pt")
-        
-        for item in target_names:
-            file.write(item+"\n")
-        file.close()
-        file = open('target_lengths.txt','w')
-        for item in target_lengths:
-            file.write(item+"\n")
-        file.close()
 
 
         del self.target_seqs  # remove from memory
@@ -355,33 +369,36 @@ class UniRefEvaluator(Evaluator):
 
         print(self.output_path)
         print(f"Number of queries: {len(queries)}")
-        search_time, filter_time, aggregate_time = 0, 0, 0
-        all_filtered_scores = {}
+        # search_time, filter_time, aggregate_time = 0, 0, 0
+        #all_filtered_scores = {}
         for i in tqdm.tqdm(range(len(queries))):
 
-            # f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
-            # f.write("Name     Distance" + "\n")
+            f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
 
-            qval = torch.nn.functional.normalize(queries[i], dim=-1)
+            if self.normalize_embeddings:
+                qval = torch.nn.functional.normalize(queries[i], dim=-1)
+            else:
+                qval = queries[i]
 
-            filtered_scores, search_time, filter_time, aggregate_time = self.search(qval, search_time, filter_time, aggregate_time)
-            all_filtered_scores[i] = filtered_scores
-            # for name, distance in filtered_scores.items():
-            #     f.write(f"{name}     {distance}" + "\n")
-            # f.close()
+            filtered_scores = self.search(qval)#, search_time, filter_time, aggregate_time)
+            #all_filtered_scores[i] = filtered_scores
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
 
 
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")
-        logger.info(f"Search time: {search_time}.")
-        logger.info(f"Filter time: {filter_time}.")
-        logger.info(f"Aggregate time: {aggregate_time}.")
+        # logger.info(f"Search time: {search_time}.")
+        # logger.info(f"Filter time: {filter_time}.")
+        # logger.info(f"Aggregate time: {aggregate_time}.")
 
-        print("Writing results to file...")
-        for query_idx, score in all_filtered_scores.items():
-            f = open(f"{self.output_path}/{query_names[query_idx]}.txt", "w")
-            f.write("Name     Distance" + "\n")
-            for name, distance in score.items():
-                f.write(f"{name}     {distance}" + "\n")
-            f.close()
+        # print("Writing results to file...")
+        # for query_idx, score in all_filtered_scores.items():
+        #     f = open(f"{self.output_path}/{query_names[query_idx]}.txt", "w")
+        #     f.write("Name     Distance" + "\n")
+        #     for name, distance in score.items():
+        #         f.write(f"{name}     {distance}" + "\n")
+        #     f.close()

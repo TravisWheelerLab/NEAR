@@ -21,7 +21,7 @@ def parse_eval_hmmer_hits(
     hmmer_dirpath,
     query_id,
     save_dir=None,
-    evaltargetfastafile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargets.fa",
+    targetfile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargets.fa",
 ):
     """Parses hmmer hits from .hits files and saves as a pickled dictionary"""
     query_id = str(query_id)
@@ -29,16 +29,13 @@ def parse_eval_hmmer_hits(
     hmmerhits = HmmerHits(dir_path=hmmer_dirpath)
     all_target_hits = {}
 
-    targetsequencefasta = FastaFile(evaltargetfastafile)
-    targetsequencedata = targetsequencefasta.data
-
     for tfile in tqdm.tqdm(range(45)):
 
         target_hits = hmmerhits.get_hits(
             hmmer_dirpath,
             tfile,
             query_num=query_id,
-            filtered_targets=list(targetsequencedata.keys()),
+            filtered_targets=None,
         )  # {'target_dirnum' :{'query_dirnum': {qname: {tname: data} }  } }
         all_target_hits = update(all_target_hits, target_hits)
 
@@ -62,8 +59,12 @@ def parse_eval_hmmer_hits(
 
 # parse_full("/xdisk/twheeler/daphnedemekas/phmmer_normal_results", query_id=4, save_dir = '/xdisk/twheeler/daphnedemekas/ALL_PHMMERNORMAL_QUERY4_RESULTS')
 if __name__ == "__main__":
+    
+    queryfile = "/xdisk/twheeler/daphnedemekas/query4-alignments/over-90/queries.fa"
+    targetfile = "/xdisk/twheeler/daphnedemekas/query4-alignments/over-90/targets.fa"
+
     parse_eval_hmmer_hits(
-        "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
+        "/xdisk/twheeler/daphnedemekas/phmmer_normal_results",
         query_id=4,
-        save_dir="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargetdict",
+        save_dir="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargetdict-over90-normal",
     )

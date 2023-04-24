@@ -6,15 +6,14 @@ You need to increase max sequence length too"""
 
 from src.data.benchmarking import (
     get_data,
-    generate_roc_from_sorted_pairs,
+    generate_roc,
     plot_mean_e_values,
     plot_lengths,
 )
 from src.data.eval_data_config import (
     load_alignment_inputs,
-    load_blosum_inputs,
-    load_kmer_inputs,
     load_knn_inputs,
+    load_esm_inputs,
     all_hits_max_file_4,
     all_hits_normal_file_4,
 )
@@ -88,13 +87,9 @@ class Results:
         data_savedir: str,
         evaluemeansfile: str,
         evaluemeanstitle: str,
-        sorted_alignment_pairs_path: str,
-        temp_data_file: str,
         roc_filepath: str,
         plot_roc: bool = False,
-        num_pos_per_evalue: list = None,
-        num_hits: int = None,
-        plot_evalue_means: bool = False,
+        temp_file: str = None,
     ):
         """evaluates a given model"""
 
@@ -102,33 +97,33 @@ class Results:
             model_results_path, hmmer_hits_dict, savedir=data_savedir
         )
 
+        print("Plotting e values and saving to")
+        print(evaluemeansfile)
         plot_mean_e_values(
-            self.similarities,
-            self.e_values,
-            self.biases,
-            min_threshold=0,
-            max_threshold=np.max(self.similarities),
-            outputfilename=evaluemeansfile,
-            plot_stds=True,
-            _plot_lengths=True,
-            title=evaluemeanstitle,
-        )
+             self.similarities,
+             self.e_values,
+             self.biases,
+             min_threshold=0,
+             max_threshold=np.max(self.similarities),
+             outputfilename=evaluemeansfile,
+             plot_stds=True,
+             _plot_lengths=True,
+             title=evaluemeanstitle,
+         )
         if plot_roc:
-            generate_roc_from_sorted_pairs(
+            generate_roc(
                 model_results_path,
-                sorted_alignment_pairs_path,
-                temp_data_file,
                 hmmer_hits_dict,
                 roc_filepath,
-                num_pos_per_evalue,
-                num_hits,
+                temp_file
             )
 
 
 def evaluate(
     query_id=4,
-    models: list = ["align", "blosum", "kmer"],
-    modes: list = ["normal", "max", "flat", "scann"],
+    models: list = ["align", "knn"],
+    modes: list = ["normal", "max"],
+    modelname: str = None,
     lengths: bool = True,
 ):
     """Main function for evaluation"""
@@ -139,61 +134,42 @@ def evaluate(
             if "max" in modes:
                 print("Parsing Alignment Model IVF Query 4 Max")
 
-                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max")
+                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max",modelname)
                 alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
             if "normal" in modes:
-                align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal")
+                align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal",modelname)
 
                 print("Parsing Alignment Model IVF Query 4 Normal")
                 _ = Results(**align_ivf_normal_inputs_4)
-            if "scann" in modes:
-                align_ivf_scann_inputs = load_alignment_inputs(all_hits_max, "scann")
-                print("Parsing Alignment Model Scann Query 4 Normal")
-
-                _ = Results(**align_ivf_scann_inputs)
-
-        if "blosum" in models:
-            if "normal" in modes:
-                blosum_ivf_normal_inputs = load_blosum_inputs(all_hits_normal, "normal")
-                print("Parsing Blosum Model IVF")
-                _ = Results(**blosum_ivf_normal_inputs)
-            if "max" in modes:
-                blosum_ivf_max_inputs = load_blosum_inputs(all_hits_max, "max")
-
-                print("Parsing Blosum Model IVF - Max")
-                blosum_model_ivf_max = Results(**blosum_ivf_max_inputs)
-
-            if "flat" in modes:
-                blosum_flat_inputs = load_blosum_inputs(all_hits_max, "flat")
-                print("Parsing Blosum Model Flat - Max")
-                _ = Results(**blosum_flat_inputs)
-
-        if "kmer" in models:
-            if "max" in modes:
-                kmer_inputs = load_kmer_inputs(all_hits_max, "max")
-                print("Parsing Alignment Model KMER Max")
-                alignment_model_kmer_max = Results(**kmer_inputs)
-            if "normal" in modes:
-                kmer_inputs_normal = load_kmer_inputs(all_hits_normal, "normal")
-                print("Parsing Alignment Model KMER Normal")
-                _ = Results(**kmer_inputs_normal)
 
         if "knn" in models:
             if "max" in modes:
-                kmer_inputs = load_knn_inputs(all_hits_max, "max")
+                kmer_inputs = load_knn_inputs(all_hits_max, "max", modelname)
                 print("Parsing Alignment Model KNN Max")
-                alignment_model_kmer_max = Results(**kmer_inputs)
+                alignment_model_knn_max = Results(**kmer_inputs)
             if "normal" in modes:
-                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal")
+                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal",modelname)
                 print("Parsing Alignment Model KNN Normal")
                 _ = Results(**kmer_inputs_normal)
         if lengths:
             plot_lengths(
                 alignment_model_ivf_max.similarities,
-                blosum_model_ivf_max.similarities,
-                alignment_model_kmer_max.similarities,
+                alignment_model_knn_max.similarities
             )
-
+        if "esm" in models:
+            if "max" in modes:
+                esm_inputs = load_esm_inputs(all_hits_max, "max", modelname)
+                print("Parsing Alignment Model ESM Max")
+                alignment_model_knn_max = Results(**esm_inputs)
+            if "normal" in modes:
+                esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal",modelname)
+                print("Parsing Alignment Model ESM Normal")
+                _ = Results(**esm_inputs_normal)
+        if lengths:
+            plot_lengths(
+                alignment_model_ivf_max.similarities,
+                alignment_model_knn_max.similarities
+            )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -201,28 +177,25 @@ if __name__ == "__main__":
     parser.add_argument("--models", type=str, default=["ABK"])
     parser.add_argument("--modes", type=str, default=["MNF"])
     parser.add_argument("--lengths", action="store_true")
+    parser.add_argument("--modelname", type=str)
 
     args = parser.parse_args()
 
     modelinitials = args.models
     modeinitials = args.modes
+    modelname = args.modelname
 
     models = []
     modes = []
     if "A" in modelinitials:
         models.append("align")
-    if "B" in modelinitials:
-        models.append("blosum")
-    # if "K" in modelinitials:
-    #     models.append("kmer")
-    if "KN" in modelinitials:
+    if "K" in modelinitials:
         models.append("knn")
+    if "E" in modelinitials:
+        models.append("esm")
     if "M" in modeinitials:
         modes.append("max")
     if "N" in modeinitials:
         modes.append("normal")
-    if "F" in modeinitials:
-        modes.append("flat")
-    if "S" in modeinitials:
-        modes.append("scann")
-    evaluate(args.query_id, models, modes, lengths=args.lengths)
+
+    evaluate(args.query_id, models, modes, modelname, lengths=args.lengths)

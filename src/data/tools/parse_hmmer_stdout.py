@@ -114,6 +114,12 @@ def get_evaluation_alignment_data():
         result = SearchIO.parse(stdout_path, "hmmer3-text")
         targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t_fnum}.fa")
         targetsequences = targetfasta.data
+        fulltargets90 = set()
+        fullqueries90 = set()
+        fulltargets50 = set()
+        fullqueries50 = set()
+        fulltargetsbetween = set()
+        fullqueriesbetween = set()
         for qresult in tqdm.tqdm(result):
             query_id = qresult.id
             for hit in qresult:
@@ -131,26 +137,37 @@ def get_evaluation_alignment_data():
 
                         if len(seq1) / len(fullseq1) >= 0.9 and len(seq2) / len(fullseq2) >= 0.9:
                             alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/over-90"
+                            checkt = fulltargets90
+                            checkq = fullqueries90
                         elif len(seq1) / len(fullseq1) <= 0.5 or len(seq2) / len(fullseq2) <= 0.5:
                             alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/under-50"
+                            checkt = fulltargets50
+                            checkq = fullqueries50
                         else:
                             alignment_file_dir = f"/xdisk/twheeler/daphnedemekas/query4-alignments/between"
+                            checkt = fulltargetsbetween
+                            checkq = fullqueriesbetween
 
-                        queries = open(f'{alignment_file_dir}/queries.fa','a')
-                        queries.write(">" + query_id + " " + "\n")
-                        queries.write(fullseq1 + "\n")
-                        queries.close()
-                        targets = open(f'{alignment_file_dir}/targets.fa','a')
-                        targets.write(">" + target_id + " " + "\n")
-                        targets.write(fullseq2 + "\n")
-                        targets.close()
+                        
+                        if fullseq1 not in checkq:
+                            queries = open(f'{alignment_file_dir}/queries.fa','a')
+                            queries.write(">" + query_id + " " + "\n")
+                            queries.write(fullseq1 + "\n")
+                            queries.close()
+                        checkq.add(fullseq1)
+                        if fullseq2 not in checkt:
+                            targets = open(f'{alignment_file_dir}/targets.fa','a')
+                            targets.write(">" + target_id + " " + "\n")
+                            targets.write(fullseq2 + "\n")
+                            targets.close()
+                        checkt.add(fullseq2)
 
 if __name__ == "__main__":
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("task_id")
-    # args = parser.parse_args()
+#    parser = argparse.ArgumentParser()
+#    parser.add_argument("task_id")
+#    args = parser.parse_args()
 
-    # parse_by_task(args.task_id)
+    #parse_by_task(args.task_id)
 
     get_evaluation_alignment_data()

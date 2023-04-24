@@ -56,6 +56,9 @@ class AlignmentGenerator(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
+            if len(lines) == 0:
+                print(f"No lines in {alignment_file}")
+                return None, None
             seq1 = lines[1].strip("\n")
             seq2 = lines[2].strip("\n")
         return seq1.upper(), seq2.upper()
@@ -66,6 +69,8 @@ class AlignmentGenerator(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         seq1, seq2 = self.parse_alignment(alignment_path)
+        if seq1 is None:
+            return self.__getitem__(idx + 1)
         assert len(seq1) == len(seq2)
 
         seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
@@ -95,7 +100,7 @@ class AlignmentGenerator(DataModule):
         return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
 
 
-class AlignmentGeneratorWithIndels_(DataModule):
+class AlignmentGeneratorWithIndels(DataModule):
     """Alignment generator with insertions and deletions"""
 
     def __init__(self, ali_path, seq_len, training=True):
@@ -322,7 +327,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
             if training is False:
-                self.alignment_file_paths = random.sample(self.alignment_file_paths, 30000)
+                self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -549,6 +554,8 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         sequences = []
         indices = []
 
+
+
         for idx in range(len(subsequences)):
             subseq = subseqs_without_gaps[idx]
             subseq_indices = subsequence_indices[idx]
@@ -560,6 +567,8 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             assert len(seq) == self.seq_len
 
             assert len(seq_indices) == self.seq_len
+        
+
         # assert (
         #     len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2)
         # ), print(
@@ -567,7 +576,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         # )
 
         encoded_sequences = [utils.encode_string_sequence(seq) for seq in sequences]
-        torch_indices = [torch.as_tensor(seq_indices) for seq_indices in indices]
+        torch_indices = [torch.as_tensor(seq_indices,dtype=torch.float16) for seq_indices in indices]
 
         if len(encoded_sequences) > 20:
             encoded_sequences = encoded_sequences[:20]

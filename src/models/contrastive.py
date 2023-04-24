@@ -214,10 +214,15 @@ class ResNet1dMultiPos(ResNet1d):
         embeddings_transposed = embeddings.transpose(
             -1, -2
         )  # batch_size x sequence_length x embedding_dimension
-        e = torch.cat(torch.unbind(embeddings_transposed, dim=0)).unsqueeze(1)
+        # all_e1s = torch.split(
+        #     embeddings.transpose(-1, -2), embeddings.shape[1] // embeddings.shape[2], dim=0
+        # )
+        e = torch.cat(torch.unbind(embeddings_transposed, dim=0))
 
-        e = torch.nn.functional.normalize(e, dim=-1)
+        #torch.cat((e1.unsqueeze(1), e2.unsqueeze(1))
+
+        en = torch.nn.functional.normalize(e, dim=-1)
         l = torch.stack(labels).flatten()
-        loss = self.loss_func(e, l)
+        loss = self.loss_func(en.unsqueeze(1), l)
 
         return loss

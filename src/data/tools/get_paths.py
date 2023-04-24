@@ -1,6 +1,6 @@
 """Write paths to training and evaluation data to a file"""
 import os
-
+import yaml
 with open("config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
@@ -14,9 +14,9 @@ targetfastasdir = config["targetfastasdir"]
 
 def single_positive_paths():
 
-    TRAIN_DIR = t_alignments
+    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments-final"
 
-    with open("/xdisk/twheeler/daphnedemekas/train_paths.txt", "w", encoding="utf-8") as tpaths:
+    with open("/xdisk/twheeler/daphnedemekas/train_paths-final.txt", "w", encoding="utf-8") as tpaths:
 
         print("Writing train paths")
         for Q in range(4):
@@ -26,12 +26,12 @@ def single_positive_paths():
                 for f in files:
                     tpaths.write(f"{TRAIN_DIR}/{Q}/{T}/{f}" + "\n")
 
-    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments"
+    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments-final"
 
-    with open("/xdisk/twheeler/daphnedemekas/valpaths.txt", "w", encoding="utf-8") as valpaths:
+    with open("/xdisk/twheeler/daphnedemekas/valpaths-final.txt", "w", encoding="utf-8") as valpaths:
 
         print("Writing val paths")
-        for Q in [0, 1]:
+        for Q in [0, 1,2,3]:
             for T in range(45):
                 files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
                 for f in files:
@@ -67,5 +67,5 @@ def multi_positive_paths():
                     valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
 
 
-#single_positive_paths()
-multi_positive_paths()
+single_positive_paths()
+#multi_positive_paths()

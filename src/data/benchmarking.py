@@ -20,7 +20,7 @@ def plot_mean_e_values(
     max_threshold: int = 300,
     outputfilename: str = "evaluemeans",
     plot_stds: bool = True,
-    _plot_lengths: bool = True,
+    _plot_lengths: bool = False,
     title: str = "",
     scatter_size: int = 1,
 ):
@@ -62,19 +62,20 @@ def plot_mean_e_values(
             np.array(means) + np.array(stds) / 2,
             alpha=0.5,
         )
-    if _plot_lengths:
-        plt.fill_between(
-            thresholds,
-            np.array(means) - np.array(lengths),
-            np.array(means) + np.array(lengths),
-            alpha=0.5,
-            color="orange",
-        )
+    # if _plot_lengths:
+    #     plt.fill_between(
+    #         thresholds,
+    #         np.array(means) - np.array(lengths),
+    #         np.array(means) + np.array(lengths),
+    #         alpha=0.5,
+    #         color="orange",
+    #     )
     plt.title(title)
     plt.ylim(-20, 0)
+    #plt.xlim(0,100)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
-    plt.savefig(f"ResNet1d/eval/{outputfilename}.png")
+    plt.savefig(f"ResNet1d/results/{outputfilename}.png")
 
 
 def plot_lengths(distance_list1, distance_list2, distance_list3):
@@ -148,6 +149,27 @@ def plot_roc_curve(
                 num_decoys[i] += 1
         filtration = [num_decoys[i] / numhits for i in range(num_thresholds)]
 
+        if 100*filtration[0] > 25:
+            datafile.close()
+            for i in range(num_thresholds):
+                axis.plot(
+                    np.array(filtrations)[:, i],
+                    np.array(recalls)[:, i],
+                    f"{COLORS[i]}--",
+                    linewidth=2,
+                    label=evalue_thresholds[i],
+                )
+
+            # axis.plot([75, 100], [25, 0], "k--", linewidth=2)
+
+            axis.set_xlabel("filtration")
+            axis.set_ylabel("recall")
+            plt.ylim(0,100)
+            plt.legend()
+            plt.savefig(f"{figure_path}", bbox_inches="tight")
+            plt.close()
+            return None
+
         if idx % 50000 == 0 and (100 * (1 - filtration[0]) > 75):
             recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
 
@@ -170,33 +192,26 @@ def plot_roc_curve(
         )
 
     # axis.plot([75, 100], [25, 0], "k--", linewidth=2)
-    datafile.close()
 
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     plt.legend()
-    plt.savefig(f"{figure_path}", bbox_inches="tight")
+    plt.savefig(f"{figure_path}_FULL.png", bbox_inches="tight")
     plt.close()
 
 
-def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, list]:
+def get_sorted_pairs(modelhitsfile: str) -> Tuple[list, list]:
     """parses the output file from our model
     and returns a list of scores and query-target
     pairs for the results that are also in hmmer hits"""
     all_scores = []
     all_pairs = []
-    # if os.path.exists(sorted_pairs_file):
-    #     print("Found sorted pairs")
-    #     with open(sorted_pairs_file, "rb") as pairs:
-    #         sorted_pairs = pickle.load(pairs)
-    #     return sorted_pairs
 
-    print("Iterating..")
+
+    print(f"Iterating over {modelhitsfile}..")
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
         queryname = queryhits.strip(".txt")
-        # if queryname not in hmmerhits.keys():modu
-        #     print(f"Query {queryname} not in hmmer hits")
-        #     continue
+
 
         with open(f"{modelhitsfile}/{queryhits}", "r") as file:
 
@@ -214,11 +229,51 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, 
     del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
     del all_pairs
-    # print(f"Saving scores file {sorted_pairs_file}")
-    # with open(sorted_pairs_file, "wb") as pairsfile:
-    #     pickle.dump(sorted_pairs, pairsfile)
-    return sorted_pairs
 
+    return sorted_pairs
+def get_sorted_pairs_slow(modelhitsfile: str) -> Tuple[list, list]:
+    """parses the output file from our model
+    and returns a list of scores and query-target
+    pairs for the results that are also in hmmer hits"""
+    all_scores = []
+    all_pairs = []
+
+
+    print(f"Iterating over {modelhitsfile}..")
+    for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
+        queryname = queryhits.strip(".txt")
+
+
+        with open(f"{modelhitsfile}/{queryhits}", "r") as file:
+
+            for line in file:
+                if "Distance" in line:
+                    continue
+                target = line.split()[0].strip("\n")
+
+                score = int(line.split()[1].strip("\n"))
+                all_scores.append(score)
+
+    sortedidx = np.argsort(all_scores)[::-1]
+    del all_scores
+
+    for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
+        queryname = queryhits.strip(".txt")
+
+
+        with open(f"{modelhitsfile}/{queryhits}", "r") as file:
+
+            for line in file:
+                if "Distance" in line:
+                    continue
+                target = line.split()[0].strip("\n")
+
+                all_pairs.append((queryname, target))
+
+    sorted_pairs = [all_pairs[i] for i in sortedidx]
+    del all_pairs
+
+    return sorted_pairs
 
 def write_datafile(
     pairs: list,
@@ -259,6 +314,8 @@ def write_datafile(
                 print(e)
                 pdb.set_trace()
 
+            
+
             datafile.write(
                 f"{query}          {target}          {evalue}          \
                     {classname1}          {classname2}          \
@@ -270,6 +327,18 @@ def write_datafile(
     return numpos_per_evalue, numhits
 
 
+def generate_roc(modelhitsfile, hmmerhits, figure_path, temp_file):
+    sorted_pairs = get_sorted_pairs(modelhitsfile)
+    print(f"Length of sorted pairs: {len(sorted_pairs)}")
+
+    numpos_per_evalue, numhits = write_datafile(
+        sorted_pairs, hmmerhits, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=temp_file
+    )
+    print("Wrote files")
+    print(f"Num pos per evalue: {numpos_per_evalue}")
+    print(f"Num hits: {numhits}")
+    plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=temp_file)
+    
 def generate_roc_from_sorted_pairs(
     modelhitsfile,
     sortedpairsfile: str,

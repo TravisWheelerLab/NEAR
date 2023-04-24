@@ -20,7 +20,7 @@ train_ex = Experiment()
 def contrastive_SCL():
 
     description = (
-        "Training on alignment data with indels using real sequence padding and masked regloss"
+        "variable seq length"
     )
     model_name = "ResNet1dMultiPos"
     dataset_name = "AlignmentGeneratorIndelsMultiPos"
@@ -41,7 +41,7 @@ def contrastive_SCL():
 
     @to_dict
     class dataloader_args:
-        batch_size = 16
+        batch_size = 24
         num_workers = 6
         drop_last = True
 
@@ -58,7 +58,7 @@ def contrastive_SCL():
         training = False
 
 
-# @train_ex.config
+#@train_ex.config
 def contrastive_alignment_generator():
 
     description = (
@@ -78,7 +78,7 @@ def contrastive_alignment_generator():
 
     @to_dict
     class train_dataset_args:
-        ali_path = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
+        ali_path = "/xdisk/twheeler/daphnedemekas/train_paths-final.txt"
         seq_len = 128
 
     @to_dict
@@ -95,7 +95,7 @@ def contrastive_alignment_generator():
 
     @to_dict
     class val_dataset_args:
-        ali_path = "/xdisk/twheeler/daphnedemekas/valpaths2.txt"
+        ali_path = "/xdisk/twheeler/daphnedemekas/valpaths-final.txt"
         seq_len = 128
         training = False
 

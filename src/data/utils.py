@@ -80,7 +80,7 @@ def get_evaluation_data(
 
     query_id = str(query_id)
 
-    queryfile = f"{HOME}/prefilter/uniref/split_subset/queries/queries_{query_id}.fa"
+    queryfile = "data/evaluationqueries.fa"
     queryfasta = FastaFile(queryfile)
     querysequences = queryfasta.data
     print(f"Number of query sequences: {len(querysequences)}")
