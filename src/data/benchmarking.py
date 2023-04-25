@@ -400,21 +400,21 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
-    if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
-        all_similarities = np.load(f"{savedir}/all_similarities.npy")
-        all_e_values = np.load(f"{savedir}/all_e_values.npy")
-        all_biases = np.load(f"{savedir}/all_biases.npy")
-        # all_targets = np.load(f"{savedir}/all_targets.npy")
+    # if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
+    #     all_similarities = np.load(f"{savedir}/all_similarities.npy")
+    #     all_e_values = np.load(f"{savedir}/all_e_values.npy")
+    #     all_biases = np.load(f"{savedir}/all_biases.npy")
+    #     # all_targets = np.load(f"{savedir}/all_targets.npy")
 
-        with open(f"{savedir}/hits_dict.pkl", "rb") as file:
-            similarity_hits_dict = pickle.load(file)
-        return (
-            similarity_hits_dict,
-            all_similarities,
-            all_e_values,
-            all_biases,
-            len(all_similarities),
-        )
+    #     with open(f"{savedir}/hits_dict.pkl", "rb") as file:
+    #         similarity_hits_dict = pickle.load(file)
+    #     return (
+    #         similarity_hits_dict,
+    #         all_similarities,
+    #         all_e_values,
+    #         all_biases,
+    #         len(all_similarities),
+    #     )
 
     similarity_hits_dict = {}
     all_similarities = []
@@ -422,10 +422,13 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     all_e_values = []
     all_biases = []
     all_targets = []
+    print(hits_path)
     for queryhits in tqdm.tqdm(os.listdir(hits_path)):
         queryname = queryhits.strip(".txt")
         with open(f"{hits_path}/{queryhits}", "r") as similarities:
             if queryname not in all_hits_max:
+                print(queryname)
+
                 continue
             similarity_hits_dict[queryname] = {}
 
@@ -434,7 +437,9 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
                     continue
                 target = line.split()[0].strip("\n")
                 if target not in all_hits_max[queryname]:
+                    print(target)
                     continue
+
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)
 

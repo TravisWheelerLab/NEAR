@@ -1,48 +1,12 @@
 """Write paths to training and evaluation data to a file"""
 import os
-import yaml
-with open("config.yaml", "r") as file:
-    config = yaml.safe_load(file)
+import argparse
 
-t_alignments_multipos = config["trainalignmentsmultipos"]
-e_alignments_multipos = config["evalalignmentsmultipos"]
-t_alignments = config["trainalignmentspath"]
-e_alignments = config["evalalignmentspath"]
-queryfastasdir = config["queryfastasdir"]
-targetfastasdir = config["targetfastasdir"]
-
-
-def single_positive_paths():
-
-    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments-final"
-
-    with open("/xdisk/twheeler/daphnedemekas/train_paths-final.txt", "w", encoding="utf-8") as tpaths:
-
-        print("Writing train paths")
-        for Q in range(4):
-            print(Q)
-            for T in range(45):
-                files = os.listdir(f"{TRAIN_DIR}/{Q}/{T}")
-                for f in files:
-                    tpaths.write(f"{TRAIN_DIR}/{Q}/{T}/{f}" + "\n")
-
-    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments-final"
-
-    with open("/xdisk/twheeler/daphnedemekas/valpaths-final.txt", "w", encoding="utf-8") as valpaths:
-
-        print("Writing val paths")
-        for Q in [0, 1,2,3]:
-            for T in range(45):
-                files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
-                for f in files:
-                    valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
-
-
-def multi_positive_paths():
-    TRAIN_DIR = "/xdisk/twheeler/daphnedemekas/train-alignments-multipos2"
+def main(train_dir, eval_dir, train_path, eval_path):
+    TRAIN_DIR = train_dir
 
     with open(
-        "/xdisk/twheeler/daphnedemekas/train_paths-multipos.txt", "w"
+        train_path, "w"
     ) as tpaths:
 
         print("Writing train paths")
@@ -53,19 +17,28 @@ def multi_positive_paths():
                 for f in files:
                     tpaths.write(f"{TRAIN_DIR}/{Q}/{T}/{f}" + "\n")
 
-    VAL_DIR = "/xdisk/twheeler/daphnedemekas/eval-alignments-multipos2"
+    VAL_DIR = eval_dir
 
     with open(
-        "/xdisk/twheeler/daphnedemekas/valpaths-multipos.txt", "w", encoding="utf-8"
+        eval_path, "w", encoding="utf-8"
     ) as valpaths:
 
         print("Writing val paths")
-        for Q in [0, 1]:
+        for Q in [0, 1, 2]:
             for T in range(45):
                 files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
                 for f in files:
                     valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
 
 
-single_positive_paths()
-#multi_positive_paths()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_dir")
+    parser.add_argument("--eval_dir")
+    parser.add_argument("--train_path")
+    parser.add_argument("--eval_path")
+
+    args = parser.parse_args()
+
+    main(args.train_dir, args.eval_dir, args.train_path, args.eval_path)
+

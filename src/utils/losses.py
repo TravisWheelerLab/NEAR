@@ -166,14 +166,13 @@ class SupConLoss(nn.Module):
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
 
         values = torch.where(mask.sum(1) > 0)[0]
-        batch_size = len(values)
 
         # compute mean of log-likelihood over positive
         mean_log_prob_pos = (mask * log_prob).sum(1)[values] / mask.sum(1)[values]       # loss
 
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
         #pdb.set_trace()
-        loss = loss.view(anchor_count, batch_size).nanmean()
+        loss = loss.mean()
         return loss
 
 

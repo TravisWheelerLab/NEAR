@@ -96,7 +96,7 @@ class Results:
         (self.hits_dict, self.similarities, self.e_values, self.biases, self.numhits,) = get_data(
             model_results_path, hmmer_hits_dict, savedir=data_savedir
         )
-
+        #pdb.set_trace()
         print("Plotting e values and saving to")
         print(evaluemeansfile)
         plot_mean_e_values(
@@ -151,11 +151,7 @@ def evaluate(
                 kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal",modelname)
                 print("Parsing Alignment Model KNN Normal")
                 _ = Results(**kmer_inputs_normal)
-        if lengths:
-            plot_lengths(
-                alignment_model_ivf_max.similarities,
-                alignment_model_knn_max.similarities
-            )
+
         if "esm" in models:
             if "max" in modes:
                 esm_inputs = load_esm_inputs(all_hits_max, "max", modelname)

@@ -37,11 +37,11 @@ def contrastive_SCL():
     @to_dict
     class train_dataset_args:
         ali_path = "/xdisk/twheeler/daphnedemekas/train_paths-multipos.txt"
-        seq_len = 96
+        seq_len = 128
 
     @to_dict
     class dataloader_args:
-        batch_size = 24
+        batch_size = 16
         num_workers = 6
         drop_last = True
 

@@ -103,7 +103,7 @@ def train(_config):
         callbacks=CallbackSet.callbacks(),
         logger=logger,
         val_check_interval=0.2,
- #       resume_from_checkpoint = ''
+        resume_from_checkpoint = 'ResNet1dMultiPos/epoch_0_4.36850.cpkt'
     )
 
     trainer.fit(

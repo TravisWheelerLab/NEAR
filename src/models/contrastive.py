@@ -171,7 +171,7 @@ class ResNet1d(pl.LightningModule):
         return {"val_loss": loss}
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optim = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optim
 
     def training_epoch_end(self, outputs):

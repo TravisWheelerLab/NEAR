@@ -69,8 +69,7 @@ class AlignmentGenerator(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         seq1, seq2 = self.parse_alignment(alignment_path)
-        if seq1 is None:
-            return self.__getitem__(idx + 1)
+
         assert len(seq1) == len(seq2)
 
         seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
@@ -129,8 +128,7 @@ class AlignmentGeneratorWithIndels(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
-            if len(lines) < 3:
-                print(f"Alignment file: {alignment_file} has no sequences")
+
             seq1 = lines[1].strip("\n")
             seq2 = lines[2].strip("\n")
             seq1_full = lines[3].strip("\n")
@@ -347,8 +345,6 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
-            if len(lines) < 3:
-                print(f"Alignment file: {alignment_file} has no sequences")
             subsequences = []
             fullsequences = []
             for line in lines[1:]:

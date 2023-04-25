@@ -109,7 +109,7 @@ def get_evaluation_alignment_data():
     querysequences = queryfasta.data
 
 
-    for t_fnum in tqdm.tqdm(range(45)):
+    for t_fnum in tqdm.tqdm(range(30,45)):
         stdout_path = f"{config['hmmer_stdout_path']}/4-{t_fnum}.txt"
         result = SearchIO.parse(stdout_path, "hmmer3-text")
         targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{t_fnum}.fa")
