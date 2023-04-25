@@ -42,6 +42,9 @@ class ResNet1d(pl.LightningModule):
         self._setup_layers()
 
         self.save_hyperparameters()
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
+
 
     def _setup_layers(self):
 
@@ -164,29 +167,30 @@ class ResNet1d(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         loss = self._shared_step(batch)
-        return {"loss": loss}
+        self.training_step_outputs.append(loss)
+        return loss
 
     def validation_step(self, batch, batch_nb):
         loss = self._shared_step(batch)
-        return {"val_loss": loss}
+        self.validation_step_outputs.append(loss)
+        return loss
 
     def configure_optimizers(self):
         optim = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
         return optim
 
-    def training_epoch_end(self, outputs):
-        train_loss = self.all_gather([x["loss"] for x in outputs])
-        loss = torch.mean(torch.stack(train_loss))
-        self.log("train_loss", loss)
-        self.log("learning_rate", self.learning_rate)
+    def on_train_epoch_end(self):
+        epoch_average = torch.stack(self.training_step_outputs).mean()
+        self.log("training_epoch_average", epoch_average)
+        self.training_step_outputs.clear()  # free memory
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
 
-    def validation_epoch_end(self, outputs):
-        val_loss = self.all_gather([x["val_loss"] for x in outputs])
-        val_loss = torch.mean(torch.stack(val_loss))
-        self.log("val_loss", val_loss)
+    def on_validation_epoch_end(self):
+        epoch_average = torch.stack(self.validation_step_outputs).mean()
+        self.log("validation_epoch_average", epoch_average)
+        self.validation_step_outputs.clear()  # free memory
 
 
 class ResNet1dMultiPos(ResNet1d):
