@@ -1,6 +1,6 @@
-description: "Training on alignment data with indels using real sequence padding and masked regloss"
-model_name:  "ResNet1d"
-dataset_name: "AlignmentGeneratorWithIndels"
+description: ("Training with supervised contrastive loss, multiple postiives, and indels")
+model_name:  "ResNet1dMultiPos"
+dataset_name: "AlignmentGeneratorIndelsMultiPos"
 log_dir: "/xdisk/twheeler/daphnedemekas/prefilter"
 log_verbosity: logging.INFO
 seed: 42
@@ -12,11 +12,11 @@ model_args:
     indels: True
 
 train_dataset_args:
-    ali_path: "/xdisk/twheeler/daphnedemekas/train_paths-final.txt"
+    ali_path: "/xdisk/twheeler/daphnedemekas/train_paths-multipos.txt"
     seq_len: 128
 
 dataloader_args:
-    batch_size: 32
+    batch_size: 16
     num_workers: 6
     drop_last: True
 
@@ -26,6 +26,6 @@ trainer_args:
     max_epochs: 100
 
 val_dataset_args:
-    ali_path: "/xdisk/twheeler/daphnedemekas/valpaths-final.txt"
+    ali_path: "/xdisk/twheeler/daphnedemekas/valpathsmultipos.txt"
     seq_len: 128
     training: False

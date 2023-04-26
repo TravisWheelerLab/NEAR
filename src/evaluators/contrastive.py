@@ -12,8 +12,8 @@ import torch
 from src.evaluators.uniref_evaluator import UniRefEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
 import time
-logger = logging.getLogger("evaluate")
 
+logger = logging.getLogger("evaluate")
 
 
 class ContrastiveEvaluator(UniRefEvaluator):
@@ -92,34 +92,25 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         return scores, indices
 
-    def search(self, query_embedding: torch.Tensor):#, search_time: int, filter_time: int, aggregate_time :int) -> List[Tuple[str, float]]:
+    def search(self, query_embedding: torch.Tensor):
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        # t = time.time()
-
         scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
-
-        # search_time += time.time() - t
-
-        # t = time.time()
 
         scores, indices = self.filter_scores(
             scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
         )
 
-        # filter_time += time.time() - t
-        # t = time.time()
-
-
-        for distance, name in zip(scores, self.unrolled_names[indices],):
+        for distance, name in zip(
+            scores,
+            self.unrolled_names[indices],
+        ):
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
 
-        return filtered_scores #, search_time, filter_time, aggregate_time  # , filtered_list
-
-    
+        return filtered_scores

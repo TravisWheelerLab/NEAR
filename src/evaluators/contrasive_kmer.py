@@ -44,14 +44,7 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
             for random_matrix in self.random_matrices:
                 transformed_embedding = torch.mm(normalized_embedding.squeeze(1), random_matrix)
                 transformed_sequence_embeddings.append(transformed_embedding)
-            # for amino_embedding in sequence_embedding:
-            #     transformed_amino_embeddings = []
-            #     normalized_embedding = nn.InstanceNorm1d(amino_embedding)
-            #     for random_matrix in self.random_matrices:
-            #         transformed_embedding = torch.mm(random_matrix, normalized_embedding)
-            #         transformed_amino_embeddings.append(transformed_embedding)
 
-            #     transformed_sequence_embeddings.append(transformed_amino_embeddings)
         return transformed_sequence_embeddings  # list of tensors of shape 506,256
 
     def reduce(self, sequence_embeddings: List[torch.Tensor]):
@@ -59,11 +52,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         the fact that they are pairs.. but i should rethink this. when we do search maybe we only want
         to do a distance for each pair
 
-        also maybe want to see whether i can plug 2d vectors into FAISS 
-        
+        also maybe want to see whether i can plug 2d vectors into FAISS
+
         The reduction takes a list of sequence embeddinigs of the embedding dim
         and reduces them by creating windows of length W
-        and calculating the cosine similarity of each pair of windows 
+        and calculating the cosine similarity of each pair of windows
         and returning the pairs with the smallest similarity"""
         indices = [i for i in itertools.product(range(self.W), range(self.W)) if i[0] != i[1]]
 
@@ -90,7 +83,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
     @torch.no_grad()
     def _calc_embeddings(
-        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
+        self,
+        sequence_data: dict,
+        model_class,
+        apply_random_sequence: bool,
+        max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -103,7 +100,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-            names, sequences, model_class, apply_random_sequence, max_seq_length,
+            names,
+            sequences,
+            model_class,
+            apply_random_sequence,
+            max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)

@@ -6,10 +6,59 @@ import matplotlib.pyplot as plt
 import tqdm
 import numpy as np
 import pickle
-from src.data.utils import get_evaluation_data
 import pdb
+from src.data.hmmerhits import FastaFile
+
 
 COLORS = ["r", "c", "g", "k"]
+
+
+def update(d1, d2):
+    c = d1.copy()
+    for key in d2:
+        if key in d1:
+            c[key].update(d2[key])
+        else:
+            c[key] = d2[key]
+    return c
+
+
+def get_evaluation_data(
+    queryfile="data/evaluationqueries.fa",
+    save_dir=None,
+    targethitsfile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargetdict.pkl",
+    evaltargetfastafile="data/evaluationtargets.fa",
+) -> Tuple[dict, dict, dict]:
+    """Taking advantage of our current data structure of nested directories
+    holding fasta files to quickly get all hmmer hits and sequence dicts for all
+    queries in the input query id file and all target sequences in all of num_files"""
+
+    queryfasta = FastaFile(queryfile)
+    querysequences = queryfasta.data
+    print(f"Number of query sequences: {len(querysequences)}")
+    filtered_query_sequences = {}
+
+    targetsequencefasta = FastaFile(evaltargetfastafile)
+    targetsequences = targetsequencefasta.data
+    print(f"Number of target sequences: {len(targetsequences)}")
+
+    if save_dir is not None:  # only return those that we don't already have
+
+        existing_queries = [f.strip(".txt") for f in os.listdir(save_dir)]
+
+        print(f"Cleaning out {len(existing_queries)} queries that we already have in results...")
+        for query, value in querysequences.items():
+            if query not in existing_queries:
+                filtered_query_sequences.update({query: value})
+
+        querysequences = filtered_query_sequences
+
+    with open(targethitsfile, "rb") as file:
+        all_target_hits = pickle.load(file)
+
+    print(f"Number of target HMMER hits: {len(all_target_hits)}")
+
+    return querysequences, targetsequences, all_target_hits
 
 
 def plot_mean_e_values(
@@ -62,17 +111,17 @@ def plot_mean_e_values(
             np.array(means) + np.array(stds) / 2,
             alpha=0.5,
         )
-    # if _plot_lengths:
-    #     plt.fill_between(
-    #         thresholds,
-    #         np.array(means) - np.array(lengths),
-    #         np.array(means) + np.array(lengths),
-    #         alpha=0.5,
-    #         color="orange",
-    #     )
+    if _plot_lengths:
+        plt.fill_between(
+            thresholds,
+            np.array(means) - np.array(lengths),
+            np.array(means) + np.array(lengths),
+            alpha=0.5,
+            color="orange",
+        )
     plt.title(title)
     plt.ylim(-20, 0)
-    #plt.xlim(0,100)
+    # plt.xlim(0,100)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
     plt.savefig(f"ResNet1d/results/{outputfilename}.png")
@@ -149,7 +198,7 @@ def plot_roc_curve(
                 num_decoys[i] += 1
         filtration = [num_decoys[i] / numhits for i in range(num_thresholds)]
 
-        if 100*filtration[0] > 25:
+        if 100 * filtration[0] > 25:
             datafile.close()
             for i in range(num_thresholds):
                 axis.plot(
@@ -164,7 +213,7 @@ def plot_roc_curve(
 
             axis.set_xlabel("filtration")
             axis.set_ylabel("recall")
-            plt.ylim(0,100)
+            plt.ylim(0, 100)
             plt.legend()
             plt.savefig(f"{figure_path}", bbox_inches="tight")
             plt.close()
@@ -207,11 +256,9 @@ def get_sorted_pairs(modelhitsfile: str) -> Tuple[list, list]:
     all_scores = []
     all_pairs = []
 
-
     print(f"Iterating over {modelhitsfile}..")
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
         queryname = queryhits.strip(".txt")
-
 
         with open(f"{modelhitsfile}/{queryhits}", "r") as file:
 
@@ -231,49 +278,7 @@ def get_sorted_pairs(modelhitsfile: str) -> Tuple[list, list]:
     del all_pairs
 
     return sorted_pairs
-def get_sorted_pairs_slow(modelhitsfile: str) -> Tuple[list, list]:
-    """parses the output file from our model
-    and returns a list of scores and query-target
-    pairs for the results that are also in hmmer hits"""
-    all_scores = []
-    all_pairs = []
 
-
-    print(f"Iterating over {modelhitsfile}..")
-    for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
-        queryname = queryhits.strip(".txt")
-
-
-        with open(f"{modelhitsfile}/{queryhits}", "r") as file:
-
-            for line in file:
-                if "Distance" in line:
-                    continue
-                target = line.split()[0].strip("\n")
-
-                score = int(line.split()[1].strip("\n"))
-                all_scores.append(score)
-
-    sortedidx = np.argsort(all_scores)[::-1]
-    del all_scores
-
-    for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
-        queryname = queryhits.strip(".txt")
-
-
-        with open(f"{modelhitsfile}/{queryhits}", "r") as file:
-
-            for line in file:
-                if "Distance" in line:
-                    continue
-                target = line.split()[0].strip("\n")
-
-                all_pairs.append((queryname, target))
-
-    sorted_pairs = [all_pairs[i] for i in sortedidx]
-    del all_pairs
-
-    return sorted_pairs
 
 def write_datafile(
     pairs: list,
@@ -314,8 +319,6 @@ def write_datafile(
                 print(e)
                 pdb.set_trace()
 
-            
-
             datafile.write(
                 f"{query}          {target}          {evalue}          \
                     {classname1}          {classname2}          \
@@ -338,32 +341,6 @@ def generate_roc(modelhitsfile, hmmerhits, figure_path, temp_file):
     print(f"Num pos per evalue: {numpos_per_evalue}")
     print(f"Num hits: {numhits}")
     plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=temp_file)
-    
-def generate_roc_from_sorted_pairs(
-    modelhitsfile,
-    sortedpairsfile: str,
-    filename: str,
-    hmmerhits: dict,
-    figure_path: str,
-    numpos_per_evalue=None,
-    numhits=None,
-):
-    """Pipeline to write data to file and generate the ROC plot
-    This will then delete the file as well as its massive and not useful"""
-    if os.path.exists(filename) and numpos_per_evalue is not None and numhits is not None:
-        print("Found existing file data.. plotting ROC curve.")
-        plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
-        return None
-    sorted_pairs = get_sorted_pairs(modelhitsfile, sortedpairsfile)
-
-    numpos_per_evalue, numhits = write_datafile(
-        sorted_pairs, hmmerhits, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=filename
-    )
-
-    print("Wrote files")
-    print(f"Num pos per evalue: {numpos_per_evalue}")
-    print(f"Num hits: {numhits}")
-    plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
 
 
 def get_outliers(
@@ -399,22 +376,6 @@ def get_outliers(
 def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
-
-    # if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
-    #     all_similarities = np.load(f"{savedir}/all_similarities.npy")
-    #     all_e_values = np.load(f"{savedir}/all_e_values.npy")
-    #     all_biases = np.load(f"{savedir}/all_biases.npy")
-    #     # all_targets = np.load(f"{savedir}/all_targets.npy")
-
-    #     with open(f"{savedir}/hits_dict.pkl", "rb") as file:
-    #         similarity_hits_dict = pickle.load(file)
-    #     return (
-    #         similarity_hits_dict,
-    #         all_similarities,
-    #         all_e_values,
-    #         all_biases,
-    #         len(all_similarities),
-    #     )
 
     similarity_hits_dict = {}
     all_similarities = []

@@ -280,7 +280,12 @@ class AlignmentGeneratorWithIndels(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -500,7 +505,12 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -550,8 +560,6 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         sequences = []
         indices = []
 
-
-
         for idx in range(len(subsequences)):
             subseq = subseqs_without_gaps[idx]
             subseq_indices = subsequence_indices[idx]
@@ -563,16 +571,11 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             assert len(seq) == self.seq_len
 
             assert len(seq_indices) == self.seq_len
-        
-
-        # assert (
-        #     len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2)
-        # ), print(
-        #     f"Not all the same length! {idx} {seq1} {seq1_full} {seq2} {seq2_full}"
-        # )
 
         encoded_sequences = [utils.encode_string_sequence(seq) for seq in sequences]
-        torch_indices = [torch.as_tensor(seq_indices,dtype=torch.float16) for seq_indices in indices]
+        torch_indices = [
+            torch.as_tensor(seq_indices, dtype=torch.float16) for seq_indices in indices
+        ]
 
         if len(encoded_sequences) > 20:
             encoded_sequences = encoded_sequences[:20]

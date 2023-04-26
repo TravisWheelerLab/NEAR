@@ -1,23 +1,19 @@
-
-import torch 
-from sacred import Experiment 
+import torch
 import os
-from pathlib import Path
 from pytorch_lightning import Trainer, seed_everything
 from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
 from src.callbacks import CallbackSet
-import time 
+import time
 from src.train_config import *
-import yaml 
+import yaml
+import argparse
 from src.utils.util import (
     load_dataset_class,
-    load_evaluator_class,
     load_model_class,
 )
 
 HOME = os.environ["HOME"]
-train_ex = Experiment('train')
 
 
 def train(_config):
@@ -36,12 +32,16 @@ def train(_config):
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args,
+        train_dataset,
+        collate_fn=train_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
     if val_dataset is not None:
         val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args,
+            val_dataset,
+            collate_fn=val_dataset.collate_fn(),
+            **params.dataloader_args,
         )
     else:
         val_dataloader = None
@@ -63,12 +63,20 @@ def train(_config):
     )
 
     trainer.fit(
-        model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader,
+        model,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
-    with open("src/configs/train.yaml", "r") as stream:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+
+    args = parser.parse_args()
+    configfile = args.config.strip(".yaml")
+
+    with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     train(_config)

@@ -45,11 +45,12 @@ class ResNet1d(pl.LightningModule):
         self.training_step_outputs = []
         self.validation_step_outputs = []
 
-
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
+            in_channels=self.in_channels,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
         )
 
         _list = []
@@ -110,11 +111,15 @@ class ResNet1d(pl.LightningModule):
     def _shared_step(self, batch):
 
         if self.indels:
-            (seq1, labels1, seq2, labels2,) = batch  # 32 pairs of sequences, each amino has a label
+            (
+                seq1,
+                labels1,
+                seq2,
+                labels2,
+            ) = batch  # 32 pairs of sequences, each amino has a label
 
             features = torch.cat([seq1, seq2], dim=0)
 
-            # mask = self.construct_mask(labels1, labels2)
             seq_len = labels1.shape[1]
 
             # have to make the labels unique for every batchs
@@ -155,9 +160,7 @@ class ResNet1d(pl.LightningModule):
                 plt.imshow(arr)
                 plt.colorbar()
                 self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
-        # loss = self.loss_func(
-        #     torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1), mask = mask
-        # )
+
         # input is ((batch_size/2) x 2 x embedding_dimension)
 
         loss = self.loss_func(
@@ -202,28 +205,14 @@ class ResNet1dMultiPos(ResNet1d):
 
         (features, labels) = batch  # 32 pairs of sequences, each amino has a label
         # these are now not all the same size so we need to first relabel and then flatten
-
-        # #now flatten along the label idx dimension
-        # loss = self.loss_func(features, labels)
-
-        # l1 = torch.cat(torch.unbind(labels1, dim=0))
-        # l2 = torch.cat(torch.unbind(labels2, dim=0))
-        # mask = torch.eq(l1.unsqueeze(1), l2.unsqueeze(0)).float()
-        # e1_indices = torch.where(~l1.isnan())[0]
-        # e2_indices = torch.where(~l2.isnan())[0]
-
         embeddings = self.forward(features)
         # batch_size x sequence_length x embedding_dimension
 
         embeddings_transposed = embeddings.transpose(
             -1, -2
         )  # batch_size x sequence_length x embedding_dimension
-        # all_e1s = torch.split(
-        #     embeddings.transpose(-1, -2), embeddings.shape[1] // embeddings.shape[2], dim=0
-        # )
-        e = torch.cat(torch.unbind(embeddings_transposed, dim=0))
 
-        #torch.cat((e1.unsqueeze(1), e2.unsqueeze(1))
+        e = torch.cat(torch.unbind(embeddings_transposed, dim=0))
 
         en = torch.nn.functional.normalize(e, dim=-1)
         l = torch.stack(labels).flatten()

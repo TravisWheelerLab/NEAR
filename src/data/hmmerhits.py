@@ -81,7 +81,7 @@ class HmmerHits:
         )
         return query_fasta
 
-    def parse_hits_file(self, hits_file: str, filtered_targets=None) -> Tuple[dict, np.array]:
+    def parse_hits_file(self, hits_file: SyntaxError) -> Tuple[dict, np.array]:
         """parses a HMMER hits file
         Input: the path to hits file
         Returns: a dictionary of structure {query: {target:data}}
@@ -96,8 +96,7 @@ class HmmerHits:
                 print(f"Found an oddly formatted row: {row}")
                 continue
             target_name = row_info[0]
-            if filtered_targets is not None and target_name not in filtered_targets:
-                continue
+
             assert "UniRef90" in target_name
 
             query_name = row_info[2]
@@ -112,7 +111,14 @@ class HmmerHits:
                 row_info[9],
             )
             data = np.array(
-                [e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,]
+                [
+                    e_value_full,
+                    score_full,
+                    bias_full,
+                    e_value_best,
+                    score_best,
+                    bias_best,
+                ]
             ).astype("float64")
 
             if query_name in data_dict:
@@ -126,21 +132,12 @@ class HmmerHits:
 
         return data_dict
 
-    def get_hits(
-        self, directory: str, target_num, query_num=None, filtered_targets=None
-    ) -> Tuple[dict, np.array]:
-        """
-        args:
-            target_dir: the directory where the targets are stored
-            query_num: the query number (marking a directory)
-            to get the hits for
-        returns:
-            target_query_hits: of format {query:{target:data}}
-            hits_array: np array of just the data
-        """
+    def get_hits(self, directory: str) -> Tuple[dict, np.array]:
 
-        hits_dict = self.parse_hits_file(
-            f"{directory}/{query_num}/{target_num}/hits.tblout", filtered_targets
-        )
+        assert os.path.exists(
+            f"{directory}/hits.tblout"
+        ), f"No HMMER hits at {directory}/hits.tblout"
+
+        hits_dict = self.parse_hits_file(f"{directory}/hits.tblout")
 
         return hits_dict

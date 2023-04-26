@@ -1,40 +1,7 @@
 import os
-import pdb
 import tqdm
-from src.data.hmmerhits import FastaFile
 import argparse
 import itertools
-import yaml 
-
-
-with open("config.yaml", "r") as file:
-    config = yaml.safe_load(file)
-
-t_alignments_multipos = config["trainalignmentsmultipos"]
-e_alignments_multipos = config["evalalignmentsmultipos"]
-t_alignments = config["trainalignmentspath"]
-e_alignments = config["evalalignmentspath"]
-queryfastasdir = config["queryfastasdir"]
-targetfastasdir = config["targetfastasdir"]
-
-def get_full_sequences(query_num, target_num, query, target):
-    queryfile = f"{queryfastasdir}/queries_{query_num}.fa"
-    queryfasta = FastaFile(queryfile)
-    # all_hits = {}
-    querysequences = queryfasta.data
-    targetsequences = {}
-
-    targetfasta = FastaFile(f"{targetfastasdir}/targets_{target_num}.fa")
-    targetdata = targetfasta.data
-    targetsequences.update(targetdata)
-
-    if query not in querysequences or target not in targetsequences:
-        return None, None
-
-    query_sequence = querysequences[query]
-    target_sequence = targetsequences[target]
-
-    return query_sequence, target_sequence
 
 
 def get_training_data(path):
@@ -125,72 +92,26 @@ def write_new_data_with_matches(new_training_data_path, training_data):
             i += 1
 
 
-def main_train(task_id):
-    targets = list(range(45))
-    train_queries = list(range(4))
-
-    train_target_queries = list(itertools.product(targets, train_queries))
-
-    target_num = train_target_queries[int(task_id) - 1][0]
-    query_num = train_target_queries[int(task_id) - 1][1]
-
-    print(f"Collecting training data for target num {target_num} and query num {query_num}")
-
-    training_data_path = f"{t_alignments}/{query_num}/{target_num}"
-    new_training_data_path = (
-        f"{t_alignments_multipos}/{query_num}/{target_num}"
-    )
-
-    if not os.path.exists(f"{t_alignments_multipos}/{query_num}"):
-        os.mkdir(f"{t_alignments_multipos}/{query_num}")
-
-    if not os.path.exists(
-        f"{t_alignments_multipos}/{query_num}/{target_num}"
-    ):
-        os.mkdir(
-            f"{t_alignments_multipos}/{query_num}/{target_num}"
-        )
-
-    training_data = get_training_data(training_data_path)
-    write_new_data_with_matches(new_training_data_path, training_data)
+def main_train(single_pos_training_data: str, multi_pos_training_data: str):
+    print(f"Writing multi-positives to {multi_pos_training_data}")
+    training_data = get_training_data(single_pos_training_data)
+    write_new_data_with_matches(multi_pos_training_data, training_data)
 
 
-def main_eval(task_id):
-    targets = list(range(45))
-    eval_queries = [0, 1]
+def main_eval(single_pos_eval_data: str, multi_pos_eval_data: str):
+    print(f"Writing multi-positives to {multi_pos_eval_data}")
 
-    eval_target_queries = list(itertools.product(targets, eval_queries))
-
-    target_num = eval_target_queries[int(task_id) - 1][0]
-    query_num = eval_target_queries[int(task_id) - 1][1]
-
-    eval_data_path = f"{e_alignments}/{query_num}/{target_num}"
-    new_training_data_path = (
-        f"{e_alignments_multipos}/{query_num}/{target_num}"
-    )
-    if not os.path.exists(f"{e_alignments_multipos}/{query_num}"):
-        os.mkdir(f"{e_alignments_multipos}/{query_num}")
-
-    if not os.path.exists(
-        f"{e_alignments_multipos}/{query_num}/{target_num}"
-    ):
-        os.mkdir(
-            f"{e_alignments_multipos}/{query_num}/{target_num}"
-        )
-
-    eval_data = get_training_data(eval_data_path)
-    write_new_data_with_matches(new_training_data_path, eval_data)
+    eval_data = get_training_data(single_pos_eval_data)
+    write_new_data_with_matches(multi_pos_eval_data, eval_data)
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("task_id")
+parser.add_argument("single_pos_training_data")
+parser.add_argument("multi_pos_training_data")
+parser.add_argument("single_pos_eval_data")
+parser.add_argument("multi_pos_eval_data")
 args = parser.parse_args()
 
-task_id = args.task_id
 
-main_train(args.task_id)
-
-if int(args.task_id) <= 45 * 2:
-    main_eval(args.task_id)
-
-print("Done")
+main_train(args.single_pos_training_data, args.multi_pos_training_data)
+main_eval(args.single_pos_eval_data, args.multi_pos_eval_data)

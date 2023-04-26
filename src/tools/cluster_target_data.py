@@ -8,7 +8,7 @@ import yaml
 
 def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir):
     """Clusters the uniref90 target data into clusters of percent similairty id 0.3
-    
+
     Requires UCLUST to be installed"""
     t = 0
 
@@ -19,7 +19,12 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
             os.mkdir(clusterpath)
 
         cmd = f"./usearch -cluster_fast {targetfastapath} -id 0.3 -clusters {clusterpath}/cluster_"
-        _ = subprocess.run(cmd, shell=True, capture_output=True, check=True,)
+        _ = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            check=True,
+        )
 
         clustered_seqnames = []
         numseqs = 0
@@ -87,16 +92,10 @@ if __name__ == "__main__":
         print(f"Making target directory {args.cluster_savedir}")
         os.mkdir(args.cluster_savedir)
 
-    assert os.path.exists("./usearch"), "Usearch needs to be installed to your home directory \
+    assert os.path.exists(
+        "./usearch"
+    ), "Usearch needs to be installed to your home directory \
         in order to run this script. Please install Usearch or otherwise change the command to point \
         to where Usearch is located on your machine. For more information see README."
 
-
-
-    main(
-        args.train_savepath,
-        args.eval_savepath,
-        args.cluster_savedir,
-        args.target_fasta
-    )
-
+    main(args.train_savepath, args.eval_savepath, args.cluster_savedir, args.target_fasta)

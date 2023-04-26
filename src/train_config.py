@@ -19,9 +19,7 @@ train_ex = Experiment()
 @train_ex.config
 def contrastive_SCL():
 
-    description = (
-        "variable seq length"
-    )
+    description = "variable seq length"
     model_name = "ResNet1dMultiPos"
     dataset_name = "AlignmentGeneratorIndelsMultiPos"
     log_dir = f"{HOME}/prefilter"
@@ -58,7 +56,7 @@ def contrastive_SCL():
         training = False
 
 
-#@train_ex.config
+# @train_ex.config
 def contrastive_alignment_generator():
 
     description = (

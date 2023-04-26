@@ -93,30 +93,29 @@ class Results:
     ):
         """evaluates a given model"""
 
-        (self.hits_dict, self.similarities, self.e_values, self.biases, self.numhits,) = get_data(
-            model_results_path, hmmer_hits_dict, savedir=data_savedir
-        )
-        #pdb.set_trace()
+        (
+            self.hits_dict,
+            self.similarities,
+            self.e_values,
+            self.biases,
+            self.numhits,
+        ) = get_data(model_results_path, hmmer_hits_dict, savedir=data_savedir)
+        # pdb.set_trace()
         print("Plotting e values and saving to")
         print(evaluemeansfile)
         plot_mean_e_values(
-             self.similarities,
-             self.e_values,
-             self.biases,
-             min_threshold=0,
-             max_threshold=np.max(self.similarities),
-             outputfilename=evaluemeansfile,
-             plot_stds=True,
-             _plot_lengths=True,
-             title=evaluemeanstitle,
-         )
+            self.similarities,
+            self.e_values,
+            self.biases,
+            min_threshold=0,
+            max_threshold=np.max(self.similarities),
+            outputfilename=evaluemeansfile,
+            plot_stds=True,
+            _plot_lengths=True,
+            title=evaluemeanstitle,
+        )
         if plot_roc:
-            generate_roc(
-                model_results_path,
-                hmmer_hits_dict,
-                roc_filepath,
-                temp_file
-            )
+            generate_roc(model_results_path, hmmer_hits_dict, roc_filepath, temp_file)
 
 
 def evaluate(
@@ -134,10 +133,12 @@ def evaluate(
             if "max" in modes:
                 print("Parsing Alignment Model IVF Query 4 Max")
 
-                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max",modelname)
+                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max", modelname)
                 alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
             if "normal" in modes:
-                align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal",modelname)
+                align_ivf_normal_inputs_4 = load_alignment_inputs(
+                    all_hits_normal, "normal", modelname
+                )
 
                 print("Parsing Alignment Model IVF Query 4 Normal")
                 _ = Results(**align_ivf_normal_inputs_4)
@@ -148,7 +149,7 @@ def evaluate(
                 print("Parsing Alignment Model KNN Max")
                 alignment_model_knn_max = Results(**kmer_inputs)
             if "normal" in modes:
-                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal",modelname)
+                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal", modelname)
                 print("Parsing Alignment Model KNN Normal")
                 _ = Results(**kmer_inputs_normal)
 
@@ -158,14 +159,12 @@ def evaluate(
                 print("Parsing Alignment Model ESM Max")
                 alignment_model_knn_max = Results(**esm_inputs)
             if "normal" in modes:
-                esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal",modelname)
+                esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal", modelname)
                 print("Parsing Alignment Model ESM Normal")
                 _ = Results(**esm_inputs_normal)
         if lengths:
-            plot_lengths(
-                alignment_model_ivf_max.similarities,
-                alignment_model_knn_max.similarities
-            )
+            plot_lengths(alignment_model_ivf_max.similarities, alignment_model_knn_max.similarities)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

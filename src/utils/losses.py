@@ -77,7 +77,7 @@ class NpairLoss(nn.Module):
                 positive[p_indices] ** 2
             ) / len(p_indices)
         else:
-            l2_loss = (torch.sum(anchor ** 2) + torch.sum(positive ** 2)) / batch_size
+            l2_loss = (torch.sum(anchor**2) + torch.sum(positive**2)) / batch_size
 
         loss = loss_ce + self.l2_reg * l2_loss * 0.25
         return loss
@@ -168,10 +168,10 @@ class SupConLoss(nn.Module):
         values = torch.where(mask.sum(1) > 0)[0]
 
         # compute mean of log-likelihood over positive
-        mean_log_prob_pos = (mask * log_prob).sum(1)[values] / mask.sum(1)[values]       # loss
+        mean_log_prob_pos = (mask * log_prob).sum(1)[values] / mask.sum(1)[values]  # loss
 
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
-        #pdb.set_trace()
+        # pdb.set_trace()
         loss = loss.mean()
         return loss
 

@@ -2,12 +2,11 @@
 import os
 import argparse
 
+
 def main(train_dir, eval_dir, train_path, eval_path):
     TRAIN_DIR = train_dir
 
-    with open(
-        train_path, "w"
-    ) as tpaths:
+    with open(train_path, "w") as tpaths:
 
         print("Writing train paths")
         for Q in range(4):
@@ -19,9 +18,7 @@ def main(train_dir, eval_dir, train_path, eval_path):
 
     VAL_DIR = eval_dir
 
-    with open(
-        eval_path, "w", encoding="utf-8"
-    ) as valpaths:
+    with open(eval_path, "w", encoding="utf-8") as valpaths:
 
         print("Writing val paths")
         for Q in [0, 1, 2]:
@@ -31,7 +28,7 @@ def main(train_dir, eval_dir, train_path, eval_path):
                     valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_dir")
     parser.add_argument("--eval_dir")
@@ -41,4 +38,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args.train_dir, args.eval_dir, args.train_path, args.eval_path)
-

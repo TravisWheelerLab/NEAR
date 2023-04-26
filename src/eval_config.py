@@ -25,7 +25,7 @@ ROOT = "/xdisk/twheeler/daphnedemekas/prefilter-output"
 if not os.path.exists(ROOT):
     os.mkdir(ROOT)
 
-#@evaluation_ex.config
+# @evaluation_ex.config
 def contrastive_SCL():
     # change nprobe to 5
     device = "cuda"
@@ -86,8 +86,10 @@ def contrastive_SCL():
         "minimum_seq_length": 0,
         "max_seq_length": 512,
         "output_path": save_dir,
-        "num_threads":num_threads,
+        "num_threads": num_threads,
     }
+
+
 @evaluation_ex.config
 def contrastive_alignments_quantized():
     # change nprobe to 5
@@ -149,11 +151,11 @@ def contrastive_alignments_quantized():
         "minimum_seq_length": 0,
         "max_seq_length": 2000,
         "output_path": save_dir,
-        "num_threads":num_threads,
+        "num_threads": num_threads,
     }
 
 
-#@evaluation_ex.config
+# @evaluation_ex.config
 def contrastive_alignments_kmer():
     device = "cuda"
     model_name = "ResNet1d"
@@ -178,7 +180,9 @@ def contrastive_alignments_kmer():
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     querysequences, targetsequences, all_hits = get_evaluation_data(
-        "/xdisk/twheeler/daphnedemekas/phmmer_max_results", query_id=4, save_dir=save_dir,
+        "/xdisk/twheeler/daphnedemekas/phmmer_max_results",
+        query_id=4,
+        save_dir=save_dir,
     )
     print("Loaded all data")
     print(len(querysequences))
