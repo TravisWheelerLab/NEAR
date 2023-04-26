@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from src.utils.layers import ResConv
-from src.utils.losses import NpairLoss, SupConLoss
+from src.losses import NpairLoss, SupConLoss
 
 
 class ResNet1d(pl.LightningModule):

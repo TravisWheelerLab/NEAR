@@ -1,86 +1,5 @@
-"""
-Author: Yonglong Tian (yonglong@mit.edu)
-Date: May 07, 2020
-"""
-from __future__ import print_function
-
-import pdb
-
-import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-
-def _save(fpath, arr):
-    plt.imshow(arr.cpu())
-    plt.colorbar()
-    plt.title(fpath)
-    # plt.savefig(fpath, bbox_inches="tight")
-    plt.show()
-
-
-def calc_unique(x, dim=-1):
-    unique, inverse = torch.unique(x, return_inverse=True, dim=dim)
-    perm = torch.arange(inverse.size(dim), dtype=inverse.dtype, device=inverse.device)
-    inverse, perm = inverse.flip([dim]), perm.flip([dim])
-    return (
-        unique,
-        inverse.new_empty(unique.size(dim)).scatter_(dim, inverse, perm),
-    )
-
-
-def cross_entropy(logits, target, size_average=True):
-    if size_average:
-        sum = torch.sum(-target * F.log_softmax(logits, -1), -1)
-        zeros = torch.where(target.sum(1) == 0)[0]
-        sum[zeros] = float("nan")
-        return torch.nanmean(sum)
-    else:
-        return torch.sum(torch.sum(-target * F.log_softmax(logits, -1), -1))
-
-
-class NpairLoss(nn.Module):
-    """the multi-class n-pair loss"""
-
-    def __init__(self, l2_reg=0.02):
-        super(NpairLoss, self).__init__()
-        self.l2_reg = l2_reg
-
-    # def forward(self, anchor: torch.Tensor, positive: torch.Tensor, target: torch.Tensor) -> float:
-    #     device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
-
-    #     batch_size = anchor.size(0)
-    #     anchor_mask = torch.where(target.sum(1) == float('nan'))[0]
-    #     pos_mask = torch.where(target.sum(0) == float('nan'))[0]
-
-    #     if target is None:
-    #         target = torch.eye(batch_size, dtype=torch.float32).to(device)
-
-    #     logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
-    #     loss_ce = cross_entropy(logit, target)
-    #     l2_loss = torch.sum(anchor[zeros]**2) / batch_size + torch.sum(positive**2) / batch_size
-
-    #     loss = loss_ce + self.l2_reg*l2_loss*0.25
-    #     return loss
-    def forward(self, anchor, positive, target, a_indices, p_indices):
-        device = torch.device("cuda") if anchor.is_cuda else torch.device("cpu")
-        batch_size = anchor.size(0)
-        if target is None:
-            target = torch.eye(batch_size, dtype=torch.float32).to(device)
-
-        logit = torch.matmul(anchor, torch.transpose(positive, 0, 1))
-        loss_ce = cross_entropy(logit, target)
-
-        if a_indices is not None:
-            l2_loss = torch.sum(anchor[a_indices] ** 2) / len(a_indices) + torch.sum(
-                positive[p_indices] ** 2
-            ) / len(p_indices)
-        else:
-            l2_loss = (torch.sum(anchor**2) + torch.sum(positive**2)) / batch_size
-
-        loss = loss_ce + self.l2_reg * l2_loss * 0.25
-        return loss
 
 
 class SupConLoss(nn.Module):
@@ -148,11 +67,8 @@ class SupConLoss(nn.Module):
         # for numerical stability
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
-        # pdb.set_trace()
 
         # tile mask
-        # mask = mask.repeat(anchor_count, contrast_count)
-        # mask-out self-contrast cases
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
@@ -174,10 +90,3 @@ class SupConLoss(nn.Module):
         # pdb.set_trace()
         loss = loss.mean()
         return loss
-
-
-if __name__ == "__main__":
-
-    embed = torch.randn((32, 256, 22))
-    lfunc = SigmoidLoss(device="cpu")
-    lfunc(embed, None, None)
