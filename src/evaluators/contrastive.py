@@ -11,10 +11,7 @@ import torch
 
 from src.evaluators.uniref_evaluator import UniRefEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
-<<<<<<< HEAD
 import time
-=======
->>>>>>> main
 
 logger = logging.getLogger("evaluate")
 
@@ -71,11 +68,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
         else:
             self.index.add(unrolled_targets)
 
-<<<<<<< HEAD
         faiss.omp_set_num_threads(self.num_threads)
-=======
-        faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
->>>>>>> main
 
     def filter_scores(self, scores_array, indices_array):
         """Filters the scores such that every query amino can only
@@ -99,53 +92,24 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         return scores, indices
 
-<<<<<<< HEAD
     def search(self, query_embedding: torch.Tensor):
-=======
-    def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
->>>>>>> main
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
         filtered_scores = {}
 
         scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
-<<<<<<< HEAD
-
-=======
-        # remove stuff that's under/over the threshold
-
-        """ BASED ON MY UNDERSTANDING 
-        This should be a matrix 
-        and have values for distances for each amino acid in the query sequence """
-        # indices = indices_array[self.comp_func(distances_array, self.distance_threshold)]
-        # distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
-        # for each amino, the 1000 target aminos that are closest to that amino
->>>>>>> main
         scores, indices = self.filter_scores(
             scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
         )
 
-<<<<<<< HEAD
         for distance, name in zip(
             scores,
             self.unrolled_names[indices],
         ):
-=======
-        # for distance, name in zip(
-        #     distances.ravel().to("cpu").numpy(),
-        #     self.unrolled_names[indices.ravel().to("cpu").numpy()],
-        # ):
-        for distance, name in zip(scores, self.unrolled_names[indices],):
-            # filtered_list.append((name, distance))
->>>>>>> main
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
-<<<<<<< HEAD
 
         return filtered_scores
-=======
-        return filtered_scores  # , filtered_list
->>>>>>> main

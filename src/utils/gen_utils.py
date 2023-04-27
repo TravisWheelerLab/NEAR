@@ -1,10 +1,6 @@
 import logging
 import os
 
-<<<<<<< HEAD
-=======
-import pandas as pd
->>>>>>> main
 import torch
 
 logger = logging.getLogger("train")
@@ -16,10 +12,6 @@ __all__ = [
     "amino_alphabet",
     "encode_string_sequence",
     "encode_tensor_sequence",
-<<<<<<< HEAD
-=======
-    "create_substitution_distribution",
->>>>>>> main
 ]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
@@ -75,32 +67,6 @@ def encode_tensor_sequence(sequence):
     return data
 
 
-<<<<<<< HEAD
-=======
-def create_substitution_distribution(blosum):
-    if blosum not in [45, 62, 80, 90]:
-        raise ValueError("blosum should be one of <45, 62, 80, 90>")
-
-    sub_dists = pd.read_csv(
-        f"{os.environ['HOME']}/prefilter/src/resources/blosum{blosum}.probs", delim_whitespace=True,
-    )
-    substitution_distributions = {}
-
-    for amino_acid in sub_dists.keys():
-        # fmt: off
-        reordered = []
-        for character in amino_alphabet:
-            if character not in sub_dists.keys():
-                continue
-            reordered.append(sub_dists.loc[amino_acid][character])
-
-        substitution_distributions[amino_acid] = torch.distributions.categorical.Categorical(torch.as_tensor(reordered))
-        # fmt: on
-
-    return substitution_distributions
-
-
->>>>>>> main
 def generate_string_sequence(length):
     sequence = amino_distribution.sample(sample_shape=(length,))
     sequence = "".join([amino_alphabet[i] for i in sequence])
