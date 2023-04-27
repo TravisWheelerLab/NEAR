@@ -113,7 +113,13 @@ def neighborhood_labels(fasta_files: List[str], figure_path: str) -> None:
     )
 
     ax[1].bar(
+<<<<<<< HEAD
+        np.arange(len(first_bar)),
+        np.log(first_bar),
+        label="num sequences in family",
+=======
         np.arange(len(first_bar)), np.log(first_bar), label="num sequences in family",
+>>>>>>> main
     )
     ax[1].bar(
         np.arange(len(second_bar)),
@@ -195,7 +201,13 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
     fig, ax = plt.subplots(nrows=3, figsize=(13, 10))
 
     ax[0].bar(
+<<<<<<< HEAD
+        np.arange(len(num_train_labels)),
+        num_train_labels,
+        label="train labels",
+=======
         np.arange(len(num_train_labels)), num_train_labels, label="train labels",
+>>>>>>> main
     )
     ax[0].bar(np.arange(len(num_val_labels)), num_val_labels, label="val labels")
     ax[0].set_title("number of training and validation labels per family")
@@ -218,10 +230,21 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
     ax[0].legend()
 
     ax[1].bar(
+<<<<<<< HEAD
+        np.arange(len(num_train_labels)),
+        np.log(num_train_labels),
+        label="train labels",
+    )
+    ax[1].bar(
+        np.arange(len(num_val_labels)),
+        np.log(num_val_labels),
+        label="val labels",
+=======
         np.arange(len(num_train_labels)), np.log(num_train_labels), label="train labels",
     )
     ax[1].bar(
         np.arange(len(num_val_labels)), np.log(num_val_labels), label="val labels",
+>>>>>>> main
     )
     ax[1].set_title("number of training and validation labels per family (log scale)")
     ax[1].legend()
@@ -339,7 +362,14 @@ def parser():
     )
     neighbor.add_argument("save_fig", type=str, help="where to save the figure")
     neighbor.add_argument(
+<<<<<<< HEAD
+        "--key",
+        default="val_files",
+        type=str,
+        help="key to access in the .yaml file",
+=======
         "--key", default="val_files", type=str, help="key to access in the .yaml file",
+>>>>>>> main
     )
 
     comp = sp.add_parser(

@@ -1,0 +1,23 @@
+model_name:  "ResNet1d"
+evaluator_name: "ContrastiveEvaluator"
+description: "Use CPU with IVF optimization and multithreading"
+index_sring: "IVF256,Flat"
+log_verbosity: logging.INFO
+checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
+query_file: "data/evaluationqueries.fa"
+target_embeddings: 'target_embeddings.pt'
+target_names: target_names.txt
+target_lengths: target_lengths.txt
+evaluator_args:
+    query_file: "data/evaluationqueries.fa"
+    encoding_func: None
+    model_device: "gpu" 
+    index_device: "gpu"
+    index_string: "IVF256,Flat"  # IVF256,PQ16", #IVF256
+    nprobe: 50
+    normalize_embeddings: True
+    minimum_seq_length: 0
+    max_seq_length: 2000
+    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-5"
+    num_threads: 16
+

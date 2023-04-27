@@ -16,11 +16,27 @@ class ResConv(torch.nn.Module):
         self.padding_mode = padding_mode
         self.kernel_size = kernel_size
         self.conv1 = torch.nn.Conv1d(
+<<<<<<< HEAD
+            filters,
+            filters,
+            kernel_size,
+            padding=padding,
+            padding_mode=padding_mode,
+        )
+        self.act = torch.nn.ELU()
+        self.conv2 = torch.nn.Conv1d(
+            filters,
+            filters,
+            kernel_size,
+            padding=padding,
+            padding_mode=padding_mode,
+=======
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode,
         )
         self.act = torch.nn.ELU()
         self.conv2 = torch.nn.Conv1d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode,
+>>>>>>> main
         )
 
     def masked_forward(self, features, mask):
@@ -35,7 +51,13 @@ class ResConv(torch.nn.Module):
             # two convolutions; so multiply half the kernel width by 2.
             # clearer than just self.kernel_size.
             features = features[
+<<<<<<< HEAD
+                :,
+                :,
+                2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+=======
                 :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+>>>>>>> main
             ]
         x = ~mask[:, None, :] * x
         return x + features, mask
@@ -49,7 +71,13 @@ class ResConv(torch.nn.Module):
             # two convolutions; so multiply half the kernel width by 2.
             # clearer than just self.kernel_size.
             features = features[
+<<<<<<< HEAD
+                :,
+                :,
+                2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+=======
                 :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+>>>>>>> main
             ]
         return x + features
 
@@ -62,11 +90,27 @@ class ResConv2d(torch.nn.Module):
         self.padding_mode = padding_mode
         self.kernel_size = kernel_size
         self.conv1 = torch.nn.Conv2d(
+<<<<<<< HEAD
+            filters,
+            filters,
+            kernel_size,
+            padding=padding,
+            padding_mode=padding_mode,
+        )
+        self.act = torch.nn.ELU()
+        self.conv2 = torch.nn.Conv2d(
+            filters,
+            filters,
+            kernel_size,
+            padding=padding,
+            padding_mode=padding_mode,
+=======
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode,
         )
         self.act = torch.nn.ELU()
         self.conv2 = torch.nn.Conv2d(
             filters, filters, kernel_size, padding=padding, padding_mode=padding_mode,
+>>>>>>> main
         )
 
     def masked_forward(self, features, mask):
@@ -81,7 +125,13 @@ class ResConv2d(torch.nn.Module):
             # two convolutions; so multiply half the kernel width by 2.
             # clearer than just self.kernel_size.
             features = features[
+<<<<<<< HEAD
+                :,
+                :,
+                2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+=======
                 :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+>>>>>>> main
             ]
         x = ~mask[:, None, :] * x
         return x + features, mask
@@ -95,7 +145,13 @@ class ResConv2d(torch.nn.Module):
             # two convolutions; so multiply half the kernel width by 2.
             # clearer than just self.kernel_size.
             features = features[
+<<<<<<< HEAD
+                :,
+                :,
+                2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+=======
                 :, :, 2 * (self.kernel_size // 2) : -2 * (self.kernel_size // 2),
+>>>>>>> main
             ]
         return x + features
 

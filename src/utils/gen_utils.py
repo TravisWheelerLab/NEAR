@@ -1,7 +1,10 @@
 import logging
 import os
 
+<<<<<<< HEAD
+=======
 import pandas as pd
+>>>>>>> main
 import torch
 
 logger = logging.getLogger("train")
@@ -13,7 +16,10 @@ __all__ = [
     "amino_alphabet",
     "encode_string_sequence",
     "encode_tensor_sequence",
+<<<<<<< HEAD
+=======
     "create_substitution_distribution",
+>>>>>>> main
 ]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
@@ -69,6 +75,8 @@ def encode_tensor_sequence(sequence):
     return data
 
 
+<<<<<<< HEAD
+=======
 def create_substitution_distribution(blosum):
     if blosum not in [45, 62, 80, 90]:
         raise ValueError("blosum should be one of <45, 62, 80, 90>")
@@ -92,6 +100,7 @@ def create_substitution_distribution(blosum):
     return substitution_distributions
 
 
+>>>>>>> main
 def generate_string_sequence(length):
     sequence = amino_distribution.sample(sample_shape=(length,))
     sequence = "".join([amino_alphabet[i] for i in sequence])

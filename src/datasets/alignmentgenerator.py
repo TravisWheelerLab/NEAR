@@ -5,6 +5,7 @@ from src import utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 import pdb
+import random
 
 
 class AlignmentGenerator(DataModule):
@@ -39,6 +40,8 @@ class AlignmentGenerator(DataModule):
 
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            if training is False:
+                self.alignment_file_paths = random.sample(self.alignment_file_paths, 30000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -53,6 +56,9 @@ class AlignmentGenerator(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
+            if len(lines) == 0:
+                print(f"No lines in {alignment_file}")
+                return None, None
             seq1 = lines[1].strip("\n")
             seq2 = lines[2].strip("\n")
         return seq1.upper(), seq2.upper()
@@ -92,7 +98,7 @@ class AlignmentGenerator(DataModule):
         return utils.encode_string_sequence(seq1), utils.encode_string_sequence(seq2)
 
 
-class AlignmentGeneratorWithIndels_(DataModule):
+class AlignmentGeneratorWithIndels(DataModule):
     """Alignment generator with insertions and deletions"""
 
     def __init__(self, ali_path, seq_len, training=True):
@@ -121,8 +127,6 @@ class AlignmentGeneratorWithIndels_(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
-            if len(lines) < 3:
-                print(f"Alignment file: {alignment_file} has no sequences")
             seq1 = lines[1].strip("\n")
             seq2 = lines[2].strip("\n")
             seq1_full = lines[3].strip("\n")
@@ -274,7 +278,12 @@ class AlignmentGeneratorWithIndels_(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -318,6 +327,8 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
 
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            if training is False:
+                self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -337,8 +348,6 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
-            if len(lines) < 3:
-                print(f"Alignment file: {alignment_file} has no sequences")
             subsequences = []
             fullsequences = []
             for line in lines[1:]:
@@ -494,7 +503,12 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -536,7 +550,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
         subsequences, fullsequences = self.parse_alignment(alignment_path)
         if len(subsequences) == 0:
-            return self.__getitem(idx + 1)
+            return self.__getitem__(idx + 1)
 
         subseqs_without_gaps, subsequence_indices = self.parse_indels(subsequences)
         # pdb.set_trace()
@@ -555,14 +569,11 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             assert len(seq) == self.seq_len
 
             assert len(seq_indices) == self.seq_len
-        # assert (
-        #     len(seq1) == len(seq1_indices) == len(seq2_indices) == len(seq2)
-        # ), print(
-        #     f"Not all the same length! {idx} {seq1} {seq1_full} {seq2} {seq2_full}"
-        # )
 
         encoded_sequences = [utils.encode_string_sequence(seq) for seq in sequences]
-        torch_indices = [torch.as_tensor(seq_indices) for seq_indices in indices]
+        torch_indices = [
+            torch.as_tensor(seq_indices, dtype=torch.float16) for seq_indices in indices
+        ]
 
         if len(encoded_sequences) > 20:
             encoded_sequences = encoded_sequences[:20]

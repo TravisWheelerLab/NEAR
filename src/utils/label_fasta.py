@@ -54,7 +54,14 @@ def emit_and_inject_labels(
             try:
                 family_name = accession_id_to_name[neighborhood_label]
                 # get correct alignment
+<<<<<<< HEAD
+                ali_file = os.path.join(
+                    ali_directory,
+                    f"{family_name}.{pid}-train.sto",
+                )
+=======
                 ali_file = os.path.join(ali_directory, f"{family_name}.{pid}-train.sto",)
+>>>>>>> main
                 tmp_hmm_file = random_filename(".")
                 # create hmm with correct --ere value (relative entropy)
                 # the default is 0.59, per hmmer user guide.
@@ -96,7 +103,12 @@ def emit_sequences(hmm_file, output_directory, n):
     # save to the same name as the hmm file but with a .fa
     # suffix and in the output directory argument
     output_path = os.path.join(
+<<<<<<< HEAD
+        output_directory,
+        os.path.splitext(os.path.basename(hmm_file))[0] + ".fa",
+=======
         output_directory, os.path.splitext(os.path.basename(hmm_file))[0] + ".fa",
+>>>>>>> main
     )
     cmd = f"hmmemit -o {output_path} -N {n} {hmm_file}"
     subprocess.call(cmd.split())
@@ -221,7 +233,12 @@ def create_parser():
     )
 
     train_hdb_parser = subparsers.add_parser(
+<<<<<<< HEAD
+        "hdb",
+        description="extract training alignment from the alidb and" " create a new hmm",
+=======
         "hdb", description="extract training alignment from the alidb and" " create a new hmm",
+>>>>>>> main
     )
     train_hdb_parser.add_argument("fasta_file", help="fasta file containing train sequences")
     train_hdb_parser.add_argument("alidb", help="alignment database")
@@ -242,7 +259,14 @@ def create_parser():
     injection_parser.add_argument("output_directory", help="where to save the emitted sequences")
     injection_parser.add_argument("ali_directory", help="where the .sto files are saved")
     injection_parser.add_argument(
+<<<<<<< HEAD
+        "--relent",
+        default=0.59,
+        type=float,
+        help="relative entropy to use when building hmms",
+=======
         "--relent", default=0.59, type=float, help="relative entropy to use when building hmms",
+>>>>>>> main
     )
 
     return parser
@@ -506,7 +530,12 @@ class Generator:
 
         if jobid_to_wait_for is not None:
             slurm_script = slurm_script.replace(
+<<<<<<< HEAD
+                "DEPENDENCY",
+                f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+=======
                 "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+>>>>>>> main
             )
         else:
             slurm_script = slurm_script.replace("DEPENDENCY", "")
@@ -562,7 +591,12 @@ class Generator:
 
         if jobid_to_wait_for is not None:
             slurm_script = slurm_script.replace(
+<<<<<<< HEAD
+                "DEPENDENCY",
+                f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+=======
                 "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+>>>>>>> main
             )
         else:
             slurm_script = slurm_script.replace("DEPENDENCY", "")
@@ -597,7 +631,12 @@ class Generator:
 
         if jobid_to_wait_for is not None:
             bash_script = bash_script.replace(
+<<<<<<< HEAD
+                "DEPENDENCY",
+                f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+=======
                 "DEPENDENCY", f"#SBATCH --dependency=afterok:{jobid_to_wait_for}",
+>>>>>>> main
             )
         else:
             bash_script = bash_script.replace("DEPENDENCY", "")
@@ -641,7 +680,13 @@ if __name__ == "__main__":
         if not os.path.isdir(program_args.output_directory):
             os.makedirs(program_args.output_directory)
         emit_sequences(
+<<<<<<< HEAD
+            program_args.hmm_file,
+            program_args.output_directory,
+            n=program_args.n,
+=======
             program_args.hmm_file, program_args.output_directory, n=program_args.n,
+>>>>>>> main
         )
     elif program_args.command == "inject":
         if not os.path.isdir(program_args.output_directory):

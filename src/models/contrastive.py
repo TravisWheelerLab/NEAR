@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from src.utils.layers import ResConv
-from src.utils.losses import NpairLoss, SupConLoss
+from src.losses import NpairLoss, SupConLoss
 
 
 class ResNet1d(pl.LightningModule):
@@ -42,11 +42,22 @@ class ResNet1d(pl.LightningModule):
         self._setup_layers()
 
         self.save_hyperparameters()
+<<<<<<< HEAD
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
+=======
+>>>>>>> main
 
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
+<<<<<<< HEAD
+            in_channels=self.in_channels,
+            out_channels=self.res_block_n_filters,
+            kernel_size=1,
+=======
             in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
+>>>>>>> main
         )
 
         _list = []
@@ -107,11 +118,23 @@ class ResNet1d(pl.LightningModule):
     def _shared_step(self, batch):
 
         if self.indels:
+<<<<<<< HEAD
+            (
+                seq1,
+                labels1,
+                seq2,
+                labels2,
+            ) = batch  # 32 pairs of sequences, each amino has a label
+
+            features = torch.cat([seq1, seq2], dim=0)
+
+=======
             (seq1, labels1, seq2, labels2,) = batch  # 32 pairs of sequences, each amino has a label
 
             features = torch.cat([seq1, seq2], dim=0)
 
             # mask = self.construct_mask(labels1, labels2)
+>>>>>>> main
             seq_len = labels1.shape[1]
 
             # have to make the labels unique for every batchs
@@ -152,9 +175,13 @@ class ResNet1d(pl.LightningModule):
                 plt.imshow(arr)
                 plt.colorbar()
                 self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
+<<<<<<< HEAD
+
+=======
         # loss = self.loss_func(
         #     torch.cat((e1.unsqueeze(1), e2.unsqueeze(1)), dim=1), mask = mask
         # )
+>>>>>>> main
         # input is ((batch_size/2) x 2 x embedding_dimension)
 
         loss = self.loss_func(
@@ -164,6 +191,24 @@ class ResNet1d(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         loss = self._shared_step(batch)
+<<<<<<< HEAD
+        self.training_step_outputs.append(loss)
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        loss = self._shared_step(batch)
+        self.validation_step_outputs.append(loss)
+        return loss
+
+    def configure_optimizers(self):
+        optim = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        return optim
+
+    def on_train_epoch_end(self):
+        epoch_average = torch.stack(self.training_step_outputs).mean()
+        self.log("training_epoch_average", epoch_average)
+        self.training_step_outputs.clear()  # free memory
+=======
         return {"loss": loss}
 
     def validation_step(self, batch, batch_nb):
@@ -179,14 +224,22 @@ class ResNet1d(pl.LightningModule):
         loss = torch.mean(torch.stack(train_loss))
         self.log("train_loss", loss)
         self.log("learning_rate", self.learning_rate)
+>>>>>>> main
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
 
+<<<<<<< HEAD
+    def on_validation_epoch_end(self):
+        epoch_average = torch.stack(self.validation_step_outputs).mean()
+        self.log("validation_epoch_average", epoch_average)
+        self.validation_step_outputs.clear()  # free memory
+=======
     def validation_epoch_end(self, outputs):
         val_loss = self.all_gather([x["val_loss"] for x in outputs])
         val_loss = torch.mean(torch.stack(val_loss))
         self.log("val_loss", val_loss)
+>>>>>>> main
 
 
 class ResNet1dMultiPos(ResNet1d):
@@ -198,6 +251,8 @@ class ResNet1dMultiPos(ResNet1d):
 
         (features, labels) = batch  # 32 pairs of sequences, each amino has a label
         # these are now not all the same size so we need to first relabel and then flatten
+<<<<<<< HEAD
+=======
 
         # #now flatten along the label idx dimension
         # loss = self.loss_func(features, labels)
@@ -208,12 +263,22 @@ class ResNet1dMultiPos(ResNet1d):
         # e1_indices = torch.where(~l1.isnan())[0]
         # e2_indices = torch.where(~l2.isnan())[0]
 
+>>>>>>> main
         embeddings = self.forward(features)
         # batch_size x sequence_length x embedding_dimension
 
         embeddings_transposed = embeddings.transpose(
             -1, -2
         )  # batch_size x sequence_length x embedding_dimension
+<<<<<<< HEAD
+
+        e = torch.cat(torch.unbind(embeddings_transposed, dim=0))
+
+        en = torch.nn.functional.normalize(e, dim=-1)
+        l = torch.stack(labels).flatten()
+        loss = self.loss_func(en.unsqueeze(1), l)
+
+=======
         e = torch.cat(torch.unbind(embeddings_transposed, dim=0)).unsqueeze(1)
         l = torch.stack(labels).flatten()
         loss = self.loss_func(e, l)
@@ -245,4 +310,5 @@ class ResNet1dMultiPos(ResNet1d):
         # loss = self.loss_func(
         #     e1, e2, mask, e1_indices, e2_indices
         # )  # input is ((batch_size/2) x 2 x embedding_dimension)
+>>>>>>> main
         return loss

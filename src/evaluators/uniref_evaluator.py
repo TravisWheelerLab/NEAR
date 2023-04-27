@@ -1,10 +1,15 @@
 """Evaluator base class for any evaluator using 
 Uniref database"""
 
+<<<<<<< HEAD
+import logging
+import os
+=======
 import json
 import logging
 import os
 import pdb
+>>>>>>> main
 import time
 from typing import List, Tuple
 
@@ -12,10 +17,15 @@ import numpy as np
 import torch
 import tqdm
 
+<<<<<<< HEAD
+from src.evaluators import Evaluator
+from src.utils import encode_string_sequence
+=======
 # from src.evaluators.metrics import plot_roc_curve
 from src.evaluators import Evaluator
 from src.utils import encode_string_sequence
 from src.utils.gen_utils import generate_string_sequence
+>>>>>>> main
 
 logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
@@ -45,6 +55,10 @@ class UniRefEvaluator(Evaluator):
         index_string="Flat",
         index_device="cpu",
         output_path="",
+<<<<<<< HEAD
+        num_threads=16,
+=======
+>>>>>>> main
     ):
         """
         Args:
@@ -100,6 +114,10 @@ class UniRefEvaluator(Evaluator):
         self.distance_threshold = float(distance_threshold)
         self.evalue_threshold = evalue_threshold
         self.output_path = output_path
+<<<<<<< HEAD
+        self.num_threads = num_threads
+=======
+>>>>>>> main
 
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -108,6 +126,13 @@ class UniRefEvaluator(Evaluator):
             logger.info("Using comparison function <= threshold for filtration.")
             self.comp_func = np.less_equal
 
+<<<<<<< HEAD
+    def filter_sequences_by_length(
+        self,
+        model_class,
+        names: List[str],
+        sequences: List[str],
+=======
         # root = "/xdisk/twheeler/colligan/data/prefilter/uniref_benchmark/"
         # self.max_hmmer_hits = get_hmmer_hits(f"{root}/max_hmmer_hits.txt")
 
@@ -117,6 +142,7 @@ class UniRefEvaluator(Evaluator):
         sequences: List[str],
         model_class,
         apply_random_sequence: bool,
+>>>>>>> main
         max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Filters the sequences by length thresholding given the
@@ -129,6 +155,9 @@ class UniRefEvaluator(Evaluator):
         for name, sequence in tqdm.tqdm(zip(names, sequences)):
             length = len(sequence)
             if max_seq_length >= length >= self.minimum_seq_length:
+<<<<<<< HEAD
+
+=======
                 # if apply_random_sequence:
                 # add 100 aminos on to the beginning
                 # random_seq = generate_string_sequence(100)
@@ -136,6 +165,7 @@ class UniRefEvaluator(Evaluator):
                 #     random_seq + sequence, model_class
                 # )
                 # else:
+>>>>>>> main
                 embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
                 embeddings.append(embed.to("cpu"))
@@ -143,11 +173,24 @@ class UniRefEvaluator(Evaluator):
             else:
                 num_removed += 1
                 filtered_names.remove(name)
+<<<<<<< HEAD
+=======
                 # filtered_sequences.remove(sequence)
+>>>>>>> main
                 logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
         logger.info(f"removed {num_removed} sequences. ")
         return filtered_names, embeddings, lengths
 
+<<<<<<< HEAD
+    @torch.no_grad()
+    def _calc_embeddings(
+        self,
+        sequence_data: dict,
+        model_class,
+        apply_random_sequence: bool,
+        max_seq_length=512,
+    ) -> Tuple[List[str], List[torch.Tensor], List[str]]:
+=======
     # def filter_hmmer_hits(self, target_names: List[str]):
     #     """Filters the max hmmer hits dict to include
     #     only the targets that passed length thresolding
@@ -181,6 +224,7 @@ class UniRefEvaluator(Evaluator):
     def _calc_embeddings(
         self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+>>>>>>> main
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
         sequence length and returns the filtered sequences/names and embeddings
@@ -192,13 +236,37 @@ class UniRefEvaluator(Evaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
+<<<<<<< HEAD
+            model_class,
+            names,
+            sequences,
+            max_seq_length,
+=======
             names, sequences, model_class, apply_random_sequence, max_seq_length,
+>>>>>>> main
         )
 
         assert len(filtered_names) == len(embeddings)
 
         return filtered_names, embeddings, lengths
 
+<<<<<<< HEAD
+    def evaluate_multiprocessing(
+        self, query_names, query_embeddings, target_names, target_embeddings, target_lengths
+    ) -> dict:
+        """Evaluation pipeline.
+
+        runs Faiss clustering and filtering and returns a dictionary of the model's hits.
+        """
+
+        print(f"Found {(len(self.target_seqs))} targets")
+
+        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
+
+        self.filter(query_embeddings, query_names)
+
+=======
+>>>>>>> main
     def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
 
@@ -233,6 +301,9 @@ class UniRefEvaluator(Evaluator):
 
         self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
 
+<<<<<<< HEAD
+        self.filter(query_embeddings, query_names)
+=======
         model_hits, _, _ = self.filter(query_embeddings, query_names)
 
         # self.denom = len(query_names) * len(target_names)
@@ -246,6 +317,7 @@ class UniRefEvaluator(Evaluator):
         # )
 
         return model_hits
+>>>>>>> main
 
     def compute_embedding(self, sequence, model_class):
         """This gets called from within the calculate embedding function
@@ -274,6 +346,12 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     @torch.no_grad()
+<<<<<<< HEAD
+    def filter(self, queries, query_names):
+        """Filters our hits based on
+        distance to the query in the Faiiss
+        cluster space"""
+=======
     def filter(
         self, queries, query_names,
     ):
@@ -281,6 +359,7 @@ class UniRefEvaluator(Evaluator):
         distance to the query in the Faiiss
         cluster space"""
         qdict = dict()
+>>>>>>> main
 
         logger.info("Beginning search.")
 
@@ -290,6 +369,15 @@ class UniRefEvaluator(Evaluator):
             os.mkdir(self.output_path)
 
         print(self.output_path)
+<<<<<<< HEAD
+        print(f"Number of queries: {len(queries)}")
+
+        for i in tqdm.tqdm(range(len(queries))):
+
+            f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+
+=======
 
         for i in tqdm.tqdm(range(len(queries))):
             if os.path.exists(f"{self.output_path}/{query_names[i]}.txt"):
@@ -299,16 +387,26 @@ class UniRefEvaluator(Evaluator):
 
             logger.debug(f"{i / (len(queries)):.3f}")
 
+>>>>>>> main
             if self.normalize_embeddings:
                 qval = torch.nn.functional.normalize(queries[i], dim=-1)
             else:
                 qval = queries[i]
 
+<<<<<<< HEAD
+            filtered_scores = self.search(qval)  # , search_time, filter_time, aggregate_time)
+=======
             filtered_scores = self.search(qval)
+>>>>>>> main
             for name, distance in filtered_scores.items():
                 f.write(f"{name}     {distance}" + "\n")
             f.close()
 
+<<<<<<< HEAD
+        loop_time = time.time() - t_begin
+
+        logger.info(f"Entire loop took: {loop_time}.")
+=======
             qdict[query_names[i]] = filtered_scores
 
         loop_time = time.time() - t_begin
@@ -316,3 +414,4 @@ class UniRefEvaluator(Evaluator):
         logger.info(f"Entire loop took: {loop_time}.")
 
         return qdict, loop_time / i, loop_time
+>>>>>>> main

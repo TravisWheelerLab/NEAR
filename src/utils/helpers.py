@@ -6,7 +6,10 @@ from typing import List, Tuple, Union
 
 import faiss
 import faiss.contrib.torch_utils
+<<<<<<< HEAD
+=======
 import pandas as pd
+>>>>>>> main
 import torch
 
 import src.models as models
@@ -19,7 +22,10 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
+<<<<<<< HEAD
+=======
     "parse_tblout",
+>>>>>>> main
     "stack_vae_batch",
     "esm_toks",
     "parse_labels",
@@ -101,7 +107,16 @@ def load_model(model_path, hyperparams, device):
 
 
 def create_faiss_index(
+<<<<<<< HEAD
+    embeddings,
+    embed_dim,
+    index_string,
+    nprobe,
+    device="cpu",
+    distance_metric="cosine",
+=======
     embeddings, embed_dim, index_string, nprobe, device="cpu", distance_metric="cosine",
+>>>>>>> main
 ):
 
     log.info(f"using index with {distance_metric} metric.")
@@ -347,6 +362,8 @@ def non_default_collate(batch):
     )
 
 
+<<<<<<< HEAD
+=======
 def parse_tblout(tbl):
     """
     Parse a .tblout file created with hmmsearch -o <tbl>.tblout <seqdb> <hmmdb>
@@ -378,6 +395,7 @@ def parse_tblout(tbl):
     return df
 
 
+>>>>>>> main
 class AAIndexFFT:
     def __init__(self):
         self.mapping = {}
