@@ -113,9 +113,13 @@ def neighborhood_labels(fasta_files: List[str], figure_path: str) -> None:
     )
 
     ax[1].bar(
+<<<<<<< HEAD
         np.arange(len(first_bar)),
         np.log(first_bar),
         label="num sequences in family",
+=======
+        np.arange(len(first_bar)), np.log(first_bar), label="num sequences in family",
+>>>>>>> main
     )
     ax[1].bar(
         np.arange(len(second_bar)),
@@ -197,9 +201,13 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
     fig, ax = plt.subplots(nrows=3, figsize=(13, 10))
 
     ax[0].bar(
+<<<<<<< HEAD
         np.arange(len(num_train_labels)),
         num_train_labels,
         label="train labels",
+=======
+        np.arange(len(num_train_labels)), num_train_labels, label="train labels",
+>>>>>>> main
     )
     ax[0].bar(np.arange(len(num_val_labels)), num_val_labels, label="val labels")
     ax[0].set_title("number of training and validation labels per family")
@@ -222,6 +230,7 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
     ax[0].legend()
 
     ax[1].bar(
+<<<<<<< HEAD
         np.arange(len(num_train_labels)),
         np.log(num_train_labels),
         label="train labels",
@@ -230,6 +239,12 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
         np.arange(len(num_val_labels)),
         np.log(num_val_labels),
         label="val labels",
+=======
+        np.arange(len(num_train_labels)), np.log(num_train_labels), label="train labels",
+    )
+    ax[1].bar(
+        np.arange(len(num_val_labels)), np.log(num_val_labels), label="val labels",
+>>>>>>> main
     )
     ax[1].set_title("number of training and validation labels per family (log scale)")
     ax[1].legend()
@@ -254,9 +269,7 @@ def compare_valid_and_train_labels(hparams: dict, figure_path: str) -> None:
 
     ax[0].legend()
     ax[2].bar(
-        np.arange(len(num_val_labels)),
-        num_val_labels / num_train_labels,
-        label="val labels",
+        np.arange(len(num_val_labels)), num_val_labels / num_train_labels, label="val labels",
     )
     ax[2].set_title(
         "ratio number of validation labels per family to number of train labels per family"
@@ -306,16 +319,10 @@ def number_of_sequences_per_unique_label_combination(hparams: dict, figure_path:
     ax[0].set_title("intersection of validation and train labelsets")
     ax0 = ax[0].twinx()
     ax0.plot(
-        np.arange(len(val_counts)),
-        np.cumsum(val_counts),
-        "b-",
-        label="cumulative val dist",
+        np.arange(len(val_counts)), np.cumsum(val_counts), "b-", label="cumulative val dist",
     )
     ax0.plot(
-        np.arange(len(train_counts)),
-        np.cumsum(train_counts),
-        "k-",
-        label="cumulative train dist",
+        np.arange(len(train_counts)), np.cumsum(train_counts), "k-", label="cumulative train dist",
     )
     ax0.legend()
 
@@ -351,16 +358,18 @@ def parser():
         " or a set of fasta files.",
     )
     neighbor.add_argument(
-        "files",
-        nargs="+",
-        help="list of files or a .yaml file containing train/val_file keys",
+        "files", nargs="+", help="list of files or a .yaml file containing train/val_file keys",
     )
     neighbor.add_argument("save_fig", type=str, help="where to save the figure")
     neighbor.add_argument(
+<<<<<<< HEAD
         "--key",
         default="val_files",
         type=str,
         help="key to access in the .yaml file",
+=======
+        "--key", default="val_files", type=str, help="key to access in the .yaml file",
+>>>>>>> main
     )
 
     comp = sp.add_parser(
@@ -369,9 +378,7 @@ def parser():
         " Accepts a single .yaml file with train_files and val_files as keys",
     )
     comp.add_argument(
-        "yaml_file",
-        type=str,
-        help=".yaml file containing train/val_file keys",
+        "yaml_file", type=str, help=".yaml file containing train/val_file keys",
     )
     comp.add_argument("save_fig", type=str, help="where to save the figure")
 
@@ -381,9 +388,7 @@ def parser():
     )
 
     uniq.add_argument(
-        "yaml_file",
-        type=str,
-        help=".yaml file containing train/val_file keys",
+        "yaml_file", type=str, help=".yaml file containing train/val_file keys",
     )
     uniq.add_argument("save_fig", type=str, help="where to save the figure")
 

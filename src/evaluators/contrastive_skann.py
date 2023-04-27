@@ -1,31 +1,25 @@
-"""" Evaluator class for the contrastive CNN model """
-
 import logging
 import os
 import pdb
 from typing import List, Tuple
 
-import faiss
+import scann
 import numpy as np
 import torch
 
 from src.evaluators.uniref_evaluator import UniRefEvaluator
-from src.utils import create_faiss_index, encode_string_sequence
-<<<<<<< HEAD
-import time
-=======
->>>>>>> main
+from src.utils import encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 
 
-class ContrastiveEvaluator(UniRefEvaluator):
+class ContrastiveEvaluatorScaNN(UniRefEvaluator):
     """Evaluator for the Contrastive Loss Model"""
 
     def __init__(self, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
-        self.index: faiss.Index = None
+        self.unrolled_names = []
 
     def compute_embedding(self, sequence: str, model_class) -> torch.Tensor:
         """Encodes the input sequence as a tensor and then passes
@@ -38,44 +32,53 @@ class ContrastiveEvaluator(UniRefEvaluator):
         )
 
     def _setup_targets_for_search(
-        self, target_embeddings: List[torch.Tensor], target_names: List[str], lengths: List[int]
+        self, target_embeddings: List[torch.Tensor], target_names: List[str],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
 
-        self.unrolled_names = np.repeat(target_names, lengths)
-        unrolled_targets = torch.cat(
-            target_embeddings, dim=0
-        )  # (num targets x amino per target) x 256
-
+        lengths: List[int] = list(map(lambda s: s.shape[0], target_embeddings))
         logger.info(f"Original DB size: {sum(lengths)}")
-        del lengths
+        unrolled_targets = []
+
+        for length, name, target in zip(lengths, target_names, target_embeddings):
+            # sample every N amino.
+            aminos = torch.cat([target[j].unsqueeze(0) for j in range(length)], dim=0)
+
+            self.unrolled_names.extend(
+                [name] * length
+            )  # record keeping (num targets x amino per target)
+            # - every given amino in a sequence has the same name
+            unrolled_targets.append(aminos)
+
+        unrolled_targets = torch.cat(
+            unrolled_targets, dim=0
+        )  # (num targets x amino per target) x 256
 
         logger.info(f"Number of aminos in target DB: {unrolled_targets.shape[0]}")
 
         if self.normalize_embeddings:
             unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-        self.index: faiss.Index = create_faiss_index(
-            embeddings=unrolled_targets,
-            embed_dim=unrolled_targets.shape[-1],
-            distance_metric="cosine" if self.normalize_embeddings else "l2",
-            index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            nprobe=self.nprobe,
-            device=self.index_device,
+        n = unrolled_targets.shape[0]
+
+        num_partitions = int(np.sqrt(n))
+        print(f"Number of targets: {n}")
+        print(f"Number of leaves: {num_partitions}")
+
+        self.searcher = (
+            scann.scann_ops_pybind.builder(unrolled_targets, 10, "dot_product")
+            .tree(
+                num_leaves=num_partitions,
+                num_leaves_to_search=num_partitions // 10,
+                training_sample_size=250000,
+            )
+            .score_ah(2, anisotropic_quantization_threshold=0.2)
+            .reorder(100)
+            .build()
         )
 
-        logger.info("Adding targets to index.")
-        if self.index_device == "cpu":
-            self.index.add(unrolled_targets.to("cpu"))
-        else:
-            self.index.add(unrolled_targets)
-
-<<<<<<< HEAD
-        faiss.omp_set_num_threads(self.num_threads)
-=======
-        faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
->>>>>>> main
+        self.unrolled_names = np.asarray(self.unrolled_names)
 
     def filter_scores(self, scores_array, indices_array):
         """Filters the scores such that every query amino can only
@@ -94,25 +97,21 @@ class ContrastiveEvaluator(UniRefEvaluator):
             _, unique_indices = np.unique(
                 names[sorted_idx], return_index=True
             )  # the unique names of the targets for each 1000 hits (<= 1000)
-            indices += list(indices_array[idx][sorted_idx][unique_indices])
-            scores += list(scores_idx[sorted_idx][unique_indices])
-
+            try:
+                indices += list(indices_array[idx][sorted_idx][unique_indices])
+                scores += list(scores_idx[sorted_idx][unique_indices])
+            except ValueError as e:
+                print(e)
+                pdb.set_trace()
         return scores, indices
 
-<<<<<<< HEAD
-    def search(self, query_embedding: torch.Tensor):
-=======
     def search(self, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
->>>>>>> main
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
-<<<<<<< HEAD
-
-=======
+        indices_array, scores_array = self.searcher.search_batched(query_embedding.contiguous())
         # remove stuff that's under/over the threshold
 
         """ BASED ON MY UNDERSTANDING 
@@ -121,31 +120,16 @@ class ContrastiveEvaluator(UniRefEvaluator):
         # indices = indices_array[self.comp_func(distances_array, self.distance_threshold)]
         # distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
         # for each amino, the 1000 target aminos that are closest to that amino
->>>>>>> main
-        scores, indices = self.filter_scores(
-            scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
-        )
+        scores, indices = self.filter_scores(scores_array, indices_array)
 
-<<<<<<< HEAD
-        for distance, name in zip(
-            scores,
-            self.unrolled_names[indices],
-        ):
-=======
         # for distance, name in zip(
         #     distances.ravel().to("cpu").numpy(),
         #     self.unrolled_names[indices.ravel().to("cpu").numpy()],
         # ):
         for distance, name in zip(scores, self.unrolled_names[indices],):
             # filtered_list.append((name, distance))
->>>>>>> main
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:
                 filtered_scores[name] = distance
-<<<<<<< HEAD
-
-        return filtered_scores
-=======
         return filtered_scores  # , filtered_list
->>>>>>> main
