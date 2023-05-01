@@ -2,7 +2,6 @@ import torch
 import os
 from types import SimpleNamespace
 import time
-from src.train_config import *
 import yaml
 import argparse
 import itertools

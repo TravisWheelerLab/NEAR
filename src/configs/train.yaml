@@ -10,6 +10,12 @@ model_args:
     log_interval: 1000
     in_channels: 20
     indels: True
+    res_block_n_filters: 256
+    res_block_kernel_size: 3
+    in_channels: 128
+    n_res_blocks: 8
+    padding: "same"
+    padding_mode: "circular"
 
 train_dataset_args:
     ali_path: "/xdisk/twheeler/daphnedemekas/train_paths-final.txt"
