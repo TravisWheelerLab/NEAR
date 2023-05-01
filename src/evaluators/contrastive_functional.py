@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from src.utils import create_faiss_index, encode_string_sequence
-
+import pickle
 logger = logging.getLogger("evaluate")
 
 
@@ -38,8 +38,8 @@ def filter_sequences_by_length(
     names: List[str],
     sequences: List[str],
     model_class,
-    model_device="cpu",
     max_seq_length=512,
+    model_device="cpu",
     minimum_seq_length=0,
 ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Filters the sequences by length thresholding given the
@@ -49,7 +49,7 @@ def filter_sequences_by_length(
 
     filtered_names = names.copy()
     num_removed = 0
-    for name, sequence in zip(names, sequences):
+    for name, sequence in tqdm.tqdm(zip(names, sequences)):
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
@@ -68,7 +68,7 @@ def filter_sequences_by_length(
 
 
 @torch.no_grad()
-def _calc_embeddings(sequence_data, model_class) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+def _calc_embeddings(sequence_data, model_class, max_seq_length) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Calculates the embeddings for the sequences by
     calling the model forward function. Filters the sequences by max/min
     sequence length and returns the filtered sequences/names and embeddings
@@ -78,7 +78,7 @@ def _calc_embeddings(sequence_data, model_class) -> Tuple[List[str], List[str], 
     names = list(sequence_data.keys())
     sequences = list(sequence_data.values())
 
-    filtered_names, embeddings, lengths = filter_sequences_by_length(names, sequences, model_class)
+    filtered_names, embeddings, lengths = filter_sequences_by_length(names, sequences, model_class, max_seq_length)
 
     return filtered_names, embeddings, lengths
 
@@ -107,19 +107,13 @@ def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[s
 
     return filtered_scores
 
-def get_target_embeddings(arg_list, normalize_embeddings = True):
-    target_data, model, output_path, index, unrolled_names = arg_list
+def save_target_embeddings(arg_list):
 
-    target_names, targets, lengths = _calc_embeddings(target_data, model)
+    target_data, model, max_seq_length = arg_list
 
-    with open('targetnames2000.pickle', 'wb') as handle:
-        pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    target_names, targets, lengths = _calc_embeddings(target_data, model, max_seq_length)
 
-    with open('targets2000.pickle', 'wb') as handle:
-        pickle.dump(targets, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('target_lengths_2000.pickle', 'wb') as handle:
-        pickle.dump(targets, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
+    return target_names, targets, lengths
 
 
 @torch.no_grad()
@@ -128,9 +122,9 @@ def filter(arg_list, normalize_embeddings=True):
     distance to the query in the Faiiss
     cluster space"""
 
-    query_data, model, output_path, index, unrolled_names = arg_list
+    query_data, model, output_path, index, unrolled_names, max_seq_length = arg_list
 
-    query_names, queries, _ = _calc_embeddings(query_data, model)
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -157,7 +151,7 @@ def _setup_targets_for_search(
     index_string,
     nprobe,
     num_threads = 16,
-    normalize_embeddings=True,
+    normalize_embeddings=True, 
     index_device="cpu",
 ):
     """Creates the Faiss Index object using the unrolled
@@ -176,7 +170,7 @@ def _setup_targets_for_search(
         distance_metric="cosine" if normalize_embeddings else "l2",
         index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
         nprobe=nprobe,
-        num_threads = num_threads,
+        num_threads = 1,
         device=index_device,
     )
 

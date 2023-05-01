@@ -5,9 +5,10 @@ index_string: "IVF256,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/evaluationqueries.fa"
-target_embeddings: 'target_embeddings.pt'
-target_names: target_names.txt
-target_lengths: target_lengths.txt
+target_file: "data/evaluationtargets.fa"
+target_embeddings: 'targets_2000.pt'
+target_names: 'targetnames2000.pickle'
+target_lengths: 'target_lengths_2000.pickle'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-5"
 num_threads: 16
 device: 'cpu'

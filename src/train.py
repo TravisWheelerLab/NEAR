@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
 from src.callbacks import CallbackSet
 import time
-from src.train_config import *
 import yaml
 import argparse
 from src.utils.util import (
