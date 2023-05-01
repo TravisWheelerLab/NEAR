@@ -107,6 +107,20 @@ def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[s
 
     return filtered_scores
 
+def get_target_embeddings(arg_list, normalize_embeddings = True):
+    target_data, model, output_path, index, unrolled_names = arg_list
+
+    target_names, targets, lengths = _calc_embeddings(target_data, model)
+
+    with open('targetnames2000.pickle', 'wb') as handle:
+        pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open('targets2000.pickle', 'wb') as handle:
+        pickle.dump(targets, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('target_lengths_2000.pickle', 'wb') as handle:
+        pickle.dump(targets, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 
 @torch.no_grad()
 def filter(arg_list, normalize_embeddings=True):
@@ -142,6 +156,7 @@ def _setup_targets_for_search(
     lengths: List[int],
     index_string,
     nprobe,
+    num_threads = 16,
     normalize_embeddings=True,
     index_device="cpu",
 ):
@@ -161,6 +176,7 @@ def _setup_targets_for_search(
         distance_metric="cosine" if normalize_embeddings else "l2",
         index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
         nprobe=nprobe,
+        num_threads = num_threads,
         device=index_device,
     )
 
@@ -169,8 +185,6 @@ def _setup_targets_for_search(
         index.add(unrolled_targets.to("cpu"))
     else:
         index.add(unrolled_targets)
-
-    faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
 
     return unrolled_names, index
 

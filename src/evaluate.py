@@ -9,7 +9,11 @@ from src.evaluators.contrastive_functional import filter, _setup_targets_for_sea
 from src.data.hmmerhits import FastaFile
 from src.data.eval_utils import get_evaluation_data
 from multiprocessing.pool import ThreadPool as Pool
-
+from src.utils.util import (
+    load_dataset_class,
+    load_evaluator_class,
+    load_model_class,
+)
 HOME = os.environ["HOME"]
 
 
@@ -17,14 +21,16 @@ def evaluate_multiprocessing(_config):
 
     params = SimpleNamespace(**_config)
 
-    params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
 
-    model = params.model_class.load_from_checkpoint(
+    model_class = load_model_class(params.model_name)
+
+    model = model_class.load_from_checkpoint(
         checkpoint_path=params.checkpoint_path,
         map_location=torch.device(params.device),
     ).to(params.device)
 
-    queryfasta = FastaFile(params.queryfile)
+    queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
     q_chunk_size = len(query_sequences) // params.num_threads
 
@@ -39,7 +45,7 @@ def evaluate_multiprocessing(_config):
 
     assert len(lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
-        target_embeddings, target_names, target_lengths, params.index_string, params.nprobe
+        target_embeddings, target_names, target_lengths, params.index_string, params.nprobe, params.num_threads // 4
     )
 
     arg_list = [
@@ -56,7 +62,7 @@ def evaluate_multiprocessing(_config):
 
     pool = Pool(params.num_threads)
 
-    params.logger.info("Beginning search...")
+    print("Beginning search...")
 
     start_time = time.time()
 
@@ -64,7 +70,7 @@ def evaluate_multiprocessing(_config):
         print("Got result")
 
     loop_time = time.time() - start_time
-    params.logger.info(f"Entire search took: {loop_time}.")
+    print(f"Entire search took: {loop_time}.")
     pool.terminate()
 
 
@@ -73,8 +79,10 @@ def evaluate(_config):
     params = SimpleNamespace(**_config)
 
     params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
+    model_class = load_model_class(params.model_name)
+    evaluator_class = load_evaluator_class(params.evaluator_name)
 
-    model = params.model_class.load_from_checkpoint(
+    model = model_class.load_from_checkpoint(
         checkpoint_path=params.checkpoint_path,
         map_location=torch.device(params.device),
     ).to(params.device)
@@ -85,7 +93,7 @@ def evaluate(_config):
     params.evaluator_args["target_sequences"] = target_sequences
     params.evaluator_args["hmmer_hits_max"] = hmmer_hits_max
 
-    evaluator = params.evaluator_class(**params.evaluator_args)
+    evaluator = evaluator_class(**params.evaluator_args)
 
     evaluator.evaluate(model_class=model)
 
@@ -101,7 +109,7 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
 
-    if _config.num_threads > 1:
+    if _config["num_threads"] > 1:
         evaluate_multiprocessing(_config)
     else:
         evaluate(_config)

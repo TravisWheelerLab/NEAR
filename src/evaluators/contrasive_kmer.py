@@ -31,13 +31,8 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
             for i in range(self.num_random_matrices)
         ]  # should these be between 0 and 1 since we just normalized? yes they are random normal...
 
-<<<<<<< HEAD
         self.W = 10
         self.step_size = 1
-=======
-        self.W = 15
-        self.step_size = 10
->>>>>>> main
 
     def transform(self, sequence_embeddings: List[torch.Tensor]):
         transformed_sequence_embeddings = []
@@ -49,18 +44,6 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
             for random_matrix in self.random_matrices:
                 transformed_embedding = torch.mm(normalized_embedding.squeeze(1), random_matrix)
                 transformed_sequence_embeddings.append(transformed_embedding)
-<<<<<<< HEAD
-
-=======
-            # for amino_embedding in sequence_embedding:
-            #     transformed_amino_embeddings = []
-            #     normalized_embedding = nn.InstanceNorm1d(amino_embedding)
-            #     for random_matrix in self.random_matrices:
-            #         transformed_embedding = torch.mm(random_matrix, normalized_embedding)
-            #         transformed_amino_embeddings.append(transformed_embedding)
-
-            #     transformed_sequence_embeddings.append(transformed_amino_embeddings)
->>>>>>> main
         return transformed_sequence_embeddings  # list of tensors of shape 506,256
 
     def reduce(self, sequence_embeddings: List[torch.Tensor]):
@@ -68,19 +51,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         the fact that they are pairs.. but i should rethink this. when we do search maybe we only want
         to do a distance for each pair
 
-<<<<<<< HEAD
         also maybe want to see whether i can plug 2d vectors into FAISS
 
         The reduction takes a list of sequence embeddinigs of the embedding dim
         and reduces them by creating windows of length W
         and calculating the cosine similarity of each pair of windows
-=======
-        also maybe want to see whether i can plug 2d vectors into FAISS 
-        
-        The reduction takes a list of sequence embeddinigs of the embedding dim
-        and reduces them by creating windows of length W
-        and calculating the cosine similarity of each pair of windows 
->>>>>>> main
         and returning the pairs with the smallest similarity"""
         indices = [i for i in itertools.product(range(self.W), range(self.W)) if i[0] != i[1]]
 
@@ -107,15 +82,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
     @torch.no_grad()
     def _calc_embeddings(
-<<<<<<< HEAD
         self,
         sequence_data: dict,
         model_class,
         apply_random_sequence: bool,
         max_seq_length=512,
-=======
-        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
->>>>>>> main
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -128,15 +99,11 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-<<<<<<< HEAD
             names,
             sequences,
             model_class,
             apply_random_sequence,
             max_seq_length,
-=======
-            names, sequences, model_class, apply_random_sequence, max_seq_length,
->>>>>>> main
         )
 
         assert len(filtered_names) == len(embeddings)
