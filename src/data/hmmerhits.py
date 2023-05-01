@@ -96,7 +96,6 @@ class HmmerHits:
                 print(f"Found an oddly formatted row: {row}")
                 continue
             target_name = row_info[0]
-
             assert "UniRef90" in target_name
 
             query_name = row_info[2]
