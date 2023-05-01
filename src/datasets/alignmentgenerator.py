@@ -328,7 +328,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         seq_len: fixed sequence length"""
 
         with open(ali_path, "r") as file:
-            self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            self.alignment_file_paths = [f for f in file.readlines() if f.strip('\n').endswith('.txt')]
             if training is False:
                 self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
@@ -532,7 +532,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             """
             seqs = [torch.stack(b[0]) for b in batch]
 
-            seqs = torch.concatenate(seqs, dim=0)
+            seqs = torch.cat(seqs, dim=0)
 
             labels = []
 
@@ -576,7 +576,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         torch_indices = [
             torch.as_tensor(seq_indices, dtype=torch.float16) for seq_indices in indices
         ]
-
+        
         if len(encoded_sequences) > 20:
             encoded_sequences = encoded_sequences[:20]
             torch_indices = torch_indices[:20]

@@ -184,7 +184,7 @@ class ResNet1d(pl.LightningModule):
 
     def on_train_epoch_end(self):
         epoch_average = torch.stack(self.training_step_outputs).mean()
-        self.log("training_epoch_average", epoch_average)
+        self.log("loss", epoch_average)
         self.training_step_outputs.clear()  # free memory
 
     def on_train_start(self):
@@ -192,7 +192,7 @@ class ResNet1d(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         epoch_average = torch.stack(self.validation_step_outputs).mean()
-        self.log("validation_epoch_average", epoch_average)
+        self.log("val_loss", epoch_average)
         self.validation_step_outputs.clear()  # free memory
 
 

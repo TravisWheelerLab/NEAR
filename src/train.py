@@ -12,7 +12,8 @@ from src.utils.util import (
     load_dataset_class,
     load_model_class,
 )
-
+from torch import multiprocessing
+multiprocessing.set_start_method("fork")
 HOME = os.environ["HOME"]
 
 
@@ -60,7 +61,9 @@ def train(_config):
         callbacks=CallbackSet.callbacks(),
         logger=logger,
         val_check_interval=0.2,
-    )
+        devices="auto",
+        strategy="ddp_find_unused_parameters_false",
+     )
 
     trainer.fit(
         model,
