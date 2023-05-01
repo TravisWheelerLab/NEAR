@@ -185,18 +185,15 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, 
     pairs for the results that are also in hmmer hits"""
     all_scores = []
     all_pairs = []
-    # if os.path.exists(sorted_pairs_file):
-    #     print("Found sorted pairs")
-    #     with open(sorted_pairs_file, "rb") as pairs:
-    #         sorted_pairs = pickle.load(pairs)
-    #     return sorted_pairs
+    if os.path.exists(sorted_pairs_file):
+        print("Found sorted pairs")
+        with open(sorted_pairs_file, "rb") as pairs:
+            sorted_pairs = pickle.load(pairs)
+        return sorted_pairs
 
     print("Iterating..")
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
         queryname = queryhits.strip(".txt")
-        # if queryname not in hmmerhits.keys():modu
-        #     print(f"Query {queryname} not in hmmer hits")
-        #     continue
 
         with open(f"{modelhitsfile}/{queryhits}", "r") as file:
 
@@ -214,9 +211,9 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, 
     del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
     del all_pairs
-    # print(f"Saving scores file {sorted_pairs_file}")
-    # with open(sorted_pairs_file, "wb") as pairsfile:
-    #     pickle.dump(sorted_pairs, pairsfile)
+    print(f"Saving scores file to {sorted_pairs_file}")
+    with open(sorted_pairs_file, "wb") as pairsfile:
+        pickle.dump(sorted_pairs, pairsfile)
     return sorted_pairs
 
 
@@ -335,7 +332,6 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         all_similarities = np.load(f"{savedir}/all_similarities.npy")
         all_e_values = np.load(f"{savedir}/all_e_values.npy")
         all_biases = np.load(f"{savedir}/all_biases.npy")
-        # all_targets = np.load(f"{savedir}/all_targets.npy")
 
         with open(f"{savedir}/hits_dict.pkl", "rb") as file:
             similarity_hits_dict = pickle.load(file)

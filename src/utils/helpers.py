@@ -25,7 +25,7 @@ __all__ = [
     "stack_contrastive_batch",
     "load_model",
     "non_default_collate",
-    "create_faiss_index"
+    "create_faiss_index",
 ]
 
 TBLOUT_COL_NAMES = [

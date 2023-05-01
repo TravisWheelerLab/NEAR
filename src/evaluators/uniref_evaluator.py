@@ -163,20 +163,6 @@ class UniRefEvaluator(Evaluator):
 
         return filtered_names, embeddings, lengths
 
-    def evaluate_multiprocessing(
-        self, query_names, query_embeddings, target_names, target_embeddings, target_lengths
-    ) -> dict:
-        """Evaluation pipeline.
-
-        runs Faiss clustering and filtering and returns a dictionary of the model's hits.
-        """
-
-        print(f"Found {(len(self.target_seqs))} targets")
-
-        self._setup_targets_for_search(target_embeddings, target_names, target_lengths)
-
-        self.filter(query_embeddings, query_names)
-
     def evaluate(self, model_class) -> dict:
         """Evaluation pipeline.
 

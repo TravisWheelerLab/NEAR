@@ -17,10 +17,7 @@ from src.data.eval_data_config import (
     all_hits_max_file_4,
     all_hits_normal_file_4,
 )
-import pdb
 import numpy as np
-import matplotlib.pyplot as plt
-import os
 import pickle
 import argparse
 

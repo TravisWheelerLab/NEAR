@@ -1,4 +1,5 @@
-"""" Evaluator class for the contrastive CNN model """
+"""" Functional version of the evaluator class. 
+This is preferred when using multiprocessing """
 
 import logging
 import os
@@ -9,7 +10,7 @@ import numpy as np
 import torch
 
 from src.utils import create_faiss_index, encode_string_sequence
-import pickle
+
 logger = logging.getLogger("evaluate")
 
 
@@ -68,7 +69,9 @@ def filter_sequences_by_length(
 
 
 @torch.no_grad()
-def _calc_embeddings(sequence_data, model_class, max_seq_length) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+def _calc_embeddings(
+    sequence_data, model_class, max_seq_length
+) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Calculates the embeddings for the sequences by
     calling the model forward function. Filters the sequences by max/min
     sequence length and returns the filtered sequences/names and embeddings
@@ -78,7 +81,9 @@ def _calc_embeddings(sequence_data, model_class, max_seq_length) -> Tuple[List[s
     names = list(sequence_data.keys())
     sequences = list(sequence_data.values())
 
-    filtered_names, embeddings, lengths = filter_sequences_by_length(names, sequences, model_class, max_seq_length)
+    filtered_names, embeddings, lengths = filter_sequences_by_length(
+        names, sequences, model_class, max_seq_length
+    )
 
     return filtered_names, embeddings, lengths
 
@@ -106,6 +111,7 @@ def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[s
             filtered_scores[name] = distance
 
     return filtered_scores
+
 
 def save_target_embeddings(arg_list):
 
@@ -150,8 +156,8 @@ def _setup_targets_for_search(
     lengths: List[int],
     index_string,
     nprobe,
-    num_threads = 16,
-    normalize_embeddings=True, 
+    num_threads=16,
+    normalize_embeddings=True,
     index_device="cpu",
 ):
     """Creates the Faiss Index object using the unrolled
@@ -170,7 +176,7 @@ def _setup_targets_for_search(
         distance_metric="cosine" if normalize_embeddings else "l2",
         index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
         nprobe=nprobe,
-        num_threads = 1,
+        num_threads=1,
         device=index_device,
     )
 
