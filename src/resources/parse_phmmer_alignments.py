@@ -46,7 +46,10 @@ for f in tqdm.tqdm(glob(tst)):
     for k, target_sequence in enumerate(target_gapped_sequences):
         keep_idx = []
         for i in range(len(target_sequence)):
-            if target_sequence[i] not in ("-", ".") and query_gapped_sequence[i] not in ("-", ".",):
+            if target_sequence[i] not in ("-", ".") and query_gapped_sequence[i] not in (
+                "-",
+                ".",
+            ):
                 keep_idx.append(i)
         # now, add in matches:
         if 256 <= len(keep_idx) <= 300:

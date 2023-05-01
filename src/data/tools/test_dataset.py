@@ -21,7 +21,11 @@ def supconloss(embeddings, labels_1=None, labels_2=None, mask=None):
     embeddings_transposed = embeddings.transpose(-1, -2)
     # batch_size x sequence_length x embedding_dimension
 
-    emb1, emb2 = torch.split(embeddings_transposed, embeddings.shape[0] // 2, dim=0,)
+    emb1, emb2 = torch.split(
+        embeddings_transposed,
+        embeddings.shape[0] // 2,
+        dim=0,
+    )
     emb1 = torch.cat(torch.unbind(emb1, dim=0))  # original seq embeddings
     emb2 = torch.cat(torch.unbind(emb2, dim=0))  # mutated seq embeddings
     # ((batch_size/2) * sequence_length) x embedding_dimension
@@ -77,7 +81,10 @@ if __name__ == "__main__":
     DEVICE = "cuda"
     # device = "cpu"
     model = model_class(
-        learning_rate=1e-5, log_interval=100, in_channels=20, res_block_n_filters=256,
+        learning_rate=1e-5,
+        log_interval=100,
+        in_channels=20,
+        res_block_n_filters=256,
     )
     print("Loaded model")
 

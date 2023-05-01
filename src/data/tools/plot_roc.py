@@ -39,44 +39,42 @@ _, _, all_hits_normal = get_evaluation_data(
 # )
 
 
-BLOSUM_MODEL_RESULTS_PATH_FLAT = "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
+BLOSUM_MODEL_RESULTS_PATH_FLAT = (
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities"
+)
 
-BLOSUM_MODEL_RESULTS_PATH_IVF = "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities-IVF"
+BLOSUM_MODEL_RESULTS_PATH_IVF = (
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/BlosumEvaluation/similarities-IVF"
+)
 
-ALIGNMENT_MODEL_RESULTS_PATH_IVF = "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-IVF"
+ALIGNMENT_MODEL_RESULTS_PATH_IVF = (
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-IVF"
+)
 
-ALIGNMENT_MODEL_RESULTS_PATH_IVF_0 = "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-IVF-0"
+ALIGNMENT_MODEL_RESULTS_PATH_IVF_0 = (
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities-IVF-0"
+)
 
 # align data
 TEMP_DATA_FILE = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits.txt"
-TEMP_DATA_FILE_NORMAL = (
-    "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_normal.txt"
-)
+TEMP_DATA_FILE_NORMAL = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_normal.txt"
 
-TEMP_DATA_FILE_0 = (
-    "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_0.txt"
-)
-TEMP_DATA_FILE_NORMAL_0 = (
-    "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_normal_0.txt"
-)
+TEMP_DATA_FILE_0 = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_0.txt"
+TEMP_DATA_FILE_NORMAL_0 = "/xdisk/twheeler/daphnedemekas/data1_distance_sum_hits_normal_0.txt"
 
 # blosum data
-TEMP_DATA_FILE = (
-    "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_sum_hits.txt"
-)
-TEMP_DATA_FILE_NORMAL = (
-    "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_sum_hits_normal.txt"
-)
+TEMP_DATA_FILE = "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_sum_hits.txt"
+TEMP_DATA_FILE_NORMAL = "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_sum_hits_normal.txt"
 
 # generate_roc_from_sorted_pairs(BLOSUM_MODEL_RESULTS_PATH_IVF, "/xdisk/twheeler/daphnedemekas/sorted_blosum_IVF_pairs.pkl", TEMP_DATA_FILE, all_hits_max, "ResNet1d/eval/blosum_IVF_roc.png")
 # generate_roc_from_sorted_pairs(BLOSUM_MODEL_RESULTS_PATH_IVF, "/xdisk/twheeler/daphnedemekas/sorted_blosum_IVF_pairs_normal.pkl", TEMP_DATA_FILE_NORMAL, all_hits_normal, "ResNet1d/eval/blosum_IVF_roc_normal.png")
 
 
-ALIGNMENT_MODEL_RESULTS_PATH_FLAT = "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities"
-
-TEMP_DATA_FILE_ALIGN_FLAT = (
-    "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_align_flat.txt"
+ALIGNMENT_MODEL_RESULTS_PATH_FLAT = (
+    "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/similarities"
 )
+
+TEMP_DATA_FILE_ALIGN_FLAT = "/xdisk/twheeler/daphnedemekas/blosum_data1_distance_align_flat.txt"
 # generate_roc_from_sorted_pairs(ALIGNMENT_MODEL_RESULTS_PATH_FLAT, "/xdisk/twheeler/daphnedemekas/sorted_alignment_flat_pairs_0.pkl", TEMP_DATA_FILE_ALIGN_FLAT, all_hits_max, "ResNet1d/eval/alignment_flat_roc_0.png")
 # generate_roc_from_sorted_pairs(ALIGNMENT_MODEL_RESULTS_PATH_IVF_0, "/xdisk/twheeler/daphnedemekas/sorted_alignment_IVF_pairs_0_normal.pkl", TEMP_DATA_FILE_NORMAL_0, all_hits_normal, "ResNet1d/eval/alignment_IVF_roc_0_normal.png")
 # NEED TO REDO THIS LAST ONE -- YOU HAD IT AS NORMAL
