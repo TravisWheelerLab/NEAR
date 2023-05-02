@@ -60,8 +60,8 @@ def train(_config):
         callbacks=CallbackSet.callbacks(),
         logger=logger,
         val_check_interval=0.2,
-        devices="auto",
-        strategy="ddp_find_unused_parameters_false",
+        devices=1,
+        #strategy="ddp_find_unused_parameters_false",
      )
 
     trainer.fit(

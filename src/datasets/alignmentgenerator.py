@@ -6,7 +6,7 @@ from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
 import pdb
 import random
-
+import os
 
 class AlignmentGenerator(DataModule):
     """Alignment generator class without indels"""
@@ -297,6 +297,8 @@ class AlignmentGeneratorWithIndels(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
+        if not os.path.exists(alignment_path):
+            return self.__getitem__(idx+1)
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)
@@ -346,6 +348,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
         sequences from an alignment file"""
+
         with open(alignment_file, "r") as file:
             lines = file.readlines()
             subsequences = []
@@ -548,6 +551,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
+        if not os.path.exists(alignment_path):
+            return self.__getitem__(idx + 1)
+
         subsequences, fullsequences = self.parse_alignment(alignment_path)
         if len(subsequences) == 0:
             return self.__getitem__(idx + 1)
