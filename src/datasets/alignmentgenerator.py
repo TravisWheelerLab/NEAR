@@ -4,7 +4,6 @@ import torch
 from src import utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
-import pdb
 import random
 import os
 
@@ -328,7 +327,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         seq_len: fixed sequence length"""
 
         with open(ali_path, "r") as file:
-            self.alignment_file_paths = [f for f in file.readlines() if f.strip('\n').endswith('.txt')]
+            self.alignment_file_paths = [
+                f for f in file.readlines() if f.strip("\n").endswith(".txt")
+            ]
             if training is False:
                 self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
@@ -430,8 +431,6 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         be aligned in the loss function
         if the sequence is longer than the sequence length then
         we can just chop them"""
-
-        # pdb.set_trace()
 
         sequence_length = self.seq_len
         if len(sequence) >= sequence_length:
@@ -580,7 +579,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         torch_indices = [
             torch.as_tensor(seq_indices, dtype=torch.float16) for seq_indices in indices
         ]
-        
+
         if len(encoded_sequences) > 20:
             encoded_sequences = encoded_sequences[:20]
             torch_indices = torch_indices[:20]

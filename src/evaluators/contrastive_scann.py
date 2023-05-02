@@ -119,20 +119,13 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         """ BASED ON MY UNDERSTANDING 
         This should be a matrix 
         and have values for distances for each amino acid in the query sequence """
-        # indices = indices_array[self.comp_func(distances_array, self.distance_threshold)]
-        # distances = distances_array[self.comp_func(distances_array, self.distance_threshold)] #this has shape sequence length x 1000
-        # for each amino, the 1000 target aminos that are closest to that amino
+
         scores, indices = self.filter_scores(scores_array, indices_array)
 
-        # for distance, name in zip(
-        #     distances.ravel().to("cpu").numpy(),
-        #     self.unrolled_names[indices.ravel().to("cpu").numpy()],
-        # ):
         for distance, name in zip(
             scores,
             self.unrolled_names[indices],
         ):
-            # filtered_list.append((name, distance))
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:

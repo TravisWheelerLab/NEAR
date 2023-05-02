@@ -1,5 +1,4 @@
-"""Datasets"""
-# pylint: disable=no-member
+"""Dataset for using BLOSUM substitution matrix for alignments"""
 import logging
 import os
 from random import shuffle

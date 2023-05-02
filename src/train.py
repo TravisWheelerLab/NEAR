@@ -12,6 +12,7 @@ from src.utils.util import (
     load_model_class,
 )
 from torch import multiprocessing
+
 multiprocessing.set_start_method("fork")
 HOME = os.environ["HOME"]
 

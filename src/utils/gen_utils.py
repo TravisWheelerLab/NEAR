@@ -11,7 +11,8 @@ __all__ = [
     "amino_char_to_index",
     "amino_alphabet",
     "encode_string_sequence",
-    "encode_tensor_sequence"]
+    "encode_tensor_sequence",
+]
 
 amino_alphabet = [c for c in "ARNDCQEGHILKMFPSTWYVBZXJ*U"]
 amino_char_to_index = {c: i for i, c in enumerate("ARNDCQEGHILKMFPSTWYVBZXJ*U")}

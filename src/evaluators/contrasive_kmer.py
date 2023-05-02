@@ -1,4 +1,6 @@
-"""" Evaluator class for the contrastive CNN model """
+"""" Evaluator class for the contrastive CNN model 
+This evaluator attempts to reduce the embedding of the sequence using
+a KMER like algorithm and perform nearest neighbor search on the reduced space"""
 
 import itertools
 import logging
@@ -7,11 +9,8 @@ import faiss
 import torch
 from torch import nn
 from typing import Tuple, List
-import pdb
-import os
 import tqdm
 from src.evaluators.contrastive import ContrastiveEvaluator
-from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
 
@@ -107,9 +106,6 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
         )
 
         assert len(filtered_names) == len(embeddings)
-
-        # transformed_embeddings = self.transform(embeddings)
-        # products, maximizers = self.find_maximizers(transformed_embeddings)
 
         print("Reducing...")
         embeddings_minimized = self.reduce(embeddings)
