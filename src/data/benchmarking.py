@@ -179,7 +179,7 @@ def plot_roc_curve(
     plt.close()
 
 
-def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, list]:
+def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple[list, list]:
     """parses the output file from our model
     and returns a list of scores and query-target
     pairs for the results that are also in hmmer hits"""
@@ -266,13 +266,12 @@ def write_datafile(
 
     return numpos_per_evalue, numhits
 
-
-def generate_roc_from_sorted_pairs(
+def generate_roc(
     modelhitsfile,
-    sortedpairsfile: str,
-    filename: str,
-    hmmerhits: dict,
     figure_path: str,
+    hmmerhits: dict,
+    filename: str,
+    sortedpairsfile: str = None,
     numpos_per_evalue=None,
     numhits=None,
 ):
