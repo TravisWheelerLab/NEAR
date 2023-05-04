@@ -69,6 +69,7 @@ def train(_config):
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
+        ckpt_path = 'ResNet1d/version_6/checkpoints/epoch_0_3.50085.ckpt'
     )
 
 

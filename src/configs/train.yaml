@@ -22,7 +22,7 @@ train_dataset_args:
 
 dataloader_args:
     batch_size: 64
-    num_workers: 6
+    num_workers: 12
     drop_last: True
 
 trainer_args:

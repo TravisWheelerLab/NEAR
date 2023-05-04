@@ -185,11 +185,12 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple
     pairs for the results that are also in hmmer hits"""
     all_scores = []
     all_pairs = []
-    if os.path.exists(sorted_pairs_file):
-        print("Found sorted pairs")
-        with open(sorted_pairs_file, "rb") as pairs:
-            sorted_pairs = pickle.load(pairs)
-        return sorted_pairs
+    if sorted_pairs_file:
+        if os.path.exists(sorted_pairs_file):
+            print("Found sorted pairs")
+            with open(sorted_pairs_file, "rb") as pairs:
+                sorted_pairs = pickle.load(pairs)
+            return sorted_pairs
 
     print("Iterating..")
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
@@ -211,9 +212,10 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple
     del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
     del all_pairs
-    print(f"Saving scores file to {sorted_pairs_file}")
-    with open(sorted_pairs_file, "wb") as pairsfile:
-        pickle.dump(sorted_pairs, pairsfile)
+    if sorted_pairs_file:
+        print(f"Saving scores file to {sorted_pairs_file}")
+        with open(sorted_pairs_file, "wb") as pairsfile:
+            pickle.dump(sorted_pairs, pairsfile)
     return sorted_pairs
 
 
