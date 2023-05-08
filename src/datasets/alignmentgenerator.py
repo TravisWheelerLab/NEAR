@@ -4,9 +4,8 @@ import torch
 from src import utils
 from src.datasets import DataModule
 from src.utils.gen_utils import generate_string_sequence
-import pdb
 import random
-
+import os
 
 class AlignmentGenerator(DataModule):
     """Alignment generator class without indels"""
@@ -297,6 +296,8 @@ class AlignmentGeneratorWithIndels(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
+        if not os.path.exists(alignment_path):
+            return self.__getitem__(idx+1)
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)
@@ -326,7 +327,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         seq_len: fixed sequence length"""
 
         with open(ali_path, "r") as file:
-            self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
+            self.alignment_file_paths = [
+                f for f in file.readlines() if f.strip("\n").endswith(".txt")
+            ]
             if training is False:
                 self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
         print(f"Found {len(self.alignment_file_paths)} alignment files")
@@ -346,6 +349,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
         sequences from an alignment file"""
+
         with open(alignment_file, "r") as file:
             lines = file.readlines()
             subsequences = []
@@ -427,8 +431,6 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         be aligned in the loss function
         if the sequence is longer than the sequence length then
         we can just chop them"""
-
-        # pdb.set_trace()
 
         sequence_length = self.seq_len
         if len(sequence) >= sequence_length:
@@ -530,7 +532,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             """
             seqs = [torch.stack(b[0]) for b in batch]
 
-            seqs = torch.concatenate(seqs, dim=0)
+            seqs = torch.cat(seqs, dim=0)
 
             labels = []
 
@@ -548,6 +550,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
+        if not os.path.exists(alignment_path):
+            return self.__getitem__(idx + 1)
+
         subsequences, fullsequences = self.parse_alignment(alignment_path)
         if len(subsequences) == 0:
             return self.__getitem__(idx + 1)

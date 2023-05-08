@@ -26,48 +26,6 @@ def update(d1, d2):
     return c
 
 
-def get_evaluation_data_old(
-    hitsdirpath=None,
-    query_id=4,
-    save_dir=None,
-    targethitsfile="evaltargethmmerhits.pkl",
-    evaltargetfastafile="data/evaluationtargets.fa",
-) -> Tuple[dict, dict, dict]:
-    """Taking advantage of our current data structure of nested directories
-    holding fasta files to quickly get all hmmer hits and sequence dicts for all
-    queries in the input query id file and all target sequences in all of num_files"""
-
-    query_id = str(query_id)
-
-    queryfile = f"{HOME}/prefilter/uniref/split_subset/queries/queries_{query_id}.fa"
-    queryfasta = FastaFile(queryfile)
-    querysequences = queryfasta.data
-    print(f"Number of query sequences: {len(querysequences)}")
-    filtered_query_sequences = {}
-
-    targetsequencefasta = FastaFile(evaltargetfastafile)
-    targetsequences = targetsequencefasta.data
-    print(f"Number of target sequences: {len(targetsequences)}")
-
-    if save_dir is not None:  # only return those that we don't already have
-
-        existing_queries = [f.strip(".txt") for f in os.listdir(save_dir)]
-
-        print(f"Cleaning out {len(existing_queries)} queries that we already have in results...")
-        for query, value in querysequences.items():
-            if query not in existing_queries:
-                filtered_query_sequences.update({query: value})
-
-        querysequences = filtered_query_sequences
-
-    with open(targethitsfile, "rb") as file:
-        all_target_hits = pickle.load(file)
-
-    print(f"Number of target HMMER hits: {len(all_target_hits)}")
-
-    return querysequences, targetsequences, all_target_hits
-
-
 def get_evaluation_data(
     query_id=4,
     save_dir=None,

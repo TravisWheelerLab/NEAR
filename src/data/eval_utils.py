@@ -33,6 +33,9 @@ def get_evaluation_data(
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
     queries in the input query id file and all target sequences in all of num_files"""
 
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+
     queryfasta = FastaFile(queryfile)
     querysequences = queryfasta.data
     print(f"Number of query sequences: {len(querysequences)}")
@@ -221,12 +224,6 @@ def plot_roc_curve(
 
         if idx % 50000 == 0 and (100 * (1 - filtration[0]) > 75):
             recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
-
-            # print(
-            #     f"num_Ps: {num_positives},  num_Ds: {num_decoys},  \
-            #         recall: {[100 * (recall[i]) for i in range(num_thresholds)]}, filtration: {[100 * (1 - filtration[i]) for i in range(num_thresholds)]}"
-            # )
-
             filtrations.append([100 * (1 - filtration[i]) for i in range(num_thresholds)])
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
 

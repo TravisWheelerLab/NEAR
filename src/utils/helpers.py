@@ -18,14 +18,6 @@ log = logging.getLogger(__name__)
 seed(1)
 
 __all__ = [
-    "stack_vae_batch",
-    "esm_toks",
-    "parse_labels",
-    "AAIndexFFT",
-    "encode_with_aaindex",
-    "pad_sequences",
-    "create_faiss_index",
-    "handle_figure_path",
     "fasta_from_file",
     "to_dict",
     "pad_contrastive_batches",
@@ -33,6 +25,7 @@ __all__ = [
     "stack_contrastive_batch",
     "load_model",
     "non_default_collate",
+    "create_faiss_index",
 ]
 
 TBLOUT_COL_NAMES = [
@@ -103,13 +96,14 @@ def create_faiss_index(
     embed_dim,
     index_string,
     nprobe,
+    num_threads,
     device="cpu",
     distance_metric="cosine",
 ):
 
     log.info(f"using index with {distance_metric} metric.")
 
-    faiss.omp_set_num_threads(int(os.environ.get("NUM_THREADS")))
+    faiss.omp_set_num_threads(num_threads)
 
     if index_string == "IndexIVFFlat":
         quantizer = faiss.IndexFlatL2(embed_dim)  # the other index

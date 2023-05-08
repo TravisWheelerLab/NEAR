@@ -5,13 +5,14 @@ from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
 from src.callbacks import CallbackSet
 import time
-from src.train_config import *
 import yaml
 import argparse
 from src.utils.util import (
     load_dataset_class,
     load_model_class,
 )
+from torch import multiprocessing
+
 
 HOME = os.environ["HOME"]
 
@@ -60,17 +61,20 @@ def train(_config):
         callbacks=CallbackSet.callbacks(),
         logger=logger,
         val_check_interval=0.2,
-    )
+        devices=1,
+        #strategy="ddp_find_unused_parameters_false",
+     )
 
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
+        ckpt_path = 'ResNet1d/version_12/checkpoints/epoch_1_3.31192.ckpt'
     )
 
 
 if __name__ == "__main__":
-
+    # multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
 

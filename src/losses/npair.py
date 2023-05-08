@@ -14,7 +14,7 @@ def cross_entropy(logits, target, size_average=True):
 
 
 class NpairLoss(nn.Module):
-    """the multi-class n-pair loss"""
+    """N pairs loss"""
 
     def __init__(self, l2_reg=0.02):
         super(NpairLoss, self).__init__()

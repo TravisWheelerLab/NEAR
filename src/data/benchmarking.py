@@ -74,7 +74,7 @@ def plot_mean_e_values(
     plt.ylim(-20, 0)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
-    plt.savefig(f"ResNet1d/eval/{outputfilename}.png")
+    plt.savefig(f"ResNet1d/results/{outputfilename}.png")
 
 
 def plot_lengths(distance_list1, distance_list2, distance_list3):
@@ -179,24 +179,22 @@ def plot_roc_curve(
     plt.close()
 
 
-def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, list]:
+def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple[list, list]:
     """parses the output file from our model
     and returns a list of scores and query-target
     pairs for the results that are also in hmmer hits"""
     all_scores = []
     all_pairs = []
-    # if os.path.exists(sorted_pairs_file):
-    #     print("Found sorted pairs")
-    #     with open(sorted_pairs_file, "rb") as pairs:
-    #         sorted_pairs = pickle.load(pairs)
-    #     return sorted_pairs
+    if sorted_pairs_file:
+        if os.path.exists(sorted_pairs_file):
+            print("Found sorted pairs")
+            with open(sorted_pairs_file, "rb") as pairs:
+                sorted_pairs = pickle.load(pairs)
+            return sorted_pairs
 
     print("Iterating..")
     for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
         queryname = queryhits.strip(".txt")
-        # if queryname not in hmmerhits.keys():modu
-        #     print(f"Query {queryname} not in hmmer hits")
-        #     continue
 
         with open(f"{modelhitsfile}/{queryhits}", "r") as file:
 
@@ -214,9 +212,10 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str) -> Tuple[list, 
     del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
     del all_pairs
-    # print(f"Saving scores file {sorted_pairs_file}")
-    # with open(sorted_pairs_file, "wb") as pairsfile:
-    #     pickle.dump(sorted_pairs, pairsfile)
+    if sorted_pairs_file:
+        print(f"Saving scores file to {sorted_pairs_file}")
+        with open(sorted_pairs_file, "wb") as pairsfile:
+            pickle.dump(sorted_pairs, pairsfile)
     return sorted_pairs
 
 
@@ -269,13 +268,12 @@ def write_datafile(
 
     return numpos_per_evalue, numhits
 
-
-def generate_roc_from_sorted_pairs(
+def generate_roc(
     modelhitsfile,
-    sortedpairsfile: str,
-    filename: str,
-    hmmerhits: dict,
     figure_path: str,
+    hmmerhits: dict,
+    filename: str,
+    sortedpairsfile: str = None,
     numpos_per_evalue=None,
     numhits=None,
 ):
@@ -332,10 +330,10 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     into lists and dictionaries"""
 
     if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
+        print(f"Getting saved data from {savedir}/all_similarities.npy")
         all_similarities = np.load(f"{savedir}/all_similarities.npy")
         all_e_values = np.load(f"{savedir}/all_e_values.npy")
         all_biases = np.load(f"{savedir}/all_biases.npy")
-        # all_targets = np.load(f"{savedir}/all_targets.npy")
 
         with open(f"{savedir}/hits_dict.pkl", "rb") as file:
             similarity_hits_dict = pickle.load(file)
@@ -357,14 +355,16 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         queryname = queryhits.strip(".txt")
         with open(f"{hits_path}/{queryhits}", "r") as similarities:
             if queryname not in all_hits_max:
+                print(f"Query: {queryname}")
                 continue
             similarity_hits_dict[queryname] = {}
 
             for line in similarities:
                 if "Distance" in line:
                     continue
-                target = line.split()[0].strip("\n")
+                target = line.split()[0].strip("\n").strip(".pt")
                 if target not in all_hits_max[queryname]:
+                    #print(f"Target: {target}")
                     continue
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)

@@ -1,9 +1,7 @@
 """" Evaluator class for the contrastive CNN model """
 
 import logging
-import os
-import pdb
-from typing import List, Tuple
+from typing import List
 
 import faiss
 import numpy as np
@@ -11,7 +9,6 @@ import torch
 
 from src.evaluators.uniref_evaluator import UniRefEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
-import time
 
 logger = logging.getLogger("evaluate")
 

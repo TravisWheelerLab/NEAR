@@ -19,7 +19,9 @@ class ResNet1d(pl.LightningModule):
         in_channels: int = 128,
         n_res_blocks: int = 8,
         training: bool = True,
-        indels=False,
+        padding: str = "same",
+        padding_mode: str = "circular",
+        indels=True,
     ):
 
         super(ResNet1d, self).__init__()
@@ -31,8 +33,8 @@ class ResNet1d(pl.LightningModule):
         self.res_block_kernel_size = res_block_kernel_size
         self.n_res_blocks = n_res_blocks
         self.res_bottleneck_factor = 1
-        self.padding = "same"
-        self.padding_mode = "circular"
+        self.padding = padding
+        self.padding_mode = padding_mode
         self.indels = indels
 
         self.log_interval = log_interval
@@ -183,16 +185,19 @@ class ResNet1d(pl.LightningModule):
 
     def on_train_epoch_end(self):
         epoch_average = torch.stack(self.training_step_outputs).mean()
-        self.log("training_epoch_average", epoch_average)
+        self.log("loss", epoch_average)
         self.training_step_outputs.clear()  # free memory
 
     def on_train_start(self):
         self.log("hp_metric", self.learning_rate)
 
     def on_validation_epoch_end(self):
-        epoch_average = torch.stack(self.validation_step_outputs).mean()
-        self.log("validation_epoch_average", epoch_average)
-        self.validation_step_outputs.clear()  # free memory
+        if len(self.validation_step_outputs) > 0:
+            epoch_average = torch.stack(self.validation_step_outputs).mean()
+            self.log("val_loss", epoch_average)
+            self.validation_step_outputs.clear()  # free memory
+        else:
+            print("Validation output empty")
 
 
 class ResNet1dMultiPos(ResNet1d):
