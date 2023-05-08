@@ -9,10 +9,10 @@ target_file: "data/evaluationtargets.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-10-new-real"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/esm"
 num_threads: 16
 device: 'cpu'
-nprobe: 10
+nprobe: 5
 normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
@@ -22,9 +22,9 @@ evaluator_args:
     model_device: "cpu" 
     index_device: "cpu"
     index_string: "IVF256,Flat"  # IVF256,PQ16", #IVF256
-    nprobe: 10
+    nprobe: 5
     normalize_embeddings: True
     minimum_seq_length: 0
     max_seq_length: 512
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-10-new-real"
+    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/esm"
     num_threads: 16

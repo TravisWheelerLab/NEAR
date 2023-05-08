@@ -33,6 +33,9 @@ def get_evaluation_data(
     holding fasta files to quickly get all hmmer hits and sequence dicts for all
     queries in the input query id file and all target sequences in all of num_files"""
 
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+
     queryfasta = FastaFile(queryfile)
     querysequences = queryfasta.data
     print(f"Number of query sequences: {len(querysequences)}")

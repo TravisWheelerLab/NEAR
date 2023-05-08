@@ -13,7 +13,7 @@ from src.utils.util import (
 )
 from torch import multiprocessing
 
-multiprocessing.set_start_method("fork")
+
 HOME = os.environ["HOME"]
 
 
@@ -69,12 +69,12 @@ def train(_config):
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path = 'ResNet1d/version_6/checkpoints/epoch_0_3.50085.ckpt'
+        ckpt_path = 'ResNet1d/version_12/checkpoints/epoch_1_3.31192.ckpt'
     )
 
 
 if __name__ == "__main__":
-
+    # multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
 

@@ -74,7 +74,7 @@ def plot_mean_e_values(
     plt.ylim(-20, 0)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
-    plt.savefig(f"ResNet1d/eval/{outputfilename}.png")
+    plt.savefig(f"ResNet1d/results/{outputfilename}.png")
 
 
 def plot_lengths(distance_list1, distance_list2, distance_list3):
@@ -330,6 +330,7 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     into lists and dictionaries"""
 
     if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
+        print(f"Getting saved data from {savedir}/all_similarities.npy")
         all_similarities = np.load(f"{savedir}/all_similarities.npy")
         all_e_values = np.load(f"{savedir}/all_e_values.npy")
         all_biases = np.load(f"{savedir}/all_biases.npy")
@@ -354,14 +355,16 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         queryname = queryhits.strip(".txt")
         with open(f"{hits_path}/{queryhits}", "r") as similarities:
             if queryname not in all_hits_max:
+                print(f"Query: {queryname}")
                 continue
             similarity_hits_dict[queryname] = {}
 
             for line in similarities:
                 if "Distance" in line:
                     continue
-                target = line.split()[0].strip("\n")
+                target = line.split()[0].strip("\n").strip(".pt")
                 if target not in all_hits_max[queryname]:
+                    #print(f"Target: {target}")
                     continue
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)

@@ -92,18 +92,25 @@ def evaluate_multiprocessing(_config):
 
     target_embeddings = torch.load(params.target_embeddings)
 
-    with open(params.target_names, "rb") as file_handle:
-        target_names = pickle.load(file_handle)
+    if params.target_names.endswith('.pickle'):
 
-    with open(params.target_lengths, "rb") as file_handle:
-        target_lengths = pickle.load(file_handle)
+        with open(params.target_names, "rb") as file_handle:
+            target_names = pickle.load(file_handle)
 
-    # with open(params.target_names, "r") as f:
-    #     target_names = f.readlines()
-    #     target_names = [t.strip("\n") for t in target_names]
-    # with open(params.target_lengths, "r") as f:
-    #     target_lengths = f.readlines()
-    #     lengths = [int(t.strip("\n")) for t in target_lengths]
+        with open(params.target_lengths, "rb") as file_handle:
+            target_lengths = pickle.load(file_handle)
+    
+    elif params.target_names.endswith('.txt'):
+
+        with open(params.target_names, "r") as f:
+            target_names = f.readlines()
+            target_names = [t.strip("\n") for t in target_names]
+        with open(params.target_lengths, "r") as f:
+            target_lengths = f.readlines()
+            target_lengths = [int(t.strip("\n")) for t in target_lengths]
+    
+    else:
+        raise Exception("Saved target data format not understood")
 
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
@@ -146,7 +153,7 @@ def evaluate(_config):
 
     params = SimpleNamespace(**_config)
 
-    params.logger.info(f"Loading from checkpoint in {params.checkpoint_path}")
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
     model_class = load_model_class(params.model_name)
     evaluator_class = load_evaluator_class(params.evaluator_name)
 
@@ -157,9 +164,10 @@ def evaluate(_config):
     query_sequences, target_sequences, hmmer_hits_max = get_evaluation_data(
         params.query_file, params.evaluator_args["output_path"]
     )
-    params.evaluator_args["query_seqyebces"] = query_sequences
-    params.evaluator_args["target_sequences"] = target_sequences
+    params.evaluator_args["query_seqs"] = query_sequences
+    params.evaluator_args["target_seqs"] = target_sequences
     params.evaluator_args["hmmer_hits_max"] = hmmer_hits_max
+
 
     evaluator = evaluator_class(**params.evaluator_args)
 

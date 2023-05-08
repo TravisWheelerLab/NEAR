@@ -112,7 +112,7 @@ class Results:
             title=evaluemeanstitle,
         )
         if plot_roc:
-            generate_roc(model_results_path, hmmer_hits_dict, roc_filepath, temp_file)
+            generate_roc(model_results_path, roc_filepath, hmmer_hits_dict, temp_file)
 
 
 def evaluate(

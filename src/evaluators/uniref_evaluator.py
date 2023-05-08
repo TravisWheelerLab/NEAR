@@ -29,7 +29,6 @@ class UniRefEvaluator(Evaluator):
         hmmer_hits_max: dict,
         encoding_func,
         model_device,
-        figure_path,
         select_random_aminos=False,
         minimum_seq_length=256,
         max_seq_length=512,
@@ -57,8 +56,6 @@ class UniRefEvaluator(Evaluator):
                 If None, we use src.utils.encode_string_sequence
             model_device: str
                 (cpu or cuda)
-            figure_path: str
-                where to save the ROC plot
             select_random_aminos: bool
             minimum_seq_length: int
                 we will cut all sequences in the search space
@@ -82,7 +79,6 @@ class UniRefEvaluator(Evaluator):
 
         self.encoding_func = encode_string_sequence if encoding_func is None else encoding_func
         self.add_random_sequence: bool = add_random_sequence
-        self.figure_path: str = figure_path
         self.nprobe: int = nprobe
         self.model_device: str = model_device
         self.minimum_seq_length: int = minimum_seq_length

@@ -14,7 +14,7 @@ model_args:
     res_block_kernel_size: 3
     n_res_blocks: 8
     padding: "same"
-    padding_mode: "circular"
+    padding_mode: "zeros"
 
 train_dataset_args:
     ali_path: "/xdisk/twheeler/daphnedemekas/train_paths-final.txt"

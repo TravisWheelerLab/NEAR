@@ -15,7 +15,7 @@ def sequence_representation(embeddings, max_len = 100):
     return embed_tt
 
 def amino_representation(embeddings):
-    amino_embeddings = torch.cat(embeddings[::1000], dim = 0)
+    amino_embeddings = torch.cat(embeddings[::20000], dim = 0)
     return amino_embeddings
 
 seq_embeddings = amino_representation(embeddings)
@@ -31,7 +31,9 @@ plot_axes.scatter3D(tsne_proj[:,0],tsne_proj[:,1], tsne_proj[:,2], alpha = 0.3)
 plot_axes.set_xlabel('x')
 plot_axes.set_ylabel('y')
 plot_axes.set_zlabel('z')
-
+plt.xlim(-100,0)
+plt.ylim(0,400)
+plot_axes.set_zlim(-100,0)
 plt.title("Amino-wise t-SNE ")
 
 plt.savefig('tnse3d_.png')
