@@ -214,6 +214,10 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple
 
     sortedidx = np.argsort(all_scores)[::-1]
     sorted_pairs = [all_pairs[i] for i in sortedidx]
+    if sorted_pairs_file:
+        print(f"Saving scores file to {sorted_pairs_file}")
+        with open(sorted_pairs_file, "wb") as pairsfile:
+            pickle.dump(sorted_pairs, pairsfile)
     return sorted_pairs
 
 
@@ -366,6 +370,7 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         queryname = queryhits.strip(".txt")
         with open(f"{hits_path}/{queryhits}", "r") as similarities:
             if queryname not in all_hits_max:
+                print(f"Query: {queryname}")
                 continue
             similarity_hits_dict[queryname] = {}
 
@@ -374,7 +379,6 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
                 if target not in all_hits_max[queryname]:
-                    # print(f"Target: {target}")
                     continue
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)

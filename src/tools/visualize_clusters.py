@@ -1,4 +1,4 @@
-#%%import torch
+
 import matplotlib.pyplot as plt
 import torch
 from sklearn.manifold import TSNE
@@ -26,6 +26,7 @@ tsne = TSNE(3, verbose=1)
 tsne_proj = tsne.fit_transform(seq_embeddings)
 
 print(f"Projection shape : {tsne_proj.shape})")
+
 sns.set_style("darkgrid")
 plt.figure(figsize=(5, 4))
 plot_axes = plt.axes(projection="3d")
@@ -39,3 +40,4 @@ plot_axes.set_zlim(-100, 0)
 plt.title("Amino-wise t-SNE ")
 
 plt.savefig("tnse3d_.png")
+

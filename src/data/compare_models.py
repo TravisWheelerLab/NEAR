@@ -149,7 +149,6 @@ def compare(
     axis.set_ylabel("recall")
     plt.savefig("ResNet1d/results/compared_roc.png")
 
-
 def evaluate(
     query_id=4,
     models: list = ["align", "knn"],

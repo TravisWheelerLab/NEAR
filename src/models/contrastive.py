@@ -187,6 +187,8 @@ class ResNet1d(pl.LightningModule):
             epoch_average = torch.stack(self.validation_step_outputs).mean()
             self.log("val_loss", epoch_average)
             self.validation_step_outputs.clear()  # free memory
+        else:
+            print("Validation output empty")
 
 
 class ResNet1dMultiPos(ResNet1d):

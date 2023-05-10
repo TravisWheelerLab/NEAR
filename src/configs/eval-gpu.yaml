@@ -22,4 +22,3 @@ evaluator_args:
     output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/v27-10"
     num_threads: 1
     target_embeddings_path: 'target_embeddings_v27.pt'
-

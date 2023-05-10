@@ -56,12 +56,13 @@ def train(_config):
         logger=logger,
         val_check_interval=0.2,
         devices=1,
-    )
-
+        #strategy="ddp_find_unused_parameters_false",
+     )
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
+
         ckpt_path=params.checkpoint,
     )
 

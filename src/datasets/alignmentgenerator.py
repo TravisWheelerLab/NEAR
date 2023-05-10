@@ -7,7 +7,6 @@ from src.utils.gen_utils import generate_string_sequence
 import random
 import os
 
-
 class AlignmentGenerator(DataModule):
     """Alignment generator class without indels"""
 

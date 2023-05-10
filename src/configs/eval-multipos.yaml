@@ -18,5 +18,5 @@ evaluator_args:
     normalize_embeddings: True
     minimum_seq_length: 0
     max_seq_length: 2000
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/SCL-5"
+    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-5-new"
     num_threads: 16

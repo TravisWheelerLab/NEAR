@@ -87,8 +87,7 @@ def profile(_config):
 
     else:
         names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
-
-
+        
 def evaluate_multiprocessing(_config):
 
     params = SimpleNamespace(**_config)
