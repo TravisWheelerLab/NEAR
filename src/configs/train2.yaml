@@ -17,7 +17,7 @@ model_args:
     padding_mode: "zeros"
 
 train_dataset_args:
-    ali_path: "/xdisk/twheeler/daphnedemekas/train_paths-final.txt"
+    ali_path: "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
     seq_len: 128
 
 dataloader_args:
@@ -32,6 +32,6 @@ trainer_args:
     precision: 16
 
 val_dataset_args:
-    ali_path: "/xdisk/twheeler/daphnedemekas/valpaths-final.txt"
+    ali_path: "/xdisk/twheeler/daphnedemekas/eval_paths2.txt"
     seq_len: 128
     training: False

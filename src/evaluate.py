@@ -10,6 +10,7 @@ from src.evaluators.contrastive_functional import (
     _setup_targets_for_search,
     save_target_embeddings,
 )
+from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
 from src.data.eval_utils import get_evaluation_data
 from multiprocessing.pool import ThreadPool as Pool
@@ -23,7 +24,7 @@ import pickle
 HOME = os.environ["HOME"]
 
 
-def save_off_targets(target_sequences, num_threads, model, max_seq_length, model_device):
+def save_off_targets(target_sequences, num_threads, model, max_seq_length, device, savedir):
 
     t_chunk_size = len(target_sequences) // num_threads
 
@@ -53,15 +54,39 @@ def save_off_targets(target_sequences, num_threads, model, max_seq_length, model
         target_lengths += lengths
         target_embeddings += embeddings
 
-    torch.save(target_embeddings, "targets_2000.pt")
-    with open("targetnames2000.pickle", "wb") as handle:
+    torch.save(target_embeddings, savedir)
+    with open(f"{savedir.strip('.pt')}_names.pickle", "wb") as handle:
         pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    with open("target_lengths_2000.pickle", "wb") as handle:
-        pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(f"{savedir.strip('.pt')}_lengths.pickle", "wb") as handle:
+       pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
+
+    return target_names, target_lengths, target_embeddings
+
+
+def profile(_config):
+
+    params = SimpleNamespace(**_config)
+
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+    model_class = load_model_class(params.model_name)
+    evaluator_class = load_evaluator_class(params.evaluator_name)
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+    if params.num_threads > 1:
+        q_chunk_size = len(query_sequences) // params.num_threads
+        names, sequences, lengths = embed_multithread(query_sequences, model, q_chunk_size)
+
+    else:
+        names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
 
 
 def evaluate_multiprocessing(_config):
@@ -82,35 +107,36 @@ def evaluate_multiprocessing(_config):
 
     q_chunk_size = len(query_sequences) // params.num_threads
 
-    if not os.path.exists(params.target_names):
+    if not os.path.exists(params.target_embeddings):
         print("No saved target embeddings. Calculating them now.")
         targetfasta = FastaFile(params.target_file)
         target_sequences = targetfasta.data
-        save_off_targets(
-            target_sequences, params.num_threads, model, params.max_seq_length, params.device
+
+        target_names, target_lengths, target_embeddings = save_off_targets(
+            target_sequences, params.num_threads, model, params.max_seq_length, params.device, params.target_embeddings
         )
-
-    target_embeddings = torch.load(params.target_embeddings)
-
-    if params.target_names.endswith('.pickle'):
-
-        with open(params.target_names, "rb") as file_handle:
-            target_names = pickle.load(file_handle)
-
-        with open(params.target_lengths, "rb") as file_handle:
-            target_lengths = pickle.load(file_handle)
-    
-    elif params.target_names.endswith('.txt'):
-
-        with open(params.target_names, "r") as f:
-            target_names = f.readlines()
-            target_names = [t.strip("\n") for t in target_names]
-        with open(params.target_lengths, "r") as f:
-            target_lengths = f.readlines()
-            target_lengths = [int(t.strip("\n")) for t in target_lengths]
-    
     else:
-        raise Exception("Saved target data format not understood")
+        target_embeddings = torch.load(params.target_embeddings)
+
+        if params.target_names.endswith('.pickle'):
+
+            with open(params.target_names, "rb") as file_handle:
+                target_names = pickle.load(file_handle)
+
+            with open(params.target_lengths, "rb") as file_handle:
+                target_lengths = pickle.load(file_handle)
+        
+        elif params.target_names.endswith('.txt'):
+
+            with open(params.target_names, "r") as f:
+                target_names = f.readlines()
+                target_names = [t.strip("\n") for t in target_names]
+            with open(params.target_lengths, "r") as f:
+                target_lengths = f.readlines()
+                target_lengths = [int(t.strip("\n")) for t in target_lengths]
+        
+        else:
+            raise Exception("Saved target data format not understood")
 
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
@@ -178,14 +204,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
-
+    
     args = parser.parse_args()
     configfile = args.config.strip(".yaml")
 
+
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
-
-    if _config["num_threads"] > 1:
+    if _config["profiler"]:
+        profile(_config)
+    elif _config["num_threads"] > 1:
         evaluate_multiprocessing(_config)
     else:
         evaluate(_config)

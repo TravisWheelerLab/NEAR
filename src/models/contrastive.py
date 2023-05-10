@@ -153,15 +153,6 @@ class ResNet1d(pl.LightningModule):
         e1 = torch.cat(torch.unbind(e1, dim=0))  # original seq embeddings
         e2 = torch.cat(torch.unbind(e2, dim=0))  # mutated seq embeddings
         # ((batch_size/2) * sequence_length) x embedding_dimension
-
-        if self.global_step % self.log_interval == 0:
-            with torch.no_grad():
-                fig = plt.figure(figsize=(10, 10))
-                arr = torch.matmul(e1, e2.T).to("cpu").detach().numpy()
-                arr = arr.astype(float)
-                plt.imshow(arr)
-                plt.colorbar()
-                self.logger.experiment.add_figure(f"image", plt.gcf(), global_step=self.global_step)
         # input is ((batch_size/2) x 2 x embedding_dimension)
 
         loss = self.loss_func(
@@ -180,7 +171,7 @@ class ResNet1d(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optim = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        optim = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optim
 
     def on_train_epoch_end(self):
@@ -196,8 +187,7 @@ class ResNet1d(pl.LightningModule):
             epoch_average = torch.stack(self.validation_step_outputs).mean()
             self.log("val_loss", epoch_average)
             self.validation_step_outputs.clear()  # free memory
-        else:
-            print("Validation output empty")
+
 
 
 class ResNet1dMultiPos(ResNet1d):

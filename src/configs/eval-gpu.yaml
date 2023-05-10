@@ -3,11 +3,11 @@ evaluator_name: "ContrastiveEvaluator"
 description: "Use CPU with IVF optimization and multithreading"
 index_sring: "IVF256,Flat"
 log_verbosity: logging.INFO
-checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/version_25/checkpoints/epoch_4_2.86923.ckpt
+checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/version_27/checkpoints/epoch_0_2.70480.ckpt
 query_file: "data/evaluationqueries.fa"
-target_embeddings: 'target_embeddings.pt'
-target_names: target_names.txt
-target_lengths: target_lengths.txt
+target_embeddings: 'target_embeddings_v27.pt'
+target_names: 'target_embeddings_v27_names.pickle'
+target_lengths: 'target_embeddings_v27_lengths.pickle'
 num_threads: 1
 device: "cuda"
 evaluator_args:
@@ -18,7 +18,8 @@ evaluator_args:
     nprobe: 10
     normalize_embeddings: True
     minimum_seq_length: 0
-    max_seq_length: 2000
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/IVF-10-new-real"
+    max_seq_length: 512
+    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/v27-10"
     num_threads: 1
+    target_embeddings_path: 'target_embeddings_v27.pt'
 
