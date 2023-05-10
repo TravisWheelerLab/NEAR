@@ -100,6 +100,7 @@ class Results:
             self.e_values,
             self.biases,
             self.numhits,
+            self.pairs
         ) = get_data(model_results_path, hmmer_hits_dict, savedir=data_savedir)
         # pdb.set_trace()
         print("Plotting e values and saving to")
@@ -117,7 +118,7 @@ class Results:
         )
         # pdb.set_trace()
         if plot_roc:
-            generate_roc(model_results_path, roc_filepath, hmmer_hits_dict, temp_file)
+            generate_roc(model_results_path, roc_filepath, hmmer_hits_dict, temp_file, self.similarities, self.pairs)
 
 
 def compare(
