@@ -189,7 +189,6 @@ class ResNet1d(pl.LightningModule):
             self.validation_step_outputs.clear()  # free memory
 
 
-
 class ResNet1dMultiPos(ResNet1d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

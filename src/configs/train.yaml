@@ -4,7 +4,7 @@ dataset_name: "AlignmentGeneratorWithIndels"
 log_dir: "/xdisk/twheeler/daphnedemekas/prefilter"
 log_verbosity: logging.INFO
 seed: 144272510
-
+checkpoint: None
 model_args:
     learning_rate: 0.00001
     log_interval: 1000

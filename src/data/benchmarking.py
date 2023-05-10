@@ -106,7 +106,8 @@ def plot_lengths(distance_list1, distance_list2, distance_list3):
 
 def plot_roc_curve(
     figure_path: str,
-    filtrations: list, recalls: list,
+    filtrations: list,
+    recalls: list,
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     """This plots the ROC curve comparing the
@@ -139,10 +140,13 @@ def plot_roc_curve(
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
 
-def get_filtration_recall(numpos_per_evalue: list,
+
+def get_filtration_recall(
+    numpos_per_evalue: list,
     numhits: int,
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
-    filename: str = "data.txt"):
+    filename: str = "data.txt",
+):
 
     print("Getting Filtration & Recall")
 
@@ -173,10 +177,11 @@ def get_filtration_recall(numpos_per_evalue: list,
 
             filtrations.append([100 * (1 - filtration[i]) for i in range(num_thresholds)])
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
-        
-        elif (100 * (1 - filtration[0]) < 75):
+
+        elif 100 * (1 - filtration[0]) < 75:
             datafile.close()
             return filtrations, recalls
+
 
 def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple[list, list]:
     """parses the output file from our model
@@ -261,15 +266,14 @@ def write_datafile(
 
     return numpos_per_evalue, numhits
 
-def get_roc_data(model_results_path,
-    hmmer_hits_dict: dict,
-    temp_file: str,
-    sortedpairsfile: str = None,
-    **kwargs):
 
-    if os.path.exists(f'{temp_file}_filtration'):
-        filtrations = pickle.load(f'{temp_file}_filtration')
-        recalls = pickle.load(f'{temp_file}_recall')
+def get_roc_data(
+    model_results_path, hmmer_hits_dict: dict, temp_file: str, sortedpairsfile: str = None, **kwargs
+):
+
+    if os.path.exists(f"{temp_file}_filtration"):
+        filtrations = pickle.load(f"{temp_file}_filtration")
+        recalls = pickle.load(f"{temp_file}_recall")
         return filtrations, recalls
 
     sorted_pairs = get_sorted_pairs(model_results_path, sortedpairsfile)
@@ -282,9 +286,9 @@ def get_roc_data(model_results_path,
 
     print(f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall")
 
-    with open(f'{temp_file}_filtration', "wb") as filtrationfile:
+    with open(f"{temp_file}_filtration", "wb") as filtrationfile:
         pickle.dump(filtrations, filtrationfile)
-    with open(f'{temp_file}_recall', "wb") as recallfile:
+    with open(f"{temp_file}_recall", "wb") as recallfile:
         pickle.dump(recalls, recallfile)
     return filtrations, recalls
 
@@ -370,7 +374,7 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
                 if target not in all_hits_max[queryname]:
-                    #print(f"Target: {target}")
+                    # print(f"Target: {target}")
                     continue
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)

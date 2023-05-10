@@ -4,6 +4,7 @@ dataset_name: "AlignmentGeneratorIndelsMultiPos"
 log_dir: "/xdisk/twheeler/daphnedemekas"
 log_verbosity: logging.INFO
 seed: 42
+checkpoint: None
 
 model_args:
     learning_rate: 0.0005

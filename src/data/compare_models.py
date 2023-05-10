@@ -9,8 +9,8 @@ from src.data.benchmarking import (
     generate_roc,
     plot_mean_e_values,
     plot_lengths,
-    get_roc_data, 
-    COLORS
+    get_roc_data,
+    COLORS,
 )
 from src.data.eval_data_config import (
     load_alignment_inputs,
@@ -24,6 +24,7 @@ import pickle
 import argparse
 import matplotlib.pyplot as plt
 import pdb
+
 
 def load_hmmer_hits(query_id: int = 4):
     """Loads pre-saved hmmer hits dictionaries for a given
@@ -114,25 +115,22 @@ class Results:
             _plot_lengths=False,
             title=evaluemeanstitle,
         )
-        #pdb.set_trace()
+        # pdb.set_trace()
         if plot_roc:
             generate_roc(model_results_path, roc_filepath, hmmer_hits_dict, temp_file)
 
 
-
 def compare(
-    query_id=4,
-    modelname: str = "IVF-10",
-    evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+    query_id=4, modelname: str = "IVF-10", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
 ):
 
     print(f"Comparing models with {modelname}")
     all_hits_max, _ = load_hmmer_hits(4)
 
     align = load_alignment_inputs(all_hits_max, "max", modelname)
-    esm = load_esm_inputs(all_hits_max, 'max',"esm")
-    knn = load_knn_inputs(all_hits_max, 'max', "knn-for-homology")
-    knn90 = load_knn_inputs(all_hits_max, 'max', "knn-over-90")
+    esm = load_esm_inputs(all_hits_max, "max", "esm")
+    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
+    knn90 = load_knn_inputs(all_hits_max, "max", "knn-over-90")
 
     _, axis = plt.subplots(figsize=(10, 10))
 
@@ -150,7 +148,6 @@ def compare(
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     plt.savefig("ResNet1d/results/compared_roc.png")
-
 
 
 def evaluate(
@@ -231,6 +228,6 @@ if __name__ == "__main__":
     if "N" in modeinitials:
         modes.append("normal")
 
-    #compare(modelname)
+    # compare(modelname)
 
     evaluate(args.query_id, models, modes, modelname, lengths=args.lengths)

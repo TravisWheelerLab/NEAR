@@ -4,12 +4,12 @@ import tqdm
 import pdb
 import os
 
-trainpaths = '/xdisk/twheeler/daphnedemekas/train_paths2.txt'
-trainpathsclean = open('/xdisk/twheeler/daphnedemekas/train_paths_clean.txt','w')
+trainpaths = "/xdisk/twheeler/daphnedemekas/train_paths2.txt"
+trainpathsclean = open("/xdisk/twheeler/daphnedemekas/train_paths_clean.txt", "w")
 
 fdataset = AlignmentGeneratorWithIndels(trainpaths, 512)
 
-file = open(trainpaths,'r')
+file = open(trainpaths, "r")
 allines = file.readlines()
 file.close()
 
@@ -19,9 +19,9 @@ for idx in tqdm.tqdm(range(INDEX, len(allines))):
     try:
         item = fdataset.__getitem__(idx)
         trainpathsclean.write(allines[idx])
-        #print(idx)
+        # print(idx)
     except Exception as e:
-        if 'is empty' in str(e):
+        if "is empty" in str(e):
             print("Deleting empty file")
             os.remove(allines[idx].strip("\n"))
             continue

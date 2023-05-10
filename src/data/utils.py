@@ -66,6 +66,7 @@ def get_evaluation_data(
 
     return querysequences, targetsequences, all_target_hits
 
+
 def get_new_evaluation_data(
     query_id=0,
     targethitsfile="/xdisk/twheeler/daphnedemekas/prefilter/data/evaluationtargetdict0.pkl",
@@ -87,19 +88,19 @@ def get_new_evaluation_data(
     print(f"Number of target sequences: {len(targetsequences)}")
 
     all_target_hits = {}
-    hmmerhits = HmmerHits(dir_path='/xdisk/twheeler/daphnedemekas/phmmer_max_results')
+    hmmerhits = HmmerHits(dir_path="/xdisk/twheeler/daphnedemekas/phmmer_max_results")
     for i in range(45):
-        target_hits = hmmerhits.get_hits(f'/xdisk/twheeler/daphnedemekas/phmmer_max_results/0/{i}')
+        target_hits = hmmerhits.get_hits(f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/0/{i}")
         all_target_hits.update(target_hits)
         print(len(all_target_hits))
 
-    #update(all_target_hits, target_hits)
-
+    # update(all_target_hits, target_hits)
 
     print(f"Number of target HMMER hits: {len(all_target_hits)}")
 
-    with open(targethitsfile, 'wb') as handle:
+    with open(targethitsfile, "wb") as handle:
         pickle.dump(all_target_hits, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return querysequences, targetsequences, all_target_hits
+
 
 get_new_evaluation_data()

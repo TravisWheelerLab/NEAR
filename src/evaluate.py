@@ -59,7 +59,7 @@ def save_off_targets(target_sequences, num_threads, model, max_seq_length, devic
         pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open(f"{savedir.strip('.pt')}_lengths.pickle", "wb") as handle:
-       pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
@@ -113,20 +113,25 @@ def evaluate_multiprocessing(_config):
         target_sequences = targetfasta.data
 
         target_names, target_lengths, target_embeddings = save_off_targets(
-            target_sequences, params.num_threads, model, params.max_seq_length, params.device, params.target_embeddings
+            target_sequences,
+            params.num_threads,
+            model,
+            params.max_seq_length,
+            params.device,
+            params.target_embeddings,
         )
     else:
         target_embeddings = torch.load(params.target_embeddings)
 
-        if params.target_names.endswith('.pickle'):
+        if params.target_names.endswith(".pickle"):
 
             with open(params.target_names, "rb") as file_handle:
                 target_names = pickle.load(file_handle)
 
             with open(params.target_lengths, "rb") as file_handle:
                 target_lengths = pickle.load(file_handle)
-        
-        elif params.target_names.endswith('.txt'):
+
+        elif params.target_names.endswith(".txt"):
 
             with open(params.target_names, "r") as f:
                 target_names = f.readlines()
@@ -134,7 +139,7 @@ def evaluate_multiprocessing(_config):
             with open(params.target_lengths, "r") as f:
                 target_lengths = f.readlines()
                 target_lengths = [int(t.strip("\n")) for t in target_lengths]
-        
+
         else:
             raise Exception("Saved target data format not understood")
 
@@ -194,7 +199,6 @@ def evaluate(_config):
     params.evaluator_args["target_seqs"] = target_sequences
     params.evaluator_args["hmmer_hits_max"] = hmmer_hits_max
 
-
     evaluator = evaluator_class(**params.evaluator_args)
 
     evaluator.evaluate(model_class=model)
@@ -204,10 +208,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
-    
+
     args = parser.parse_args()
     configfile = args.config.strip(".yaml")
-
 
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)

@@ -1,4 +1,4 @@
-import torch 
+import torch
 import torch.profiler as profiler
 from typing import List, Tuple
 import tqdm
@@ -7,6 +7,7 @@ import itertools
 from multiprocessing.pool import ThreadPool as Pool
 
 import time
+
 
 def embed_with_profile(
     arg_list,
@@ -26,7 +27,7 @@ def embed_with_profile(
     for name, sequence in tqdm.tqdm(zip(names, sequences)):
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
-            #with profiler.profile(profile_memory = True, record_shapes = True, use_cuda = True) as prof:
+            # with profiler.profile(profile_memory = True, record_shapes = True, use_cuda = True) as prof:
             embed = (
                 model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
                 .squeeze()
@@ -34,17 +35,24 @@ def embed_with_profile(
             )
             # return: seq_lenxembed_dim shape
             embeddings.append(embed.to("cpu"))
-            lengths.append(length)            
-            #print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cuda_time_total", row_limit=3))
+            lengths.append(length)
+            # print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cuda_time_total", row_limit=3))
         else:
             num_removed += 1
             filtered_names.remove(name)
             # filtered_sequences.remove(sequence)
     return filtered_names, embeddings, lengths
 
-def embed_multithread(query_sequences, model, q_chunk_size, num_threads = 16):
 
-    arg_list = [(list(data.keys()), list(data.values()), model) for data in [dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)) for i in range(0, len(query_sequences), q_chunk_size)]]
+def embed_multithread(query_sequences, model, q_chunk_size, num_threads=16):
+
+    arg_list = [
+        (list(data.keys()), list(data.values()), model)
+        for data in [
+            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size))
+            for i in range(0, len(query_sequences), q_chunk_size)
+        ]
+    ]
 
     pool = Pool(num_threads)
 
@@ -58,7 +66,6 @@ def embed_multithread(query_sequences, model, q_chunk_size, num_threads = 16):
     loop_time = time.time() - start_time
     print(f"Entire search took: {loop_time}.")
     pool.terminate()
-
 
 
 @torch.no_grad()

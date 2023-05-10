@@ -28,7 +28,6 @@ def train(_config):
 
     val_dataset = dataset_class(**params.val_dataset_args)
 
-
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -41,7 +40,6 @@ def train(_config):
         collate_fn=val_dataset.collate_fn(),
         **params.dataloader_args,
     )
-
 
     logger = TensorBoardLogger(
         save_dir=params.log_dir,
@@ -57,15 +55,15 @@ def train(_config):
         callbacks=CallbackSet.callbacks(),
         logger=logger,
         val_check_interval=0.2,
-        devices=1)
+        devices=1,
+    )
 
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path = "/xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/version_27/checkpoints/epoch_0_2.60146.ckpt"
+        ckpt_path=params.checkpoint,
     )
-
 
 
 if __name__ == "__main__":

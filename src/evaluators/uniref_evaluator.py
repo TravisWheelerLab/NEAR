@@ -13,6 +13,7 @@ import tqdm
 from src.evaluators import Evaluator
 from src.utils import encode_string_sequence
 import pickle
+
 logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
 
@@ -41,7 +42,7 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
         output_path="",
         num_threads=16,
-        target_embeddings_path = None,
+        target_embeddings_path=None,
     ):
         """
         Args:
@@ -179,13 +180,14 @@ class UniRefEvaluator(Evaluator):
                 print("Loading saved target embeddings")
                 target_embeddings = torch.load(self.target_embeddings_path)
 
-
                 with open(f"{self.target_embeddings_path[:-3]}_names.pickle", "rb") as file_handle:
                     target_names = pickle.load(file_handle)
 
-                with open(f"{self.target_embeddings_path[:-3]}_lengths.pickle", "rb") as file_handle:
+                with open(
+                    f"{self.target_embeddings_path[:-3]}_lengths.pickle", "rb"
+                ) as file_handle:
                     target_lengths = pickle.load(file_handle)
-                
+
         else:
             print("Embedding targets...")
             target_names, target_embeddings, target_lengths = self._calc_embeddings(
@@ -213,8 +215,6 @@ class UniRefEvaluator(Evaluator):
             max_seq_length=self.max_seq_length,
         )
         del self.query_seqs
-
-
 
         del self.target_seqs  # remove from memory
 
