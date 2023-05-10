@@ -9,9 +9,9 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 from tqdm import tqdm
-
+import pickle
 from src import models
-from src.data.hmmerhits import FastaFile
+from src.data.hmmerhits import FastaFile, HmmerHits
 
 HOME = os.environ["HOME"]
 
@@ -65,3 +65,4 @@ def get_evaluation_data(
     print(f"Number of target HMMER hits: {len(all_target_hits)}")
 
     return querysequences, targetsequences, all_target_hits
+

@@ -12,6 +12,7 @@ import tqdm
 
 from src.evaluators import Evaluator
 from src.utils import encode_string_sequence
+import pickle
 
 logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
@@ -41,6 +42,7 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
         output_path="",
         num_threads=16,
+        target_embeddings_path=None,
     ):
         """
         Args:
@@ -94,6 +96,7 @@ class UniRefEvaluator(Evaluator):
         self.evalue_threshold = evalue_threshold
         self.output_path = output_path
         self.num_threads = num_threads
+        self.target_embeddings_path = target_embeddings_path
 
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -172,6 +175,38 @@ class UniRefEvaluator(Evaluator):
 
         print(f"Found {(len(self.target_seqs))} targets")
 
+        if self.target_embeddings_path is not None:
+            if os.path.exists(self.target_embeddings_path):
+                print("Loading saved target embeddings")
+                target_embeddings = torch.load(self.target_embeddings_path)
+
+                with open(f"{self.target_embeddings_path[:-3]}_names.pickle", "rb") as file_handle:
+                    target_names = pickle.load(file_handle)
+
+                with open(
+                    f"{self.target_embeddings_path[:-3]}_lengths.pickle", "rb"
+                ) as file_handle:
+                    target_lengths = pickle.load(file_handle)
+
+        else:
+            print("Embedding targets...")
+            target_names, target_embeddings, target_lengths = self._calc_embeddings(
+                sequence_data=self.target_seqs,
+                model_class=model_class,
+                apply_random_sequence=False,
+                max_seq_length=self.max_seq_length,
+            )
+
+            if self.target_embeddings_path is not None:
+                print(f"Saving target embeddings to: {self.target_embeddings_path}")
+
+                torch.save(target_embeddings, self.target_embeddings_path)
+                with open(f"{self.target_embeddings_path}_names.pickle", "wb") as handle:
+                    pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+                with open(f"{self.target_embeddings_path}_lengths.pickle", "wb") as handle:
+                    pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         print("Embedding queries...")
         query_names, query_embeddings, _ = self._calc_embeddings(
             sequence_data=self.query_seqs,
@@ -180,14 +215,6 @@ class UniRefEvaluator(Evaluator):
             max_seq_length=self.max_seq_length,
         )
         del self.query_seqs
-
-        print("Embedding targets...")
-        target_names, target_embeddings, target_lengths = self._calc_embeddings(
-            sequence_data=self.target_seqs,
-            model_class=model_class,
-            apply_random_sequence=False,
-            max_seq_length=self.max_seq_length,
-        )
 
         del self.target_seqs  # remove from memory
 

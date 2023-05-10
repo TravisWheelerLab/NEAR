@@ -3,7 +3,9 @@ import argparse
 import logging
 import tqdm
 from Bio import SearchIO
+import os
 from src.data.hmmerhits import FastaFile
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +14,12 @@ logger.setLevel(logging.INFO)
 
 def parse_stdout(
     stdout_path: str,
-    alignment_file_dir: str,
-    querysequences: dict = None,
-    targetsequences: dict = None,
+    trainpath: str,
+    valpath,
+    querysequences: dict,
+    targetsequences: dict,
+    trainseqs, 
+    valseqs,
     write_full_seq=True,
 ):
     """Parse the saved off stdout files from running hmmer
@@ -52,10 +57,16 @@ def parse_stdout(
         for hit in qresult:
             target_id = hit.id
 
-            if hit.evalue > 1:
-                continue
+            if target_id in trainseqs:
+                if hit.evalue > 1:
+                    continue
 
-            alignment_file_path = f"{alignment_file_dir}/{query_id}-{target_id}.txt"
+                alignment_file_path = f"{trainpath}/{query_id}-{target_id}.txt"
+
+            elif target_id in valseqs:
+                if hit.evalue > 10:
+                    continue
+                alignment_file_path = f"{valpath}/{query_id}-{target_id}.txt"
 
             with open(alignment_file_path, "w") as alignment_file:
                 for hsp in hit:
@@ -72,6 +83,58 @@ def parse_stdout(
                         alignment_file.write(fullseq2 + "\n")
 
 
+def parse(task_id):
+    task_id = int(task_id)
+    logger.info("Task ID: %s", task_id)
+
+    targets = list(range(45))
+    queries = list(range(4))
+    target_queries = list(itertools.product(targets, queries))
+
+    target_filenum = target_queries[task_id - 1][0]
+    query_filenum = target_queries[task_id - 1][1]
+
+    train_root = '/xdisk/twheeler/daphnedemekas/train-alignments'
+    val_root = '/xdisk/twheeler/daphnedemekas/eval-alignments'
+    stdout_path = f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}-{target_filenum}.txt"
+    dirpath1 = f"{train_root}/{query_filenum}"
+    trainpath = f"{train_root}/{query_filenum}/{target_filenum}"
+
+    queryfile = f"uniref/split_subset/queries/queries_{query_filenum}.fa"
+    queryfasta = FastaFile(queryfile)
+    querysequences = queryfasta.data
+    targetfasta = FastaFile(f"uniref/split_subset/targets/targets_{target_filenum}.fa")
+    targetsequences = targetfasta.data
+
+    if not os.path.exists(dirpath1):
+        os.mkdir(dirpath1)
+    if not os.path.exists(trainpath):
+        os.mkdir(trainpath)
+
+
+    dirpath1 = f"{val_root}/{query_filenum}"
+    valpath = f"{val_root}/{query_filenum}/{target_filenum}"
+
+    if not os.path.exists(dirpath1):
+        os.mkdir(dirpath1)
+    if not os.path.exists(valpath):
+        os.mkdir(valpath)
+
+    trainseqs = '/xdisk/twheeler/daphnedemekas/targetdataseqs/train.txt'
+    evalseqs = '/xdisk/twheeler/daphnedemekas/targetdataseqs/eval.txt'
+
+
+    with open(trainseqs, "r") as train_target_file:
+        train_targets = [t.strip("\n") for t in train_target_file.readlines()]
+        print(f"Found {len(train_targets)} train targets")
+    with open(evalseqs, "r") as val_target_file:
+        val_targets = [t.strip("\n") for t in val_target_file.readlines()]
+        print(f"Found {len(val_targets)} val targets")
+    parse_stdout(stdout_path=stdout_path, trainpath, valpath, querysequences, targetsequences, train_targets, val_targets)
+
+
+    
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -87,5 +150,15 @@ if __name__ == "__main__":
     targetsequences = targetfasta.data
 
     args = parser.parse_args()
+
+
+
+
+
+
+
+
+
+
 
     parse_stdout(args.stdout_path, args.save_dir, querysequences, targetsequences)

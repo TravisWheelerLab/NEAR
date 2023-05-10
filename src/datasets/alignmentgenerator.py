@@ -126,6 +126,13 @@ class AlignmentGeneratorWithIndels(DataModule):
         sequences from an alignment file"""
         with open(alignment_file, "r") as file:
             lines = file.readlines()
+            if len(lines) == 0:
+                raise Exception(f"{alignment_file} is empty")
+            if len(lines) < 4:
+                raise Exception(f"{alignment_file} has less than 4 lines")
+                seq1 = lines[1].strip("\n")
+                seq2 = lines[2].strip("\n")
+                return seq1.upper(), seq2.upper(), seq1.upper(), seq2.upper()
             seq1 = lines[1].strip("\n")
             seq2 = lines[2].strip("\n")
             seq1_full = lines[3].strip("\n")
@@ -296,8 +303,9 @@ class AlignmentGeneratorWithIndels(DataModule):
         """Gets the sequences as indices for a batch"""
 
         alignment_path = self.alignment_file_paths[idx].strip("\n")
+
         if not os.path.exists(alignment_path):
-            return self.__getitem__(idx+1)
+            return self.__getitem__(idx + 1)
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)

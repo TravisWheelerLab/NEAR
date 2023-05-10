@@ -1,6 +1,6 @@
 model_name:  "ResNet1d"
 evaluator_name: "ContrastiveEvaluator"
-description: "Use CPU with IVF optimization and multithreading"
+description: "Profiler"
 index_string: "IVF256,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/version_27/checkpoints/epoch_0_2.60146.ckpt
@@ -9,11 +9,11 @@ target_file: "data/evaluationtargets.fa"
 target_embeddings: 'target_embeddings_v27-3.pt'
 target_names: 'target_embeddings_v27-3_names.pickle'
 target_lengths: 'target_embeddings_v27-3_lengths.pickle'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/v273-1"
-num_threads: 16
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/v273-5"
+num_threads: 1
 device: 'cpu'
-nprobe: 1
+nprobe: 5
 normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
-profiler: False
+profiler: True

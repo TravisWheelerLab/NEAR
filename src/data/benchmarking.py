@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import tqdm
 import numpy as np
 import pickle
-from src.data.utils import get_evaluation_data
 import pdb
 
 COLORS = ["r", "c", "g", "k"]
@@ -20,9 +19,9 @@ def plot_mean_e_values(
     max_threshold: int = 300,
     outputfilename: str = "evaluemeans",
     plot_stds: bool = True,
-    _plot_lengths: bool = True,
+    _plot_lengths: bool = False,
     title: str = "",
-    scatter_size: int = 1,
+    scatter_size: int = 3,
 ):
     """This plots the correlation between the average
     hmmer e values to the model's similarity score
@@ -107,10 +106,9 @@ def plot_lengths(distance_list1, distance_list2, distance_list3):
 
 def plot_roc_curve(
     figure_path: str,
-    numpos_per_evalue: list,
-    numhits: int,
+    filtrations: list,
+    recalls: list,
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
-    filename: str = "data.txt",
 ):
     """This plots the ROC curve comparing the
     recall and filtration of this model to hmmer hits
@@ -127,6 +125,32 @@ def plot_roc_curve(
     num_thresholds = len(evalue_thresholds)
     _, axis = plt.subplots(figsize=(10, 10))
     axis.set_title(f"{os.path.splitext(os.path.basename(figure_path))[0]}")
+
+    for i in range(num_thresholds):
+        axis.plot(
+            np.array(filtrations)[:, i],
+            np.array(recalls)[:, i],
+            f"{COLORS[i]}--",
+            linewidth=2,
+            label=evalue_thresholds[i],
+        )
+    axis.set_xlabel("filtration")
+    axis.set_ylabel("recall")
+    plt.legend()
+    plt.savefig(f"{figure_path}", bbox_inches="tight")
+    plt.close()
+
+
+def get_filtration_recall(
+    numpos_per_evalue: list,
+    numhits: int,
+    evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
+    filename: str = "data.txt",
+):
+
+    print("Getting Filtration & Recall")
+
+    num_thresholds = len(evalue_thresholds)
 
     num_positives = [0] * num_thresholds
     num_decoys = [0] * num_thresholds
@@ -151,32 +175,12 @@ def plot_roc_curve(
         if idx % 50000 == 0 and (100 * (1 - filtration[0]) > 75):
             recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
 
-            # print(
-            #     f"num_Ps: {num_positives},  num_Ds: {num_decoys},  \
-            #         recall: {[100 * (recall[i]) for i in range(num_thresholds)]}, filtration: {[100 * (1 - filtration[i]) for i in range(num_thresholds)]}"
-            # )
-
             filtrations.append([100 * (1 - filtration[i]) for i in range(num_thresholds)])
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
 
-    datafile.close()
-    for i in range(num_thresholds):
-        axis.plot(
-            np.array(filtrations)[:, i],
-            np.array(recalls)[:, i],
-            f"{COLORS[i]}--",
-            linewidth=2,
-            label=evalue_thresholds[i],
-        )
-
-    # axis.plot([75, 100], [25, 0], "k--", linewidth=2)
-    datafile.close()
-
-    axis.set_xlabel("filtration")
-    axis.set_ylabel("recall")
-    plt.legend()
-    plt.savefig(f"{figure_path}", bbox_inches="tight")
-    plt.close()
+        elif 100 * (1 - filtration[0]) < 75:
+            datafile.close()
+            return filtrations, recalls
 
 
 def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple[list, list]:
@@ -201,7 +205,7 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple
             for line in file:
                 if "Distance" in line:
                     continue
-                target = line.split()[0].strip("\n")
+                target = line.split()[0].strip("\n").strip()
 
                 score = float(line.split()[1].strip("\n"))
                 all_scores.append(score)
@@ -209,9 +213,7 @@ def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple
                 all_pairs.append((queryname, target))
 
     sortedidx = np.argsort(all_scores)[::-1]
-    del all_scores
     sorted_pairs = [all_pairs[i] for i in sortedidx]
-    del all_pairs
     if sorted_pairs_file:
         print(f"Saving scores file to {sorted_pairs_file}")
         with open(sorted_pairs_file, "wb") as pairsfile:
@@ -268,31 +270,44 @@ def write_datafile(
 
     return numpos_per_evalue, numhits
 
+
+def get_roc_data(
+    model_results_path, hmmer_hits_dict: dict, temp_file: str, sortedpairsfile: str = None, **kwargs
+):
+
+    if os.path.exists(f"{temp_file}_filtration"):
+        filtrations = pickle.load(f"{temp_file}_filtration")
+        recalls = pickle.load(f"{temp_file}_recall")
+        return filtrations, recalls
+
+    sorted_pairs = get_sorted_pairs(model_results_path, sortedpairsfile)
+
+    numpos_per_evalue, numhits = write_datafile(
+        sorted_pairs, hmmer_hits_dict, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=temp_file
+    )
+    print("Wrote files")
+    filtrations, recalls = get_filtration_recall(numpos_per_evalue, numhits, filename=temp_file)
+
+    print(f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall")
+
+    with open(f"{temp_file}_filtration", "wb") as filtrationfile:
+        pickle.dump(filtrations, filtrationfile)
+    with open(f"{temp_file}_recall", "wb") as recallfile:
+        pickle.dump(recalls, recallfile)
+    return filtrations, recalls
+
+
 def generate_roc(
     modelhitsfile,
     figure_path: str,
     hmmerhits: dict,
     filename: str,
     sortedpairsfile: str = None,
-    numpos_per_evalue=None,
-    numhits=None,
 ):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
-    if os.path.exists(filename) and numpos_per_evalue is not None and numhits is not None:
-        print("Found existing file data.. plotting ROC curve.")
-        plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
-        return None
-    sorted_pairs = get_sorted_pairs(modelhitsfile, sortedpairsfile)
-
-    numpos_per_evalue, numhits = write_datafile(
-        sorted_pairs, hmmerhits, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=filename
-    )
-
-    print("Wrote files")
-    print(f"Num pos per evalue: {numpos_per_evalue}")
-    print(f"Num hits: {numhits}")
-    plot_roc_curve(figure_path, numpos_per_evalue, numhits, filename=filename)
+    filtrations, recalls = get_roc_data(modelhitsfile, hmmerhits, filename, sortedpairsfile)
+    plot_roc_curve(figure_path, filtrations, recalls)
 
 
 def get_outliers(
@@ -364,7 +379,6 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
                 if target not in all_hits_max[queryname]:
-                    #print(f"Target: {target}")
                     continue
                 similarity = float(line.split()[1].strip("\n"))
                 all_similarities.append(similarity)

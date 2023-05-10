@@ -26,10 +26,7 @@ def train(_config):
     model = model_class(**params.model_args)
     train_dataset = dataset_class(**params.train_dataset_args)
 
-    if hasattr(params, "val_dataset_args"):
-        val_dataset = dataset_class(**params.val_dataset_args)
-    else:
-        val_dataset = None
+    val_dataset = dataset_class(**params.val_dataset_args)
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
@@ -38,14 +35,11 @@ def train(_config):
         **params.dataloader_args,
     )
 
-    if val_dataset is not None:
-        val_dataloader = torch.utils.data.DataLoader(
-            val_dataset,
-            collate_fn=val_dataset.collate_fn(),
-            **params.dataloader_args,
-        )
-    else:
-        val_dataloader = None
+    val_dataloader = torch.utils.data.DataLoader(
+        val_dataset,
+        collate_fn=val_dataset.collate_fn(),
+        **params.dataloader_args,
+    )
 
     logger = TensorBoardLogger(
         save_dir=params.log_dir,
@@ -64,12 +58,12 @@ def train(_config):
         devices=1,
         #strategy="ddp_find_unused_parameters_false",
      )
-
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path = 'ResNet1d/version_12/checkpoints/epoch_1_3.31192.ckpt'
+
+        ckpt_path=params.checkpoint,
     )
 
 

@@ -35,7 +35,7 @@ def filter_scores(scores_array, indices_array, unrolled_names):
     return scores, indices
 
 
-def filter_sequences_by_length(
+def filter_and_calc_embeddings(
     names: List[str],
     sequences: List[str],
     model_class,
@@ -81,7 +81,7 @@ def _calc_embeddings(
     names = list(sequence_data.keys())
     sequences = list(sequence_data.values())
 
-    filtered_names, embeddings, lengths = filter_sequences_by_length(
+    filtered_names, embeddings, lengths = filter_and_calc_embeddings(
         names, sequences, model_class, max_seq_length
     )
 
