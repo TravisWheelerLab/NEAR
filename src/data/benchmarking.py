@@ -183,41 +183,14 @@ def get_filtration_recall(
             return filtrations, recalls
 
 
-def get_sorted_pairs(modelhitsfile: str, sorted_pairs_file: str = None) -> Tuple[list, list]:
+def get_sorted_pairs(all_scores, all_pairs) -> Tuple[list, list]:
     """parses the output file from our model
     and returns a list of scores and query-target
     pairs for the results that are also in hmmer hits"""
-    all_scores = []
-    all_pairs = []
-    if sorted_pairs_file:
-        if os.path.exists(sorted_pairs_file):
-            print("Found sorted pairs")
-            with open(sorted_pairs_file, "rb") as pairs:
-                sorted_pairs = pickle.load(pairs)
-            return sorted_pairs
-
-    print("Iterating..")
-    for queryhits in tqdm.tqdm(os.listdir(modelhitsfile)):
-        queryname = queryhits.strip(".txt")
-
-        with open(f"{modelhitsfile}/{queryhits}", "r") as file:
-
-            for line in file:
-                if "Distance" in line:
-                    continue
-                target = line.split()[0].strip("\n").strip()
-
-                score = float(line.split()[1].strip("\n"))
-                all_scores.append(score)
-
-                all_pairs.append((queryname, target))
 
     sortedidx = np.argsort(all_scores)[::-1]
     sorted_pairs = [all_pairs[i] for i in sortedidx]
-    if sorted_pairs_file:
-        print(f"Saving scores file to {sorted_pairs_file}")
-        with open(sorted_pairs_file, "wb") as pairsfile:
-            pickle.dump(sorted_pairs, pairsfile)
+
     return sorted_pairs
 
 
@@ -236,30 +209,25 @@ def write_datafile(
     with open(filename, "w", encoding="utf-8") as datafile:
         for pair in tqdm.tqdm(pairs):
             query, target = pair[0], pair[1]
-            try:
-                evalue = None
-                if query not in hmmerhits or target not in hmmerhits[query]:
-                    classname1 = classname2 = classname3 = classname4 = "D"
-                else:
-                    evalue = hmmerhits[query][target][0]
-                    classname1 = classname2 = classname3 = classname4 = "M"
+            evalue = None
+            if query not in hmmerhits or target not in hmmerhits[query]:
+                classname1 = classname2 = classname3 = classname4 = "D"
+            else:
+                evalue = hmmerhits[query][target][0]
+                classname1 = classname2 = classname3 = classname4 = "M"
 
-                    if evalue < evalue_thresholds[3]:
-                        classname4 = "P"
-                        numpos_per_evalue[3] += 1
-                        if evalue < evalue_thresholds[2]:
-                            classname3 = "P"
-                            numpos_per_evalue[2] += 1
-                            if evalue < evalue_thresholds[1]:
-                                classname2 = "P"
-                                numpos_per_evalue[1] += 1
-                                if evalue < evalue_thresholds[0]:
-                                    classname1 = "P"
-                                    numpos_per_evalue[0] += 1
-            except Exception as e:
-                print(e)
-                pdb.set_trace()
-
+                if evalue < evalue_thresholds[3]:
+                    classname4 = "P"
+                    numpos_per_evalue[3] += 1
+                    if evalue < evalue_thresholds[2]:
+                        classname3 = "P"
+                        numpos_per_evalue[2] += 1
+                        if evalue < evalue_thresholds[1]:
+                            classname2 = "P"
+                            numpos_per_evalue[1] += 1
+                            if evalue < evalue_thresholds[0]:
+                                classname1 = "P"
+                                numpos_per_evalue[0] += 1
             datafile.write(
                 f"{query}          {target}          {evalue}          \
                     {classname1}          {classname2}          \
@@ -272,7 +240,7 @@ def write_datafile(
 
 
 def get_roc_data(
-    model_results_path, hmmer_hits_dict: dict, temp_file: str, sortedpairsfile: str = None, **kwargs
+    model_results_path, hmmer_hits_dict: dict, temp_file: str, scores, pairs, **kwargs
 ):
 
     if os.path.exists(f"{temp_file}_filtration"):
@@ -280,7 +248,7 @@ def get_roc_data(
         recalls = pickle.load(f"{temp_file}_recall")
         return filtrations, recalls
 
-    sorted_pairs = get_sorted_pairs(model_results_path, sortedpairsfile)
+    sorted_pairs = get_sorted_pairs(scores, pairs)
 
     numpos_per_evalue, numhits = write_datafile(
         sorted_pairs, hmmer_hits_dict, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=temp_file
@@ -294,6 +262,8 @@ def get_roc_data(
         pickle.dump(filtrations, filtrationfile)
     with open(f"{temp_file}_recall", "wb") as recallfile:
         pickle.dump(recalls, recallfile)
+    
+    os.remove(temp_file)
     return filtrations, recalls
 
 
@@ -302,11 +272,12 @@ def generate_roc(
     figure_path: str,
     hmmerhits: dict,
     filename: str,
-    sortedpairsfile: str = None,
+    scores: list, 
+    pairs: list
 ):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
-    filtrations, recalls = get_roc_data(modelhitsfile, hmmerhits, filename, sortedpairsfile)
+    filtrations, recalls = get_roc_data(modelhitsfile, hmmerhits, filename, scores, pairs)
     plot_roc_curve(figure_path, filtrations, recalls)
 
 
@@ -409,4 +380,5 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
         all_e_values,
         all_biases,
         numhits,
+        all_targets
     )
