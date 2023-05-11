@@ -50,9 +50,7 @@ class ResNet1d(pl.LightningModule):
     def _setup_layers(self):
 
         self.embed = nn.Conv1d(
-            in_channels=self.in_channels,
-            out_channels=self.res_block_n_filters,
-            kernel_size=1,
+            in_channels=self.in_channels, out_channels=self.res_block_n_filters, kernel_size=1,
         )
 
         _list = []
@@ -113,12 +111,7 @@ class ResNet1d(pl.LightningModule):
     def _shared_step(self, batch):
 
         if self.indels:
-            (
-                seq1,
-                labels1,
-                seq2,
-                labels2,
-            ) = batch  # 32 pairs of sequences, each amino has a label
+            (seq1, labels1, seq2, labels2,) = batch  # 32 pairs of sequences, each amino has a label
 
             features = torch.cat([seq1, seq2], dim=0)
 

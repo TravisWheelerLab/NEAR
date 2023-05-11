@@ -32,9 +32,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
         )
 
     def _setup_targets_for_search(
-        self,
-        target_embeddings: List[torch.Tensor],
-        target_names: List[str],
+        self, target_embeddings: List[torch.Tensor], target_names: List[str],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
@@ -122,10 +120,7 @@ class ContrastiveEvaluatorScaNN(UniRefEvaluator):
 
         scores, indices = self.filter_scores(scores_array, indices_array)
 
-        for distance, name in zip(
-            scores,
-            self.unrolled_names[indices],
-        ):
+        for distance, name in zip(scores, self.unrolled_names[indices],):
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:

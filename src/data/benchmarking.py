@@ -136,6 +136,7 @@ def plot_roc_curve(
         )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
+    axis.set_ylim(0, 100)
     plt.legend()
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
@@ -160,9 +161,10 @@ def get_filtration_recall(
 
     recall = None
     filtration = None
+    print(f"Reading file {filename}")
     datafile = open(filename, "r")
 
-    for idx, line in tqdm.tqdm(enumerate(datafile)):
+    for idx, line in tqdm.tqdm(enumerate(datafile.readlines())):
         line = line.split()
         classnames = [line[3 + i] for i in range(num_thresholds)]
         for i in range(num_thresholds):
@@ -171,6 +173,7 @@ def get_filtration_recall(
             elif classnames[i] == "D":
                 num_decoys[i] += 1
         filtration = [num_decoys[i] / numhits for i in range(num_thresholds)]
+        print(100 * (1 - filtration[0]))
 
         if idx % 50000 == 0 and (100 * (1 - filtration[0]) > 75):
             recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
@@ -181,6 +184,7 @@ def get_filtration_recall(
         elif 100 * (1 - filtration[0]) < 75:
             datafile.close()
             return filtrations, recalls
+    # return filtrations, recalls
 
 
 def get_sorted_pairs(all_scores, all_pairs) -> Tuple[list, list]:
@@ -204,7 +208,7 @@ def write_datafile(
     Returns the number of positives for 4 evalue thresholds
     TODO: This code can be improved /generalized"""
     numpos_per_evalue = [0, 0, 0, 0]
-    print("Writing to file...")
+    print(f"Writing to file {filename}..")
     numhits = 0
     with open(filename, "w", encoding="utf-8") as datafile:
         for pair in tqdm.tqdm(pairs):
@@ -236,19 +240,18 @@ def write_datafile(
             )
             numhits += 1
 
+    print(f"Numpos per evalue: {numpos_per_evalue}")
+    print(f"Number of hits: {numhits}")
+
     return numpos_per_evalue, numhits
 
 
-def get_roc_data(
-    model_results_path, hmmer_hits_dict: dict, temp_file: str, scores, pairs, **kwargs
-):
+def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs, **kwargs):
 
-    if os.path.exists(f"{temp_file}_filtration"):
-        filtrations = pickle.load(f"{temp_file}_filtration")
-        recalls = pickle.load(f"{temp_file}_recall")
+    if os.path.exists(f"{temp_file}_filtration.pickle"):
+        filtrations = pickle.load(f"{temp_file}_filtration.pickle")
+        recalls = pickle.load(f"{temp_file}_recall.pickle")
         return filtrations, recalls
-
-    sorted_pairs = get_sorted_pairs(scores, pairs)
 
     numpos_per_evalue, numhits = write_datafile(
         sorted_pairs, hmmer_hits_dict, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=temp_file
@@ -258,26 +261,19 @@ def get_roc_data(
 
     print(f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall")
 
-    with open(f"{temp_file}_filtration", "wb") as filtrationfile:
+    with open(f"{temp_file}_filtration.pickle", "wb") as filtrationfile:
         pickle.dump(filtrations, filtrationfile)
-    with open(f"{temp_file}_recall", "wb") as recallfile:
+    with open(f"{temp_file}_recall.pickle", "wb") as recallfile:
         pickle.dump(recalls, recallfile)
-    
-    os.remove(temp_file)
+
+    # os.remove(temp_file)
     return filtrations, recalls
 
 
-def generate_roc(
-    modelhitsfile,
-    figure_path: str,
-    hmmerhits: dict,
-    filename: str,
-    scores: list, 
-    pairs: list
-):
+def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
-    filtrations, recalls = get_roc_data(modelhitsfile, hmmerhits, filename, scores, pairs)
+    filtrations, recalls = get_roc_data(hmmerhits, filename, sorted_pairs)
     plot_roc_curve(figure_path, filtrations, recalls)
 
 
@@ -315,70 +311,74 @@ def get_data(hits_path: str, all_hits_max: dict, savedir=None):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
-    if savedir is not None and os.path.exists(f"{savedir}/all_similarities.npy"):
-        print(f"Getting saved data from {savedir}/all_similarities.npy")
+    if savedir is not None and os.path.exists(f"{savedir}/all_scores.npy"):
+        print(f"Getting saved data from {savedir}")
         all_similarities = np.load(f"{savedir}/all_similarities.npy")
         all_e_values = np.load(f"{savedir}/all_e_values.npy")
         all_biases = np.load(f"{savedir}/all_biases.npy")
+        all_targets = np.load(f"{savedir}/all_targets.npy")
+        all_scores = np.load(f"{savedir}/all_scores.npy")
 
-        with open(f"{savedir}/hits_dict.pkl", "rb") as file:
-            similarity_hits_dict = pickle.load(file)
+        print("Sorting pairs...")
+        sorted_pairs = get_sorted_pairs(all_scores, all_targets)
+
         return (
-            similarity_hits_dict,
             all_similarities,
             all_e_values,
             all_biases,
-            len(all_similarities),
+            sorted_pairs,
+        )
+    elif savedir is not None and os.path.exists(f"{savedir}/sorted_pairs.npy"):
+        print(f"Getting saved data from {savedir}")
+        all_similarities = np.load(f"{savedir}/all_similarities.npy")
+        all_e_values = np.load(f"{savedir}/all_e_values.npy")
+        all_biases = np.load(f"{savedir}/all_biases.npy")
+        sorted_pairs = np.load(f"{savedir}/sorted_pairs.npy")
+        return (
+            all_similarities,
+            all_e_values,
+            all_biases,
+            sorted_pairs,
         )
 
-    similarity_hits_dict = {}
-    all_similarities = []
+    similarities = []
 
     all_e_values = []
     all_biases = []
     all_targets = []
+    all_scores = []
     for queryhits in tqdm.tqdm(os.listdir(hits_path)):
         queryname = queryhits.strip(".txt")
-        with open(f"{hits_path}/{queryhits}", "r") as similarities:
-            if queryname not in all_hits_max:
-                print(f"Query: {queryname}")
-                continue
-            similarity_hits_dict[queryname] = {}
+        with open(f"{hits_path}/{queryhits}", "r") as file:
 
-            for line in similarities:
+            for line in file:
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
+                all_targets.append((queryname, target))
+                similarity = float(line.split()[1].strip("\n"))
+                all_scores.append(similarity)
+                if queryname not in all_hits_max:
+                    continue
+
                 if target not in all_hits_max[queryname]:
                     continue
                 similarity = float(line.split()[1].strip("\n"))
-                all_similarities.append(similarity)
-
-                similarity_hits_dict[queryname][target] = similarity
+                similarities.append(similarity)
 
                 all_e_values.append(all_hits_max[queryname][target][0])
                 all_biases.append(all_hits_max[queryname][target][2])
-                all_targets.append((queryname, target))
+
+    print("Sorting pairs...")
+    sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
     if savedir is not None:
         if not os.path.exists(savedir):
             os.mkdir(savedir)
         print(f"Saving to {savedir}:")
-        np.save(f"{savedir}/all_similarities", np.array(all_similarities), allow_pickle=True)
+        np.save(f"{savedir}/similarities", np.array(similarities), allow_pickle=True)
         np.save(f"{savedir}/all_biases", np.array(all_biases), allow_pickle=True)
         np.save(f"{savedir}/all_e_values", np.array(all_e_values), allow_pickle=True)
-        np.save(f"{savedir}/all_targets", np.array(all_targets), allow_pickle=True)
+        np.save(f"{savedir}/sorted_pairs", np.array(sorted_pairs), allow_pickle=True)
 
-        with open(f"{savedir}/hits_dict.pkl", "wb") as file:
-            pickle.dump(similarity_hits_dict, file)
-
-    numhits = np.sum([len(similarity_hits_dict[q]) for q in list(similarity_hits_dict.keys())])
-    print(f"Got {numhits} total hits from our model")
-    return (
-        similarity_hits_dict,
-        all_similarities,
-        all_e_values,
-        all_biases,
-        numhits,
-        all_targets
-    )
+    return (similarities, all_e_values, all_biases, sorted_pairs)

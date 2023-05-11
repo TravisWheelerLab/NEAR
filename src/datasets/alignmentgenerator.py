@@ -7,6 +7,7 @@ from src.utils.gen_utils import generate_string_sequence
 import random
 import os
 
+
 class AlignmentGenerator(DataModule):
     """Alignment generator class without indels"""
 
@@ -284,12 +285,7 @@ class AlignmentGeneratorWithIndels(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence,
-                indices,
-                subseq_index,
-                full_seq,
-                addition_left_amt,
-                addition_right_amt,
+                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -513,12 +509,7 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence,
-                indices,
-                subseq_index,
-                full_seq,
-                addition_left_amt,
-                addition_right_amt,
+                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 

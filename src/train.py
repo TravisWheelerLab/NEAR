@@ -30,21 +30,14 @@ def train(_config):
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset,
-        collate_fn=train_dataset.collate_fn(),
-        **params.dataloader_args,
+        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args,
     )
 
     val_dataloader = torch.utils.data.DataLoader(
-        val_dataset,
-        collate_fn=val_dataset.collate_fn(),
-        **params.dataloader_args,
+        val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args,
     )
 
-    logger = TensorBoardLogger(
-        save_dir=params.log_dir,
-        name=params.model_name,
-    )
+    logger = TensorBoardLogger(save_dir=params.log_dir, name=params.model_name,)
 
     logger.experiment.add_text(
         tag="description", text_string=params.description, walltime=time.time()
@@ -56,14 +49,13 @@ def train(_config):
         logger=logger,
         val_check_interval=0.2,
         devices=1,
-        #strategy="ddp_find_unused_parameters_false",
-     )
+        # strategy="ddp_find_unused_parameters_false",
+    )
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-
-        ckpt_path=params.checkpoint,
+        # ckpt_path=params.checkpoint,
     )
 
 

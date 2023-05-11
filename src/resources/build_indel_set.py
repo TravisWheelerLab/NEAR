@@ -67,9 +67,7 @@ for name, sequence in tqdm(zip(names, sequences), total=len(sequences)):
             alignment_outfile = hmmfile.replace("hmms", "alignments")
             alignment_outfile = alignment_outfile.replace(".hmm", ".sto")
             out = hmmalign(
-                hmm_file=hmmfile,
-                fasta_file=sequence_and_emission_file,
-                outfile=alignment_outfile,
+                hmm_file=hmmfile, fasta_file=sequence_and_emission_file, outfile=alignment_outfile,
             )
 
         except subprocess.CalledProcessError as e:

@@ -10,10 +10,7 @@ import time
 
 
 def embed_with_profile(
-    arg_list,
-    max_seq_length=512,
-    model_device="cpu",
-    minimum_seq_length=0,
+    arg_list, max_seq_length=512, model_device="cpu", minimum_seq_length=0,
 ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Filters the sequences by length thresholding given the
     minimum and maximum length threshold variables"""

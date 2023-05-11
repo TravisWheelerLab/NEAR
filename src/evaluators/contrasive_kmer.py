@@ -81,11 +81,7 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
     @torch.no_grad()
     def _calc_embeddings(
-        self,
-        sequence_data: dict,
-        model_class,
-        apply_random_sequence: bool,
-        max_seq_length=512,
+        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -98,11 +94,7 @@ class ContrastiveKmerEvaluator(ContrastiveEvaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-            names,
-            sequences,
-            model_class,
-            apply_random_sequence,
-            max_seq_length,
+            names, sequences, model_class, apply_random_sequence, max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)

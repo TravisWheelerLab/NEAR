@@ -76,8 +76,7 @@ def profile(_config):
     evaluator_class = load_evaluator_class(params.evaluator_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
     ).to(params.device)
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
@@ -87,7 +86,8 @@ def profile(_config):
 
     else:
         names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
-        
+
+
 def evaluate_multiprocessing(_config):
 
     params = SimpleNamespace(**_config)
@@ -97,8 +97,7 @@ def evaluate_multiprocessing(_config):
     model_class = load_model_class(params.model_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
     ).to(params.device)
 
     queryfasta = FastaFile(params.query_file)
@@ -188,8 +187,7 @@ def evaluate(_config):
     evaluator_class = load_evaluator_class(params.evaluator_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
     ).to(params.device)
     query_sequences, target_sequences, hmmer_hits_max = get_evaluation_data(
         params.query_file, params.evaluator_args["output_path"]

@@ -19,12 +19,7 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
             os.mkdir(clusterpath)
 
         cmd = f"./usearch -cluster_fast {targetfastapath} -id 0.3 -clusters {clusterpath}/cluster_"
-        _ = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            check=True,
-        )
+        _ = subprocess.run(cmd, shell=True, capture_output=True, check=True,)
 
         clustered_seqnames = []
         numseqs = 0

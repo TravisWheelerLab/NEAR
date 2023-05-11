@@ -110,14 +110,7 @@ class HmmerHits:
                 row_info[9],
             )
             data = np.array(
-                [
-                    e_value_full,
-                    score_full,
-                    bias_full,
-                    e_value_best,
-                    score_best,
-                    bias_best,
-                ]
+                [e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,]
             ).astype("float64")
 
             if query_name in data_dict:

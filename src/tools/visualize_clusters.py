@@ -1,4 +1,3 @@
-
 import matplotlib.pyplot as plt
 import torch
 from sklearn.manifold import TSNE
@@ -40,4 +39,3 @@ plot_axes.set_zlim(-100, 0)
 plt.title("Amino-wise t-SNE ")
 
 plt.savefig("tnse3d_.png")
-

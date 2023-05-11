@@ -110,8 +110,7 @@ def _compute_count_mat_and_similarities(
     representative_embedding_start_point = np.where(representative_labels == label_to_analyze)
     if pretrained_transformer:
         similarities = torch.matmul(
-            query_sequence,
-            representative_embedding.T.to(query_sequence.device),
+            query_sequence, representative_embedding.T.to(query_sequence.device),
         )
     else:
         similarities = torch.cdist(
@@ -128,10 +127,7 @@ def _compute_count_mat_and_similarities(
 
     for i, amino_acid in enumerate(query_sequence):
         distances, match_indices = search_index_device_aware(
-            representative_index,
-            amino_acid.unsqueeze(0),
-            index_device,
-            n_neighbors=n_neighbors,
+            representative_index, amino_acid.unsqueeze(0), index_device, n_neighbors=n_neighbors,
         )
         # if there's a match to the predicted label
         for match_index in match_indices[0]:
@@ -143,17 +139,10 @@ def _compute_count_mat_and_similarities(
 
 
 def most_common_matches(
-    faiss_index,
-    cluster_representative_labels,
-    normalized_query_embedding,
-    neighbors,
-    device,
+    faiss_index, cluster_representative_labels, normalized_query_embedding, neighbors, device,
 ):
     distances, match_indices = search_index_device_aware(
-        faiss_index,
-        normalized_query_embedding.to(device),
-        device,
-        n_neighbors=neighbors,
+        faiss_index, normalized_query_embedding.to(device), device, n_neighbors=neighbors,
     )
     if "cuda" in device:
         matches = cluster_representative_labels[match_indices.ravel().cpu().numpy()]
@@ -176,11 +165,7 @@ def search_index_device_aware(faiss_index, embedding, device, n_neighbors):
 
 @torch.no_grad()
 def compute_cluster_representative_embeddings(
-    representative_sequences,
-    representative_labels,
-    trained_model,
-    normalize,
-    device,
+    representative_sequences, representative_labels, trained_model, normalize, device,
 ):
     # create representative tensor for raw sequences.
     # what, I'm not batching?
@@ -317,11 +302,7 @@ def recall_at_pid_thresholds(
             train_alignment = query_dataset.dataset.label_to_seed_alignment[label]
             pid = calculate_pid(gapped_sequence, train_alignment)
             predicted_labels, counts = most_common_matches(
-                cluster_rep_index,
-                cluster_rep_labels,
-                sequence,
-                n_neighbors,
-                index_device,
+                cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, index_device,
             )
             # get percent identity;
             # return
@@ -386,11 +367,7 @@ def visualize_prediction_patterns(
                 sequence = sequence.contiguous()
 
             predicted_labels, counts = most_common_matches(
-                cluster_rep_index,
-                cluster_rep_labels,
-                sequence,
-                n_neighbors,
-                index_device,
+                cluster_rep_index, cluster_rep_labels, sequence, n_neighbors, index_device,
             )
             predicted_labels = predicted_labels[np.argsort(counts)]
             # now, get the dp matrix going.
@@ -422,8 +399,7 @@ def visualize_prediction_patterns(
                     rep_embedding = cluster_rep_embeddings[cluster_rep_labels == lab]
                     l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
                     ax[kk % 5, kk // 5].imshow(
-                        l2s.to("cpu"),
-                        cmap="PiYG",
+                        l2s.to("cpu"), cmap="PiYG",
                     )
                     ax[kk % 5, kk // 5].set_title(f"{kk + 1} ranked match. {lab == label} match.")
                     ax[kk % 5, kk // 5].set_xticks([])
@@ -434,8 +410,7 @@ def visualize_prediction_patterns(
                 l2s = torch.matmul(sequence, rep_embedding.to(sequence.device).T)
 
                 ax[kk % 5, kk // 5].imshow(
-                    l2s.to("cpu"),
-                    cmap="PiYG",
+                    l2s.to("cpu"), cmap="PiYG",
                 )
                 ax[kk % 5, kk // 5].set_xticks([])
                 ax[kk % 5, kk // 5].set_yticks([])
@@ -453,13 +428,11 @@ def visualize_prediction_patterns(
 
                 if predicted_labels[-1] == label:
                     plt.savefig(
-                        f"{image_path}/dots_true_hit_{image_idx}.png",
-                        bbox_inches="tight",
+                        f"{image_path}/dots_true_hit_{image_idx}.png", bbox_inches="tight",
                     )
                 else:
                     plt.savefig(
-                        f"{image_path}/dots_false_hit_{image_idx}.png",
-                        bbox_inches="tight",
+                        f"{image_path}/dots_false_hit_{image_idx}.png", bbox_inches="tight",
                     )
 
                 image_idx += 1
@@ -503,8 +476,7 @@ def visualize_prediction_patterns(
                 plt.title("self-similarity")
                 plt.colorbar()
                 plt.savefig(
-                    f"{image_path}/no_mlp_self_{unique_name}.png",
-                    bbox_inches="tight",
+                    f"{image_path}/no_mlp_self_{unique_name}.png", bbox_inches="tight",
                 )
                 plt.close()
 
@@ -589,8 +561,7 @@ def visualize_prediction_patterns(
                 )
                 ax[2, 1].imshow(true_cmat)
                 plt.savefig(
-                    f"{image_path}/false_{unique_name}.png",
-                    bbox_inches="tight",
+                    f"{image_path}/false_{unique_name}.png", bbox_inches="tight",
                 )
 
                 true_gapped_seq = cluster_rep_gapped_seqs[label]

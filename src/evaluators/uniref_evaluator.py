@@ -106,11 +106,7 @@ class UniRefEvaluator(Evaluator):
             self.comp_func = np.less_equal
 
     def filter_sequences_by_length(
-        self,
-        model_class,
-        names: List[str],
-        sequences: List[str],
-        max_seq_length=512,
+        self, model_class, names: List[str], sequences: List[str], max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Filters the sequences by length thresholding given the
         minimum and maximum length threshold variables"""
@@ -135,11 +131,7 @@ class UniRefEvaluator(Evaluator):
 
     @torch.no_grad()
     def _calc_embeddings(
-        self,
-        sequence_data: dict,
-        model_class,
-        apply_random_sequence: bool,
-        max_seq_length=512,
+        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
     ) -> Tuple[List[str], List[torch.Tensor], List[str]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -152,10 +144,7 @@ class UniRefEvaluator(Evaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-            model_class,
-            names,
-            sequences,
-            max_seq_length,
+            model_class, names, sequences, max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)

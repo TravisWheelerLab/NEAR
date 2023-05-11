@@ -16,12 +16,7 @@ def main(query_fasta, target_fasta, outputfile, stdout_file, hmmer_max=False):
     else:
         cmd = f'phmmer --cpu 16 --tblout {outputfile} \
             "{query_fasta}" "{target_fasta}"'
-    hmmer = subprocess.run(
-        cmd,
-        shell=True,
-        capture_output=True,
-        check=True,
-    )
+    hmmer = subprocess.run(cmd, shell=True, capture_output=True, check=True,)
 
     with open(stdout_file, "w") as file:
         file.write(hmmer.stdout.decode("utf-8"))

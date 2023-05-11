@@ -94,13 +94,9 @@ class Results:
     ):
         """evaluates a given model"""
 
-        (
-            self.hits_dict,
-            self.similarities,
-            self.e_values,
-            self.biases,
-            self.numhits,
-        ) = get_data(model_results_path, hmmer_hits_dict, savedir=data_savedir)
+        (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+            model_results_path, hmmer_hits_dict, savedir=data_savedir
+        )
         # pdb.set_trace()
         print("Plotting e values and saving to")
         print(evaluemeansfile)
@@ -117,7 +113,7 @@ class Results:
         )
         # pdb.set_trace()
         if plot_roc:
-            generate_roc(model_results_path, roc_filepath, hmmer_hits_dict, temp_file)
+            generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
 
 
 def compare(
@@ -148,6 +144,7 @@ def compare(
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     plt.savefig("ResNet1d/results/compared_roc.png")
+
 
 def evaluate(
     query_id=4,

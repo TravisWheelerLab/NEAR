@@ -100,10 +100,7 @@ def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[s
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
 
-    for distance, name in zip(
-        scores,
-        unrolled_names[indices],
-    ):
+    for distance, name in zip(scores, unrolled_names[indices],):
         # filtered_list.append((name, distance))
         if name in filtered_scores.keys():
             filtered_scores[name] += distance

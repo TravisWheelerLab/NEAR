@@ -100,10 +100,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
         )
 
-        for distance, name in zip(
-            scores,
-            self.unrolled_names[indices],
-        ):
+        for distance, name in zip(scores, self.unrolled_names[indices],):
             if name in filtered_scores.keys():
                 filtered_scores[name] += distance
             else:

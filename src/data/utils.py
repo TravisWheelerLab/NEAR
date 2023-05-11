@@ -65,4 +65,3 @@ def get_evaluation_data(
     print(f"Number of target HMMER hits: {len(all_target_hits)}")
 
     return querysequences, targetsequences, all_target_hits
-
