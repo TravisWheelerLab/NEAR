@@ -75,7 +75,7 @@ def load_alignment_inputs(hits, mode, modelname):
             "evaluemeanstitle": f"Correlation in ALIGN IVF model - HMMER Normal",
             "roc_filepath": f"ResNet1d/results/{modelname}_normal_roc.png",
             "plot_roc": True,
-            f"temp_file": "/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
+            "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
         }
 
     else:

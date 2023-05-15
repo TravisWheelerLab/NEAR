@@ -8,7 +8,7 @@ embeddings = torch.load("/xdisk/twheeler/daphnedemekas/prefilter/target_embeddin
 
 def sequence_representation(embeddings, max_len=100):
 
-    embed = [e[:max_len] for e in embeddings[::50] if len(e) >= max_len]
+    embed = [e[:max_len] for e in embeddings[:100] if len(e) >= max_len]
     embed_t = torch.stack(embed, dim=0)
     embed_tt = embed_t.reshape(embed_t.shape[0], embed_t.shape[1] * embed_t.shape[2])
     return embed_tt
@@ -19,7 +19,7 @@ def amino_representation(embeddings):
     return amino_embeddings
 
 
-seq_embeddings = amino_representation(embeddings)
+seq_embeddings = sequence_representation(embeddings)
 
 tsne = TSNE(3, verbose=1)
 tsne_proj = tsne.fit_transform(seq_embeddings)
@@ -38,4 +38,4 @@ plt.ylim(0, 400)
 plot_axes.set_zlim(-100, 0)
 plt.title("Amino-wise t-SNE ")
 
-plt.savefig("tnse3d_.png")
+plt.savefig("tnse3d.png")

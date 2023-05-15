@@ -10,6 +10,7 @@ from src.data.benchmarking import (
     plot_mean_e_values,
     plot_lengths,
     get_roc_data,
+    get_sorted_pairs,
     COLORS,
 )
 from src.data.eval_data_config import (
@@ -24,6 +25,9 @@ import pickle
 import argparse
 import matplotlib.pyplot as plt
 import pdb
+import resource
+resource.setrlimit(resource.RLIMIT_DATA, (500 * 1024**3, -1))
+
 
 
 def load_hmmer_hits(query_id: int = 4):
@@ -95,7 +99,7 @@ class Results:
         """evaluates a given model"""
 
         (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-            model_results_path, hmmer_hits_dict, savedir=data_savedir
+            model_results_path, hmmer_hits_dict, data_savedir=data_savedir
         )
         # pdb.set_trace()
         print("Plotting e values and saving to")
@@ -130,20 +134,26 @@ def compare(
 
     _, axis = plt.subplots(figsize=(10, 10))
 
-    for inputs in [align, esm, knn, knn90]:
-        filtrations, recalls = get_roc_data(**inputs)
+    for inputs in [esm, knn, knn90, align]:
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        (_, _, _, sorted_pairs) = get_data(**inputs)
+        
+        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
 
         for i in range(4):
             axis.plot(
-                np.array(filtrations)[:, i],
-                np.array(recalls)[:, i],
+                np.array(filtrations)[:, -1],
+                np.array(recalls)[:, -1],
                 f"{COLORS[i]}--",
                 linewidth=2,
-                label=evalue_thresholds[i],
+                label=['ESM', 'ProtTransT5XLU50','ProtTransT5XLU50,>90', 'ResNet10'][i],
             )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     plt.savefig("ResNet1d/results/compared_roc.png")
+    pdb.set_trace()
 
 
 def evaluate(
@@ -151,7 +161,6 @@ def evaluate(
     models: list = ["align", "knn"],
     modes: list = ["normal", "max"],
     modelname: str = None,
-    lengths: bool = True,
 ):
     """Main function for evaluation"""
 
@@ -159,6 +168,7 @@ def evaluate(
 
     if query_id == 4:
         all_hits_max, all_hits_normal = load_hmmer_hits(query_id)
+        #all_hits_max, all_hits_normal = None, None
 
         if "align" in models:
             if "max" in modes:
@@ -193,16 +203,13 @@ def evaluate(
                 esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal", modelname)
                 print("Parsing Alignment Model ESM Normal")
                 _ = Results(**esm_inputs_normal)
-        if lengths:
-            plot_lengths(alignment_model_ivf_max.similarities, alignment_model_knn_max.similarities)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
     parser.add_argument("--models", type=str, default=["ABK"])
     parser.add_argument("--modes", type=str, default=["MNF"])
-    parser.add_argument("--lengths", action="store_true")
+    parser.add_argument("--compare", action="store_true")
     parser.add_argument("--modelname", type=str)
 
     args = parser.parse_args()
@@ -224,6 +231,7 @@ if __name__ == "__main__":
     if "N" in modeinitials:
         modes.append("normal")
 
-    # compare(modelname)
+    if args.compare:
+        compare(modelname)
 
-    evaluate(args.query_id, models, modes, modelname, lengths=args.lengths)
+    evaluate(args.query_id, models, modes, modelname)
