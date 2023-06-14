@@ -95,7 +95,6 @@ def create_faiss_index(
     embeddings,
     embed_dim,
     index_string,
-    nprobe,
     num_threads,
     device="cpu",
     distance_metric="cosine",
@@ -130,7 +129,7 @@ def create_faiss_index(
 
     log.info(f"Using index {index_string}")
     if "LSH" in index_string:
-        index = faiss.IndexLSH(embed_dim, 64)
+        index = faiss.IndexLSH(embed_dim, 512)
     else:
         if distance_metric == "cosine":
             log.info("Normalizing embeddings for use with cosine metric.")
@@ -138,9 +137,7 @@ def create_faiss_index(
         else:
             index = faiss.index_factory(embed_dim, index_string)
 
-        if "IVF" in index_string:
-            index.nprobe = nprobe
-            log.info(f"Setting nprobe to {nprobe}.")
+    index.parallel_mode = True
 
     if device == "cuda":
         num = 0

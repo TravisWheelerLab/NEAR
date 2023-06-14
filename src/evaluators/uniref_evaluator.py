@@ -35,13 +35,13 @@ class UniRefEvaluator(Evaluator):
         max_seq_length=512,
         evalue_threshold=1,
         add_random_sequence=False,
-        nprobe=5,
         distance_threshold=0,
         normalize_embeddings=False,
         index_string="Flat",
         index_device="cpu",
         output_path="",
         num_threads=16,
+        nprobe = 100,
         target_embeddings_path=None,
     ):
         """
@@ -71,17 +71,17 @@ class UniRefEvaluator(Evaluator):
             add_random_sequence: bool
                 if True, some random sequence will
                 be added to the beginning of the query sequences
-            nprobe: int
+            alpha: int
                 a parameter of the Faiss index
         """
 
         self.query_seqs: dict = query_seqs
         self.target_seqs: dict = target_seqs
         self.max_hmmer_hits: dict = hmmer_hits_max
+        self.nprobe = nprobe
 
         self.encoding_func = encode_string_sequence if encoding_func is None else encoding_func
         self.add_random_sequence: bool = add_random_sequence
-        self.nprobe: int = nprobe
         self.model_device: str = model_device
         self.minimum_seq_length: int = minimum_seq_length
         self.max_seq_length: int = max_seq_length
@@ -120,7 +120,7 @@ class UniRefEvaluator(Evaluator):
             if max_seq_length >= length >= self.minimum_seq_length:
                 embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
-                embeddings.append(embed.to("cpu"))
+                embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
                 lengths.append(length)
             else:
                 num_removed += 1
@@ -169,13 +169,13 @@ class UniRefEvaluator(Evaluator):
                 print("Loading saved target embeddings")
                 target_embeddings = torch.load(self.target_embeddings_path)
 
-                with open(f"{self.target_embeddings_path[:-3]}_names.pickle", "rb") as file_handle:
-                    target_names = pickle.load(file_handle)
+                with open(f"target_names.txt", "r") as file_handle:
+                    target_names = [t.strip("\n") for t in file_handle.readlines()]
 
                 with open(
-                    f"{self.target_embeddings_path[:-3]}_lengths.pickle", "rb"
+                    f"target_lengths.txt", "r"
                 ) as file_handle:
-                    target_lengths = pickle.load(file_handle)
+                    target_lengths = [int(t.strip("\n")) for t in file_handle.readlines()]
 
         else:
             print("Embedding targets...")
@@ -238,35 +238,32 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     @torch.no_grad()
-    def filter(self, queries, query_names):
+    def filter(self, queries, query_names, write_results = False):
         """Filters our hits based on
         distance to the query in the Faiiss
         cluster space"""
 
         logger.info("Beginning search.")
 
-        t_begin = time.time()
-
         if not os.path.exists(self.output_path):
             os.mkdir(self.output_path)
 
         print(self.output_path)
         print(f"Number of queries: {len(queries)}")
+        
+        t_begin = time.time()
 
         for i in tqdm.tqdm(range(len(queries))):
+            filtered_scores = self.search(queries[i])  # , search_time, filter_time, aggregate_time)
 
-            f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
-            f.write("Name     Distance" + "\n")
+            # if write_results:
 
-            if self.normalize_embeddings:
-                qval = torch.nn.functional.normalize(queries[i], dim=-1)
-            else:
-                qval = queries[i]
+            #     f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
+            #     f.write("Name     Distance" + "\n")
 
-            filtered_scores = self.search(qval)  # , search_time, filter_time, aggregate_time)
-            for name, distance in filtered_scores.items():
-                f.write(f"{name}     {distance}" + "\n")
-            f.close()
+            #     for name, distance in filtered_scores.items():
+            #         f.write(f"{name}     {distance}" + "\n")
+            #     f.close()
 
         loop_time = time.time() - t_begin
 

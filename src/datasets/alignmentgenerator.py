@@ -125,6 +125,9 @@ class AlignmentGeneratorWithIndels(DataModule):
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
         sequences from an alignment file"""
+        if not os.path.exists(alignment_file):
+            print("Corrupt file. Random sampling.")
+            alignment_file = random.sample(self.alignment_file_paths,1)[0].strip("\n")
         with open(alignment_file, "r") as file:
             lines = file.readlines()
             if len(lines) == 0:
@@ -301,7 +304,9 @@ class AlignmentGeneratorWithIndels(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         if not os.path.exists(alignment_path):
-            return self.__getitem__(idx + 1)
+            print(f"Bad path: {alignment_path}")
+            
+            alignment_path = random.sample(self.alignment_file_paths,1)[0].strip("\n")
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)

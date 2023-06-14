@@ -148,7 +148,7 @@ def evaluate_multiprocessing(_config):
         target_lengths,
         params.index_string,
         params.nprobe,
-        params.num_threads // 4,
+        params.omp_num_threads,
     )
 
     arg_list = [
@@ -159,6 +159,7 @@ def evaluate_multiprocessing(_config):
             index,
             unrolled_names,
             params.max_seq_length,
+            params.write_results
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
@@ -167,14 +168,15 @@ def evaluate_multiprocessing(_config):
     pool = Pool(params.num_threads)
 
     print("Beginning search...")
+    start = time.time()
 
-    start_time = time.time()
-
+    duration = 0
     for result in pool.imap(filter, arg_list):
-        print("Got result")
+        duration += result
 
-    loop_time = time.time() - start_time
-    print(f"Entire search took: {loop_time}.")
+    print(f"Total CPU time: {duration}.")
+    print(f"Elapsed time: {time.time() - start}.")
+
     pool.terminate()
 
 

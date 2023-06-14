@@ -155,6 +155,73 @@ def compare(
     plt.savefig("ResNet1d/results/compared_roc.png")
     pdb.set_trace()
 
+def compare2(
+    query_id=4, evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+):
+    styles = ['dashed','solid']
+
+    print(f"Comparing NEAT models")
+    all_hits_max, _ = load_hmmer_hits(4)
+
+    align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
+    align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
+
+    nprobes = [50,250]
+
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for idx, inputs in enumerate([align, align2]):
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        # (_, _, _, sorted_pairs) = get_data(**inputs)
+        
+        filtrations, recalls = get_roc_data(**inputs)
+
+        for i in range(4):
+            axis.plot(
+                np.array(filtrations)[:, i],
+                np.array(recalls)[:, i],
+                #f"{COLORS[idx]}--",
+                linewidth=2,
+                label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
+                linestyle = styles[idx]
+            )
+    axis.set_xlabel("filtration")
+    axis.set_ylabel("recall")
+    print("Saving figure")
+    plt.legend()
+    plt.savefig("ResNet1d/results/superimposedCPU.png")
+
+    plt.clf()
+
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for inputs in [align, align2]:
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        # (_, _, _, sorted_pairs) = get_data(**inputs)
+        
+        filtrations, recalls = get_roc_data(**inputs)
+
+        for i in range(4):
+            axis.plot(
+                np.array(filtrations)[:, i],
+                np.array(recalls)[:, i],
+                #f"{COLORS[idx]}--",
+                linewidth=2,
+                label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
+                linestyle = styles[idx]
+            )
+    axis.set_xlabel("filtration")
+    axis.set_ylabel("recall")
+    axis.set_ylim(90,100)
+    axis.set_xlim(95,100)
+    plt.legend()
+    print("Saving figure")
+    plt.savefig("ResNet1d/results/superimposedCPU-zoomed.png")
+
 
 def evaluate(
     query_id=4,
@@ -204,6 +271,15 @@ def evaluate(
                 print("Parsing Alignment Model ESM Normal")
                 _ = Results(**esm_inputs_normal)
 
+        if "mmseqs" in models:
+            if "max" in modes:
+                mmseqs_inputs = load_mmseqs_inputs(all_hits_max, "max", modelname)
+                print("Parsing Alignment Model ESM Max")
+                alignment_model_knn_max = Results(**mmseqs_inputs)
+            if "normal" in modes:
+                mmseqs_inputs_normal = load_mmseqs_inputs(all_hits_normal, "normal", modelname)
+                print("Parsing Alignment Model ESM Normal")
+                _ = Results(**mmseqs_inputs_normal)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
@@ -226,12 +302,14 @@ if __name__ == "__main__":
         models.append("knn")
     if "E" in modelinitials:
         models.append("esm")
+    if "M" in modelinitials:
+        models.append("mmseqs")
     if "M" in modeinitials:
         modes.append("max")
     if "N" in modeinitials:
         modes.append("normal")
 
     if args.compare:
-        compare(modelname)
+        compare2()
 
     evaluate(args.query_id, models, modes, modelname)

@@ -7,8 +7,10 @@ from typing import List, Tuple
 import tqdm
 import faiss
 import numpy as np
+import pdb
 import torch
-
+import time
+from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
@@ -21,19 +23,18 @@ def filter_scores(scores_array, indices_array, unrolled_names):
     scores = []
     indices = []
 
-    for idx in range(len(scores_array)):
-        scores_idx = scores_array[idx]
-        names = unrolled_names[indices_array[idx]]  # the names of the targets for each 1000 hits
-        sorted_idx = np.argsort(scores_idx)[::-1]
+    for match_idx in range(len(scores_array)):
+        match_scores = scores_array[match_idx]
+        names = unrolled_names[indices_array[match_idx]]  # the names of the targets for each 1000 hits
+        sorted_match_idx = np.argsort(match_scores)[::-1]
 
         _, unique_indices = np.unique(
-            names[sorted_idx], return_index=True
+            names[sorted_match_idx], return_index=True
         )  # the unique names of the targets for each 1000 hits (<= 1000)
-        indices += list(indices_array[idx][sorted_idx][unique_indices])
-        scores += list(scores_idx[sorted_idx][unique_indices])
+        indices += list(indices_array[match_idx][sorted_match_idx][unique_indices])
+        scores += list(match_scores[sorted_match_idx][unique_indices])
 
     return scores, indices
-
 
 def filter_and_calc_embeddings(
     names: List[str],
@@ -59,7 +60,7 @@ def filter_and_calc_embeddings(
                 .T
             )
             # return: seq_lenxembed_dim shape
-            embeddings.append(embed.to("cpu"))
+            embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
             lengths.append(length)
         else:
             num_removed += 1
@@ -93,19 +94,16 @@ def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[s
     filtered list of sequences and distances to their centre
     which we use as hits for the given query"""
 
-    filtered_scores = {}
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
     scores, indices = filter_scores(
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
+    filtered_scores = defaultdict(float)
 
     for distance, name in zip(scores, unrolled_names[indices],):
-        # filtered_list.append((name, distance))
-        if name in filtered_scores.keys():
-            filtered_scores[name] += distance
-        else:
-            filtered_scores[name] = distance
+        filtered_scores[name] += distance
+
 
     return filtered_scores
 
@@ -120,31 +118,61 @@ def save_target_embeddings(arg_list):
 
 
 @torch.no_grad()
-def filter(arg_list, normalize_embeddings=True):
+def filter(arg_list):
     """Filters our hits based on
     distance to the query in the Faiiss
     cluster space"""
 
-    query_data, model, output_path, index, unrolled_names, max_seq_length = arg_list
+    query_data, model, output_path, index, unrolled_names, max_seq_length, write_results = arg_list
 
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
+    start_time = time.time()
+
+
     for i in tqdm.tqdm(range(len(queries))):
 
-        f = open(f"{output_path}/{query_names[i]}.txt", "w")
-        f.write("Name     Distance" + "\n")
-        if normalize_embeddings:
-            qval = torch.nn.functional.normalize(queries[i], dim=-1)
-
         filtered_scores = search(
-            index, unrolled_names, qval
-        )  # , search_time, filter_time, aggregate_time)
-        for name, distance in filtered_scores.items():
-            f.write(f"{name}     {distance}" + "\n")
-        f.close()
+            index, unrolled_names, queries[i]
+        )  
+    
+        if write_results:
+            f = open(f"{output_path}/{query_names[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
+    duration = time.time() - start_time
+    return duration
+
+def est_nprobe(index, threshold = 1):
+    # Retrieve centroid vectors for each Voronoi cell
+    centroids = index.quantizer.reconstruct_n(0,index.quantizer.ntotal).cpu()
+
+    random_numbers = np.random.randint(1000,size = (10,))
+    random_centroids = [centroids[i] for i in random_numbers]
+
+    surrounding_cells = []
+    for target_centroid in random_centroids:
+
+        distances = np.linalg.norm(centroids - target_centroid, axis=1)
+        sorted_distances_indices = np.argsort(distances)
+
+        sorted_distances = distances[sorted_distances_indices]
+        nprobe_est = len(np.where(sorted_distances<threshold)[0])
+        surrounding_cells.append(nprobe_est)
+    print(f"Estimating nprobe from {surrounding_cells}")
+    nprobe_avg = np.mean(surrounding_cells)
+    print(f"Nprobe: {nprobe_avg}")
+        
+
+    return int(nprobe_avg)
+    # Calculate Voronoi cell boundaries (e.g., using Convex Hull algorithm)
+
+    # Calculate angles between Voronoi cell boundaries
 
 
 def _setup_targets_for_search(
@@ -153,7 +181,7 @@ def _setup_targets_for_search(
     lengths: List[int],
     index_string,
     nprobe,
-    num_threads=16,
+    num_threads=1,
     normalize_embeddings=True,
     index_device="cpu",
 ):
@@ -167,26 +195,32 @@ def _setup_targets_for_search(
 
     unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
+    print(f"Creating index: {index_string}")
+    start = time.time()
     index: faiss.Index = create_faiss_index(
         embeddings=unrolled_targets,
         embed_dim=unrolled_targets.shape[-1],
         distance_metric="cosine" if normalize_embeddings else "l2",
         index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-        nprobe=nprobe,
-        num_threads=1,
+        num_threads=num_threads,
         device=index_device,
     )
+    index.nprobe = nprobe
+    loop_time = time.time() - start
 
     logger.info("Adding targets to index.")
     if index_device == "cpu":
         index.add(unrolled_targets.to("cpu"))
     else:
         index.add(unrolled_targets)
+    print(f"Index Creation took: {loop_time}.")
+
+    
 
     return unrolled_names, index
 
 
-def evaluate(params, query_names, query_embeddings, index, unrolled_names) -> dict:
+def evaluate(params, query_names, query_embeddings, index, unrolled_names, write_results) -> dict:
     """Evaluation pipeline.
 
     Calculates embeddings for query and targets
@@ -195,4 +229,4 @@ def evaluate(params, query_names, query_embeddings, index, unrolled_names) -> di
     Then runs Faiss clustering and filtering and returns a dictionary of the model's hits.
     """
 
-    filter(query_embeddings, query_names, params, index, unrolled_names)
+    filter(query_embeddings, query_names, params, index, unrolled_names, write_results)

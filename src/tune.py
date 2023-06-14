@@ -1,6 +1,5 @@
 import torch
 import os
-import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -12,19 +11,41 @@ from src.utils.util import (
     load_dataset_class,
     load_model_class,
 )
+import torch
 from torch import multiprocessing
-
+from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray import tune
 
 HOME = os.environ["HOME"]
 
 
-def train(_config):
+def tune_model(train_config, trainer_args, train_dataloader, val_dataloader, model_class,logger):
+    model = model_class(**train_config)
+
+    metrics = {"loss":"val_loss"}
+    callbacks = [TuneReportCallback(metrics, on = "validation_end")]
+        
+    trainer = Trainer(
+        **trainer_args,
+        callbacks=callbacks,
+        logger=logger,
+        val_check_interval=0.2,
+        devices=1,
+        # strategy="ddp_find_unused_parameters_false",
+    )
+    trainer.fit(
+        model,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
+        # ckpt_path=params.checkpoint,
+    )   
+
+def train(_config, train_config):
     seed_everything(_config["seed"])
     params = SimpleNamespace(**_config)
     model_class = load_model_class(params.model_name)
     dataset_class = load_dataset_class(params.dataset_name)
 
-    model = model_class(**params.model_args)
     train_dataset = dataset_class(**params.train_dataset_args)
 
     val_dataset = dataset_class(**params.val_dataset_args)
@@ -47,23 +68,18 @@ def train(_config):
 
     with open(f"{save_path}/config.yaml", "w") as file:
         yaml.dump(_config, file)
-        
-    trainer = Trainer(
-        **params.trainer_args,
-        callbacks=CallbackSet.callbacks(),
-        logger=logger,
-        log_every_n_steps = 1000,
-        #val_check_interval=0.2,
-        devices=torch.cuda.device_count(),
-        #early_stop_callback=pl.callbacks.EarlyStopping(monitor='val_loss')  # Enable early stopping based on validation loss
-        # strategy="ddp_find_unused_parameters_false",
-    )
-    trainer.fit(
-        model,
-        train_dataloaders=train_dataloader,
-        val_dataloaders=val_dataloader,
-        # ckpt_path=params.checkpoint,
-    )
+
+    trainable = tune.with_parameters(tune_model, trainer_args = params.trainer_args, train_dataloader=train_dataloader, val_dataloader=val_dataloader, model_class=model_class, logger=logger)
+    analysis = tune.run(trainable,resources_per_trial = {"cpu":os.cpu_count(), "gpu":torch.cuda.device_count()}, metric = "val_loss", mode = "min", config=train_config,num_samples=10)
+
+    print("Best config")
+    print(analysis.best_config)
+    print("Best checkpoint")
+    print(analysis.best_checkpoint)
+    print("Best result")
+    print(analysis.best_result)
+    print("Best trial")
+    print(analysis.best_trial)
 
 
 if __name__ == "__main__":
@@ -78,4 +94,16 @@ if __name__ == "__main__":
 
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
-    train(_config)
+
+
+    trainer_args = {"learning_rate": tune.loguniform(1e-7,1e-3),
+    "log_interval": 10000,
+    "in_channels": 20,
+    "indels": True,
+    "res_block_n_filters": tune.choice([512, 128, 256]),
+    "res_block_kernel_size": tune.choice([3,5,7]),
+    "n_res_blocks": tune.choice([6,8,10,12]),
+    "padding": "same",
+    "padding_mode": "zeros"}
+
+    train(_config, trainer_args)

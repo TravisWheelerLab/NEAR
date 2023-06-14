@@ -246,7 +246,7 @@ def write_datafile(
     return numpos_per_evalue, numhits
 
 
-def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs, **kwargs):
+def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs = None, **kwargs):
 
     if os.path.exists(f"{temp_file}_filtration.pickle"):
         with open(f"{temp_file}_filtration.pickle", 'rb') as pickle_file:
@@ -309,13 +309,14 @@ def get_outliers(
             outliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")
 
 
+
 def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, **kwargs):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
     if data_savedir is not None and os.path.exists(f"{data_savedir}/sorted_pairs.npy"):
         print(f"Getting saved data from {data_savedir}")
-        all_similarities = np.load(f"{data_savedir}/all_similarities.npy")
+        all_similarities = np.load(f"{data_savedir}/similarities.npy")
         all_e_values = np.load(f"{data_savedir}/all_e_values.npy")
         all_biases = np.load(f"{data_savedir}/all_biases.npy")
         sorted_pairs = np.load(f"{data_savedir}/sorted_pairs.npy")
@@ -362,6 +363,6 @@ def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, 
         np.save(f"{data_savedir}/similarities", np.array(similarities,dtype='half'), allow_pickle=True)
         np.save(f"{data_savedir}/all_biases", np.array(all_biases,dtype='half'), allow_pickle=True)
         np.save(f"{data_savedir}/all_e_values", np.array(all_e_values,dtype='half'), allow_pickle=True)
-        np.save(f"{data_savedir}/sorted_pairs", np.array(sorted_pairs), allow_pickle=True)
+        #np.save(f"{data_savedir}/sorted_pairs", np.array(sorted_pairs), allow_pickle=True)
 
     return (similarities, all_e_values, all_biases, sorted_pairs)

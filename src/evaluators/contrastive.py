@@ -6,8 +6,9 @@ from typing import List
 import faiss
 import numpy as np
 import torch
-
+import pdb
 from src.evaluators.uniref_evaluator import UniRefEvaluator
+from src.evaluators.contrastive_functional import est_nprobe
 from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
@@ -55,9 +56,11 @@ class ContrastiveEvaluator(UniRefEvaluator):
             embed_dim=unrolled_targets.shape[-1],
             distance_metric="cosine" if self.normalize_embeddings else "l2",
             index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            nprobe=self.nprobe,
             device=self.index_device,
+            num_threads = self.num_threads
         )
+
+        self.index.nprobe = self.nprobe
 
         logger.info("Adding targets to index.")
         if self.index_device == "cpu":
@@ -66,7 +69,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             self.index.add(unrolled_targets)
 
         faiss.omp_set_num_threads(self.num_threads)
-
+        
     def filter_scores(self, scores_array, indices_array):
         """Filters the scores such that every query amino can only
         be matched to one amino from each target sequence
