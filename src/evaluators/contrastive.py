@@ -2,7 +2,7 @@
 
 import logging
 from typing import List
-
+import time
 import faiss
 import numpy as np
 import torch
@@ -78,14 +78,20 @@ class ContrastiveEvaluator(UniRefEvaluator):
         """Searches through the target DB and gathers a
         filtered list of sequences and distances to their centre
         which we use as hits for the given query"""
-        filtered_scores = {}
+
+        search_start = time.time()
 
         scores_array, indices_array = self.index.search(
             query_embedding.contiguous(), k=1000
         )
+        search_time = time.time() - search_start
+        filtration_time = time.time()
+
         filtered_scores = filter_scores(
             scores_array.to("cpu").numpy(),
             indices_array.to("cpu").numpy(),
             self.unrolled_names,
         )
-        return filtered_scores
+        filtration_time = time.time() - filtration_time
+
+        return filtered_scores, search_time, filtration_time

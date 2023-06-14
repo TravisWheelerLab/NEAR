@@ -276,15 +276,17 @@ class UniRefEvaluator(Evaluator):
 
         t_begin = time.time()
 
+        total_search_time = 0
+        total_filtration_time = 0
+
         for i in tqdm.tqdm(range(len(queries))):
-            filtered_scores = self.search(
-                queries[i]
-            )  # , search_time, filter_time, aggregate_time)
+            filtered_scores, search_time, filtration_time = self.search(queries[i])
+            total_search_time += search_time
+            total_filtration_time += filtration_time
 
             if write_results:
                 f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
                 f.write("Name     Distance" + "\n")
-
                 for name, distance in filtered_scores.items():
                     f.write(f"{name}     {distance}" + "\n")
                 f.close()
@@ -292,3 +294,6 @@ class UniRefEvaluator(Evaluator):
         loop_time = time.time() - t_begin
 
         logger.info(f"Entire loop took: {loop_time}.")
+
+        print(f"Search time: {total_search_time}")
+        print(f"Filtration time: {total_filtration_time}")

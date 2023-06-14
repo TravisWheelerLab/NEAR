@@ -9,6 +9,8 @@ from src.evaluators.contrastive_functional import (
     filter,
     _setup_targets_for_search,
     save_target_embeddings,
+    search_only,
+    filter_only,
 )
 from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
@@ -182,6 +184,103 @@ def evaluate_multiprocessing(_config):
     pool.terminate()
 
 
+def evaluate_multiprocessing2(_config):
+    params = SimpleNamespace(**_config)
+
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+
+    model_class = load_model_class(params.model_name)
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+
+    # get target embeddings
+    if not os.path.exists(params.target_embeddings):
+        print("No saved target embeddings. Calculating them now.")
+        targetfasta = FastaFile(params.target_file)
+        target_sequences = targetfasta.data
+
+        target_names, target_lengths, target_embeddings = save_off_targets(
+            target_sequences,
+            params.num_threads,
+            model,
+            params.max_seq_length,
+            params.device,
+            params.target_embeddings,
+        )
+    else:
+        target_embeddings = torch.load(params.target_embeddings)
+
+        if params.target_names.endswith(".pickle"):
+            with open(params.target_names, "rb") as file_handle:
+                target_names = pickle.load(file_handle)
+
+            with open(params.target_lengths, "rb") as file_handle:
+                target_lengths = pickle.load(file_handle)
+
+        elif params.target_names.endswith(".txt"):
+            with open(params.target_names, "r") as f:
+                target_names = f.readlines()
+                target_names = [t.strip("\n") for t in target_names]
+            with open(params.target_lengths, "r") as f:
+                target_lengths = f.readlines()
+                target_lengths = [int(t.strip("\n")) for t in target_lengths]
+
+        else:
+            raise Exception("Saved target data format not understood")
+
+    assert len(target_lengths) == len(target_names) == len(target_embeddings)
+    unrolled_names, index = _setup_targets_for_search(
+        target_embeddings,
+        target_names,
+        target_lengths,
+        params.index_string,
+        params.nprobe,
+        params.omp_num_threads,
+    )
+    print("Beginning search...")
+    start = time.time()
+
+    all_scores, all_indices, query_names, search_time = search_only(
+        query_sequences, model, params.max_seq_length, index, params.output_path
+    )
+
+    arg_list = [
+        (
+            all_scores[i],
+            all_indices[i],
+            unrolled_names,
+            params.write_results,
+            params.output_path,
+            query_names[i],
+        )
+        for i in range(len(all_scores))
+    ]
+    del query_sequences
+
+    pool = Pool(params.num_threads)
+
+    per_query_filtration_time = time.time()
+
+    filtration_time = 0
+    for result in pool.imap(filter_only, arg_list):
+        filtration_time += result
+
+    per_query_filtration_time = time.time() - per_query_filtration_time
+
+    print(f"Elapsed time: {time.time() - start}.")
+    print(f"FAISS parallelized Search time: {search_time}")
+    print(f"Total filtration time: {filtration_time}.")
+    print(f"Per query filtration time: {per_query_filtration_time}.")
+
+    pool.terminate()
+
+
 def evaluate(_config):
     params = SimpleNamespace(**_config)
 
@@ -217,6 +316,6 @@ if __name__ == "__main__":
     if _config["profiler"]:
         profile(_config)
     elif _config["num_threads"] > 1:
-        evaluate_multiprocessing(_config)
+        evaluate_multiprocessing2(_config)
     else:
         evaluate(_config)

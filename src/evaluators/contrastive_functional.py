@@ -109,7 +109,7 @@ def search(
 
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
-    print(f"Search time: {time.time() - search_start}")
+    search_time = time.time() - search_start
 
     filtration_time = time.time()
 
@@ -117,8 +117,8 @@ def search(
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
 
-    print(f"Filtration time: {time.time - filtration_time}")
-    return filtered_scores
+    filtration_time = time.time() - filtration_time
+    return filtered_scores, search_time, filtration_time
 
 
 def save_target_embeddings(arg_list):
@@ -129,6 +129,46 @@ def save_target_embeddings(arg_list):
     )
 
     return target_names, targets, lengths
+
+
+@torch.no_grad()
+def search_only(query_data, model, max_seq_length, index, output_path):
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    start_time = time.time()
+
+    all_scores = []
+    all_indices = []
+
+    for i in tqdm.tqdm(range(len(queries))):
+        scores_array, indices_array = index.search(queries[i].contiguous(), k=1000)
+        all_scores.append(scores_array)
+        all_indices.append(indices_array)
+
+    search_time = time.time() - start_time
+
+    print(f"Search time: {search_time}")
+    return all_scores, all_indices, query_names, search_time
+
+
+def filter_only(
+    scores, indices, unrolled_names, write_results, output_path, query_name
+):
+    filtration_start = time.time()
+    filtered_scores = filter_scores(scores, indices, unrolled_names)
+    filtration_time = time.time() - filtration_start
+    if write_results:
+        f = open(f"{output_path}/{query_name}.txt", "w")
+        f.write("Name     Distance" + "\n")
+        for name, distance in filtered_scores.items():
+            f.write(f"{name}     {distance}" + "\n")
+        f.close()
+
+    print(f"Filtration time: {filtration_time}")
+    return filtration_time
 
 
 @torch.no_grad()
@@ -154,8 +194,15 @@ def filter(arg_list):
 
     start_time = time.time()
 
+    total_search_time = 0
+    total_filtration_time = 0
+
     for i in tqdm.tqdm(range(len(queries))):
-        filtered_scores = search(index, unrolled_names, queries[i])
+        filtered_scores, search_time, filtration_time = search(
+            index, unrolled_names, queries[i]
+        )
+        total_search_time += search_time
+        total_filtration_time += filtration_time
 
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
@@ -164,7 +211,7 @@ def filter(arg_list):
                 f.write(f"{name}     {distance}" + "\n")
             f.close()
     duration = time.time() - start_time
-    return duration
+    return duration, total_search_time, total_filtration_time
 
 
 def est_nprobe(index, threshold=1):
