@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import pdb
 from src.evaluators.uniref_evaluator import UniRefEvaluator
-from src.evaluators.contrastive_functional import est_nprobe
+from src.evaluators.contrastive_functional import filter_scores
 from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")
@@ -18,7 +18,6 @@ class ContrastiveEvaluator(UniRefEvaluator):
     """Evaluator for the Contrastive Loss Model"""
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
         self.index: faiss.Index = None
 
@@ -27,13 +26,18 @@ class ContrastiveEvaluator(UniRefEvaluator):
         through the model forward function to get the embedding tensor"""
 
         return (
-            model_class(encode_string_sequence(sequence).unsqueeze(0).to(self.model_device))
+            model_class(
+                encode_string_sequence(sequence).unsqueeze(0).to(self.model_device)
+            )
             .squeeze()
             .T
         )
 
     def _setup_targets_for_search(
-        self, target_embeddings: List[torch.Tensor], target_names: List[str], lengths: List[int]
+        self,
+        target_embeddings: List[torch.Tensor],
+        target_names: List[str],
+        lengths: List[int],
     ):
         """Creates the Faiss Index object using the unrolled
         target embddings"""
@@ -57,7 +61,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             distance_metric="cosine" if self.normalize_embeddings else "l2",
             index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
             device=self.index_device,
-            num_threads = self.num_threads
+            num_threads=self.num_threads,
         )
 
         self.index.nprobe = self.nprobe
@@ -69,28 +73,6 @@ class ContrastiveEvaluator(UniRefEvaluator):
             self.index.add(unrolled_targets)
 
         faiss.omp_set_num_threads(self.num_threads)
-        
-    def filter_scores(self, scores_array, indices_array):
-        """Filters the scores such that every query amino can only
-        be matched to one amino from each target sequence
-        and it matches the one with the biggest score"""
-        scores = []
-        indices = []
-
-        for idx in range(len(scores_array)):
-            scores_idx = scores_array[idx]
-            names = self.unrolled_names[
-                indices_array[idx]
-            ]  # the names of the targets for each 1000 hits
-            sorted_idx = np.argsort(scores_idx)[::-1]
-
-            _, unique_indices = np.unique(
-                names[sorted_idx], return_index=True
-            )  # the unique names of the targets for each 1000 hits (<= 1000)
-            indices += list(indices_array[idx][sorted_idx][unique_indices])
-            scores += list(scores_idx[sorted_idx][unique_indices])
-
-        return scores, indices
 
     def search(self, query_embedding: torch.Tensor):
         """Searches through the target DB and gathers a
@@ -98,15 +80,12 @@ class ContrastiveEvaluator(UniRefEvaluator):
         which we use as hits for the given query"""
         filtered_scores = {}
 
-        scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
-        scores, indices = self.filter_scores(
-            scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy()
+        scores_array, indices_array = self.index.search(
+            query_embedding.contiguous(), k=1000
         )
-
-        for distance, name in zip(scores, self.unrolled_names[indices],):
-            if name in filtered_scores.keys():
-                filtered_scores[name] += distance
-            else:
-                filtered_scores[name] = distance
-
+        filtered_scores = filter_scores(
+            scores_array.to("cpu").numpy(),
+            indices_array.to("cpu").numpy(),
+            self.unrolled_names,
+        )
         return filtered_scores

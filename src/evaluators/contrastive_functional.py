@@ -20,21 +20,28 @@ def filter_scores(scores_array, indices_array, unrolled_names):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
     and it matches the one with the biggest score"""
-    scores = []
-    indices = []
+
+    filtered_scores = defaultdict(float)
 
     for match_idx in range(len(scores_array)):
         match_scores = scores_array[match_idx]
-        names = unrolled_names[indices_array[match_idx]]  # the names of the targets for each 1000 hits
+        names = unrolled_names[
+            indices_array[match_idx]
+        ]  # the names of the targets for each 1000 hits
         sorted_match_idx = np.argsort(match_scores)[::-1]
 
         _, unique_indices = np.unique(
             names[sorted_match_idx], return_index=True
         )  # the unique names of the targets for each 1000 hits (<= 1000)
-        indices += list(indices_array[match_idx][sorted_match_idx][unique_indices])
-        scores += list(match_scores[sorted_match_idx][unique_indices])
 
-    return scores, indices
+        new_indices = list(indices_array[match_idx][sorted_match_idx][unique_indices])
+        new_scores = list(match_scores[sorted_match_idx][unique_indices])
+
+        for distance, name in zip(new_scores, unrolled_names[new_indices]):
+            filtered_scores[name] += distance
+
+    return filtered_scores
+
 
 def filter_and_calc_embeddings(
     names: List[str],
@@ -55,7 +62,9 @@ def filter_and_calc_embeddings(
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
-                model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
+                model_class(
+                    encode_string_sequence(sequence).unsqueeze(0).to(model_device)
+                )
                 .squeeze()
                 .T
             )
@@ -89,30 +98,35 @@ def _calc_embeddings(
     return filtered_names, embeddings, lengths
 
 
-def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
+def search(
+    index, unrolled_names, query_embedding: torch.Tensor
+) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
     which we use as hits for the given query"""
 
+    search_start = time.time()
+
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
-    scores, indices = filter_scores(
+    print(f"Search time: {time.time() - search_start}")
+
+    filtration_time = time.time()
+
+    filtered_scores = filter_scores(
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
-    filtered_scores = defaultdict(float)
 
-    for distance, name in zip(scores, unrolled_names[indices],):
-        filtered_scores[name] += distance
-
-
+    print(f"Filtration time: {time.time - filtration_time}")
     return filtered_scores
 
 
 def save_target_embeddings(arg_list):
-
     target_data, model, max_seq_length = arg_list
 
-    target_names, targets, lengths = _calc_embeddings(target_data, model, max_seq_length)
+    target_names, targets, lengths = _calc_embeddings(
+        target_data, model, max_seq_length
+    )
 
     return target_names, targets, lengths
 
@@ -123,7 +137,15 @@ def filter(arg_list):
     distance to the query in the Faiiss
     cluster space"""
 
-    query_data, model, output_path, index, unrolled_names, max_seq_length, write_results = arg_list
+    (
+        query_data,
+        model,
+        output_path,
+        index,
+        unrolled_names,
+        max_seq_length,
+        write_results,
+    ) = arg_list
 
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
@@ -132,13 +154,9 @@ def filter(arg_list):
 
     start_time = time.time()
 
-
     for i in tqdm.tqdm(range(len(queries))):
+        filtered_scores = search(index, unrolled_names, queries[i])
 
-        filtered_scores = search(
-            index, unrolled_names, queries[i]
-        )  
-    
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
@@ -148,26 +166,25 @@ def filter(arg_list):
     duration = time.time() - start_time
     return duration
 
-def est_nprobe(index, threshold = 1):
-    # Retrieve centroid vectors for each Voronoi cell
-    centroids = index.quantizer.reconstruct_n(0,index.quantizer.ntotal).cpu()
 
-    random_numbers = np.random.randint(1000,size = (10,))
+def est_nprobe(index, threshold=1):
+    # Retrieve centroid vectors for each Voronoi cell
+    centroids = index.quantizer.reconstruct_n(0, index.quantizer.ntotal).cpu()
+
+    random_numbers = np.random.randint(1000, size=(10,))
     random_centroids = [centroids[i] for i in random_numbers]
 
     surrounding_cells = []
     for target_centroid in random_centroids:
-
         distances = np.linalg.norm(centroids - target_centroid, axis=1)
         sorted_distances_indices = np.argsort(distances)
 
         sorted_distances = distances[sorted_distances_indices]
-        nprobe_est = len(np.where(sorted_distances<threshold)[0])
+        nprobe_est = len(np.where(sorted_distances < threshold)[0])
         surrounding_cells.append(nprobe_est)
     print(f"Estimating nprobe from {surrounding_cells}")
     nprobe_avg = np.mean(surrounding_cells)
     print(f"Nprobe: {nprobe_avg}")
-        
 
     return int(nprobe_avg)
     # Calculate Voronoi cell boundaries (e.g., using Convex Hull algorithm)
@@ -189,7 +206,9 @@ def _setup_targets_for_search(
     target embddings"""
 
     unrolled_names = np.repeat(target_names, lengths)
-    unrolled_targets = torch.cat(target_embeddings, dim=0)  # (num targets x amino per target) x 256
+    unrolled_targets = torch.cat(
+        target_embeddings, dim=0
+    )  # (num targets x amino per target) x 256
 
     del lengths
 
@@ -215,12 +234,12 @@ def _setup_targets_for_search(
         index.add(unrolled_targets)
     print(f"Index Creation took: {loop_time}.")
 
-    
-
     return unrolled_names, index
 
 
-def evaluate(params, query_names, query_embeddings, index, unrolled_names, write_results) -> dict:
+def evaluate(
+    params, query_names, query_embeddings, index, unrolled_names, write_results
+) -> dict:
     """Evaluation pipeline.
 
     Calculates embeddings for query and targets

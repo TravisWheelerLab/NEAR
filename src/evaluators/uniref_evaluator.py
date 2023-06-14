@@ -41,7 +41,7 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
         output_path="",
         num_threads=16,
-        nprobe = 100,
+        nprobe=100,
         target_embeddings_path=None,
     ):
         """
@@ -80,7 +80,9 @@ class UniRefEvaluator(Evaluator):
         self.max_hmmer_hits: dict = hmmer_hits_max
         self.nprobe = nprobe
 
-        self.encoding_func = encode_string_sequence if encoding_func is None else encoding_func
+        self.encoding_func = (
+            encode_string_sequence if encoding_func is None else encoding_func
+        )
         self.add_random_sequence: bool = add_random_sequence
         self.model_device: str = model_device
         self.minimum_seq_length: int = minimum_seq_length
@@ -106,7 +108,11 @@ class UniRefEvaluator(Evaluator):
             self.comp_func = np.less_equal
 
     def filter_sequences_by_length(
-        self, model_class, names: List[str], sequences: List[str], max_seq_length=512,
+        self,
+        model_class,
+        names: List[str],
+        sequences: List[str],
+        max_seq_length=512,
     ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
         """Filters the sequences by length thresholding given the
         minimum and maximum length threshold variables"""
@@ -120,18 +126,26 @@ class UniRefEvaluator(Evaluator):
             if max_seq_length >= length >= self.minimum_seq_length:
                 embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
-                embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
+                embeddings.append(
+                    torch.nn.functional.normalize(embed, dim=-1).to("cpu")
+                )
                 lengths.append(length)
             else:
                 num_removed += 1
                 filtered_names.remove(name)
-                logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
+                logger.debug(
+                    f"Removing sequence {sequence} with length {len(sequence)}"
+                )
         logger.info(f"removed {num_removed} sequences. ")
         return filtered_names, embeddings, lengths
 
     @torch.no_grad()
     def _calc_embeddings(
-        self, sequence_data: dict, model_class, apply_random_sequence: bool, max_seq_length=512,
+        self,
+        sequence_data: dict,
+        model_class,
+        apply_random_sequence: bool,
+        max_seq_length=512,
     ) -> Tuple[List[str], List[torch.Tensor], List[str]]:
         """Calculates the embeddings for the sequences by
         calling the model forward function. Filters the sequences by max/min
@@ -144,7 +158,10 @@ class UniRefEvaluator(Evaluator):
 
         logger.info("Filtering sequences by length...")
         filtered_names, embeddings, lengths = self.filter_sequences_by_length(
-            model_class, names, sequences, max_seq_length,
+            model_class,
+            names,
+            sequences,
+            max_seq_length,
         )
 
         assert len(filtered_names) == len(embeddings)
@@ -172,10 +189,10 @@ class UniRefEvaluator(Evaluator):
                 with open(f"target_names.txt", "r") as file_handle:
                     target_names = [t.strip("\n") for t in file_handle.readlines()]
 
-                with open(
-                    f"target_lengths.txt", "r"
-                ) as file_handle:
-                    target_lengths = [int(t.strip("\n")) for t in file_handle.readlines()]
+                with open(f"target_lengths.txt", "r") as file_handle:
+                    target_lengths = [
+                        int(t.strip("\n")) for t in file_handle.readlines()
+                    ]
 
         else:
             print("Embedding targets...")
@@ -190,11 +207,17 @@ class UniRefEvaluator(Evaluator):
                 print(f"Saving target embeddings to: {self.target_embeddings_path}")
 
                 torch.save(target_embeddings, self.target_embeddings_path)
-                with open(f"{self.target_embeddings_path}_names.pickle", "wb") as handle:
+                with open(
+                    f"{self.target_embeddings_path}_names.pickle", "wb"
+                ) as handle:
                     pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-                with open(f"{self.target_embeddings_path}_lengths.pickle", "wb") as handle:
-                    pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                with open(
+                    f"{self.target_embeddings_path}_lengths.pickle", "wb"
+                ) as handle:
+                    pickle.dump(
+                        target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL
+                    )
 
         print("Embedding queries...")
         query_names, query_embeddings, _ = self._calc_embeddings(
@@ -238,7 +261,7 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     @torch.no_grad()
-    def filter(self, queries, query_names, write_results = False):
+    def filter(self, queries, query_names, write_results=False):
         """Filters our hits based on
         distance to the query in the Faiiss
         cluster space"""
@@ -250,20 +273,21 @@ class UniRefEvaluator(Evaluator):
 
         print(self.output_path)
         print(f"Number of queries: {len(queries)}")
-        
+
         t_begin = time.time()
 
         for i in tqdm.tqdm(range(len(queries))):
-            filtered_scores = self.search(queries[i])  # , search_time, filter_time, aggregate_time)
+            filtered_scores = self.search(
+                queries[i]
+            )  # , search_time, filter_time, aggregate_time)
 
-            # if write_results:
+            if write_results:
+                f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
+                f.write("Name     Distance" + "\n")
 
-            #     f = open(f"{self.output_path}/{query_names[i]}.txt", "w")
-            #     f.write("Name     Distance" + "\n")
-
-            #     for name, distance in filtered_scores.items():
-            #         f.write(f"{name}     {distance}" + "\n")
-            #     f.close()
+                for name, distance in filtered_scores.items():
+                    f.write(f"{name}     {distance}" + "\n")
+                f.close()
 
         loop_time = time.time() - t_begin
 

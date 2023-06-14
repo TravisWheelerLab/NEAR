@@ -24,8 +24,9 @@ import pickle
 HOME = os.environ["HOME"]
 
 
-def save_off_targets(target_sequences, num_threads, model, max_seq_length, device, savedir):
-
+def save_off_targets(
+    target_sequences, num_threads, model, max_seq_length, device, savedir
+):
     t_chunk_size = len(target_sequences) // num_threads
 
     arg_list = [
@@ -68,7 +69,6 @@ def save_off_targets(target_sequences, num_threads, model, max_seq_length, devic
 
 
 def profile(_config):
-
     params = SimpleNamespace(**_config)
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -76,20 +76,22 @@ def profile(_config):
     evaluator_class = load_evaluator_class(params.evaluator_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
     ).to(params.device)
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
     if params.num_threads > 1:
         q_chunk_size = len(query_sequences) // params.num_threads
-        names, sequences, lengths = embed_multithread(query_sequences, model, q_chunk_size)
+        names, sequences, lengths = embed_multithread(
+            query_sequences, model, q_chunk_size
+        )
 
     else:
         names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
 
 
 def evaluate_multiprocessing(_config):
-
     params = SimpleNamespace(**_config)
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -97,7 +99,8 @@ def evaluate_multiprocessing(_config):
     model_class = load_model_class(params.model_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
     ).to(params.device)
 
     queryfasta = FastaFile(params.query_file)
@@ -105,6 +108,7 @@ def evaluate_multiprocessing(_config):
 
     q_chunk_size = len(query_sequences) // params.num_threads
 
+    # get target embeddings
     if not os.path.exists(params.target_embeddings):
         print("No saved target embeddings. Calculating them now.")
         targetfasta = FastaFile(params.target_file)
@@ -122,7 +126,6 @@ def evaluate_multiprocessing(_config):
         target_embeddings = torch.load(params.target_embeddings)
 
         if params.target_names.endswith(".pickle"):
-
             with open(params.target_names, "rb") as file_handle:
                 target_names = pickle.load(file_handle)
 
@@ -130,7 +133,6 @@ def evaluate_multiprocessing(_config):
                 target_lengths = pickle.load(file_handle)
 
         elif params.target_names.endswith(".txt"):
-
             with open(params.target_names, "r") as f:
                 target_names = f.readlines()
                 target_names = [t.strip("\n") for t in target_names]
@@ -159,7 +161,7 @@ def evaluate_multiprocessing(_config):
             index,
             unrolled_names,
             params.max_seq_length,
-            params.write_results
+            params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
@@ -181,7 +183,6 @@ def evaluate_multiprocessing(_config):
 
 
 def evaluate(_config):
-
     params = SimpleNamespace(**_config)
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -189,7 +190,8 @@ def evaluate(_config):
     evaluator_class = load_evaluator_class(params.evaluator_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path, map_location=torch.device(params.device),
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
     ).to(params.device)
     query_sequences, target_sequences, hmmer_hits_max = get_evaluation_data(
         params.query_file, params.evaluator_args["output_path"]
@@ -204,7 +206,6 @@ def evaluate(_config):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
 
