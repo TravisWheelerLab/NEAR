@@ -16,6 +16,7 @@ from src.data.benchmarking import (
 from src.data.eval_data_config import (
     load_alignment_inputs,
     load_knn_inputs,
+    load_mmseqs_inputs,
     load_esm_inputs,
     all_hits_max_file_4,
     all_hits_normal_file_4,
@@ -121,7 +122,7 @@ class Results:
 
 
 def compare(
-    query_id=4, modelname: str = "IVF-10", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+    query_id=4, modelname: str = "IVF-1", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
 ):
 
     print(f"Comparing models with {modelname}")
@@ -130,11 +131,12 @@ def compare(
     align = load_alignment_inputs(all_hits_max, "max", modelname)
     esm = load_esm_inputs(all_hits_max, "max", "esm")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
-    knn90 = load_knn_inputs(all_hits_max, "max", "knn-over-90")
+    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
+    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
 
     _, axis = plt.subplots(figsize=(10, 10))
 
-    for inputs in [esm, knn, knn90, align]:
+    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
         #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
         #     model_results_path, hmmer_hits_dict, savedir=data_savedir
         # )
@@ -142,19 +144,87 @@ def compare(
         
         filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
 
-        for i in range(4):
-            axis.plot(
-                np.array(filtrations)[:, -1],
-                np.array(recalls)[:, -1],
-                f"{COLORS[i]}--",
-                linewidth=2,
-                label=['ESM', 'ProtTransT5XLU50','ProtTransT5XLU50,>90', 'ResNet10'][i],
-            )
+        axis.plot(
+            np.array(filtrations)[:, -1],
+            np.array(recalls)[:, -1],
+            f"{COLORS[idx]}--",
+            linewidth=2,
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+        )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
-    plt.savefig("ResNet1d/results/compared_roc.png")
-    pdb.set_trace()
+    axis.grid()
+    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-1]}.png")
+    #pdb.set_trace()
+    plt.clf()
+    _, axis = plt.subplots(figsize=(10, 10))
 
+    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        (_, _, _, sorted_pairs) = get_data(**inputs)
+
+        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
+
+        axis.plot(
+            np.array(filtrations)[:, -2],
+            np.array(recalls)[:, -2],
+            f"{COLORS[idx]}--",
+            linewidth=2,
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+        )
+    axis.set_xlabel("filtration")
+    axis.set_ylabel("recall")
+    axis.grid()
+    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-2]}.png")
+    plt.clf()
+
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        (_, _, _, sorted_pairs) = get_data(**inputs)
+
+        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
+
+        axis.plot(
+            np.array(filtrations)[:,-3],
+            np.array(recalls)[:, -3],
+            f"{COLORS[idx]}--",
+            linewidth=2,
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+        )
+    axis.set_xlabel("filtration")
+    axis.grid()
+    axis.set_ylabel("recall")
+    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-3]}.png")
+    plt.clf()
+
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
+        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
+        # )
+        (_, _, _, sorted_pairs) = get_data(**inputs)
+
+        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
+
+        axis.plot(
+            np.array(filtrations)[:,-4],
+            np.array(recalls)[:, -4],
+            f"{COLORS[idx]}--",
+            linewidth=2,
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+        )
+    axis.set_xlabel("filtration")
+    axis.grid()
+    axis.set_ylabel("recall")
+    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-4]}.png")
+    plt.clf()
 def compare2(
     query_id=4, evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
 ):
@@ -287,6 +357,7 @@ if __name__ == "__main__":
     parser.add_argument("--modes", type=str, default=["MNF"])
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--modelname", type=str)
+    parser.add_argument("--impose", action="store_true")
 
     args = parser.parse_args()
 
@@ -310,6 +381,8 @@ if __name__ == "__main__":
         modes.append("normal")
 
     if args.compare:
+        compare()
+    elif args.impose:
         compare2()
-
-    evaluate(args.query_id, models, modes, modelname)
+    else:
+        evaluate(args.query_id, models, modes, modelname)

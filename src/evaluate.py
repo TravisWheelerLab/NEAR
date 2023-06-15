@@ -276,7 +276,7 @@ def evaluate_multiprocessing2(_config):
     print(f"Elapsed time: {time.time() - start}.")
     print(f"FAISS parallelized Search time: {search_time}")
     print(f"Total filtration time: {filtration_time}.")
-    print(f"Per query filtration time: {per_query_filtration_time}.")
+    print(f"Elapsed filtration time: {per_query_filtration_time}.")
 
     pool.terminate()
 

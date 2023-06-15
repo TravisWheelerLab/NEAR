@@ -155,8 +155,9 @@ def search_only(query_data, model, max_seq_length, index, output_path):
 
 
 def filter_only(
-    scores, indices, unrolled_names, write_results, output_path, query_name
+    arg_list
 ):
+    scores, indices, unrolled_names, write_results, output_path, query_name = arg_list
     filtration_start = time.time()
     filtered_scores = filter_scores(scores, indices, unrolled_names)
     filtration_time = time.time() - filtration_start

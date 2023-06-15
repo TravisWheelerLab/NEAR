@@ -100,9 +100,9 @@ if __name__ == "__main__":
     "log_interval": 10000,
     "in_channels": 20,
     "indels": True,
-    "res_block_n_filters": tune.choice([512, 128, 256]),
-    "res_block_kernel_size": tune.choice([3,5,7]),
-    "n_res_blocks": tune.choice([6,8,10,12]),
+    "res_block_n_filters": tune.grid_search([512, 128, 256]),
+    "res_block_kernel_size": tune.grid_search([3,5,7]),
+    "n_res_blocks": tune.grid_search([6,8,10,12]),
     "padding": "same",
     "padding_mode": "zeros"}
 

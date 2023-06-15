@@ -8,7 +8,7 @@ import numpy as np
 import pickle
 import pdb
 
-COLORS = ["r", "c", "g", "k"]
+COLORS = ["r", "c", "g", "k", "o"]
 
 
 def plot_mean_e_values(
@@ -183,7 +183,7 @@ def get_filtration_recall(
         elif 100 * (1 - filtration[0]) < 75:
             datafile.close()
             return filtrations, recalls
-    # return filtrations, recalls
+    return filtrations, recalls
 
 
 def get_sorted_pairs(all_scores, all_pairs) -> Tuple[list, list]:

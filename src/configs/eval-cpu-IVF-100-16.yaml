@@ -11,13 +11,15 @@ target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
 num_threads: 16
-omp_num_threads: 16
+omp_num_threads: 20
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
+write_results: False
 nprobe: 100
+output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
 evaluator_args:
     encoding_func: None
     model_device: "cpu" 
