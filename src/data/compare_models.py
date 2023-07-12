@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import pdb
 import resource
 resource.setrlimit(resource.RLIMIT_DATA, (500 * 1024**3, -1))
-
+import os
 
 
 def load_hmmer_hits(query_id: int = 4):
@@ -122,17 +122,18 @@ class Results:
 
 
 def compare(
-    query_id=4, modelname: str = "IVF-1", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+    query_id=4, modelname: str = "CPU-20K-150", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
 ):
 
     print(f"Comparing models with {modelname}")
     all_hits_max, _ = load_hmmer_hits(4)
 
     align = load_alignment_inputs(all_hits_max, "max", modelname)
-    esm = load_esm_inputs(all_hits_max, "max", "esm")
+    esm = load_esm_inputs(all_hits_max, "max", "esm-50")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
+    #last = load_mmseqs_inputs(all_hits_max, "max", "")
 
     _, axis = plt.subplots(figsize=(10, 10))
 
@@ -140,20 +141,36 @@ def compare(
         #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
         #     model_results_path, hmmer_hits_dict, savedir=data_savedir
         # )
-        (_, _, _, sorted_pairs) = get_data(**inputs)
+        if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
+            print("Loading filtration and recall directly")
+            with open(f"{inputs['temp_file']}_filtration.pickle", 'rb') as pickle_file:
+                filtrations = pickle.load(pickle_file)
+            with open(f"{inputs['temp_file']}_recall.pickle", 'rb') as pickle_file:
+                recalls = pickle.load(pickle_file)
+        else:
+            print(f" No such file {inputs['temp_file']}_filtration.pickle")
+
+
+            (_, _, _, sorted_pairs) = get_data(**inputs)
         
-        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
+            filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
 
         axis.plot(
             np.array(filtrations)[:, -1],
             np.array(recalls)[:, -1],
-            f"{COLORS[idx]}--",
+            f"{COLORS[idx]}",
             linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
         )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     axis.grid()
+    axis.legend()
+    axis.set_xlim(75,101)
+    axis.set_xticks([75,80,85,90,95,100])
+    #axis.set_ylim(25,101)
+    #axis.set_yticks([50,60,70,80,90,100])
+
     plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-1]}.png")
     #pdb.set_trace()
     plt.clf()
@@ -170,13 +187,19 @@ def compare(
         axis.plot(
             np.array(filtrations)[:, -2],
             np.array(recalls)[:, -2],
-            f"{COLORS[idx]}--",
+            f"{COLORS[idx]}",
             linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
         )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
     axis.grid()
+    axis.legend()
+    axis.set_xlim(75,101)
+    axis.set_xticks([75,80,85,90,95,100])
+    axis.set_ylim(50,101)
+    axis.set_yticks([50,60,70,80,90,100])
+
     plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-2]}.png")
     plt.clf()
 
@@ -193,13 +216,19 @@ def compare(
         axis.plot(
             np.array(filtrations)[:,-3],
             np.array(recalls)[:, -3],
-            f"{COLORS[idx]}--",
+            f"{COLORS[idx]}",
             linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
         )
     axis.set_xlabel("filtration")
+    axis.legend()
     axis.grid()
     axis.set_ylabel("recall")
+    axis.set_xlim(75,101)
+    axis.set_xticks([75,80,85,90,95,100])
+    axis.set_ylim(50,101)
+    axis.set_yticks([50,60,70,80,90,100])
+
     plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-3]}.png")
     plt.clf()
 
@@ -216,12 +245,17 @@ def compare(
         axis.plot(
             np.array(filtrations)[:,-4],
             np.array(recalls)[:, -4],
-            f"{COLORS[idx]}--",
+            f"{COLORS[idx]}",
             linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-1', "MMseqs2"][idx],
+            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
         )
     axis.set_xlabel("filtration")
     axis.grid()
+    axis.legend()
+    axis.set_xlim(75,101)
+    axis.set_xticks([75,80,85,90,95,100])
+    axis.set_ylim(50,101)
+    axis.set_yticks([50,60,70,80,90,100])
     axis.set_ylabel("recall")
     plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-4]}.png")
     plt.clf()
@@ -231,10 +265,12 @@ def compare2(
     styles = ['dashed','solid']
 
     print(f"Comparing NEAT models")
-    all_hits_max, _ = load_hmmer_hits(4)
+    all_hits_max, _all_hits_normal = load_hmmer_hits(4)
 
-    align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
-    align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
+    # align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
+    # align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
+    align = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-50")
+    align2 = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-250")
 
     nprobes = [50,250]
 
@@ -248,26 +284,27 @@ def compare2(
         
         filtrations, recalls = get_roc_data(**inputs)
 
-        for i in range(4):
+        for i in [0,1,2,3]:
             axis.plot(
                 np.array(filtrations)[:, i],
                 np.array(recalls)[:, i],
-                #f"{COLORS[idx]}--",
+                f"{COLORS[i]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
                 linestyle = styles[idx]
             )
-    axis.set_xlabel("filtration")
-    axis.set_ylabel("recall")
+    axis.set_xlabel("filtration", fontsize = 12)
+    axis.set_ylabel("recall", fontsize = 12)
+    axis.grid()
     print("Saving figure")
     plt.legend()
-    plt.savefig("ResNet1d/results/superimposedCPU.png")
+    plt.savefig("ResNet1d/results/superimposedCPUnormal.png")
 
     plt.clf()
 
     _, axis = plt.subplots(figsize=(10, 10))
 
-    for inputs in [align, align2]:
+    for idx, inputs in enumerate([align, align2]):
         #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
         #     model_results_path, hmmer_hits_dict, savedir=data_savedir
         # )
@@ -275,22 +312,26 @@ def compare2(
         
         filtrations, recalls = get_roc_data(**inputs)
 
-        for i in range(4):
+        for i in [0,1,2,3]:
             axis.plot(
                 np.array(filtrations)[:, i],
                 np.array(recalls)[:, i],
-                #f"{COLORS[idx]}--",
+                f"{COLORS[i]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
                 linestyle = styles[idx]
             )
-    axis.set_xlabel("filtration")
-    axis.set_ylabel("recall")
-    axis.set_ylim(90,100)
-    axis.set_xlim(95,100)
+    axis.set_xlabel("filtration", fontsize = 12)
+    axis.set_ylabel("recall", fontsize = 12)
+    axis.set_ylim(90,100.2)
+    axis.set_xlim(95,100.2)
+    axis.grid()
+    axis.set_xticks([95,96,97,98,99,100], fontsize = 12)
+    axis.set_yticks([90,92,94,96,98,100], fontsize = 12)
+
     plt.legend()
     print("Saving figure")
-    plt.savefig("ResNet1d/results/superimposedCPU-zoomed.png")
+    plt.savefig("ResNet1d/results/superimposedCPUnormal-zoomed.png")
 
 
 def evaluate(

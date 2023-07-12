@@ -10,23 +10,12 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
-num_threads: 2
+num_threads: 16
+omp_num_threads: 1
 device: 'cpu'
 normalize_embeddings: True
-minimum_seq_length: 0
+minimum_seq_length: 100
 max_seq_length: 200
 profiler: False
 nprobe: 5
 write_results: False
-evaluator_args:
-    encoding_func: None
-    model_device: "cpu" 
-    index_device: "cpu"
-    index_string: "IVF10000,Flat"
-    normalize_embeddings: True
-    minimum_seq_length: 0
-    max_seq_length: 200
-    nprobe: 5
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
-    num_threads: 2
-    target_embeddings_path: 'target_embeddings.pt'

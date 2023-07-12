@@ -128,19 +128,24 @@ class AlignmentGeneratorWithIndels(DataModule):
         if not os.path.exists(alignment_file):
             print("Corrupt file. Random sampling.")
             alignment_file = random.sample(self.alignment_file_paths,1)[0].strip("\n")
-        with open(alignment_file, "r") as file:
+        file =  open(alignment_file, "r") 
+        lines = file.readlines()
+        if len(lines) == 0 or len(lines) < 4:
+            #raise Exception(f"{alignment_file} is empty")
+            print("Alignment file is empty")
+            alignment_file = random.sample(self.alignment_file_paths,1)[0].strip("\n")
+            file =  open(alignment_file, "r") 
             lines = file.readlines()
-            if len(lines) == 0:
-                raise Exception(f"{alignment_file} is empty")
-            if len(lines) < 4:
-                raise Exception(f"{alignment_file} has less than 4 lines")
-                seq1 = lines[1].strip("\n")
-                seq2 = lines[2].strip("\n")
-                return seq1.upper(), seq2.upper(), seq1.upper(), seq2.upper()
-            seq1 = lines[1].strip("\n")
-            seq2 = lines[2].strip("\n")
-            seq1_full = lines[3].strip("\n")
-            seq2_full = lines[4].strip("\n")
+        # if len(lines) < 4:
+        #     raise Exception(f"{alignment_file} has less than 4 lines")
+        #     seq1 = lines[1].strip("\n")
+        #     seq2 = lines[2].strip("\n")
+        #     return seq1.upper(), seq2.upper(), seq1.upper(), seq2.upper()
+        seq1 = lines[1].strip("\n")
+        seq2 = lines[2].strip("\n")
+        seq1_full = lines[3].strip("\n")
+        seq2_full = lines[4].strip("\n")
+        file.close()
         return seq1.upper(), seq2.upper(), seq1_full.upper(), seq2_full.upper()
 
     def parse_indels(self, seq1: str, seq2: str):
@@ -304,7 +309,7 @@ class AlignmentGeneratorWithIndels(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         if not os.path.exists(alignment_path):
-            print(f"Bad path: {alignment_path}")
+            #print(f"Bad path: {alignment_path}")
             
             alignment_path = random.sample(self.alignment_file_paths,1)[0].strip("\n")
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)

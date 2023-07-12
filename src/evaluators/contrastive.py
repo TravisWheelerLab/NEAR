@@ -61,7 +61,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
             distance_metric="cosine" if self.normalize_embeddings else "l2",
             index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
             device=self.index_device,
-            num_threads=self.num_threads,
+            num_threads=self.omp_num_threads,
         )
 
         self.index.nprobe = self.nprobe
@@ -72,7 +72,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
         else:
             self.index.add(unrolled_targets)
 
-        faiss.omp_set_num_threads(self.num_threads)
+        faiss.omp_set_num_threads(self.omp_num_threads)
 
     def search(self, query_embedding: torch.Tensor):
         """Searches through the target DB and gathers a

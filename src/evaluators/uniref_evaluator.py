@@ -41,6 +41,7 @@ class UniRefEvaluator(Evaluator):
         index_device="cpu",
         output_path="",
         num_threads=16,
+        omp_num_threads = 4,
         nprobe=100,
         target_embeddings_path=None,
     ):
@@ -97,7 +98,7 @@ class UniRefEvaluator(Evaluator):
         self.distance_threshold = float(distance_threshold)
         self.evalue_threshold = evalue_threshold
         self.output_path = output_path
-        self.num_threads = num_threads
+        self.omp_num_threads = omp_num_threads
         self.target_embeddings_path = target_embeddings_path
 
         if self.normalize_embeddings:

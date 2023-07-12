@@ -36,16 +36,16 @@ if __name__ == "__main__":
 
     # args = parser.parse_args()
     create_target_indices()
-    # for query in range(5):
-    #     print(f"Searching query: {query}")
-    #     make(f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{query}")
-    #     queryfasta = f"/xdisk/twheeler/daphnedemekas/prefilter/uniref/split_subset/queries/queries_{query}.fa"
+    for query in range(5):
+        print(f"Searching query: {query}")
+        make(f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{query}")
+        queryfasta = f"/xdisk/twheeler/daphnedemekas/prefilter/uniref/split_subset/queries/queries_{query}.fa"
 
-    #     for target in range(45):
-    #         make(f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{target}")
+        for target in range(45):
+            make(f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{target}")
 
-    #         output_dir = f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{query}/{target}"
+            output_dir = f"/xdisk/twheeler/daphnedemekas/mmseqs-output/{query}/{target}"
 
-    #         targetindex = f"targetDB{target}"
+            targetindex = f"targetDB{target}"
 
-    #         main(queryfasta, targetindex, output_dir)
+            main(queryfasta, targetindex, output_dir)

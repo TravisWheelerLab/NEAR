@@ -19,10 +19,18 @@ logger = logging.getLogger("evaluate")
 def filter_scores(scores_array, indices_array, unrolled_names):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
-    and it matches the one with the biggest score"""
+    and it matches the one with the biggest score. 
+    
+    Then sums the scores that belong to the same target 
+    and returns the resulting distances in a dict
+    
+    scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
+    indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
+    for each of the scores in scores_array"""
 
     filtered_scores = defaultdict(float)
 
+    #iterate over query amino scores
     for match_idx in range(len(scores_array)):
         match_scores = scores_array[match_idx]
         names = unrolled_names[
@@ -118,6 +126,8 @@ def search(
     )
 
     filtration_time = time.time() - filtration_time
+
+    #TODO: divide by query sequence length and multiply by median sequence length
     return filtered_scores, search_time, filtration_time
 
 

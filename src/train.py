@@ -13,8 +13,7 @@ from src.utils.util import (
     load_model_class,
 )
 from torch import multiprocessing
-
-
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 HOME = os.environ["HOME"]
 
 
@@ -50,19 +49,19 @@ def train(_config):
         
     trainer = Trainer(
         **params.trainer_args,
+#        callbacks=[EarlyStopping(monitor='val_loss')],
         callbacks=CallbackSet.callbacks(),
         logger=logger,
-        log_every_n_steps = 1000,
+        log_every_n_steps = 10000,
         #val_check_interval=0.2,
-        devices=torch.cuda.device_count(),
-        #early_stop_callback=pl.callbacks.EarlyStopping(monitor='val_loss')  # Enable early stopping based on validation loss
+        devices=1,
         # strategy="ddp_find_unused_parameters_false",
     )
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        # ckpt_path=params.checkpoint,
+        ckpt_path=params.checkpoint,
     )
 
 

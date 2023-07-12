@@ -28,29 +28,36 @@ def parse_mmseqs():
         val_targets = [t.strip("\n") for t in val_target_file.readlines()]
         print(f"Found {len(val_targets)} val targets")
 
-    directory = '/xdisk/twheeler/daphnedemekas/mmseqs-output/4'
+    #directory = '/xdisk/twheeler/daphnedemekas/mmseqs-output/4'
 
-    mmseqs_output = {}
+    myqueries = [f[:-4] for f in os.listdir('/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/CPU-20K-150')]
+    with open('/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt', 'r') as tnames:
+       mytargets = [t.strip("\n") for t in tnames.readlines()]
 
-    outputdir = '/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs'
-    os.mkdir(outputdir)
+    
+    #assert len(queries) == 16769
+    print(f"Number of relevant targets: {len(mytargets)}")
+    outputdir = '/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-mmseqs'
 
-    for subdir in tqdm.tqdm(os.listdir(directory)):
-        mmseqspath = f'{directory}/{subdir}/alnRes.m8'
-        with open(mmseqspath, 'r') as f:
-            lines = f.readlines()
-            for f in tqdm.tqdm(lines):
-                line_split = f.split()
-                query, target = line_split[0], line_split[1]
-                bitscore = float(line_split[-1])
-                if os.path.exists(f"{outputdir}/{query}.txt"):
-                    with open(f"{outputdir}/{query}.txt", "a") as f:
+    #for subdir in tqdm.tqdm(os.listdir(directory)):
+    
+    mmseqspath = f'/xdisk/twheeler/daphnedemekas/mmseqs/reversedresults.m8'
+    with open(mmseqspath, 'r') as f:
+        lines = f.readlines()
+        for f in tqdm.tqdm(lines):
+            line_split = f.split()
+            query, target = line_split[0], line_split[1]
+            if query not in myqueries or target not in mytargets:    
+                print("skipping")
+                continue
+            bitscore = float(line_split[-1])
+            if os.path.exists(f"{outputdir}/{query}.txt"):
+                with open(f"{outputdir}/{query}.txt", "a") as f:
                     
-                        f.write(f"{target}     {bitscore}" + "\n")
-                else:
-                    with open(f"{outputdir}/{query}.txt", "w") as f:
-                    
-                        f.write(f"{target}     {bitscore}" + "\n")      
+                    f.write(f"{target}     {bitscore}" + "\n")
+            else:
+                with open(f"{outputdir}/{query}.txt", "w") as f:
+                    f.write(f"{target}     {bitscore}" + "\n")      
 
 
 def get_mmseqs_recall(e_value_threshold):

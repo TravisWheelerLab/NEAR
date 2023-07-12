@@ -8,7 +8,7 @@ import numpy as np
 import pickle
 import pdb
 
-COLORS = ["r", "c", "g", "k", "o"]
+COLORS = ["mediumseagreen", "darkblue", "mediumvioletred", "darkorchid", "tomato"]
 
 
 def plot_mean_e_values(
@@ -69,12 +69,17 @@ def plot_mean_e_values(
             alpha=0.5,
             color="orange",
         )
+    # plt.title(title + ", Full")
+    # plt.ylabel("Log E value means")
+    # plt.xlabel("Similarity Threshold")
+    # plt.savefig(f"ResNet1d/results/{outputfilename}-full.png")
+
     plt.title(title)
     plt.ylim(-20, 0)
+    plt.xlim(0,100)
     plt.ylabel("Log E value means")
     plt.xlabel("Similarity Threshold")
     plt.savefig(f"ResNet1d/results/{outputfilename}.png")
-
 
 def plot_lengths(distance_list1, distance_list2, distance_list3):
     thresholds = np.linspace(
@@ -130,25 +135,32 @@ def plot_roc_curve(
         axis.plot(
             np.array(filtrations)[:, i],
             np.array(recalls)[:, i],
-            f"{COLORS[i]}--",
+            f"{COLORS[i]}",
             linewidth=2,
             label=evalue_thresholds[i],
         )
     axis.set_xlabel("filtration")
     axis.set_ylabel("recall")
-#    axis.set_ylim(0, 100)
+    axis.ticklabel_format(style='plain', axis='x', useOffset=False)
+    axis.grid()
+    axis.set_ylim(0, 100)
     plt.legend()
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
 
 
 def get_filtration_recall(
-    numpos_per_evalue: list,
-    numhits: int,
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
     filename: str = "data.txt",
 ):
-
+    if 'max' in filename:
+        print("max numpos")
+        numpos_per_evalue = [355203, 598800, 901348, 3607355]
+        alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
+    else:
+        print("normal numpos")
+        numpos_per_evalue = [354984, 593354, 839953, 886633]
+        alldecoys = [2345180299, 2345180299, 2345180299, 2345180299]
     print("Getting Filtration & Recall")
 
     num_thresholds = len(evalue_thresholds)
@@ -172,7 +184,7 @@ def get_filtration_recall(
                 num_positives[i] += 1
             elif classnames[i] == "D":
                 num_decoys[i] += 1
-        filtration = [num_decoys[i] / numhits for i in range(num_thresholds)]
+        filtration = [num_decoys[i] / alldecoys[i] for i in range(num_thresholds)]
 
         if idx % 1000 == 0 and (100 * (1 - filtration[0]) > 75):
             recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
@@ -207,43 +219,48 @@ def write_datafile(
     """This opens a data file and counts the recall as it descends through the results
     Returns the number of positives for 4 evalue thresholds
     TODO: This code can be improved /generalized"""
-    numpos_per_evalue = [0, 0, 0, 0]
+    #numpos_per_evalue = [0, 0, 0, 0]
     print(f"Writing to file {filename}..")
-    numhits = 0
+    #numhits = 0
+    #numdecoys = 0
+
     with open(filename, "w", encoding="utf-8") as datafile:
         for pair in tqdm.tqdm(pairs):
             query, target = pair[0], pair[1]
+
             evalue = None
             if query not in hmmerhits or target not in hmmerhits[query]:
                 classname1 = classname2 = classname3 = classname4 = "D"
+                #numdecoys += 1
             else:
                 evalue = hmmerhits[query][target][0]
                 classname1 = classname2 = classname3 = classname4 = "M"
 
                 if evalue < evalue_thresholds[3]:
                     classname4 = "P"
-                    numpos_per_evalue[3] += 1
+                    #numpos_per_evalue[3] += 1
                     if evalue < evalue_thresholds[2]:
                         classname3 = "P"
-                        numpos_per_evalue[2] += 1
+                        #numpos_per_evalue[2] += 1
                         if evalue < evalue_thresholds[1]:
                             classname2 = "P"
-                            numpos_per_evalue[1] += 1
+                            #numpos_per_evalue[1] += 1
                             if evalue < evalue_thresholds[0]:
                                 classname1 = "P"
-                                numpos_per_evalue[0] += 1
+                                #numpos_per_evalue[0] += 1
             datafile.write(
                 f"{query}          {target}          {evalue}          \
                     {classname1}          {classname2}          \
                         {classname3}          {classname4}"
                 + "\n"
             )
-            numhits += 1
+            #numhits += 1
 
-    print(f"Numpos per evalue: {numpos_per_evalue}")
-    print(f"Number of hits: {numhits}")
+    # print(f"Numpos per evalue: {numpos_per_evalue}")
+    # print(f"Number of hits: {numhits}")
+    # print(f"Number of decoys: {numdecoys}")
 
-    return numpos_per_evalue, numhits
+    #return numpos_per_evalue, numdecoys
 
 
 def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs = None, **kwargs):
@@ -255,11 +272,11 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs = None, **k
             recalls = pickle.load(pickle_file)
         return filtrations, recalls
 
-    numpos_per_evalue, numhits = write_datafile(
+    write_datafile(
         sorted_pairs, hmmer_hits_dict, evalue_thresholds=[1e-10, 1e-4, 1e-1, 10], filename=temp_file
     )
     print("Wrote files")
-    filtrations, recalls = get_filtration_recall(numpos_per_evalue, numhits, filename=temp_file)
+    filtrations, recalls = get_filtration_recall(filename=temp_file)
 
     print(f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall")
 
@@ -268,7 +285,6 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs = None, **k
     with open(f"{temp_file}_recall.pickle", "wb") as recallfile:
         pickle.dump(recalls, recallfile)
 
-    os.remove(temp_file)
     return filtrations, recalls
 
 
@@ -333,6 +349,21 @@ def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, 
     all_biases = []
     all_targets = []
     all_scores = []
+    
+
+    #with open ("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as f:
+    #    target_names = [t.strip("\n") for  t in f.readlines()]
+    print(model_results_path)
+
+    if 'CPU' in model_results_path:
+        nprobe = model_results_path.split("/")[-1].split("-")[-1]
+        reversed_path = f"/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/reversed-{nprobe}" 
+    else:
+        reversed_path = model_results_path + "-reversed"
+    print(f"Revered path :{reversed_path}")
+    
+    #TODO: here get a dictionary query: target: score for the results from shuffeld data not in hmmer
+    reversed_results = {}
     for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
         queryname = queryhits.strip(".txt")
         with open(f"{model_results_path}/{queryhits}", "r") as file:
@@ -341,19 +372,38 @@ def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, 
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                all_targets.append((queryname, target))
+       #         if target not in target_names:
+       #             continue
+                #all_targets.append((queryname, target))
                 similarity = float(line.split()[1].strip("\n"))
+                #if there is a decoy, then collect targets from reversed results
+                if queryname not in hmmer_hits_dict or target not in hmmer_hits_dict[queryname]:
+                    if os.path.exists(f"{reversed_path}/{queryhits}"):
+                        if queryname in reversed_results:
+                            if target in reversed_results[queryname]:
+                                #print("getting reversed similarity")
+                                similarity = reversed_results[queryname][target]
+                            else:
+                                continue
+                        else:
+                            reversed_results[queryname] = {}
+                            with open(f"{reversed_path}/{queryhits}") as file:
+                                for line in file:
+                                    if "Distance" in line:
+                                        continue
+                                    target = line.split()[0].strip("\n")
+                                    s = float(line.split()[1].strip("\n"))
+                                    reversed_results[queryname][target] = s
+                            similarity = reversed_results[queryname][target]
+                else:
+                    similarities.append(similarity)
+
+                    all_e_values.append(hmmer_hits_dict[queryname][target][0])
+                    all_biases.append(hmmer_hits_dict[queryname][target][2])
+
+                all_targets.append((queryname, target))
                 all_scores.append(similarity)
-                if queryname not in hmmer_hits_dict:
-                    continue
-                if target not in hmmer_hits_dict[queryname]:
-                    continue
-
-                similarities.append(similarity)
-
-                all_e_values.append(hmmer_hits_dict[queryname][target][0])
-                all_biases.append(hmmer_hits_dict[queryname][target][2])
-
+    assert len(all_scores) == len(all_targets)
     print("Sorting pairs...")
     sorted_pairs = get_sorted_pairs(all_scores, all_targets)
     if data_savedir is not None:

@@ -14,33 +14,81 @@ from src.utils.util import (
 import torch
 from torch import multiprocessing
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
-from ray import tune
+from ray import tune, air
+from ray.tune.schedulers import ASHAScheduler
+from ray.air.config import RunConfig, ScalingConfig, CheckpointConfig
+from ray.train.lightning import LightningTrainer, LightningConfigBuilder
 
 HOME = os.environ["HOME"]
 
+def run_tune(num_samples, trainer, lightning_config):
+    scheduler = ASHAScheduler(max_t=2, grace_period=1, reduction_factor=2)
+    tuner = tune.Tuner(
+            trainer,
+            param_space={"lightning_config": lightning_config},
+            tune_config=tune.TuneConfig(
+                metric="val_loss",
+                mode="min",
+                num_samples=num_samples,
+                scheduler=scheduler,
+            ),
+            run_config=air.RunConfig(storage_path="/xdisk/twheeler/daphnedemekas/ray_tune", name="tune")
+        )
 
-def tune_model(train_config, trainer_args, train_dataloader, val_dataloader, model_class,logger):
-    model = model_class(**train_config)
+    print("Fitting tuner...")
+    results = tuner.fit()
+    best_result = results.get_best_result(metric="val_loss", mode="min")
 
-    metrics = {"loss":"val_loss"}
-    callbacks = [TuneReportCallback(metrics, on = "validation_end")]
-        
-    trainer = Trainer(
-        **trainer_args,
-        callbacks=callbacks,
-        logger=logger,
-        val_check_interval=0.2,
-        devices=1,
-        # strategy="ddp_find_unused_parameters_false",
+    print(best_result)
+    print("Best config")
+    print(results.best_config)
+    print("Best checkpoint")
+    print(results.best_checkpoint)
+    print("Best result")
+    print(results.best_result)
+    print("Best trial")
+    print(results.best_trial)
+
+
+def tune_model(train_config, train_dataloader, val_dataloader, model_class,logger):
+
+    config={"learning_rate": tune.loguniform(1e-7, 1e-3),
+                "res_block_n_filters": tune.choice([512, 128, 256]),
+                "res_block_kernel_size": tune.choice([3,5,7]),
+                "n_res_blocks": tune.choice([6,8,10,12]),
+                }
+
+    train_config.update(config)
+
+    print("Train config:")
+    print(train_config)
+    lightning_config = (
+        LightningConfigBuilder()
+        .module(cls=model_class, **train_config)
+        .trainer(max_epochs=2, accelerator="gpu", logger=logger, precision = 16, log_every_n_steps = 10000)
+        .fit_params(train_dataloaders=train_dataloader, val_dataloaders = val_dataloader)
+        .checkpointing(monitor="val_loss", save_top_k=2, mode="min", every_n_epochs = 1000)
+        .build()
     )
-    trainer.fit(
-        model,
-        train_dataloaders=train_dataloader,
-        val_dataloaders=val_dataloader,
-        # ckpt_path=params.checkpoint,
-    )   
+    scaling_config = ScalingConfig(
+        use_gpu=True, num_workers =1, resources_per_worker={"CPU": 20, "GPU": 1}
+    )
 
-def train(_config, train_config):
+    run_config = RunConfig(checkpoint_config=CheckpointConfig(
+        num_to_keep=2,
+        checkpoint_score_attribute="val_loss",
+        checkpoint_score_order="min",
+    ),
+    )
+
+    trainer = LightningTrainer(
+    scaling_config=scaling_config,
+    run_config=run_config,
+    )
+
+    run_tune(10,trainer, lightning_config)
+
+def tune_pipeline(_config):
     seed_everything(_config["seed"])
     params = SimpleNamespace(**_config)
     model_class = load_model_class(params.model_name)
@@ -68,19 +116,9 @@ def train(_config, train_config):
 
     with open(f"{save_path}/config.yaml", "w") as file:
         yaml.dump(_config, file)
-
-    trainable = tune.with_parameters(tune_model, trainer_args = params.trainer_args, train_dataloader=train_dataloader, val_dataloader=val_dataloader, model_class=model_class, logger=logger)
-    analysis = tune.run(trainable,resources_per_trial = {"cpu":os.cpu_count(), "gpu":torch.cuda.device_count()}, metric = "val_loss", mode = "min", config=train_config,num_samples=10)
-
-    print("Best config")
-    print(analysis.best_config)
-    print("Best checkpoint")
-    print(analysis.best_checkpoint)
-    print("Best result")
-    print(analysis.best_result)
-    print("Best trial")
-    print(analysis.best_trial)
-
+    tune_model(params.model_args,train_dataloader, val_dataloader, model_class,logger)
+    # trainable = tune.with_parameters(tune_model, trainer_args = params.trainer_args, train_dataloader=train_dataloader, val_dataloader=val_dataloader, model_class=model_class, logger=logger)
+    # analysis = tune.run(trainable,resources_per_trial = {"cpu":os.cpu_count(), "gpu":torch.cuda.device_count()}, metric = "val_loss", mode = "min", config=train_config,num_samples=10)
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method("spawn")
@@ -95,15 +133,4 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
 
-
-    trainer_args = {"learning_rate": tune.loguniform(1e-7,1e-3),
-    "log_interval": 10000,
-    "in_channels": 20,
-    "indels": True,
-    "res_block_n_filters": tune.grid_search([512, 128, 256]),
-    "res_block_kernel_size": tune.grid_search([3,5,7]),
-    "n_res_blocks": tune.grid_search([6,8,10,12]),
-    "padding": "same",
-    "padding_mode": "zeros"}
-
-    train(_config, trainer_args)
+    tune_pipeline(_config)
