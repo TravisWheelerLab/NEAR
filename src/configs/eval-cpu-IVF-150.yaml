@@ -11,7 +11,7 @@ target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/CPU-20K-150"
 num_threads: 16
-omp_num_threads: 3
+omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0

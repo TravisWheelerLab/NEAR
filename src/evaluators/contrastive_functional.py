@@ -19,18 +19,18 @@ logger = logging.getLogger("evaluate")
 def filter_scores(scores_array, indices_array, unrolled_names):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
-    and it matches the one with the biggest score. 
-    
-    Then sums the scores that belong to the same target 
+    and it matches the one with the biggest score.
+
+    Then sums the scores that belong to the same target
     and returns the resulting distances in a dict
-    
+
     scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
     indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
     for each of the scores in scores_array"""
 
     filtered_scores = defaultdict(float)
 
-    #iterate over query amino scores
+    # iterate over query amino scores
     for match_idx in range(len(scores_array)):
         match_scores = scores_array[match_idx]
         names = unrolled_names[
@@ -70,9 +70,7 @@ def filter_and_calc_embeddings(
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
-                model_class(
-                    encode_string_sequence(sequence).unsqueeze(0).to(model_device)
-                )
+                model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
                 .squeeze()
                 .T
             )
@@ -106,9 +104,7 @@ def _calc_embeddings(
     return filtered_names, embeddings, lengths
 
 
-def search(
-    index, unrolled_names, query_embedding: torch.Tensor
-) -> List[Tuple[str, float]]:
+def search(index, unrolled_names, query_embedding: torch.Tensor) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
     which we use as hits for the given query"""
@@ -127,16 +123,14 @@ def search(
 
     filtration_time = time.time() - filtration_time
 
-    #TODO: divide by query sequence length and multiply by median sequence length
+    # TODO: divide by query sequence length and multiply by median sequence length
     return filtered_scores, search_time, filtration_time
 
 
 def save_target_embeddings(arg_list):
     target_data, model, max_seq_length = arg_list
 
-    target_names, targets, lengths = _calc_embeddings(
-        target_data, model, max_seq_length
-    )
+    target_names, targets, lengths = _calc_embeddings(target_data, model, max_seq_length)
 
     return target_names, targets, lengths
 
@@ -164,9 +158,7 @@ def search_only(query_data, model, max_seq_length, index, output_path):
     return all_scores, all_indices, query_names, search_time
 
 
-def filter_only(
-    arg_list
-):
+def filter_only(arg_list):
     scores, indices, unrolled_names, write_results, output_path, query_name = arg_list
     filtration_start = time.time()
     filtered_scores = filter_scores(scores, indices, unrolled_names)
@@ -209,9 +201,7 @@ def filter(arg_list):
     total_filtration_time = 0
 
     for i in tqdm.tqdm(range(len(queries))):
-        filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, queries[i]
-        )
+        filtered_scores, search_time, filtration_time = search(index, unrolled_names, queries[i])
         total_search_time += search_time
         total_filtration_time += filtration_time
 
@@ -264,9 +254,7 @@ def _setup_targets_for_search(
     target embddings"""
 
     unrolled_names = np.repeat(target_names, lengths)
-    unrolled_targets = torch.cat(
-        target_embeddings, dim=0
-    )  # (num targets x amino per target) x 256
+    unrolled_targets = torch.cat(target_embeddings, dim=0)  # (num targets x amino per target) x 256
 
     del lengths
 
@@ -295,9 +283,7 @@ def _setup_targets_for_search(
     return unrolled_names, index
 
 
-def evaluate(
-    params, query_names, query_embeddings, index, unrolled_names, write_results
-) -> dict:
+def evaluate(params, query_names, query_embeddings, index, unrolled_names, write_results) -> dict:
     """Evaluation pipeline.
 
     Calculates embeddings for query and targets

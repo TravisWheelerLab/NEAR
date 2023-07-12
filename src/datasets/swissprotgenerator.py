@@ -141,7 +141,9 @@ class SwissProtGenerator(SwissProtLoader):
         )
 
         seq2 = utils.mutate_sequence(
-            sequence=sequence, substitutions=n_subs, sub_distributions=self.sub_dists,
+            sequence=sequence,
+            substitutions=n_subs,
+            sub_distributions=self.sub_dists,
         )
         # this creates a fuzzy tensor.
         seq2 = utils.encode_tensor_sequence(seq2)  # 20x256

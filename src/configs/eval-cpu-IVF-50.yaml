@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/new-checkpoint-50"
-num_threads: 4
+num_threads: 16
 omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True

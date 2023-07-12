@@ -1,6 +1,7 @@
-import os 
-import pickle 
+import os
+import pickle
 import tqdm
+
 all_hits_max_file_4 = "data/evaluationtargetdict"
 all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
 
@@ -21,50 +22,53 @@ def load_hmmer_hits(query_id: int = 4):
 def parse_mmseqs():
     querynum = 4
 
-    evalseqs = '/xdisk/twheeler/daphnedemekas/targetdataseqs/eval.txt'
-
+    evalseqs = "/xdisk/twheeler/daphnedemekas/targetdataseqs/eval.txt"
 
     with open(evalseqs, "r") as val_target_file:
         val_targets = [t.strip("\n") for t in val_target_file.readlines()]
         print(f"Found {len(val_targets)} val targets")
 
-    #directory = '/xdisk/twheeler/daphnedemekas/mmseqs-output/4'
+    # directory = '/xdisk/twheeler/daphnedemekas/mmseqs-output/4'
 
-    myqueries = [f[:-4] for f in os.listdir('/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/CPU-20K-150')]
-    with open('/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt', 'r') as tnames:
-       mytargets = [t.strip("\n") for t in tnames.readlines()]
+    myqueries = [
+        f[:-4]
+        for f in os.listdir(
+            "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/CPU-20K-150"
+        )
+    ]
+    with open("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as tnames:
+        mytargets = [t.strip("\n") for t in tnames.readlines()]
 
-    
-    #assert len(queries) == 16769
+    # assert len(queries) == 16769
     print(f"Number of relevant targets: {len(mytargets)}")
-    outputdir = '/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-mmseqs'
+    outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-mmseqs"
 
-    #for subdir in tqdm.tqdm(os.listdir(directory)):
-    
-    mmseqspath = f'/xdisk/twheeler/daphnedemekas/mmseqs/reversedresults.m8'
-    with open(mmseqspath, 'r') as f:
+    # for subdir in tqdm.tqdm(os.listdir(directory)):
+
+    mmseqspath = f"/xdisk/twheeler/daphnedemekas/mmseqs/reversedresults.m8"
+    with open(mmseqspath, "r") as f:
         lines = f.readlines()
         for f in tqdm.tqdm(lines):
             line_split = f.split()
             query, target = line_split[0], line_split[1]
-            if query not in myqueries or target not in mytargets:    
+            if query not in myqueries or target not in mytargets:
                 print("skipping")
                 continue
             bitscore = float(line_split[-1])
             if os.path.exists(f"{outputdir}/{query}.txt"):
                 with open(f"{outputdir}/{query}.txt", "a") as f:
-                    
+
                     f.write(f"{target}     {bitscore}" + "\n")
             else:
                 with open(f"{outputdir}/{query}.txt", "w") as f:
-                    f.write(f"{target}     {bitscore}" + "\n")      
+                    f.write(f"{target}     {bitscore}" + "\n")
 
 
 def get_mmseqs_recall(e_value_threshold):
     all_hits_max_4, all_hits_normal_4 = load_hmmer_hits()
-    with open('/xdisk/twheeler/daphnedemekas/mmseqs_hits.pkl', "rb") as file:
+    with open("/xdisk/twheeler/daphnedemekas/mmseqs_hits.pkl", "rb") as file:
         mmseqs_hits = pickle.load(file)
-    
+
     for query, target_list in mmseqs_hits.items():
         if query not in all_hits_max_4:
             print(f"Query {query} not in HMMER Max")
@@ -75,5 +79,5 @@ def get_mmseqs_recall(e_value_threshold):
                 e_value = target[0]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parse_mmseqs()

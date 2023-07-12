@@ -26,6 +26,7 @@ def load_knn_inputs(hits, mode, modelname):
             "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
         }  # "num_pos_per_evalue": [482384, 1038554, 1081989, 1088067], "num_hits":1341468330,  "plot_roc" : False}
 
+
 def load_mmseqs_inputs(hits, mode, modelname):
     if mode == "max":
         return {
@@ -49,6 +50,7 @@ def load_mmseqs_inputs(hits, mode, modelname):
             "plot_roc": True,
             "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
         }  # "num_pos_per_evalue": [482384, 1038554, 1081989, 1088067], "num_hits":1341468330,  "plot_roc" : False}
+
 
 def load_esm_inputs(hits, mode, modelname):
     if mode == "max":

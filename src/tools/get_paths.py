@@ -3,6 +3,7 @@ import os
 import argparse
 import tqdm
 
+
 def main(train_dir, eval_dir, train_path, eval_path):
     TRAIN_DIR = train_dir
 

@@ -9,7 +9,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 num_threads: 1
-omp_num_threads: 1
+omp_num_threads: 4
 profiler: False
 device: "cuda"
 evaluator_args:

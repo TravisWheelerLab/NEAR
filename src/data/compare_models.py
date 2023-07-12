@@ -1,16 +1,10 @@
-"""Model comparison
-
-You need to compare on data with query id 0 as well 
-
-You need to increase max sequence length too"""
+"""Model comparison"""
 
 from src.data.benchmarking import (
     get_data,
     generate_roc,
     plot_mean_e_values,
-    plot_lengths,
     get_roc_data,
-    get_sorted_pairs,
     COLORS,
 )
 from src.data.eval_data_config import (
@@ -27,6 +21,7 @@ import argparse
 import matplotlib.pyplot as plt
 import pdb
 import resource
+
 resource.setrlimit(resource.RLIMIT_DATA, (500 * 1024**3, -1))
 import os
 
@@ -44,47 +39,6 @@ def load_hmmer_hits(query_id: int = 4):
         raise Exception(f"No evaluation data for given query id {query_id}")
 
 
-def get_overlap(all_hits_max: dict, all_hits_normal: dict):
-    """Calculates the overlapping hits between hmmer normal
-    and hmmer max outputs"""
-    hmmer_normal = []
-    hmmer_max_only = []
-    num_missing = 0
-    missingvalues = []
-    missingpairs = []
-    num_overlap = 0
-    for q, v in all_hits_max.items():
-        if q in all_hits_normal:
-            for t, values in v.items():
-                if t in all_hits_normal[q]:
-                    hmmer_normal.append(values)
-                else:
-                    hmmer_max_only.append(values)
-
-    for query, v in all_hits_normal.items():
-
-        for t, values in v.items():
-            if t not in all_hits_max[query]:
-                num_missing += 1
-                missingpairs.append([(query, t)])
-                missingvalues.append(values)
-            else:
-                num_overlap += 1
-
-    print(f"Num missing from HMMER Max that are in HMMER Normal: {num_missing}")
-    print(f"Number overlapping in both HMMER Max and HMMER Normal: {num_overlap}")
-    print(f"Number of hits in HMMER Max not in HMMER Normal: {len(hmmer_normal)}")
-
-    return (
-        hmmer_normal,
-        hmmer_max_only,
-        num_missing,
-        num_overlap,
-        missingvalues,
-        missingpairs,
-    )
-
-
 class Results:
     def __init__(
         self,
@@ -100,9 +54,11 @@ class Results:
         """evaluates a given model"""
 
         (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-            model_results_path, hmmer_hits_dict, data_savedir=data_savedir
+            model_results_path,
+            hmmer_hits_dict,
+            data_savedir=data_savedir,
+            plot_roc=plot_roc,
         )
-        # pdb.set_trace()
         print("Plotting e values and saving to")
         print(evaluemeansfile)
         plot_mean_e_values(
@@ -116,226 +72,153 @@ class Results:
             _plot_lengths=False,
             title=evaluemeanstitle,
         )
-        # pdb.set_trace()
         if plot_roc:
             generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
 
 
-def compare(
-    query_id=4, modelname: str = "CPU-20K-150", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+def compare_models(
+    modelname: str = "CPU-20K-150",
+    evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
-
     print(f"Comparing models with {modelname}")
-    all_hits_max, _ = load_hmmer_hits(4)
+    all_hits_max, all_hits_normal = load_hmmer_hits(4)
 
-    align = load_alignment_inputs(all_hits_max, "max", modelname)
+    neat_max = load_alignment_inputs(all_hits_max, "max", modelname)
+    neat_regular = load_alignment_inputs(all_hits_normal, "normal", modelname)
+
     esm = load_esm_inputs(all_hits_max, "max", "esm-50")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
-    #last = load_mmseqs_inputs(all_hits_max, "max", "")
+    last = load_mmseqs_inputs(all_hits_max, "max", "")
 
-    _, axis = plt.subplots(figsize=(10, 10))
+    all_recalls = []
+    all_filtrations = []
 
-    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
+    for inputs in [esm, knn, protbert, neat_max, neat_regular, mmseqs, last]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
-            with open(f"{inputs['temp_file']}_filtration.pickle", 'rb') as pickle_file:
+            with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
                 filtrations = pickle.load(pickle_file)
-            with open(f"{inputs['temp_file']}_recall.pickle", 'rb') as pickle_file:
+            with open(f"{inputs['temp_file']}_recall.pickle", "rb") as pickle_file:
                 recalls = pickle.load(pickle_file)
         else:
             print(f" No such file {inputs['temp_file']}_filtration.pickle")
 
-
             (_, _, _, sorted_pairs) = get_data(**inputs)
-        
-            filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
 
-        axis.plot(
-            np.array(filtrations)[:, -1],
-            np.array(recalls)[:, -1],
-            f"{COLORS[idx]}",
-            linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
-        )
-    axis.set_xlabel("filtration")
-    axis.set_ylabel("recall")
-    axis.grid()
-    axis.legend()
-    axis.set_xlim(75,101)
-    axis.set_xticks([75,80,85,90,95,100])
-    #axis.set_ylim(25,101)
-    #axis.set_yticks([50,60,70,80,90,100])
+            filtrations, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
+        all_recalls.append(recalls)
+        all_filtrations.append(filtrations)
 
-    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-1]}.png")
-    #pdb.set_trace()
-    plt.clf()
-    _, axis = plt.subplots(figsize=(10, 10))
+    idx = 0
+    for evalue_index in [-1, -2, -3, -4]:
+        _, axis = plt.subplots(figsize=(10, 10))
 
-    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
-        (_, _, _, sorted_pairs) = get_data(**inputs)
+        for recalls, filtrations in zip(all_recalls, all_filtrations):
+            idx += 1
 
-        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
+            axis.plot(
+                np.array(filtrations)[:, evalue_index],
+                np.array(recalls)[:, evalue_index],
+                f"{COLORS[idx]}",
+                linewidth=2,
+                label=[
+                    "ESM",
+                    "ProtTransT5XLU50",
+                    "ProtBERT",
+                    "NEAT-150",
+                    "NEAT-150 (HMMER Normal)",
+                    "MMseqs2" "LAST",
+                ][idx],
+            )
+        axis.set_xlabel("filtration")
+        axis.set_ylabel("recall")
+        axis.grid()
+        axis.legend()
+        axis.set_xlim(75, 101)
+        axis.set_xticks([75, 80, 85, 90, 95, 100])
+        if evalue_index != -1:
+            axis.set_ylim(50, 101)
+            axis.set_yticks([50, 60, 70, 80, 90, 100])
+        plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png")
+        plt.clf()
 
-        axis.plot(
-            np.array(filtrations)[:, -2],
-            np.array(recalls)[:, -2],
-            f"{COLORS[idx]}",
-            linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
-        )
-    axis.set_xlabel("filtration")
-    axis.set_ylabel("recall")
-    axis.grid()
-    axis.legend()
-    axis.set_xlim(75,101)
-    axis.set_xticks([75,80,85,90,95,100])
-    axis.set_ylim(50,101)
-    axis.set_yticks([50,60,70,80,90,100])
 
-    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-2]}.png")
-    plt.clf()
-
-    _, axis = plt.subplots(figsize=(10, 10))
-
-    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
-        (_, _, _, sorted_pairs) = get_data(**inputs)
-
-        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
-
-        axis.plot(
-            np.array(filtrations)[:,-3],
-            np.array(recalls)[:, -3],
-            f"{COLORS[idx]}",
-            linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
-        )
-    axis.set_xlabel("filtration")
-    axis.legend()
-    axis.grid()
-    axis.set_ylabel("recall")
-    axis.set_xlim(75,101)
-    axis.set_xticks([75,80,85,90,95,100])
-    axis.set_ylim(50,101)
-    axis.set_yticks([50,60,70,80,90,100])
-
-    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-3]}.png")
-    plt.clf()
-
-    _, axis = plt.subplots(figsize=(10, 10))
-
-    for idx, inputs in enumerate([esm, knn, protbert, align, mmseqs]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
-        (_, _, _, sorted_pairs) = get_data(**inputs)
-
-        filtrations, recalls = get_roc_data(**inputs, sorted_pairs = sorted_pairs)
-
-        axis.plot(
-            np.array(filtrations)[:,-4],
-            np.array(recalls)[:, -4],
-            f"{COLORS[idx]}",
-            linewidth=2,
-            label=['ESM', 'ProtTransT5XLU50','ProtBERT', 'NEAT-150', "MMseqs2"][idx],
-        )
-    axis.set_xlabel("filtration")
-    axis.grid()
-    axis.legend()
-    axis.set_xlim(75,101)
-    axis.set_xticks([75,80,85,90,95,100])
-    axis.set_ylim(50,101)
-    axis.set_yticks([50,60,70,80,90,100])
-    axis.set_ylabel("recall")
-    plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[-4]}.png")
-    plt.clf()
-def compare2(
-    query_id=4, evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
-):
-    styles = ['dashed','solid']
+def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=False):
+    styles = ["dashed", "solid"]
 
     print(f"Comparing NEAT models")
     all_hits_max, _all_hits_normal = load_hmmer_hits(4)
 
-    # align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
-    # align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
-    align = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-50")
-    align2 = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-250")
+    if normal:
+        align = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-50")
+        align2 = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-250")
+    else:
+        align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
+        align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
 
-    nprobes = [50,250]
+    nprobes = [50, 250]
 
     _, axis = plt.subplots(figsize=(10, 10))
 
     for idx, inputs in enumerate([align, align2]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
-        # (_, _, _, sorted_pairs) = get_data(**inputs)
-        
         filtrations, recalls = get_roc_data(**inputs)
 
-        for i in [0,1,2,3]:
+        for i in [0, 1, 2, 3]:
             axis.plot(
                 np.array(filtrations)[:, i],
                 np.array(recalls)[:, i],
                 f"{COLORS[i]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                linestyle = styles[idx]
+                linestyle=styles[idx],
             )
-    axis.set_xlabel("filtration", fontsize = 12)
-    axis.set_ylabel("recall", fontsize = 12)
+    axis.set_xlabel("filtration", fontsize=12)
+    axis.set_ylabel("recall", fontsize=12)
     axis.grid()
     print("Saving figure")
     plt.legend()
-    plt.savefig("ResNet1d/results/superimposedCPUnormal.png")
+    if normal:
+        plt.savefig("ResNet1d/results/superimposedCPUnormal.png")
+    else:
+        plt.savefig("ResNet1d/results/superimposedCPUmax.png")
 
     plt.clf()
 
+    # again with different X limit
+
     _, axis = plt.subplots(figsize=(10, 10))
 
     for idx, inputs in enumerate([align, align2]):
-        #(self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-        #     model_results_path, hmmer_hits_dict, savedir=data_savedir
-        # )
-        # (_, _, _, sorted_pairs) = get_data(**inputs)
-        
         filtrations, recalls = get_roc_data(**inputs)
 
-        for i in [0,1,2,3]:
+        for i in [0, 1, 2, 3]:
             axis.plot(
                 np.array(filtrations)[:, i],
                 np.array(recalls)[:, i],
                 f"{COLORS[i]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                linestyle = styles[idx]
+                linestyle=styles[idx],
             )
-    axis.set_xlabel("filtration", fontsize = 12)
-    axis.set_ylabel("recall", fontsize = 12)
-    axis.set_ylim(90,100.2)
-    axis.set_xlim(95,100.2)
+    axis.set_xlabel("filtration", fontsize=12)
+    axis.set_ylabel("recall", fontsize=12)
+    axis.set_ylim(90, 100.2)
+    axis.set_xlim(95, 100.2)
     axis.grid()
-    axis.set_xticks([95,96,97,98,99,100], fontsize = 12)
-    axis.set_yticks([90,92,94,96,98,100], fontsize = 12)
+    axis.set_xticks([95, 96, 97, 98, 99, 100], fontsize=12)
+    axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
 
     plt.legend()
     print("Saving figure")
-    plt.savefig("ResNet1d/results/superimposedCPUnormal-zoomed.png")
+    if normal:
+        plt.savefig("ResNet1d/results/superimposedCPUnormal-zoomed.png")
+    else:
+        plt.savefig("ResNet1d/results/superimposedCPUmax-zoomed.png")
 
 
 def evaluate(
-    query_id=4,
     models: list = ["align", "knn"],
     modes: list = ["normal", "max"],
     modelname: str = None,
@@ -344,53 +227,51 @@ def evaluate(
 
     print(f"Evaluating {modelname}")
 
-    if query_id == 4:
-        all_hits_max, all_hits_normal = load_hmmer_hits(query_id)
-        #all_hits_max, all_hits_normal = None, None
+    all_hits_max, all_hits_normal = load_hmmer_hits(4)
 
-        if "align" in models:
-            if "max" in modes:
-                print("Parsing Alignment Model IVF Query 4 Max")
+    if "align" in models:
+        if "max" in modes:
+            print("Parsing Alignment Model IVF Query 4 Max")
 
-                align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max", modelname)
-                alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
-            if "normal" in modes:
-                align_ivf_normal_inputs_4 = load_alignment_inputs(
-                    all_hits_normal, "normal", modelname
-                )
+            align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max", modelname)
+            alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
+        if "normal" in modes:
+            align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal", modelname)
 
-                print("Parsing Alignment Model IVF Query 4 Normal")
-                _ = Results(**align_ivf_normal_inputs_4)
+            print("Parsing Alignment Model IVF Query 4 Normal")
+            _ = Results(**align_ivf_normal_inputs_4)
 
-        if "knn" in models:
-            if "max" in modes:
-                kmer_inputs = load_knn_inputs(all_hits_max, "max", modelname)
-                print("Parsing Alignment Model KNN Max")
-                alignment_model_knn_max = Results(**kmer_inputs)
-            if "normal" in modes:
-                kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal", modelname)
-                print("Parsing Alignment Model KNN Normal")
-                _ = Results(**kmer_inputs_normal)
+    if "knn" in models:
+        if "max" in modes:
+            kmer_inputs = load_knn_inputs(all_hits_max, "max", modelname)
+            print("Parsing Alignment Model KNN Max")
+            alignment_model_knn_max = Results(**kmer_inputs)
+        if "normal" in modes:
+            kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal", modelname)
+            print("Parsing Alignment Model KNN Normal")
+            _ = Results(**kmer_inputs_normal)
 
-        if "esm" in models:
-            if "max" in modes:
-                esm_inputs = load_esm_inputs(all_hits_max, "max", modelname)
-                print("Parsing Alignment Model ESM Max")
-                alignment_model_knn_max = Results(**esm_inputs)
-            if "normal" in modes:
-                esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal", modelname)
-                print("Parsing Alignment Model ESM Normal")
-                _ = Results(**esm_inputs_normal)
+    if "esm" in models:
+        if "max" in modes:
+            esm_inputs = load_esm_inputs(all_hits_max, "max", modelname)
+            print("Parsing Alignment Model ESM Max")
+            alignment_model_knn_max = Results(**esm_inputs)
+        if "normal" in modes:
+            esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal", modelname)
+            print("Parsing Alignment Model ESM Normal")
+            _ = Results(**esm_inputs_normal)
 
-        if "mmseqs" in models:
-            if "max" in modes:
-                mmseqs_inputs = load_mmseqs_inputs(all_hits_max, "max", modelname)
-                print("Parsing Alignment Model ESM Max")
-                alignment_model_knn_max = Results(**mmseqs_inputs)
-            if "normal" in modes:
-                mmseqs_inputs_normal = load_mmseqs_inputs(all_hits_normal, "normal", modelname)
-                print("Parsing Alignment Model ESM Normal")
-                _ = Results(**mmseqs_inputs_normal)
+    if "mmseqs" in models:
+        if "max" in modes:
+            mmseqs_inputs = load_mmseqs_inputs(all_hits_max, "max", modelname)
+            print("Parsing Alignment Model ESM Max")
+            alignment_model_knn_max = Results(**mmseqs_inputs)
+        if "normal" in modes:
+            mmseqs_inputs_normal = load_mmseqs_inputs(all_hits_normal, "normal", modelname)
+            print("Parsing Alignment Model ESM Normal")
+            _ = Results(**mmseqs_inputs_normal)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
@@ -422,8 +303,8 @@ if __name__ == "__main__":
         modes.append("normal")
 
     if args.compare:
-        compare()
+        compare_models()
     elif args.impose:
-        compare2()
+        compare_nprobe()
     else:
         evaluate(args.query_id, models, modes, modelname)

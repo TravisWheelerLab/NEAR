@@ -127,14 +127,14 @@ class AlignmentGeneratorWithIndels(DataModule):
         sequences from an alignment file"""
         if not os.path.exists(alignment_file):
             print("Corrupt file. Random sampling.")
-            alignment_file = random.sample(self.alignment_file_paths,1)[0].strip("\n")
-        file =  open(alignment_file, "r") 
+            alignment_file = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
+        file = open(alignment_file, "r")
         lines = file.readlines()
         if len(lines) == 0 or len(lines) < 4:
-            #raise Exception(f"{alignment_file} is empty")
+            # raise Exception(f"{alignment_file} is empty")
             print("Alignment file is empty")
-            alignment_file = random.sample(self.alignment_file_paths,1)[0].strip("\n")
-            file =  open(alignment_file, "r") 
+            alignment_file = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
+            file = open(alignment_file, "r")
             lines = file.readlines()
         # if len(lines) < 4:
         #     raise Exception(f"{alignment_file} has less than 4 lines")
@@ -293,7 +293,12 @@ class AlignmentGeneratorWithIndels(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 
@@ -309,9 +314,9 @@ class AlignmentGeneratorWithIndels(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         if not os.path.exists(alignment_path):
-            #print(f"Bad path: {alignment_path}")
-            
-            alignment_path = random.sample(self.alignment_file_paths,1)[0].strip("\n")
+            # print(f"Bad path: {alignment_path}")
+
+            alignment_path = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)
@@ -519,7 +524,12 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             addition_left_amt = subseq_index
             addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
             sequence, indices = self.pad_sequence(
-                sequence, indices, subseq_index, full_seq, addition_left_amt, addition_right_amt,
+                sequence,
+                indices,
+                subseq_index,
+                full_seq,
+                addition_left_amt,
+                addition_right_amt,
             )
             seq_chop = self.seq_len - len(sequence)
 

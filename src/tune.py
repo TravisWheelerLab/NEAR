@@ -21,19 +21,22 @@ from ray.train.lightning import LightningTrainer, LightningConfigBuilder
 
 HOME = os.environ["HOME"]
 
+
 def run_tune(num_samples, trainer, lightning_config):
     scheduler = ASHAScheduler(max_t=2, grace_period=1, reduction_factor=2)
     tuner = tune.Tuner(
-            trainer,
-            param_space={"lightning_config": lightning_config},
-            tune_config=tune.TuneConfig(
-                metric="val_loss",
-                mode="min",
-                num_samples=num_samples,
-                scheduler=scheduler,
-            ),
-            run_config=air.RunConfig(storage_path="/xdisk/twheeler/daphnedemekas/ray_tune", name="tune")
-        )
+        trainer,
+        param_space={"lightning_config": lightning_config},
+        tune_config=tune.TuneConfig(
+            metric="val_loss",
+            mode="min",
+            num_samples=num_samples,
+            scheduler=scheduler,
+        ),
+        run_config=air.RunConfig(
+            storage_path="/xdisk/twheeler/daphnedemekas/ray_tune", name="tune"
+        ),
+    )
 
     print("Fitting tuner...")
     results = tuner.fit()
@@ -50,13 +53,14 @@ def run_tune(num_samples, trainer, lightning_config):
     print(results.best_trial)
 
 
-def tune_model(train_config, train_dataloader, val_dataloader, model_class,logger):
+def tune_model(train_config, train_dataloader, val_dataloader, model_class, logger):
 
-    config={"learning_rate": tune.loguniform(1e-7, 1e-3),
-                "res_block_n_filters": tune.choice([512, 128, 256]),
-                "res_block_kernel_size": tune.choice([3,5,7]),
-                "n_res_blocks": tune.choice([6,8,10,12]),
-                }
+    config = {
+        "learning_rate": tune.loguniform(1e-7, 1e-3),
+        "res_block_n_filters": tune.choice([512, 128, 256]),
+        "res_block_kernel_size": tune.choice([3, 5, 7]),
+        "n_res_blocks": tune.choice([6, 8, 10, 12]),
+    }
 
     train_config.update(config)
 
@@ -65,28 +69,32 @@ def tune_model(train_config, train_dataloader, val_dataloader, model_class,logge
     lightning_config = (
         LightningConfigBuilder()
         .module(cls=model_class, **train_config)
-        .trainer(max_epochs=2, accelerator="gpu", logger=logger, precision = 16, log_every_n_steps = 10000)
-        .fit_params(train_dataloaders=train_dataloader, val_dataloaders = val_dataloader)
-        .checkpointing(monitor="val_loss", save_top_k=2, mode="min", every_n_epochs = 1000)
+        .trainer(
+            max_epochs=2, accelerator="gpu", logger=logger, precision=16, log_every_n_steps=10000
+        )
+        .fit_params(train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+        .checkpointing(monitor="val_loss", save_top_k=2, mode="min", every_n_epochs=1000)
         .build()
     )
     scaling_config = ScalingConfig(
-        use_gpu=True, num_workers =1, resources_per_worker={"CPU": 20, "GPU": 1}
+        use_gpu=True, num_workers=1, resources_per_worker={"CPU": 20, "GPU": 1}
     )
 
-    run_config = RunConfig(checkpoint_config=CheckpointConfig(
-        num_to_keep=2,
-        checkpoint_score_attribute="val_loss",
-        checkpoint_score_order="min",
-    ),
+    run_config = RunConfig(
+        checkpoint_config=CheckpointConfig(
+            num_to_keep=2,
+            checkpoint_score_attribute="val_loss",
+            checkpoint_score_order="min",
+        ),
     )
 
     trainer = LightningTrainer(
-    scaling_config=scaling_config,
-    run_config=run_config,
+        scaling_config=scaling_config,
+        run_config=run_config,
     )
 
-    run_tune(10,trainer, lightning_config)
+    run_tune(10, trainer, lightning_config)
+
 
 def tune_pipeline(_config):
     seed_everything(_config["seed"])
@@ -100,14 +108,21 @@ def tune_pipeline(_config):
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args,
+        train_dataset,
+        collate_fn=train_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
     val_dataloader = torch.utils.data.DataLoader(
-        val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args,
+        val_dataset,
+        collate_fn=val_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
-    logger = TensorBoardLogger(save_dir=params.log_dir, name=params.model_name,)
+    logger = TensorBoardLogger(
+        save_dir=params.log_dir,
+        name=params.model_name,
+    )
 
     logger.experiment.add_text(
         tag="description", text_string=params.description, walltime=time.time()
@@ -116,9 +131,10 @@ def tune_pipeline(_config):
 
     with open(f"{save_path}/config.yaml", "w") as file:
         yaml.dump(_config, file)
-    tune_model(params.model_args,train_dataloader, val_dataloader, model_class,logger)
+    tune_model(params.model_args, train_dataloader, val_dataloader, model_class, logger)
     # trainable = tune.with_parameters(tune_model, trainer_args = params.trainer_args, train_dataloader=train_dataloader, val_dataloader=val_dataloader, model_class=model_class, logger=logger)
     # analysis = tune.run(trainable,resources_per_trial = {"cpu":os.cpu_count(), "gpu":torch.cuda.device_count()}, metric = "val_loss", mode = "min", config=train_config,num_samples=10)
+
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method("spawn")
@@ -127,7 +143,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     configfile = args.config
-    if 'yaml' in configfile:
+    if "yaml" in configfile:
         configfile = configfile[:-5]
 
     with open(f"src/configs/{configfile}.yaml", "r") as stream:

@@ -34,7 +34,7 @@ class NpairLoss(nn.Module):
                 positive[p_indices] ** 2
             ) / len(p_indices)
         else:
-            l2_loss = (torch.sum(anchor ** 2) + torch.sum(positive ** 2)) / batch_size
+            l2_loss = (torch.sum(anchor**2) + torch.sum(positive**2)) / batch_size
 
         loss = loss_ce + self.l2_reg * l2_loss * 0.25
         return loss

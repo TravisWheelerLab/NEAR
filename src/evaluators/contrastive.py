@@ -26,9 +26,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
         through the model forward function to get the embedding tensor"""
 
         return (
-            model_class(
-                encode_string_sequence(sequence).unsqueeze(0).to(self.model_device)
-            )
+            model_class(encode_string_sequence(sequence).unsqueeze(0).to(self.model_device))
             .squeeze()
             .T
         )
@@ -81,9 +79,7 @@ class ContrastiveEvaluator(UniRefEvaluator):
 
         search_start = time.time()
 
-        scores_array, indices_array = self.index.search(
-            query_embedding.contiguous(), k=1000
-        )
+        scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
         search_time = time.time() - search_start
         filtration_time = time.time()
 

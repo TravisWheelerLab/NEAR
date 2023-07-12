@@ -14,6 +14,7 @@ from src.utils.util import (
 )
 from torch import multiprocessing
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+
 HOME = os.environ["HOME"]
 
 
@@ -30,14 +31,21 @@ def train(_config):
 
     print(f"Training model {params.model_name} with dataset {params.dataset_name}.")
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, collate_fn=train_dataset.collate_fn(), **params.dataloader_args,
+        train_dataset,
+        collate_fn=train_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
     val_dataloader = torch.utils.data.DataLoader(
-        val_dataset, collate_fn=val_dataset.collate_fn(), **params.dataloader_args,
+        val_dataset,
+        collate_fn=val_dataset.collate_fn(),
+        **params.dataloader_args,
     )
 
-    logger = TensorBoardLogger(save_dir=params.log_dir, name=params.model_name,)
+    logger = TensorBoardLogger(
+        save_dir=params.log_dir,
+        name=params.model_name,
+    )
 
     logger.experiment.add_text(
         tag="description", text_string=params.description, walltime=time.time()
@@ -46,14 +54,14 @@ def train(_config):
 
     with open(f"{save_path}/config.yaml", "w") as file:
         yaml.dump(_config, file)
-        
+
     trainer = Trainer(
         **params.trainer_args,
-#        callbacks=[EarlyStopping(monitor='val_loss')],
+        #        callbacks=[EarlyStopping(monitor='val_loss')],
         callbacks=CallbackSet.callbacks(),
         logger=logger,
-        log_every_n_steps = 10000,
-        #val_check_interval=0.2,
+        log_every_n_steps=10000,
+        # val_check_interval=0.2,
         devices=1,
         # strategy="ddp_find_unused_parameters_false",
     )
@@ -72,7 +80,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     configfile = args.config
-    if 'yaml' in configfile:
+    if "yaml" in configfile:
         configfile = configfile[:-5]
 
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
