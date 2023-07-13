@@ -81,7 +81,9 @@ class UniRefEvaluator(Evaluator):
         self.max_hmmer_hits: dict = hmmer_hits_max
         self.nprobe = nprobe
 
-        self.encoding_func = encode_string_sequence if encoding_func is None else encoding_func
+        self.encoding_func = (
+            encode_string_sequence if encoding_func is None else encoding_func
+        )
         self.add_random_sequence: bool = add_random_sequence
         self.model_device: str = model_device
         self.minimum_seq_length: int = minimum_seq_length
@@ -125,12 +127,16 @@ class UniRefEvaluator(Evaluator):
             if max_seq_length >= length >= self.minimum_seq_length:
                 embed = self.compute_embedding(sequence, model_class)
                 # return: seq_lenxembed_dim shape
-                embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
+                embeddings.append(
+                    torch.nn.functional.normalize(embed, dim=-1).to("cpu")
+                )
                 lengths.append(length)
             else:
                 num_removed += 1
                 filtered_names.remove(name)
-                logger.debug(f"Removing sequence {sequence} with length {len(sequence)}")
+                logger.debug(
+                    f"Removing sequence {sequence} with length {len(sequence)}"
+                )
         logger.info(f"removed {num_removed} sequences. ")
         return filtered_names, embeddings, lengths
 
@@ -185,7 +191,9 @@ class UniRefEvaluator(Evaluator):
                     target_names = [t.strip("\n") for t in file_handle.readlines()]
 
                 with open(f"target_lengths.txt", "r") as file_handle:
-                    target_lengths = [int(t.strip("\n")) for t in file_handle.readlines()]
+                    target_lengths = [
+                        int(t.strip("\n")) for t in file_handle.readlines()
+                    ]
 
         else:
             print("Embedding targets...")
@@ -200,11 +208,17 @@ class UniRefEvaluator(Evaluator):
                 print(f"Saving target embeddings to: {self.target_embeddings_path}")
 
                 torch.save(target_embeddings, self.target_embeddings_path)
-                with open(f"{self.target_embeddings_path}_names.pickle", "wb") as handle:
+                with open(
+                    f"{self.target_embeddings_path}_names.pickle", "wb"
+                ) as handle:
                     pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-                with open(f"{self.target_embeddings_path}_lengths.pickle", "wb") as handle:
-                    pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                with open(
+                    f"{self.target_embeddings_path}_lengths.pickle", "wb"
+                ) as handle:
+                    pickle.dump(
+                        target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL
+                    )
 
         print("Embedding queries...")
         query_names, query_embeddings, _ = self._calc_embeddings(
@@ -248,7 +262,7 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     @torch.no_grad()
-    def filter(self, queries, query_names, write_results=False):
+    def filter(self, queries, query_names, write_results=True):
         """Filters our hits based on
         distance to the query in the Faiiss
         cluster space"""
