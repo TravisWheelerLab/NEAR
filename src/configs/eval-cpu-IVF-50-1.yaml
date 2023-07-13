@@ -6,7 +6,7 @@ log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/version_53/checkpoints/epoch_4_2.57257.ckpt
 query_file: "data/evaluationqueries.fa"
 target_file: "data/evaluationtargets.fa"
-target_embeddings: 'target_embeddings_new.pt'
+target_embeddings_path: 'target_embeddings_new.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/new-checkpoint-50"
@@ -29,4 +29,4 @@ evaluator_args:
     max_seq_length: 512
     nprobe: 50
     output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/new-checkpoint-50"
-    target_embeddings_path: 'target_embeddings.pt'
+    target_embeddings_path: 'target_embeddings_new.pt'
