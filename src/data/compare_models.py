@@ -86,7 +86,7 @@ def compare_models(
     neat_max = load_alignment_inputs(all_hits_max, "max", modelname)
     neat_regular = load_alignment_inputs(all_hits_normal, "normal", modelname)
 
-    esm = load_esm_inputs(all_hits_max, "max", "esm-50")
+    esm = load_esm_inputs(all_hits_max, "max", "esm")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
@@ -141,7 +141,9 @@ def compare_models(
         if evalue_index != -1:
             axis.set_ylim(50, 101)
             axis.set_yticks([50, 60, 70, 80, 90, 100])
-        plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png")
+        plt.savefig(
+            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png"
+        )
         plt.clf()
 
 
@@ -233,10 +235,14 @@ def evaluate(
         if "max" in modes:
             print("Parsing Alignment Model IVF Query 4 Max")
 
-            align_ivf_max_inputs_4 = load_alignment_inputs(all_hits_max, "max", modelname)
+            align_ivf_max_inputs_4 = load_alignment_inputs(
+                all_hits_max, "max", modelname
+            )
             alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
         if "normal" in modes:
-            align_ivf_normal_inputs_4 = load_alignment_inputs(all_hits_normal, "normal", modelname)
+            align_ivf_normal_inputs_4 = load_alignment_inputs(
+                all_hits_normal, "normal", modelname
+            )
 
             print("Parsing Alignment Model IVF Query 4 Normal")
             _ = Results(**align_ivf_normal_inputs_4)
@@ -267,7 +273,9 @@ def evaluate(
             print("Parsing Alignment Model ESM Max")
             alignment_model_knn_max = Results(**mmseqs_inputs)
         if "normal" in modes:
-            mmseqs_inputs_normal = load_mmseqs_inputs(all_hits_normal, "normal", modelname)
+            mmseqs_inputs_normal = load_mmseqs_inputs(
+                all_hits_normal, "normal", modelname
+            )
             print("Parsing Alignment Model ESM Normal")
             _ = Results(**mmseqs_inputs_normal)
 
