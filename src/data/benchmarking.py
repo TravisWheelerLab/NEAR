@@ -161,9 +161,13 @@ def get_filtration_recall(
         filtration = [num_decoys[i] / alldecoys[i] for i in range(num_thresholds)]
 
         if idx % 1000 == 0 and (100 * (1 - filtration[0]) > 75):
-            recall = [num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)]
+            recall = [
+                num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)
+            ]
 
-            filtrations.append([100 * (1 - filtration[i]) for i in range(num_thresholds)])
+            filtrations.append(
+                [100 * (1 - filtration[i]) for i in range(num_thresholds)]
+            )
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
 
         elif 100 * (1 - filtration[0]) < 75:
@@ -239,7 +243,9 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwa
     print("Wrote files")
     filtrations, recalls = get_filtration_recall(filename=temp_file)
 
-    print(f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall")
+    print(
+        f"Saving filtrations and recalls to {temp_file}_filtration and {temp_file}_recall"
+    )
 
     with open(f"{temp_file}_filtration.pickle", "wb") as filtrationfile:
         pickle.dump(filtrations, filtrationfile)
@@ -256,7 +262,13 @@ def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs)
     plot_roc_curve(figure_path, filtrations, recalls)
 
 
-def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, plot_roc=True):
+def get_data(
+    model_results_path: str,
+    hmmer_hits_dict: dict,
+    data_savedir=None,
+    plot_roc=True,
+    **kwargs,
+):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
@@ -289,9 +301,7 @@ def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, 
 
     if "CPU" in model_results_path:
         nprobe = model_results_path.split("/")[-1].split("-")[-1]
-        reversed_path = (
-            f"/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/reversed-{nprobe}"
-        )
+        reversed_path = f"/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/reversed-{nprobe}"
     else:
         reversed_path = model_results_path + "-reversed"
     print(f"Reversed path :{reversed_path}")
@@ -306,7 +316,10 @@ def get_data(model_results_path: str, hmmer_hits_dict: dict, data_savedir=None, 
                 target = line.split()[0].strip("\n").strip(".pt")
                 similarity = float(line.split()[1].strip("\n"))
                 # if there is a decoy, then collect targets from reversed results
-                if queryname not in hmmer_hits_dict or target not in hmmer_hits_dict[queryname]:
+                if (
+                    queryname not in hmmer_hits_dict
+                    or target not in hmmer_hits_dict[queryname]
+                ):
                     if os.path.exists(f"{reversed_path}/{queryhits}"):
                         if queryname in reversed_results:
                             if target in reversed_results[queryname]:
