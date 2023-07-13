@@ -315,4 +315,4 @@ if __name__ == "__main__":
     elif args.impose:
         compare_nprobe()
     else:
-        evaluate(args.query_id, models, modes, modelname)
+        evaluate(models, modes, modelname)
