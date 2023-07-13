@@ -182,18 +182,15 @@ class UniRefEvaluator(Evaluator):
 
         print(f"Found {(len(self.target_seqs))} targets")
 
-        if self.target_embeddings_path is not None:
-            if os.path.exists(self.target_embeddings_path):
-                print("Loading saved target embeddings")
-                target_embeddings = torch.load(self.target_embeddings_path)
+        if os.path.exists(self.target_embeddings_path):
+            print("Loading saved target embeddings")
+            target_embeddings = torch.load(self.target_embeddings_path)
 
-                with open(f"target_names.txt", "r") as file_handle:
-                    target_names = [t.strip("\n") for t in file_handle.readlines()]
+            with open(f"target_names.txt", "r") as file_handle:
+                target_names = [t.strip("\n") for t in file_handle.readlines()]
 
-                with open(f"target_lengths.txt", "r") as file_handle:
-                    target_lengths = [
-                        int(t.strip("\n")) for t in file_handle.readlines()
-                    ]
+            with open(f"target_lengths.txt", "r") as file_handle:
+                target_lengths = [int(t.strip("\n")) for t in file_handle.readlines()]
 
         else:
             print("Embedding targets...")
@@ -204,21 +201,14 @@ class UniRefEvaluator(Evaluator):
                 max_seq_length=self.max_seq_length,
             )
 
-            if self.target_embeddings_path is not None:
-                print(f"Saving target embeddings to: {self.target_embeddings_path}")
+            print(f"Saving target embeddings to: {self.target_embeddings_path}")
 
-                torch.save(target_embeddings, self.target_embeddings_path)
-                with open(
-                    f"{self.target_embeddings_path}_names.pickle", "wb"
-                ) as handle:
-                    pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            torch.save(target_embeddings, self.target_embeddings_path)
+            with open(f"{self.target_embeddings_path}_names.pickle", "wb") as handle:
+                pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-                with open(
-                    f"{self.target_embeddings_path}_lengths.pickle", "wb"
-                ) as handle:
-                    pickle.dump(
-                        target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL
-                    )
+            with open(f"{self.target_embeddings_path}_lengths.pickle", "wb") as handle:
+                pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         print("Embedding queries...")
         query_names, query_embeddings, _ = self._calc_embeddings(
