@@ -100,7 +100,8 @@ class UniRefEvaluator(Evaluator):
         self.output_path = output_path
         self.omp_num_threads = omp_num_threads
         self.target_embeddings_path = target_embeddings_path
-
+        
+        print(f"Target embeddings path: {target_embeddings_path}")
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
             self.comp_func = np.greater_equal
@@ -181,7 +182,8 @@ class UniRefEvaluator(Evaluator):
             self.tile_size = model_class.initial_seq_len
 
         print(f"Found {(len(self.target_seqs))} targets")
-
+        print(self.target_embeddings_path)
+        print(os.path.exists(self.target_embeddings_path))
         if os.path.exists(self.target_embeddings_path):
             print("Loading saved target embeddings")
             target_embeddings = torch.load(self.target_embeddings_path)

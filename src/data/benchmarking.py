@@ -8,7 +8,15 @@ import numpy as np
 import pickle
 import pdb
 
-COLORS = ["mediumseagreen", "darkblue", "mediumvioletred", "darkorchid", "tomato"]
+COLORS = [
+    "mediumseagreen",
+    "darkblue",
+    "mediumvioletred",
+    "darkorchid",
+    "dodgerblue",
+    "salmon",
+    "darkgreen",
+]
 
 
 def plot_mean_e_values(
