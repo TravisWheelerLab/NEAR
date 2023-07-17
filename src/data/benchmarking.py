@@ -306,9 +306,9 @@ def get_data(
         reversed_path = model_results_path + "-reversed"
     print(f"Reversed path :{reversed_path}")
 
-    reversed_results = {}
     for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
         queryname = queryhits.strip(".txt")
+        # get positives
         with open(f"{model_results_path}/{queryhits}", "r") as file:
             for line in file:
                 if "Distance" in line:
@@ -320,30 +320,29 @@ def get_data(
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
-                    if os.path.exists(f"{reversed_path}/{queryhits}"):
-                        if queryname in reversed_results:
-                            if target in reversed_results[queryname]:
-                                similarity = reversed_results[queryname][target]
-                            else:
-                                continue
-                        else:
-                            reversed_results[queryname] = {}
-                            with open(f"{reversed_path}/{queryhits}") as file:
-                                for line in file:
-                                    if "Distance" in line:
-                                        continue
-                                    target = line.split()[0].strip("\n")
-                                    s = float(line.split()[1].strip("\n"))
-                                    reversed_results[queryname][target] = s
-                            similarity = reversed_results[queryname][target]
-                else:
-                    similarities.append(similarity)
-
-                    all_e_values.append(hmmer_hits_dict[queryname][target][0])
-                    all_biases.append(hmmer_hits_dict[queryname][target][2])
+                    continue
 
                 all_targets.append((queryname, target))
                 all_scores.append(similarity)
+                all_e_values.append(hmmer_hits_dict[queryname][target][0])
+                all_biases.append(hmmer_hits_dict[queryname][target][2])
+
+        # get decoys
+        if os.path.exists(f"{reversed_path}/{queryhits}"):
+            with open(f"{reversed_path}/{queryhits}", "r") as file:
+                for line in file:
+                    if "Distance" in line:
+                        continue
+                    target = line.split()[0].strip("\n")
+
+                    if (
+                        queryname not in hmmer_hits_dict
+                        or target not in hmmer_hits_dict[queryname]
+                    ):
+                        similarity = float(line.split()[1].strip("\n"))
+                        all_targets.append((queryname, target))
+                        all_scores.append(similarity)
+
     assert len(all_scores) == len(all_targets)
     print("Sorting pairs...")
     sorted_pairs = get_sorted_pairs(all_scores, all_targets)

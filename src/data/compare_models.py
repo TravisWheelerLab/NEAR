@@ -8,10 +8,7 @@ from src.data.benchmarking import (
     COLORS,
 )
 from src.data.eval_data_config import (
-    load_alignment_inputs,
-    load_knn_inputs,
-    load_mmseqs_inputs,
-    load_esm_inputs,
+    load_inputs,
     all_hits_max_file_4,
     all_hits_normal_file_4,
 )
@@ -83,14 +80,14 @@ def compare_models(
     print(f"Comparing models with {modelname}")
     all_hits_max, all_hits_normal = load_hmmer_hits(4)
 
-    neat_max = load_alignment_inputs(all_hits_max, "max", modelname)
-    neat_regular = load_alignment_inputs(all_hits_normal, "normal", modelname)
+    neat_max = load_inputs(all_hits_max, "max", modelname)
+    neat_regular = load_inputs(all_hits_normal, "normal", modelname)
 
-    esm = load_esm_inputs(all_hits_max, "max", "esm")
-    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "max", "")
+    esm = load_inputs(all_hits_max, "max", "esm")
+    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
+    mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
+    protbert = load_inputs(all_hits_max, "max", "protbert-1")
+    last = load_inputs(all_hits_max, "max", "")
 
     all_recalls = []
     all_filtrations = []
@@ -226,14 +223,14 @@ def plot_recall_by_evalue_threshold(
     print(f"Comparing models with {modelname}")
     all_hits_max, all_hits_normal = load_hmmer_hits(4)
 
-    neat_max = load_alignment_inputs(all_hits_max, "max", modelname)
-    neat_regular = load_alignment_inputs(all_hits_normal, "normal", modelname)
+    neat_max = load_inputs(all_hits_max, "max", modelname)
+    neat_regular = load_inputs(all_hits_normal, "normal", modelname)
 
-    esm = load_esm_inputs(all_hits_max, "max", "esm")
-    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "max", "")
+    esm = load_inputs(all_hits_max, "max", "esm")
+    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
+    mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
+    protbert = load_inputs(all_hits_max, "max", "protbert-1")
+    last = load_inputs(all_hits_max, "max", "")
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
@@ -267,11 +264,11 @@ def plot_recall_by_evalue_threshold(
     plt.savefig(f"ResNet1d/results/compared_recall.png")
     plt.clf()
 
-    esm = load_esm_inputs(all_hits_max, "normal", "esm")
-    knn = load_knn_inputs(all_hits_max, "normal", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "normal", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "normal", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "normal", "")
+    esm = load_inputs(all_hits_max, "normal", "esm")
+    knn = load_inputs(all_hits_max, "normal", "knn-for-homology")
+    mmseqs = load_inputs(all_hits_max, "normal", "mmseqs")
+    protbert = load_inputs(all_hits_max, "normal", "protbert-1")
+    last = load_inputs(all_hits_max, "normal", "")
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
@@ -320,12 +317,10 @@ def evaluate(
         if "max" in modes:
             print("Parsing Alignment Model IVF Query 4 Max")
 
-            align_ivf_max_inputs_4 = load_alignment_inputs(
-                all_hits_max, "max", modelname
-            )
+            align_ivf_max_inputs_4 = load_inputs(all_hits_max, "max", modelname)
             alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
         if "normal" in modes:
-            align_ivf_normal_inputs_4 = load_alignment_inputs(
+            align_ivf_normal_inputs_4 = load_inputs(
                 all_hits_normal, "normal", modelname
             )
 
@@ -334,33 +329,31 @@ def evaluate(
 
     if "knn" in models:
         if "max" in modes:
-            kmer_inputs = load_knn_inputs(all_hits_max, "max", modelname)
+            kmer_inputs = load_inputs(all_hits_max, "max", modelname)
             print("Parsing Alignment Model KNN Max")
             alignment_model_knn_max = Results(**kmer_inputs)
         if "normal" in modes:
-            kmer_inputs_normal = load_knn_inputs(all_hits_normal, "normal", modelname)
+            kmer_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
             print("Parsing Alignment Model KNN Normal")
             _ = Results(**kmer_inputs_normal)
 
     if "esm" in models:
         if "max" in modes:
-            esm_inputs = load_esm_inputs(all_hits_max, "max", modelname)
+            esm_inputs = load_inputs(all_hits_max, "max", modelname)
             print("Parsing Alignment Model ESM Max")
             alignment_model_knn_max = Results(**esm_inputs)
         if "normal" in modes:
-            esm_inputs_normal = load_esm_inputs(all_hits_normal, "normal", modelname)
+            esm_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
             print("Parsing Alignment Model ESM Normal")
             _ = Results(**esm_inputs_normal)
 
     if "mmseqs" in models:
         if "max" in modes:
-            mmseqs_inputs = load_mmseqs_inputs(all_hits_max, "max", modelname)
+            mmseqs_inputs = load_inputs(all_hits_max, "max", modelname)
             print("Parsing Alignment Model ESM Max")
             alignment_model_knn_max = Results(**mmseqs_inputs)
         if "normal" in modes:
-            mmseqs_inputs_normal = load_mmseqs_inputs(
-                all_hits_normal, "normal", modelname
-            )
+            mmseqs_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
             print("Parsing Alignment Model ESM Normal")
             _ = Results(**mmseqs_inputs_normal)
 
