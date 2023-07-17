@@ -161,11 +161,11 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
     all_hits_max, _all_hits_normal = load_hmmer_hits(4)
 
     if normal:
-        align = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-50")
-        align2 = load_alignment_inputs(_all_hits_normal, "normal", "CPU-20K-250")
+        align = load_inputs(_all_hits_normal, "normal", "CPU-20K-50")
+        align2 = load_inputs(_all_hits_normal, "normal", "CPU-20K-250")
     else:
-        align = load_alignment_inputs(all_hits_max, "max", "CPU-20K-50")
-        align2 = load_alignment_inputs(all_hits_max, "max", "CPU-20K-250")
+        align = load_inputs(all_hits_max, "max", "CPU-20K-50")
+        align2 = load_inputs(all_hits_max, "max", "CPU-20K-250")
 
     nprobes = [50, 250]
 
@@ -285,7 +285,6 @@ def plot_recall_by_evalue_threshold(
     protbert = load_inputs(all_hits_max, "normal", "protbert-1")
     last = load_inputs(all_hits_max, "normal", "")
 
-    evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
 
     for idx, inputs in enumerate([esm, knn, protbert, neat_regular, mmseqs, last]):
@@ -299,7 +298,6 @@ def plot_recall_by_evalue_threshold(
             (_, _, _, sorted_pairs) = get_data(**inputs)
 
             _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
-        # evalue_recalls.append(recalls[-1])
 
         plt.plot(
             evalue_thresholds,
@@ -322,7 +320,6 @@ def plot_recall_by_evalue_threshold(
 
 
 def evaluate(
-    models: list = ["align", "knn"],
     modes: list = ["normal", "max"],
     modelname: str = None,
 ):
@@ -332,55 +329,21 @@ def evaluate(
 
     all_hits_max, all_hits_normal = load_hmmer_hits(4)
 
-    if "align" in models:
-        if "max" in modes:
-            print("Parsing Alignment Model IVF Query 4 Max")
+    if "max" in modes:
+        print("Parsing Alignment Model IVF Query 4 Max")
 
-            align_ivf_max_inputs_4 = load_inputs(all_hits_max, "max", modelname)
-            alignment_model_ivf_max = Results(**align_ivf_max_inputs_4)
-        if "normal" in modes:
-            align_ivf_normal_inputs_4 = load_inputs(
-                all_hits_normal, "normal", modelname
-            )
+        align_ivf_max_inputs_4 = load_inputs(all_hits_max, "max", modelname)
+        _ = Results(**align_ivf_max_inputs_4)
+    if "normal" in modes:
+        align_ivf_normal_inputs_4 = load_inputs(all_hits_normal, "normal", modelname)
 
-            print("Parsing Alignment Model IVF Query 4 Normal")
-            _ = Results(**align_ivf_normal_inputs_4)
-
-    if "knn" in models:
-        if "max" in modes:
-            kmer_inputs = load_inputs(all_hits_max, "max", modelname)
-            print("Parsing Alignment Model KNN Max")
-            alignment_model_knn_max = Results(**kmer_inputs)
-        if "normal" in modes:
-            kmer_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
-            print("Parsing Alignment Model KNN Normal")
-            _ = Results(**kmer_inputs_normal)
-
-    if "esm" in models:
-        if "max" in modes:
-            esm_inputs = load_inputs(all_hits_max, "max", modelname)
-            print("Parsing Alignment Model ESM Max")
-            alignment_model_knn_max = Results(**esm_inputs)
-        if "normal" in modes:
-            esm_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
-            print("Parsing Alignment Model ESM Normal")
-            _ = Results(**esm_inputs_normal)
-
-    if "mmseqs" in models:
-        if "max" in modes:
-            mmseqs_inputs = load_inputs(all_hits_max, "max", modelname)
-            print("Parsing Alignment Model ESM Max")
-            alignment_model_knn_max = Results(**mmseqs_inputs)
-        if "normal" in modes:
-            mmseqs_inputs_normal = load_inputs(all_hits_normal, "normal", modelname)
-            print("Parsing Alignment Model ESM Normal")
-            _ = Results(**mmseqs_inputs_normal)
+        print("Parsing Alignment Model IVF Query 4 Normal")
+        _ = Results(**align_ivf_normal_inputs_4)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
-    parser.add_argument("--models", type=str, default=["ABK"])
     parser.add_argument("--modes", type=str, default=["MNF"])
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--modelname", type=str)
@@ -388,20 +351,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    modelinitials = args.models
     modeinitials = args.modes
     modelname = args.modelname
 
-    models = []
     modes = []
-    if "A" in modelinitials:
-        models.append("align")
-    if "K" in modelinitials:
-        models.append("knn")
-    if "E" in modelinitials:
-        models.append("esm")
-    if "M" in modelinitials:
-        models.append("mmseqs")
+
     if "M" in modeinitials:
         modes.append("max")
     if "N" in modeinitials:
@@ -413,4 +367,4 @@ if __name__ == "__main__":
     elif args.impose:
         compare_nprobe()
     else:
-        evaluate(models, modes, modelname)
+        evaluate(modes, modelname)
