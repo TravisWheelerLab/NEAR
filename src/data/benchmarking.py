@@ -8,7 +8,7 @@ import numpy as np
 import pickle
 import pdb
 
-COLORS = ["mediumseagreen", "darkblue", "mediumvioletred", "darkorchid", "tomato"]
+COLORS = ["mediumseagreen", "darkblue", "mediumvioletred", "darkorchid","dodgerblue","salmon","darkgreen"]
 
 
 def plot_mean_e_values(
@@ -335,8 +335,11 @@ def get_data(
                                     target = line.split()[0].strip("\n")
                                     s = float(line.split()[1].strip("\n"))
                                     reversed_results[queryname][target] = s
-                            similarity = reversed_results[queryname][target]
-                else:
+                            if target in reversed_results[queryname]:
+                                similarity = reversed_results[queryname][target]
+                            else:
+                                continue
+                else:   
                     similarities.append(similarity)
 
                     all_e_values.append(hmmer_hits_dict[queryname][target][0])

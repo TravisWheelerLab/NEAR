@@ -89,8 +89,8 @@ def compare_models(
     esm = load_esm_inputs(all_hits_max, "max", "esm")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "max", "")
+    protbert = load_knn_inputs(all_hits_max, "max", "protbert")
+    last = load_mmseqs_inputs(all_hits_max, "max", "last")
 
     all_recalls = []
     all_filtrations = []
@@ -111,12 +111,15 @@ def compare_models(
         all_recalls.append(recalls)
         all_filtrations.append(filtrations)
 
-    idx = 0
+    print(len(all_filtrations))
+    print(len(all_recalls))
     for evalue_index in [-1, -2, -3, -4]:
         _, axis = plt.subplots(figsize=(10, 10))
-
+        idx = -1
+        print(f"Evalue index:{evalue_index}")
         for recalls, filtrations in zip(all_recalls, all_filtrations):
             idx += 1
+            print(f"IDX: {idx}")
 
             axis.plot(
                 np.array(filtrations)[:, evalue_index],
@@ -129,20 +132,28 @@ def compare_models(
                     "ProtBERT",
                     "NEAT-150",
                     "NEAT-150 (HMMER Normal)",
-                    "MMseqs2" "LAST",
+                    "MMseqs2", "LAST",
                 ][idx],
             )
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
-        axis.grid()
+        #axis.grid()
         axis.legend()
-        axis.set_xlim(75, 101)
-        axis.set_xticks([75, 80, 85, 90, 95, 100])
+        #axis.set_xlim(75, 101)
+        #axis.set_xticks([75, 80, 85, 90, 95, 100])
         if evalue_index != -1:
             axis.set_ylim(50, 101)
             axis.set_yticks([50, 60, 70, 80, 90, 100])
+        
+        #axis.set_ylim(90, 100.2)
+        axis.set_xlim(99, 100.01)
+        axis.grid()
+        axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
+        #axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
+    
+
         plt.savefig(
-            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png"
+            f"ResNet1d/results/compared_roczoom2-{evalue_thresholds[evalue_index]}.png"
         )
         plt.clf()
 
