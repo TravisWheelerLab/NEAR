@@ -78,20 +78,21 @@ def compare_models(
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     print(f"Comparing models with {modelname}")
-    all_hits_max, all_hits_normal = load_hmmer_hits(4)
+    all_hits_max, _ = load_hmmer_hits(4)
 
     neat_max = load_inputs(all_hits_max, "max", modelname)
 
     esm = load_inputs(all_hits_max, "max", "esm")
     knn = load_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_inputs(all_hits_max, "max", "protbert-1")
-    last = load_inputs(all_hits_max, "max", "")
+    protbert = load_inputs(all_hits_max, "max", "protbert")
+    last = load_inputs(all_hits_max, "max", "last")
+    hmmer_normal = load_inputs(all_hits_max, "max", "hmmer_normal")
 
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, knn, protbert, neat_max, neat_regular, mmseqs, last]:
+    for inputs in [esm, knn, protbert, neat_max, hmmer_normal, mmseqs, last]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -127,7 +128,7 @@ def compare_models(
                     "ProtTransT5XLU50",
                     "ProtBERT",
                     "NEAT-150",
-                    "NEAT-150 (HMMER Normal)",
+                    "HMMER Normal",
                     "MMseqs2",
                     "LAST",
                 ][idx],
