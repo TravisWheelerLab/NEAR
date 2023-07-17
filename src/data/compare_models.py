@@ -243,8 +243,8 @@ def plot_recall_by_evalue_threshold(
     esm = load_esm_inputs(all_hits_max, "max", "esm")
     knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "max", "")
+    protbert = load_knn_inputs(all_hits_max, "max", "protbert")
+    last = load_mmseqs_inputs(all_hits_max, "max", "last")
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
@@ -260,29 +260,33 @@ def plot_recall_by_evalue_threshold(
             (_, _, _, sorted_pairs) = get_data(**inputs)
 
             _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
-        evalue_recalls.append(recalls[-1])
+        #evalue_recalls.append(recalls[-1])
 
         plt.plot(
             evalue_thresholds,
-            evalue_recalls,
+            np.array(recalls)[-1,:],
             label=[
                 "ESM",
                 "ProtTransT5XLU50",
                 "ProtBERT",
                 "NEAT-150",
-                "MMseqs2" "LAST",
+                "MMseqs2", "LAST",
             ][idx],
         )
-
+    plt.legend()
     plt.title("HMMER Max Recall by Evalue Threshold")
+    #plt.savefig(f"ResNet1d/results/compared_recall.png")
+    plt.xlabel("E-value thresholds")
+    plt.ylabel("Recall")
+    plt.xticks([0,1,2,3], labels = evalue_thresholds)
     plt.savefig(f"ResNet1d/results/compared_recall.png")
     plt.clf()
 
     esm = load_esm_inputs(all_hits_max, "normal", "esm")
     knn = load_knn_inputs(all_hits_max, "normal", "knn-for-homology")
     mmseqs = load_knn_inputs(all_hits_max, "normal", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "normal", "protbert-1")
-    last = load_mmseqs_inputs(all_hits_max, "normal", "")
+    protbert = load_knn_inputs(all_hits_max, "normal", "protbert")
+    last = load_mmseqs_inputs(all_hits_max, "normal", "last")
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
@@ -298,20 +302,23 @@ def plot_recall_by_evalue_threshold(
             (_, _, _, sorted_pairs) = get_data(**inputs)
 
             _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
-        evalue_recalls.append(recalls[-1])
+        #evalue_recalls.append(recalls[-1])
 
         plt.plot(
             evalue_thresholds,
-            evalue_recalls,
+            np.array(recalls)[-1,:],
             label=[
                 "ESM",
                 "ProtTransT5XLU50",
                 "ProtBERT",
                 "NEAT-150",
-                "MMseqs2" "LAST",
+                "MMseqs2", "LAST",
             ][idx],
         )
-
+    plt.legend()
+    plt.xlabel("E- value thresholds")
+    plt.ylabel("Recall")
+    
     plt.title("HMMER Normal Recall by Evalue Threshold")
     plt.savefig(f"ResNet1d/results/compared_recall_normal.png")
 
