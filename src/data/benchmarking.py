@@ -334,6 +334,7 @@ def get_data(
                 all_scores.append(similarity)
                 all_e_values.append(hmmer_hits_dict[queryname][target][0])
                 all_biases.append(hmmer_hits_dict[queryname][target][2])
+                similarities.append(similarity)
 
         # get decoys
         if os.path.exists(f"{reversed_path}/{queryhits}"):
