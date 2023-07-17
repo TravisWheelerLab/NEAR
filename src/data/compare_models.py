@@ -83,19 +83,11 @@ def compare_models(
     neat_max = load_inputs(all_hits_max, "max", modelname)
     neat_regular = load_inputs(all_hits_normal, "normal", modelname)
 
-<<<<<<< HEAD
     esm = load_inputs(all_hits_max, "max", "esm")
     knn = load_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_inputs(all_hits_max, "max", "protbert-1")
     last = load_inputs(all_hits_max, "max", "")
-=======
-    esm = load_esm_inputs(all_hits_max, "max", "esm")
-    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert")
-    last = load_mmseqs_inputs(all_hits_max, "max", "last")
->>>>>>> 31d4a40b89f179f6eae32542144c457644658897
 
     all_recalls = []
     all_filtrations = []
@@ -245,19 +237,11 @@ def plot_recall_by_evalue_threshold(
     neat_max = load_inputs(all_hits_max, "max", modelname)
     neat_regular = load_inputs(all_hits_normal, "normal", modelname)
 
-<<<<<<< HEAD
     esm = load_inputs(all_hits_max, "max", "esm")
     knn = load_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_inputs(all_hits_max, "max", "protbert-1")
     last = load_inputs(all_hits_max, "max", "")
-=======
-    esm = load_esm_inputs(all_hits_max, "max", "esm")
-    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "max", "protbert")
-    last = load_mmseqs_inputs(all_hits_max, "max", "last")
->>>>>>> 31d4a40b89f179f6eae32542144c457644658897
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
@@ -295,19 +279,11 @@ def plot_recall_by_evalue_threshold(
     plt.savefig(f"ResNet1d/results/compared_recall.png")
     plt.clf()
 
-<<<<<<< HEAD
     esm = load_inputs(all_hits_max, "normal", "esm")
     knn = load_inputs(all_hits_max, "normal", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "normal", "mmseqs")
     protbert = load_inputs(all_hits_max, "normal", "protbert-1")
     last = load_inputs(all_hits_max, "normal", "")
-=======
-    esm = load_esm_inputs(all_hits_max, "normal", "esm")
-    knn = load_knn_inputs(all_hits_max, "normal", "knn-for-homology")
-    mmseqs = load_knn_inputs(all_hits_max, "normal", "mmseqs")
-    protbert = load_knn_inputs(all_hits_max, "normal", "protbert")
-    last = load_mmseqs_inputs(all_hits_max, "normal", "last")
->>>>>>> 31d4a40b89f179f6eae32542144c457644658897
 
     evalue_recalls = []
     _, axis = plt.subplots(figsize=(10, 10))
