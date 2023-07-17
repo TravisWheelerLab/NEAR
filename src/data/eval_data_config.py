@@ -25,33 +25,3 @@ def load_inputs(hits, mode, modelname):
             "plot_roc": True,
             "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
         }  # "num_pos_per_evalue": [482384, 1038554, 1081989, 1088067], "num_hits":1341468330,  "plot_roc" : False}
-
-
-def load_alignment_inputs(hits, mode, modelname):
-    if mode == "max":
-        return {
-            "model_results_path": "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/"
-            + modelname,
-            "hmmer_hits_dict": hits,
-            "data_savedir": f"/xdisk/twheeler/daphnedemekas/{modelname}_max",
-            "evaluemeansfile": f"evaluemeans_align_{modelname}_max",
-            "evaluemeanstitle": f"Correlation in {modelname} model - HMMER Max",
-            "roc_filepath": f"ResNet1d/results/{modelname}_max_roc.png",
-            "plot_roc": True,
-            "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_max",
-        }
-    elif mode == "normal":
-        return {
-            "model_results_path": "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/"
-            + modelname,
-            "hmmer_hits_dict": hits,
-            "data_savedir": f"/xdisk/twheeler/daphnedemekas/{modelname}_normal",
-            "evaluemeansfile": f"evaluemeans_align_{modelname}_normal",
-            "evaluemeanstitle": f"Correlation in {modelname} model - HMMER Normal",
-            "roc_filepath": f"ResNet1d/results/{modelname}_normal_roc.png",
-            "plot_roc": True,
-            "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_normal",
-        }
-
-    else:
-        raise Exception("mode not understood")
