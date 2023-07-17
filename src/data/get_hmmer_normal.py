@@ -1,5 +1,5 @@
 import pickle
-from benchmarking import get_sorted_pairs
+from src.data.benchmarking import get_sorted_pairs
 import os
 import numpy as np
 
@@ -32,7 +32,7 @@ similariites = []
 for query, targethits in hmmer_normal.items():
     for target, scores in targethits.items():
         score = scores[1]
-        all_pairs.append(query, target)
+        all_pairs.append((query, target))
         all_scores.append(score)
         all_e_values.append(hmmer_max[query][target][0])
         all_biases.append(hmmer_max[query][target][2])
