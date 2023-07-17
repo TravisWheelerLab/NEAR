@@ -22,7 +22,7 @@ def load_hmmer_hits(query_id: int = 4):
         raise Exception(f"No evaluation data for given query id {query_id}")
 
 
-hmmer_normal, hmmer_max = load_hmmer_hits()
+hmmer_max, hmmer_normal = load_hmmer_hits()
 
 all_pairs = []
 all_scores = []
