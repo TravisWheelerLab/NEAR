@@ -220,6 +220,91 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
         plt.savefig("ResNet1d/results/superimposedCPUmax-zoomed.png")
 
 
+def plot_recall_by_evalue_threshold(
+    modelname: str = "CPU-20K-150", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
+):
+    print(f"Comparing models with {modelname}")
+    all_hits_max, all_hits_normal = load_hmmer_hits(4)
+
+    neat_max = load_alignment_inputs(all_hits_max, "max", modelname)
+    neat_regular = load_alignment_inputs(all_hits_normal, "normal", modelname)
+
+    esm = load_esm_inputs(all_hits_max, "max", "esm")
+    knn = load_knn_inputs(all_hits_max, "max", "knn-for-homology")
+    mmseqs = load_knn_inputs(all_hits_max, "max", "mmseqs")
+    protbert = load_knn_inputs(all_hits_max, "max", "protbert-1")
+    last = load_mmseqs_inputs(all_hits_max, "max", "")
+
+    evalue_recalls = []
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for idx, inputs in enumerate([esm, knn, protbert, neat_max, mmseqs, last]):
+        if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
+            print("Loading filtration and recall directly")
+            with open(f"{inputs['temp_file']}_recall.pickle", "rb") as pickle_file:
+                recalls = pickle.load(pickle_file)
+        else:
+            print(f" No such file {inputs['temp_file']}_filtration.pickle")
+
+            (_, _, _, sorted_pairs) = get_data(**inputs)
+
+            _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
+        evalue_recalls.append(recalls[-1])
+
+        plt.plot(
+            evalue_thresholds,
+            evalue_recalls,
+            label=[
+                "ESM",
+                "ProtTransT5XLU50",
+                "ProtBERT",
+                "NEAT-150",
+                "MMseqs2" "LAST",
+            ][idx],
+        )
+
+    plt.title("HMMER Max Recall by Evalue Threshold")
+    plt.savefig(f"ResNet1d/results/compared_recall.png")
+    plt.clf()
+
+    esm = load_esm_inputs(all_hits_max, "normal", "esm")
+    knn = load_knn_inputs(all_hits_max, "normal", "knn-for-homology")
+    mmseqs = load_knn_inputs(all_hits_max, "normal", "mmseqs")
+    protbert = load_knn_inputs(all_hits_max, "normal", "protbert-1")
+    last = load_mmseqs_inputs(all_hits_max, "normal", "")
+
+    evalue_recalls = []
+    _, axis = plt.subplots(figsize=(10, 10))
+
+    for idx, inputs in enumerate([esm, knn, protbert, neat_regular, mmseqs, last]):
+        if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
+            print("Loading filtration and recall directly")
+            with open(f"{inputs['temp_file']}_recall.pickle", "rb") as pickle_file:
+                recalls = pickle.load(pickle_file)
+        else:
+            print(f" No such file {inputs['temp_file']}_filtration.pickle")
+
+            (_, _, _, sorted_pairs) = get_data(**inputs)
+
+            _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
+        evalue_recalls.append(recalls[-1])
+
+        plt.plot(
+            evalue_thresholds,
+            evalue_recalls,
+            label=[
+                "ESM",
+                "ProtTransT5XLU50",
+                "ProtBERT",
+                "NEAT-150",
+                "MMseqs2" "LAST",
+            ][idx],
+        )
+
+    plt.title("HMMER Normal Recall by Evalue Threshold")
+    plt.savefig(f"ResNet1d/results/compared_recall_normal.png")
+
+
 def evaluate(
     models: list = ["align", "knn"],
     modes: list = ["normal", "max"],
@@ -311,7 +396,8 @@ if __name__ == "__main__":
         modes.append("normal")
 
     if args.compare:
-        compare_models()
+        # compare_models()
+        plot_recall_by_evalue_threshold()
     elif args.impose:
         compare_nprobe()
     else:
