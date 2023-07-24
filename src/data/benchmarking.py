@@ -379,3 +379,79 @@ def get_data(
         # np.save(f"{data_savedir}/sorted_pairs", np.array(sorted_pairs), allow_pickle=True)
 
     return (similarities, all_e_values, all_biases, sorted_pairs)
+
+
+def get_data_for_roc(
+    model_results_path: str,
+    hmmer_hits_dict: dict,
+    data_savedir=None,
+    plot_roc=True,
+    **kwargs,
+):
+    """Parses the outputted results and aggregates everything
+    into lists and dictionaries"""
+
+    if (data_savedir is not None and plot_roc is False) or os.path.exists(
+        f"{data_savedir}/sorted_pairs.npy"
+    ):
+        print(f"Getting saved data from {data_savedir}")
+        if plot_roc is True:
+            sorted_pairs = np.load(f"{data_savedir}/sorted_pairs.npy")
+        else:
+            sorted_pairs = None
+        return (
+            sorted_pairs,
+        )
+
+    all_targets = []
+    all_scores = []
+
+    print(model_results_path)
+
+    if "CPU" in model_results_path:
+        nprobe = model_results_path.split("/")[-1].split("-")[-1]
+        reversed_path = (
+            f"/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-{nprobe}"
+        )
+    else:
+        reversed_path = model_results_path + "-reversed"
+    print(f"Reversed path :{reversed_path}")
+
+    for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
+        queryname = queryhits.strip(".txt")
+        # get positives
+        with open(f"{model_results_path}/{queryhits}", "r") as file:
+            for line in file:
+                if "Distance" in line:
+                    continue
+                target = line.split()[0].strip("\n").strip(".pt")
+                similarity = float(line.split()[1].strip("\n"))
+                # if there is a decoy, then collect targets from reversed results
+                if (
+                    queryname not in hmmer_hits_dict
+                    or target not in hmmer_hits_dict[queryname]
+                ):
+                    continue
+
+                all_targets.append((queryname, target))
+                all_scores.append(similarity)
+        # get decoys
+        if os.path.exists(f"{reversed_path}/{queryhits}"):
+            with open(f"{reversed_path}/{queryhits}", "r") as file:
+                for line in file:
+                    if "Distance" in line:
+                        continue
+                    target = line.split()[0].strip("\n")
+
+                    if (
+                        queryname not in hmmer_hits_dict
+                        or target not in hmmer_hits_dict[queryname]
+                    ):
+                        similarity = float(line.split()[1].strip("\n"))
+                        all_targets.append((queryname, target))
+                        all_scores.append(similarity)
+
+    assert len(all_scores) == len(all_targets)
+    print("Sorting pairs...")
+
+    return sorted_pairs

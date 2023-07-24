@@ -3,6 +3,7 @@
 from src.data.benchmarking import (
     get_data,
     generate_roc,
+    get_data_for_roc,
     plot_mean_e_values,
     get_roc_data,
     COLORS,
@@ -46,30 +47,40 @@ class Results:
         evaluemeanstitle: str,
         roc_filepath: str,
         plot_roc: bool = False,
+        plot_e_values: bool = False,
         temp_file: str = None,
     ):
         """evaluates a given model"""
 
-        (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-            model_results_path,
-            hmmer_hits_dict,
-            data_savedir=data_savedir,
-            plot_roc=plot_roc,
-        )
-        print("Plotting e values and saving to")
-        print(evaluemeansfile)
-        plot_mean_e_values(
-            self.similarities,
-            self.e_values,
-            self.biases,
-            min_threshold=0,
-            max_threshold=np.max(self.similarities),
-            outputfilename=evaluemeansfile,
-            plot_stds=True,
-            _plot_lengths=False,
-            title=evaluemeanstitle,
-        )
-        if plot_roc:
+        if plot_e_values:
+            (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
+                model_results_path,
+                hmmer_hits_dict,
+                data_savedir=data_savedir,
+                plot_roc=plot_roc,
+            )
+            print("Plotting e values and saving to")
+            print(evaluemeansfile)
+            plot_mean_e_values(
+                self.similarities,
+                self.e_values,
+                self.biases,
+                min_threshold=0,
+                max_threshold=np.max(self.similarities),
+                outputfilename=evaluemeansfile,
+                plot_stds=True,
+                _plot_lengths=False,
+                title=evaluemeanstitle,
+            )
+            if plot_roc:
+                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
+        elif plot_roc:
+            sorted_pairs = get_data_for_roc(
+                model_results_path,
+                hmmer_hits_dict,
+                data_savedir=data_savedir,
+                plot_roc=plot_roc,
+            )
             generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
 
 
@@ -364,7 +375,7 @@ if __name__ == "__main__":
 
     if args.compare:
         compare_models()
-        #plot_recall_by_evalue_threshold()
+        # plot_recall_by_evalue_threshold()
     elif args.impose:
         compare_nprobe()
     else:
