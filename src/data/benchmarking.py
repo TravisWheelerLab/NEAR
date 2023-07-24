@@ -399,9 +399,7 @@ def get_data_for_roc(
             sorted_pairs = np.load(f"{data_savedir}/sorted_pairs.npy")
         else:
             sorted_pairs = None
-        return (
-            sorted_pairs,
-        )
+        return (sorted_pairs,)
 
     all_targets = []
     all_scores = []
@@ -436,6 +434,8 @@ def get_data_for_roc(
                 all_targets.append((queryname, target))
                 all_scores.append(similarity)
         # get decoys
+        x = len(all_scores)
+        print(f"Num positives: {x}")
         if os.path.exists(f"{reversed_path}/{queryhits}"):
             with open(f"{reversed_path}/{queryhits}", "r") as file:
                 for line in file:
@@ -450,8 +450,10 @@ def get_data_for_roc(
                         similarity = float(line.split()[1].strip("\n"))
                         all_targets.append((queryname, target))
                         all_scores.append(similarity)
+    print(f"Num decoys: {len(all_scores) -x}")
 
     assert len(all_scores) == len(all_targets)
     print("Sorting pairs...")
+    sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
     return sorted_pairs
