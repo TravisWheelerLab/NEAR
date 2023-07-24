@@ -254,7 +254,7 @@ class UniRefEvaluator(Evaluator):
         raise NotImplementedError()
 
     @torch.no_grad()
-    def filter(self, queries, query_names, write_results=True):
+    def filter(self, queries, query_names, write_results=False):
         """Filters our hits based on
         distance to the query in the Faiiss
         cluster space"""

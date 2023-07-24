@@ -87,7 +87,7 @@ def compare_models(
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_inputs(all_hits_max, "max", "protbert")
     last = load_inputs(all_hits_max, "max", "last")
-    hmmer_normal = load_inputs(all_hits_max, "max", "hmmer_normal")
+    hmmer_normal = load_inputs(all_hits_max, "max", "msv")
 
     all_recalls = []
     all_filtrations = []
@@ -128,7 +128,7 @@ def compare_models(
                     "ProtTransT5XLU50",
                     "ProtBERT",
                     "NEAT-150",
-                    "HMMER Normal",
+                    "MSV filter",
                     "MMseqs2",
                     "LAST",
                 ][idx],
@@ -283,7 +283,7 @@ def plot_recall_by_evalue_threshold(
     esm = load_inputs(all_hits_max, "normal", "esm")
     knn = load_inputs(all_hits_max, "normal", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "normal", "mmseqs")
-    protbert = load_inputs(all_hits_max, "normal", "protbert-1")
+    protbert = load_inputs(all_hits_max, "normal", "protbert")
     last = load_inputs(all_hits_max, "normal", "")
 
     _, axis = plt.subplots(figsize=(10, 10))
@@ -363,8 +363,8 @@ if __name__ == "__main__":
         modes.append("normal")
 
     if args.compare:
-        # compare_models()
-        plot_recall_by_evalue_threshold()
+        compare_models()
+        #plot_recall_by_evalue_threshold()
     elif args.impose:
         compare_nprobe()
     else:
