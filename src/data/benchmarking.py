@@ -405,9 +405,6 @@ def get_data_for_roc(
             sorted_pairs = None
         return (sorted_pairs,)
 
-    all_targets = []
-    all_scores = []
-
     all_pairs = []
 
     print(model_results_path)
@@ -435,14 +432,10 @@ def get_data_for_roc(
                     or target not in hmmer_hits_dict[queryname]
                 ):
                     continue
-                similarity = float(line.split()[1].strip("\n"))
 
-                # all_targets.append((queryname, target))
-                # all_scores.append(similarity)
+                similarity = float(line.split()[1].strip("\n"))
                 all_pairs.append((queryname, target, similarity))
-        # get decoys
-        # x = len(all_scores)
-        # print(f"Num positives: {x}")
+
         if os.path.exists(f"{reversed_path}/{queryhits}"):
             with open(f"{reversed_path}/{queryhits}", "r") as file:
                 for line in file:
@@ -455,16 +448,12 @@ def get_data_for_roc(
                         or target not in hmmer_hits_dict[queryname]
                     ):
                         similarity = float(line.split()[1].strip("\n"))
-                        # all_targets.append((queryname, target))
-                        # all_scores.append(similarity)
                         all_pairs.append((queryname, target, similarity))
 
     # print(f"Num decoys: {len(all_scores) -x}")
 
-    # assert len(all_scores) == len(all_targets)
     print("Sorting pairs...")
 
     all_pairs.sort(key=get_similarity, reverse=True)
-    # sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
     return all_pairs
