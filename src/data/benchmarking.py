@@ -125,7 +125,7 @@ def plot_roc_curve(
     axis.ticklabel_format(style="plain", axis="x", useOffset=False)
     axis.grid()
     axis.set_ylim(0, 105)
-    axis.set_yticks([0, 20, 40, 60, 60, 100])
+    axis.set_yticks([0, 20, 40, 60, 80, 100])
     plt.legend()
     plt.savefig(f"{figure_path}", bbox_inches="tight")
     plt.close()
