@@ -94,7 +94,7 @@ def compare_models(
     neat_max = load_inputs(all_hits_max, "max", modelname)
 
     esm = load_inputs(all_hits_max, "max", "esm")
-    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
+    # knn = load_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_inputs(all_hits_max, "max", "protbert")
     last = load_inputs(all_hits_max, "max", "last")
@@ -103,7 +103,7 @@ def compare_models(
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, knn, protbert, neat_max, hmmer_normal, mmseqs, last]:
+    for inputs in [esm, protbert, neat_max, hmmer_normal, mmseqs, last]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -136,7 +136,6 @@ def compare_models(
                 linewidth=2,
                 label=[
                     "ESM",
-                    "ProtTransT5XLU50",
                     "ProtBERT",
                     "NEAT-150",
                     "MSV filter",
@@ -146,22 +145,22 @@ def compare_models(
             )
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
-        # axis.grid()
+        axis.grid()
         axis.legend()
-        # axis.set_xlim(75, 101)
-        # axis.set_xticks([75, 80, 85, 90, 95, 100])
+        axis.set_xlim(75, 101)
+        axis.set_xticks([75, 80, 85, 90, 95, 100])
         if evalue_index != -1:
             axis.set_ylim(50, 101)
             axis.set_yticks([50, 60, 70, 80, 90, 100])
 
         # axis.set_ylim(90, 100.2)
-        axis.set_xlim(99, 100.01)
-        axis.grid()
-        axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
+        # axis.set_xlim(99, 100.01)
+        # axis.grid()
+        # axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
         # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
 
         plt.savefig(
-            f"ResNet1d/results/compared_roczoom2-{evalue_thresholds[evalue_index]}.png"
+            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png"
         )
         plt.clf()
 
