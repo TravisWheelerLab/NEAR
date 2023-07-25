@@ -307,7 +307,8 @@ def _setup_targets_for_search(
 
     print(f"Creating index: {index_string}")
     start = time.time()
-    index: faiss.Index = create_faiss_index(
+    if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
+        index: faiss.Index = create_faiss_index(
         embeddings=unrolled_targets,
         embed_dim=unrolled_targets.shape[-1],
         distance_metric="cosine" if normalize_embeddings else "l2",
@@ -315,14 +316,22 @@ def _setup_targets_for_search(
         num_threads=num_threads,
         device=index_device,
     )
+        logger.info("Adding targets to index.")
+        if index_device == "cpu":
+            index.add(unrolled_targets.to("cpu"))
+        else:
+            index.add(unrolled_targets)
+        faiss.write_index(index, "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
+        print(
+            "Wrote index to file: /xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+        )
+    else:
+        index = faiss.read_index("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
+
+
     index.nprobe = nprobe
     loop_time = time.time() - start
 
-    logger.info("Adding targets to index.")
-    if index_device == "cpu":
-        index.add(unrolled_targets.to("cpu"))
-    else:
-        index.add(unrolled_targets)
     print(f"Index Creation took: {loop_time}.")
 
     return unrolled_names, index
