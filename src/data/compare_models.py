@@ -103,7 +103,7 @@ def compare_models(
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, protbert, neat_max, hmmer_normal, mmseqs, last]:
+    for inputs in [esm, protbert, neat_max, hmmer_normal, last, mmseqs]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -129,20 +129,37 @@ def compare_models(
             idx += 1
             print(f"IDX: {idx}")
 
-            axis.plot(
-                np.array(filtrations)[:, evalue_index],
-                np.array(recalls)[:, evalue_index],
-                f"{COLORS[idx]}",
-                linewidth=2,
-                label=[
-                    "ESM",
-                    "ProtBERT",
-                    "NEAT-150",
-                    "MSV filter",
-                    "MMseqs2",
-                    "LAST",
-                ][idx],
-            )
+            if idx == 5:
+                axis.plot(
+                    np.array(filtrations)[:, evalue_index],
+                    np.array(recalls)[:, evalue_index],
+                    f"{COLORS[idx]}",
+                    linewidth=2,
+                    label=[
+                        "ESM",
+                        "ProtBERT",
+                        "NEAT-150",
+                        "MSV filter",
+                        "LAST",
+                        "MMseqs2",
+                    ][idx],
+                    linestyle="dashed",
+                )
+            else:
+                axis.plot(
+                    np.array(filtrations)[:, evalue_index],
+                    np.array(recalls)[:, evalue_index],
+                    f"{COLORS[idx]}",
+                    linewidth=2,
+                    label=[
+                        "ESM",
+                        "ProtBERT",
+                        "NEAT-150",
+                        "MSV filter",
+                        "LAST",
+                        "MMseqs2",
+                    ][idx],
+                )
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
