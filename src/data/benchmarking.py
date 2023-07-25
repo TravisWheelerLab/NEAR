@@ -429,13 +429,13 @@ def get_data_for_roc(
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                similarity = float(line.split()[1].strip("\n"))
                 # if there is a decoy, then collect targets from reversed results
                 if (
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
                     continue
+                similarity = float(line.split()[1].strip("\n"))
 
                 # all_targets.append((queryname, target))
                 # all_scores.append(similarity)
@@ -464,7 +464,7 @@ def get_data_for_roc(
     # assert len(all_scores) == len(all_targets)
     print("Sorting pairs...")
 
-    all_pairs.sort(key=get_similarity)
+    all_pairs.sort(key=get_similarity, reverse=True)
     # sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
     return all_pairs
