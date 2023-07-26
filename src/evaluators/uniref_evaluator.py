@@ -9,6 +9,7 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import tqdm
+from src.evaluators.contrastive_functional import search
 
 from src.evaluators import Evaluator
 from src.utils import encode_string_sequence
@@ -100,7 +101,7 @@ class UniRefEvaluator(Evaluator):
         self.output_path = output_path
         self.omp_num_threads = omp_num_threads
         self.target_embeddings_path = target_embeddings_path
-        
+
         print(f"Target embeddings path: {target_embeddings_path}")
         if self.normalize_embeddings:
             logger.info("Using comparison function >= threshold for filtration.")
@@ -244,15 +245,6 @@ class UniRefEvaluator(Evaluator):
         """Base method"""
         raise NotImplementedError()
 
-    def search(self, query_embedding):
-        """
-        :param query_embedding: seq_lenxembedding dimension query to search against the target database.
-        :type query_embedding: torch.Tensor()
-        :return:
-        :rtype:
-        """
-        raise NotImplementedError()
-
     @torch.no_grad()
     def filter(self, queries, query_names, write_results=False):
         """Filters our hits based on
@@ -273,7 +265,9 @@ class UniRefEvaluator(Evaluator):
         total_filtration_time = 0
 
         for i in tqdm.tqdm(range(len(queries))):
-            filtered_scores, search_time, filtration_time = self.search(queries[i])
+            filtered_scores, search_time, filtration_time = search(
+                self.index, self.unrolled_names, queries[i]
+            )
             total_search_time += search_time
             total_filtration_time += filtration_time
 
