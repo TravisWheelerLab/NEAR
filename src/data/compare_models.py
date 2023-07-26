@@ -140,7 +140,7 @@ def compare_models(
             idx += 1
             print(f"IDX: {idx}")
 
-            if labels[idx] in ["LAST, MMseqs2"]:
+            if labels[idx] in ["LAST", "MMseqs2", "ProtTransT5"]:
                 axis.scatter(
                     np.array(filtrations)[-1, evalue_index],
                     np.array(recalls)[-1, evalue_index],
