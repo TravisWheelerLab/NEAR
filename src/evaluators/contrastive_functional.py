@@ -215,8 +215,9 @@ def filter(arg_list):
     total_filtration_time = 0
 
     unrolled_names_bytes = [name.encode("utf-8") for name in unrolled_names.tolist()]
-    unrolled_names = (ctypes.c_char_p * len(unrolled_names_bytes))()
-    unrolled_names[:] = [name for name in unrolled_names_bytes]
+    unrolled_names = unrolled_names_bytes.ctypes.data_as(
+        ctypes.POINTER(ctypes.c_char_p)
+    )
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
