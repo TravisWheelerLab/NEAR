@@ -156,7 +156,7 @@ def search(
 
     filtration_time = time.time()
 
-    filtered_scores = filter_scores_without_agg(
+    filtered_scores = filter_scores(
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
 
