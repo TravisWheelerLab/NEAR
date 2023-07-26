@@ -12,78 +12,77 @@ import torch
 import time
 from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
+import ctypes
+
+
+lib = ctypes.CDLL("post-processing-rust/post-processing/my_lib.so")
+
+lib.process_data.argtypes = (
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_size_t,
+    ctypes.POINTER(ctypes.c_int),
+)
+
+
+# Define the CHashMap struct for Rust to pass the results
+class CHashMap(ctypes.Structure):
+    _fields_ = [
+        ("keys", ctypes.POINTER(ctypes.c_char_p)),
+        ("values", ctypes.POINTER(ctypes.c_double)),
+        ("len", ctypes.c_size_t),
+    ]
+
+
+# Define the function signature for filter_scores
+lib.filter_scores.restype = CHashMap
+lib.filter_scores.argtypes = [
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)),
+    ctypes.c_size_t,  # scores_rows
+    ctypes.c_size_t,  # scores_cols
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_size_t)),
+    ctypes.c_size_t,  # indices_rows
+    ctypes.c_size_t,  # indices_cols
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_char)),
+    ctypes.c_size_t,  # unrolled_names_len
+]
 
 logger = logging.getLogger("evaluate")
 
 
-def filter_scores(scores_array, indices_array, unrolled_names):
-    """Filters the scores such that every query amino can only
-    be matched to one amino from each target sequence
-    and it matches the one with the biggest score.
+# def filter_scores(
+#     scores_array: np.array, indices_array: np.array, unrolled_names: np.array
+# ) -> dict:
+#     """Filters the scores such that every query amino can only
+#     be matched to one amino from each target sequence
+#     and it matches the one with the biggest score.
 
-    Then sums the scores that belong to the same target
-    and returns the resulting distances in a dict
+#     Then sums the scores that belong to the same target
+#     and returns the resulting distances in a dict
 
-    scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
-    indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
-    for each of the scores in scores_array"""
+#     scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
+#     indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
+#     for each of the scores in scores_array
+#     unrolled_names: an array of target names that the indices in indices_array correspond to
+#     """
 
-    filtered_scores = defaultdict(float)
+#     filtered_scores: dict = defaultdict(float)
 
-    # iterate over query amino scores
-    for match_idx in range(len(scores_array)):
-        match_scores = scores_array[match_idx]
-        names = unrolled_names[
-            indices_array[match_idx]
-        ]  # the names of the targets for each 1000 hits
-        sorted_match_idx = np.argsort(match_scores)[::-1]
+#     # iterate over query amino scores
+#     for match_idx in range(len(scores_array)):
+#         match_scores = scores_array[match_idx]
+#         names = unrolled_names[
+#             indices_array[match_idx]
+#         ]  # the names of the targets for each 1000 hits
+#         sorted_match_idx = np.argsort(match_scores)[::-1]
 
-        _, unique_indices = np.unique(
-            names[sorted_match_idx], return_index=True
-        )  # the unique names of the targets for each 1000 hits (<= 1000)
+#         _, unique_indices = np.unique(names[sorted_match_idx], return_index=True)
+#         new_indices = list(indices_array[match_idx][sorted_match_idx][unique_indices])
+#         new_scores = list(match_scores[sorted_match_idx][unique_indices])
 
-        new_indices = list(indices_array[match_idx][sorted_match_idx][unique_indices])
-        new_scores = list(match_scores[sorted_match_idx][unique_indices])
+#         for distance, name in zip(new_scores, unrolled_names[new_indices]):
+#             filtered_scores[name] += distance
 
-        for distance, name in zip(new_scores, unrolled_names[new_indices]):
-            filtered_scores[name] += distance
-
-    return filtered_scores
-
-
-def filter_scores_without_agg(scores_array, indices_array, unrolled_names):
-    """Filters the scores such that every query amino can only
-    be matched to one amino from each target sequence
-    and it matches the one with the biggest score.
-
-    Then sums the scores that belong to the same target
-    and returns the resulting distances in a dict
-
-    scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
-    indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
-    for each of the scores in scores_array"""
-
-    filtered_scores = defaultdict(float)
-
-    # iterate over query amino scores
-    for match_idx in range(len(scores_array)):
-        match_scores = scores_array[match_idx]
-        names = unrolled_names[
-            indices_array[match_idx]
-        ]  # the names of the targets for each 1000 hits
-        # sorted_match_idx = np.argsort(match_scores)[::-1]
-
-        # _, unique_indices = np.unique(
-        #     names[sorted_match_idx], return_index=True
-        # )  # the unique names of the targets for each 1000 hits (<= 1000)
-
-        # new_indices = list(indices_array[match_idx][sorted_match_idx][unique_indices])
-        # new_scores = list(match_scores[sorted_match_idx][unique_indices])
-
-        for distance, name in zip(match_scores, names):
-            filtered_scores[name] += distance
-
-    return filtered_scores
+#     return filtered_scores
 
 
 def filter_and_calc_embeddings(
@@ -156,9 +155,16 @@ def search(
 
     filtration_time = time.time()
 
-    filtered_scores = filter_scores(
+    result = lib.filter_scores(
         scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
+
+    # Convert the CHashMap result back to Python dictionary
+    filtered_scores = {}
+    for i in range(result.len):
+        key = ctypes.string_at(result.keys[i]).decode("utf-8")
+        value = result.values[i]
+        filtered_scores[key] = value
 
     filtration_time = time.time() - filtration_time
 
@@ -309,25 +315,28 @@ def _setup_targets_for_search(
     start = time.time()
     if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"):
         index: faiss.Index = create_faiss_index(
-        embeddings=unrolled_targets,
-        embed_dim=unrolled_targets.shape[-1],
-        distance_metric="cosine" if normalize_embeddings else "l2",
-        index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-        num_threads=num_threads,
-        device=index_device,
-    )
+            embeddings=unrolled_targets,
+            embed_dim=unrolled_targets.shape[-1],
+            distance_metric="cosine" if normalize_embeddings else "l2",
+            index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
+            num_threads=num_threads,
+            device=index_device,
+        )
         logger.info("Adding targets to index.")
         if index_device == "cpu":
             index.add(unrolled_targets.to("cpu"))
         else:
             index.add(unrolled_targets)
-        faiss.write_index(index, "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
+        faiss.write_index(
+            index, "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+        )
         print(
             "Wrote index to file: /xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
         )
     else:
-        index = faiss.read_index("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
-
+        index = faiss.read_index(
+            "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+        )
 
     index.nprobe = nprobe
     loop_time = time.time() - start
