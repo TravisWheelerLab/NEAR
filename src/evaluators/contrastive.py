@@ -8,7 +8,6 @@ import numpy as np
 import torch
 import pdb
 from src.evaluators.uniref_evaluator import UniRefEvaluator
-from src.evaluators.contrastive_functional import filter_scores
 from src.utils import create_faiss_index, encode_string_sequence
 
 logger = logging.getLogger("evaluate")

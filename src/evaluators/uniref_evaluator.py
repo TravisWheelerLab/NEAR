@@ -17,6 +17,7 @@ import pickle
 
 logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
+from ctypes import POINTER, c_char
 
 
 class UniRefEvaluator(Evaluator):
@@ -264,9 +265,11 @@ class UniRefEvaluator(Evaluator):
         total_search_time = 0
         total_filtration_time = 0
 
+        unrolled_names_ptr = self.unrolled_names.ctypes.data_as(POINTER(c_char))
+
         for i in tqdm.tqdm(range(len(queries))):
             filtered_scores, search_time, filtration_time = search(
-                self.index, self.unrolled_names, queries[i]
+                self.index, unrolled_names_ptr, queries[i]
             )
             total_search_time += search_time
             total_filtration_time += filtration_time
