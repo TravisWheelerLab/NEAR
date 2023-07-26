@@ -215,8 +215,9 @@ def filter(arg_list):
     total_filtration_time = 0
 
     unrolled_names_bytes = [name.encode("utf-8") for name in unrolled_names.tolist()]
-    unrolled_names = (ctypes.c_char_p * len(unrolled_names_bytes))()
-    unrolled_names[:] = [name for name in unrolled_names_bytes]
+    unrolled_names = unrolled_names_bytes.ctypes.data_as(
+        ctypes.POINTER(ctypes.c_char_p)
+    )
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
@@ -283,9 +284,10 @@ def _setup_targets_for_search(
 
     unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-    print(f"Creating index: {index_string}")
     start = time.time()
     if not os.path.exists(index_path):
+        print(f"Creating index: {index_string} and saving to {index_path}")
+
         index: faiss.Index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
@@ -302,6 +304,7 @@ def _setup_targets_for_search(
         faiss.write_index(index, index_path)
         print(index_path)
     else:
+        print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
 
     index.nprobe = nprobe
