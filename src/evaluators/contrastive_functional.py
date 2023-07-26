@@ -154,8 +154,6 @@ def search(
     indices_array_np = indices_array.to("cpu").numpy().astype(np.uint64)
     indices_array = indices_array_np.ctypes.data_as(POINTER(c_ulong))
 
-    unrolled_names = unrolled_names.ctypes.data_as(POINTER(c_char))
-
     result = lib.filter_scores(
         scores_array,
         scores_array_np.shape[0],
