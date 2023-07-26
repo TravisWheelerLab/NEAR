@@ -13,15 +13,9 @@ import time
 from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
 import ctypes
+from ctypes import c_ulong, c_double, POINTER
 
-
-lib = ctypes.CDLL("post-processing-rust/post-processing/my_lib.so")
-
-lib.process_data.argtypes = (
-    ctypes.POINTER(ctypes.c_int),
-    ctypes.c_size_t,
-    ctypes.POINTER(ctypes.c_int),
-)
+lib = ctypes.CDLL("post-processing-rust/post-processing/target/release/libmy_lib.so")
 
 
 # Define the CHashMap struct for Rust to pass the results
@@ -155,9 +149,16 @@ def search(
 
     filtration_time = time.time()
 
+    scores_array_np = scores_array.to("cpu").numpy().astype(np.float64)
+    scores_array = scores_array_np.ctypes.data_as(POINTER(c_double))
+    indices_array_np = indices_array.to("cpu").numpy().astype(np.uint64)
+    indices_array = indices_array_np.ctypes.data_as(POINTER(c_ulong))
+    unrolled_names_bytes = [name.encode('utf-8')  for name in unrolled_names.tolist()]
+    unrolled_names = (ctypes.c_char_p * len(unrolled_names_bytes))(*unrolled_names_bytes)
+
     result = lib.filter_scores(
-        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
-    )
+        scores_array,scores_array_np.shape[0], scores_array_np.shape[1], indices_array, indices_array_np.shape[0], indices_array_np.shape[1], unrolled_names, len(unrolled_names))
+    
 
     # Convert the CHashMap result back to Python dictionary
     filtered_scores = {}

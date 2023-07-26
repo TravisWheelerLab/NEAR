@@ -8,9 +8,7 @@ import itertools
 from src.evaluators.contrastive_functional import (
     filter,
     _setup_targets_for_search,
-    save_target_embeddings,
-    search_only,
-    filter_only,
+    save_target_embeddings
 )
 from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
