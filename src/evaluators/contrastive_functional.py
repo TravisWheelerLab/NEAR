@@ -307,7 +307,7 @@ def _setup_targets_for_search(
 
     print(f"Creating index: {index_string}")
     start = time.time()
-    if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index")
+    if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"):
         index: faiss.Index = create_faiss_index(
         embeddings=unrolled_targets,
         embed_dim=unrolled_targets.shape[-1],

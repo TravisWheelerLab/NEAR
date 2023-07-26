@@ -7,9 +7,9 @@ checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints
 query_file: "data/evaluationqueries.fa"
 target_file: "data/reversedtargets.fa"
 target_embeddings: 'target_embeddings_reversed.pt'
-target_names: 'target_names.txt'
-target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/reversed-50"
+target_names: 'reversed_names.pickle'
+target_lengths: 'reversed_lengths.pickle'
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-50-wa"
 num_threads: 16
 omp_num_threads: 4
 device: 'cpu'
