@@ -98,6 +98,8 @@ def evaluate_multiprocessing(_config):
 
     model_class = load_model_class(params.model_name)
 
+    print(f"Index path: {params.index_path}")
+
     model = model_class.load_from_checkpoint(
         checkpoint_path=params.checkpoint_path,
         map_location=torch.device(params.device),

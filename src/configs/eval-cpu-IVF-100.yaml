@@ -19,3 +19,4 @@ max_seq_length: 512
 profiler: False
 nprobe: 100
 write_results: False
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
