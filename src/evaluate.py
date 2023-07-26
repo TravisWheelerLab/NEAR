@@ -20,6 +20,8 @@ from src.utils.util import (
     load_model_class,
 )
 import pickle
+import ctypes
+from ctypes import c_ulong, c_double, POINTER
 
 HOME = os.environ["HOME"]
 
@@ -155,6 +157,10 @@ def evaluate_multiprocessing(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
+    # Convert unrolled_names to a list of bytes (encoded in UTF-8)
+    unrolled_names_bytes = [name.encode("utf-8") for name in unrolled_names.tolist()]
+    unrolled_names_ptr = (ctypes.c_char_p * len(unrolled_names_bytes))()
+    unrolled_names_ptr[:] = [name for name in unrolled_names_bytes]
 
     arg_list = [
         (
