@@ -387,7 +387,7 @@ if __name__ == "__main__":
         modes.append("normal")
 
     if args.compare:
-        compare_models()
+        compare_models(modelname=modelname)
         # plot_recall_by_evalue_threshold()
     elif args.impose:
         compare_nprobe()
