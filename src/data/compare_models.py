@@ -145,7 +145,7 @@ def compare_models(
                     np.array(filtrations)[-1, evalue_index],
                     np.array(recalls)[-1, evalue_index],
                     c=COLORS[idx],
-                    s=10,
+                    s=100,
                     label=labels[idx],
                     marker="x",
                 )
