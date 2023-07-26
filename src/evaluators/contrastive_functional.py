@@ -269,7 +269,7 @@ def _setup_targets_for_search(
     num_threads=1,
     normalize_embeddings=True,
     index_device="cpu",
-    index_path
+    index_path="/xdisk/twheeler/daphnedemekas/faiss-index-index-targets.index",
 ):
     """Creates the Faiss Index object using the unrolled
     target embddings"""
@@ -299,16 +299,10 @@ def _setup_targets_for_search(
             index.add(unrolled_targets.to("cpu"))
         else:
             index.add(unrolled_targets)
-        faiss.write_index(
-            index, index_path
-        )
-        print(
-            index_path
-        )
+        faiss.write_index(index, index_path)
+        print(index_path)
     else:
-        index = faiss.read_index(
-            index_path
-        )
+        index = faiss.read_index(index_path)
 
     index.nprobe = nprobe
     loop_time = time.time() - start
