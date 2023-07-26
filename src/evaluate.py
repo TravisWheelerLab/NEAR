@@ -168,7 +168,7 @@ def evaluate_multiprocessing(_config):
             model,
             params.save_dir,
             index,
-            unrolled_names,
+            unrolled_names_ptr,
             params.max_seq_length,
             params.write_results,
         )
