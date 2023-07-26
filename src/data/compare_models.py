@@ -94,7 +94,7 @@ def compare_models(
     neat_max = load_inputs(all_hits_max, "max", modelname)
 
     esm = load_inputs(all_hits_max, "max", "esm")
-    # knn = load_inputs(all_hits_max, "max", "knn-for-homology")
+    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
     protbert = load_inputs(all_hits_max, "max", "protbert")
     last = load_inputs(all_hits_max, "max", "last")
@@ -103,7 +103,7 @@ def compare_models(
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, protbert, neat_max, hmmer_normal, last, mmseqs]:
+    for inputs in [esm, protbert, neat_max, hmmer_normal, last, mmseqs, knn]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -121,6 +121,17 @@ def compare_models(
 
     print(len(all_filtrations))
     print(len(all_recalls))
+
+    labels = [
+        "ESM",
+        "ProtBERT",
+        "NEAT-150",
+        "MSV filter",
+        "LAST",
+        "MMseqs2",
+        "ProtTransT5",
+    ]
+
     for evalue_index in [-1, -2, -3, -4]:
         _, axis = plt.subplots(figsize=(10, 10))
         idx = -1
@@ -129,21 +140,14 @@ def compare_models(
             idx += 1
             print(f"IDX: {idx}")
 
-            if idx == 5:
-                axis.plot(
-                    np.array(filtrations)[:, evalue_index],
-                    np.array(recalls)[:, evalue_index],
-                    f"{COLORS[idx]}",
-                    linewidth=2,
-                    label=[
-                        "ESM",
-                        "ProtBERT",
-                        "NEAT-150",
-                        "MSV filter",
-                        "LAST",
-                        "MMseqs2",
-                    ][idx],
-                    linestyle="dashed",
+            if labels[idx] in ["LAST, MMseqs2"]:
+                axis.scatter(
+                    np.array(filtrations)[-1, evalue_index],
+                    np.array(recalls)[-1, evalue_index],
+                    c=COLORS[idx],
+                    s=10,
+                    label=labels[idx],
+                    marker="x",
                 )
             else:
                 axis.plot(
@@ -151,26 +155,15 @@ def compare_models(
                     np.array(recalls)[:, evalue_index],
                     f"{COLORS[idx]}",
                     linewidth=2,
-                    label=[
-                        "ESM",
-                        "ProtBERT",
-                        "NEAT-150",
-                        "MSV filter",
-                        "LAST",
-                        "MMseqs2",
-                    ][idx],
+                    label=labels[idx],
                 )
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
         axis.legend()
-        axis.set_xlim(90, 100.2)
+        axis.set_xlim(95, 100.1)
         # axis.set_xticks([75, 80, 85, 90, 95, 100])
-        axis.set_xticks([90, 92, 94, 96, 98, 100])
-
-        if evalue_index != -1:
-            axis.set_ylim(50, 101)
-            axis.set_yticks([50, 60, 70, 80, 90, 100])
+        axis.set_xticks([95, 96, 97, 98, 99, 100])
 
         # axis.set_ylim(90, 100.2)
         # axis.set_xlim(99, 100.01)
