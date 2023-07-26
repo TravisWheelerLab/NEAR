@@ -153,12 +153,17 @@ def search(
     scores_array = scores_array_np.ctypes.data_as(POINTER(c_double))
     indices_array_np = indices_array.to("cpu").numpy().astype(np.uint64)
     indices_array = indices_array_np.ctypes.data_as(POINTER(c_ulong))
-    unrolled_names_bytes = [name.encode('utf-8')  for name in unrolled_names.tolist()]
-    unrolled_names = (ctypes.c_char_p * len(unrolled_names_bytes))(*unrolled_names_bytes)
 
     result = lib.filter_scores(
-        scores_array,scores_array_np.shape[0], scores_array_np.shape[1], indices_array, indices_array_np.shape[0], indices_array_np.shape[1], unrolled_names, len(unrolled_names))
-    
+        scores_array,
+        scores_array_np.shape[0],
+        scores_array_np.shape[1],
+        indices_array,
+        indices_array_np.shape[0],
+        indices_array_np.shape[1],
+        unrolled_names,
+        len(unrolled_names),
+    )
 
     # Convert the CHashMap result back to Python dictionary
     filtered_scores = {}
@@ -181,29 +186,6 @@ def save_target_embeddings(arg_list):
     )
 
     return target_names, targets, lengths
-
-
-@torch.no_grad()
-def search_only(query_data, model, max_seq_length, index, output_path):
-    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
-
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-
-    start_time = time.time()
-
-    all_scores = []
-    all_indices = []
-
-    for i in tqdm.tqdm(range(len(queries))):
-        scores_array, indices_array = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores_array)
-        all_indices.append(indices_array)
-
-    search_time = time.time() - start_time
-
-    print(f"Search time: {search_time}")
-    return all_scores, all_indices, query_names, search_time
 
 
 @torch.no_grad()
@@ -232,6 +214,10 @@ def filter(arg_list):
     total_search_time = 0
     total_filtration_time = 0
 
+    unrolled_names_bytes = [name.encode("utf-8") for name in unrolled_names.tolist()]
+    unrolled_names = (ctypes.c_char_p * len(unrolled_names_bytes))(
+        *unrolled_names_bytes
+    )
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
             index, unrolled_names, queries[i]
