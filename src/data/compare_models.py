@@ -125,7 +125,7 @@ def compare_models(
     labels = [
         "ESM",
         "ProtBERT",
-        "NEAT-250",
+        "NEAT-150",
         "MSV filter",
         "LAST",
         "MMseqs2",
