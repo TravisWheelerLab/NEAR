@@ -13,7 +13,7 @@ import time
 from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
 import ctypes
-from ctypes import c_ulong, c_double, POINTER
+from ctypes import c_ulong, c_double, POINTER, c_char
 
 lib = ctypes.CDLL("post-processing-rust/post-processing/target/release/libmy_lib.so")
 
@@ -153,6 +153,8 @@ def search(
     scores_array = scores_array_np.ctypes.data_as(POINTER(c_double))
     indices_array_np = indices_array.to("cpu").numpy().astype(np.uint64)
     indices_array = indices_array_np.ctypes.data_as(POINTER(c_ulong))
+
+    unrolled_names = unrolled_names.ctypes.data_as(POINTER(c_char))
 
     result = lib.filter_scores(
         scores_array,
