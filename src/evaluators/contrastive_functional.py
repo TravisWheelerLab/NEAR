@@ -15,7 +15,14 @@ from src.utils import create_faiss_index, encode_string_sequence
 import ctypes
 
 
-lib = ctypes.CDLL("post-processing-rust/post-processing/target/release/libmy_lib.so")
+lib = ctypes.CDLL("post-processing-rust/post-processing/my_lib.so")
+
+lib.process_data.argtypes = (
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_size_t,
+    ctypes.POINTER(ctypes.c_int),
+)
+
 
 # Define the CHashMap struct for Rust to pass the results
 class CHashMap(ctypes.Structure):
@@ -198,22 +205,6 @@ def search_only(query_data, model, max_seq_length, index, output_path):
     return all_scores, all_indices, query_names, search_time
 
 
-def filter_only(arg_list):
-    scores, indices, unrolled_names, write_results, output_path, query_name = arg_list
-    filtration_start = time.time()
-    filtered_scores = filter_scores(scores, indices, unrolled_names)
-    filtration_time = time.time() - filtration_start
-    if write_results:
-        f = open(f"{output_path}/{query_name}.txt", "w")
-        f.write("Name     Distance" + "\n")
-        for name, distance in filtered_scores.items():
-            f.write(f"{name}     {distance}" + "\n")
-        f.close()
-
-    print(f"Filtration time: {filtration_time}")
-    return filtration_time
-
-
 @torch.no_grad()
 def filter(arg_list):
     """Filters our hits based on
@@ -306,7 +297,7 @@ def _setup_targets_for_search(
 
     print(f"Creating index: {index_string}")
     start = time.time()
-    if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"):
+    if not os.path.exists("/xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"):
         index: faiss.Index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
@@ -321,14 +312,14 @@ def _setup_targets_for_search(
         else:
             index.add(unrolled_targets)
         faiss.write_index(
-            index, "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+            index, "/xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"
         )
         print(
-            "Wrote index to file: /xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+            "Wrote index to file: /xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"
         )
     else:
         index = faiss.read_index(
-            "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+            "/xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"
         )
 
     index.nprobe = nprobe
