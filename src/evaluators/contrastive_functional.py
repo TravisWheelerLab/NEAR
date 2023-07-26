@@ -135,7 +135,7 @@ def _calc_embeddings(
 
 
 def search(
-    index, unrolled_names, query_embedding: torch.Tensor
+    index, unrolled_names, len_names, query_embedding: torch.Tensor
 ) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
@@ -162,7 +162,7 @@ def search(
         indices_array_np.shape[0],
         indices_array_np.shape[1],
         unrolled_names,
-        len(unrolled_names),
+        len_names,
     )
 
     # Convert the CHashMap result back to Python dictionary
@@ -200,6 +200,7 @@ def filter(arg_list):
         output_path,
         index,
         unrolled_names,
+        len_names,
         max_seq_length,
         write_results,
     ) = arg_list
@@ -216,7 +217,7 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, queries[i]
+            index, unrolled_names, len_names, queries[i]
         )
         total_search_time += search_time
         total_filtration_time += filtration_time
