@@ -8,7 +8,7 @@ import itertools
 from src.evaluators.contrastive_functional import (
     filter,
     _setup_targets_for_search,
-    save_target_embeddings
+    save_target_embeddings,
 )
 from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
@@ -24,7 +24,9 @@ import pickle
 HOME = os.environ["HOME"]
 
 
-def save_off_targets(target_sequences, num_threads, model, max_seq_length, device, savedir):
+def save_off_targets(
+    target_sequences, num_threads, model, max_seq_length, device, savedir
+):
     t_chunk_size = len(target_sequences) // num_threads
 
     arg_list = [
@@ -81,7 +83,9 @@ def profile(_config):
     query_sequences = queryfasta.data
     if params.num_threads > 1:
         q_chunk_size = len(query_sequences) // params.num_threads
-        names, sequences, lengths = embed_multithread(query_sequences, model, q_chunk_size)
+        names, sequences, lengths = embed_multithread(
+            query_sequences, model, q_chunk_size
+        )
 
     else:
         names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
@@ -147,6 +151,7 @@ def evaluate_multiprocessing(_config):
         params.index_string,
         params.nprobe,
         params.omp_num_threads,
+        params.index_path,
     )
 
     arg_list = [
