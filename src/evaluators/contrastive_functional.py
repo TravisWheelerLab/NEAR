@@ -270,7 +270,7 @@ def _setup_targets_for_search(
     num_threads=1,
     normalize_embeddings=True,
     index_device="cpu",
-    index_path="/xdisk/twheeler/daphnedemekas/faiss-index-index-targets.index",
+    index_path="/xdisk/twheeler/daphnedemekas/faiss-index-targets.index",
 ):
     """Creates the Faiss Index object using the unrolled
     target embddings"""

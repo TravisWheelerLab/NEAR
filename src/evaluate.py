@@ -153,7 +153,7 @@ def evaluate_multiprocessing(_config):
         params.index_string,
         params.nprobe,
         params.omp_num_threads,
-        params.index_path,
+        index_path=params.index_path,
     )
 
     arg_list = [
