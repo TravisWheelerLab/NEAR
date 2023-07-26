@@ -15,14 +15,7 @@ from src.utils import create_faiss_index, encode_string_sequence
 import ctypes
 
 
-lib = ctypes.CDLL("post-processing-rust/post-processing/my_lib.so")
-
-lib.process_data.argtypes = (
-    ctypes.POINTER(ctypes.c_int),
-    ctypes.c_size_t,
-    ctypes.POINTER(ctypes.c_int),
-)
-
+lib = ctypes.CDLL("post-processing-rust/post-processing/target/release/libmy_lib.so")
 
 # Define the CHashMap struct for Rust to pass the results
 class CHashMap(ctypes.Structure):

@@ -1,7 +1,7 @@
 model_name:  "ResNet1d"
 evaluator_name: "ContrastiveEvaluator"
 description: "Use CPU with IVF optimization and multithreading"
-index_string: "IVF20000,Flat"
+index_string: "IVF2000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/evaluationqueries.fa"
@@ -9,7 +9,7 @@ target_file: "data/evaluationtargets.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-wa"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
 num_threads: 16
 omp_num_threads: 6
 device: 'cpu'
@@ -17,5 +17,5 @@ normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
-nprobe: 50
-write_results: False
+nprobe: 5
+write_results: True
