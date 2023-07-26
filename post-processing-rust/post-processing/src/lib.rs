@@ -15,16 +15,20 @@ pub extern "C" fn filter_scores(
     scores_array: *const *const f64,
     scores_rows: usize,
     scores_cols: usize,
-    indices_array: *const *const usize,
+    indices_array: *const *const c_ulong,
     indices_rows: usize,
     indices_cols: usize,
-    unrolled_names: *mut *const c_char,
+    unrolled_names: *const *const c_char,
     unrolled_names_len: usize,
 ) -> CHashMap {
+    println!("Convert the raw pointers to Rust slices");
+
     // Convert the raw pointers to Rust slices
     let scores_array = unsafe { std::slice::from_raw_parts(scores_array, scores_rows) };
     let indices_array = unsafe { std::slice::from_raw_parts(indices_array, indices_rows) };
     let unrolled_names = unsafe { std::slice::from_raw_parts(unrolled_names, unrolled_names_len) };
+
+    println!("Convert the data to Vec<Vec<T>> types");
 
     // Convert the data to Vec<Vec<T>> types
     let scores_array: Vec<Vec<f64>> = scores_array
@@ -40,8 +44,12 @@ pub extern "C" fn filter_scores(
         .map(|&ptr| unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() })
         .collect();
 
+    println!("Call the original filter_scores function");
+
     // Call the original filter_scores function
     let filtered_scores = filter_scores_impl(&scores_array, &indices_array, &unrolled_names);
+
+    println!("Convert the result back to C-compatible format");
 
     // Convert the result back to C-compatible format
     let mut keys: Vec<*const c_char> = Vec::new();
