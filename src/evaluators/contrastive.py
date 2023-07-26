@@ -9,6 +9,7 @@ import torch
 import pdb
 from src.evaluators.uniref_evaluator import UniRefEvaluator
 from src.utils import create_faiss_index, encode_string_sequence
+import os
 
 logger = logging.getLogger("evaluate")
 
@@ -54,15 +55,33 @@ class ContrastiveEvaluator(UniRefEvaluator):
         if self.normalize_embeddings:
             unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-        self.index: faiss.Index = create_faiss_index(
-            embeddings=unrolled_targets,
-            embed_dim=unrolled_targets.shape[-1],
-            distance_metric="cosine" if self.normalize_embeddings else "l2",
-            index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            device=self.index_device,
-            num_threads=self.omp_num_threads,
-        )
+        # TODO: make argument
 
+        index_path = "/xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"
+
+        if not os.path.exists(index_path):
+            print(f"Creating index: {self.index_string} and saving to {index_path}")
+
+            index: faiss.Index = create_faiss_index(
+                embeddings=unrolled_targets,
+                embed_dim=unrolled_targets.shape[-1],
+                distance_metric="cosine" if self.normalize_embeddings else "l2",
+                index_string=self.index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
+                num_threads=self.omp_num_threads,
+                device=self.index_device,
+            )
+            logger.info("Adding targets to index.")
+            if self.index_device == "cpu":
+                index.add(unrolled_targets.to("cpu"))
+            else:
+                index.add(unrolled_targets)
+            faiss.write_index(index, index_path)
+            print(index_path)
+        else:
+            print(f"Reading index from {index_path}")
+            index = faiss.read_index(index_path)
+
+        self.index = index
         self.index.nprobe = self.nprobe
 
         logger.info("Adding targets to index.")
