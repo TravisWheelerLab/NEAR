@@ -84,30 +84,4 @@ class ContrastiveEvaluator(UniRefEvaluator):
         self.index = index
         self.index.nprobe = self.nprobe
 
-        logger.info("Adding targets to index.")
-        if self.index_device == "cpu":
-            self.index.add(unrolled_targets.to("cpu"))
-        else:
-            self.index.add(unrolled_targets)
-
         faiss.omp_set_num_threads(self.omp_num_threads)
-
-    # def search(self, query_embedding: torch.Tensor):
-    #     """Searches through the target DB and gathers a
-    #     filtered list of sequences and distances to their centre
-    #     which we use as hits for the given query"""
-
-    #     search_start = time.time()
-
-    #     scores_array, indices_array = self.index.search(query_embedding.contiguous(), k=1000)
-    #     search_time = time.time() - search_start
-    #     filtration_time = time.time()
-
-    #     filtered_scores = filter_scores(
-    #         scores_array.to("cpu").numpy(),
-    #         indices_array.to("cpu").numpy(),
-    #         self.unrolled_names,
-    #     )
-    #     filtration_time = time.time() - filtration_time
-
-    #     return filtered_scores, search_time, filtration_time

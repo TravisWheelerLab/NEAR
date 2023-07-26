@@ -269,7 +269,7 @@ class UniRefEvaluator(Evaluator):
 
         for i in tqdm.tqdm(range(len(queries))):
             filtered_scores, search_time, filtration_time = search(
-                self.index, unrolled_names_ptr, queries[i]
+                self.index, unrolled_names_ptr, len(self.unrolled_names), queries[i]
             )
             total_search_time += search_time
             total_filtration_time += filtration_time

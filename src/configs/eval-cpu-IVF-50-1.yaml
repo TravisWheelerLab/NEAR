@@ -9,9 +9,9 @@ target_file: "data/evaluationtargets.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
+save_dir:  "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
 num_threads: 1
-omp_num_threads: 6
+omp_num_threads: 16
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0
@@ -27,6 +27,6 @@ evaluator_args:
     minimum_seq_length: 0
     max_seq_length: 512
     nprobe: 50
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
-    omp_num_threads: 6
+    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
+    omp_num_threads: 16
     target_embeddings_path: 'target_embeddings.pt'
