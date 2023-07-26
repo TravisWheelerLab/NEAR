@@ -284,9 +284,10 @@ def _setup_targets_for_search(
 
     unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
-    print(f"Creating index: {index_string}")
     start = time.time()
     if not os.path.exists(index_path):
+        print(f"Creating index: {index_string} and saving to {index_path}")
+
         index: faiss.Index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
@@ -303,6 +304,7 @@ def _setup_targets_for_search(
         faiss.write_index(index, index_path)
         print(index_path)
     else:
+        print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
 
     index.nprobe = nprobe
