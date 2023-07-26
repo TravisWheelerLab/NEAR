@@ -164,8 +164,10 @@ def compare_models(
         axis.set_ylabel("recall")
         axis.grid()
         axis.legend()
-        axis.set_xlim(75, 101)
-        axis.set_xticks([75, 80, 85, 90, 95, 100])
+        axis.set_xlim(90, 100.2)
+        # axis.set_xticks([75, 80, 85, 90, 95, 100])
+        axis.set_xticks([90, 92, 94, 96, 98, 100])
+
         if evalue_index != -1:
             axis.set_ylim(50, 101)
             axis.set_yticks([50, 60, 70, 80, 90, 100])
@@ -176,8 +178,10 @@ def compare_models(
         # axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
         # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
 
+        plt.title(f"Evalue threshold: {evalue_thresholds[evalue_index]}")
+
         plt.savefig(
-            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}.png"
+            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}-zoomed.png"
         )
         plt.clf()
 
