@@ -12,33 +12,8 @@ import torch
 import time
 from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
-import ctypes
-from ctypes import c_ulong, c_double, POINTER, c_char
+import my_rust_module
 
-lib = ctypes.CDLL("post-processing-rust/post-processing/target/release/libmy_lib.so")
-
-
-# Define the CHashMap struct for Rust to pass the results
-class CHashMap(ctypes.Structure):
-    _fields_ = [
-        ("keys", ctypes.POINTER(ctypes.c_char_p)),
-        ("values", ctypes.POINTER(ctypes.c_double)),
-        ("len", ctypes.c_size_t),
-    ]
-
-
-# Define the function signature for filter_scores
-lib.filter_scores.restype = CHashMap
-lib.filter_scores.argtypes = [
-    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)),
-    ctypes.c_size_t,  # scores_rows
-    ctypes.c_size_t,  # scores_cols
-    ctypes.POINTER(ctypes.POINTER(ctypes.c_size_t)),
-    ctypes.c_size_t,  # indices_rows
-    ctypes.c_size_t,  # indices_cols
-    ctypes.POINTER(ctypes.POINTER(ctypes.c_char)),
-    ctypes.c_size_t,  # unrolled_names_len
-]
 
 logger = logging.getLogger("evaluate")
 
@@ -135,7 +110,7 @@ def _calc_embeddings(
 
 
 def search(
-    index, unrolled_names, len_names, query_embedding: torch.Tensor
+    index, unrolled_names, query_embedding: torch.Tensor
 ) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
@@ -149,28 +124,11 @@ def search(
 
     filtration_time = time.time()
 
-    scores_array_np = scores_array.to("cpu").numpy().astype(np.float64)
-    scores_array = scores_array_np.ctypes.data_as(POINTER(c_double))
-    indices_array_np = indices_array.to("cpu").numpy().astype(np.uint64)
-    indices_array = indices_array_np.ctypes.data_as(POINTER(c_ulong))
-
-    result = lib.filter_scores(
-        scores_array,
-        scores_array_np.shape[0],
-        scores_array_np.shape[1],
-        indices_array,
-        indices_array_np.shape[0],
-        indices_array_np.shape[1],
+    filtered_scores = my_rust_module.filter_scores(
+        scores_array.to("cpu").numpy(),
+        indices_array.to("cpu").numpy(),
         unrolled_names,
-        len_names,
     )
-
-    # Convert the CHashMap result back to Python dictionary
-    filtered_scores = {}
-    for i in range(result.len):
-        key = ctypes.string_at(result.keys[i]).decode("utf-8")
-        value = result.values[i]
-        filtered_scores[key] = value
 
     filtration_time = time.time() - filtration_time
 
@@ -200,7 +158,6 @@ def filter(arg_list):
         output_path,
         index,
         unrolled_names,
-        len_names,
         max_seq_length,
         write_results,
     ) = arg_list
@@ -217,7 +174,7 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, len_names, queries[i]
+            index, unrolled_names, queries[i]
         )
         total_search_time += search_time
         total_filtration_time += filtration_time
