@@ -1,6 +1,5 @@
+use pyo3::types::PyDict;
 use std::collections::HashMap;
-use std::ffi::CStr;
-use std::ffi::CString;
 use std::os::raw::c_char;
 
 #[repr(C)]
@@ -10,26 +9,10 @@ pub struct CHashMap {
     pub len: usize,
 }
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyString};
 use pyo3::wrap_pyfunction;
-use std::collections::HashMap;
-
-fn filter_scores_impl(
-    scores_array: &Vec<Vec<f64>>,
-    indices_array: &Vec<Vec<usize>>,
-    unrolled_names: &Vec<String>,
-) -> HashMap<String, f64> {
-    // Your existing filter_scores_impl function remains unchanged
-    // ...
-    // Implement your existing logic here
-    // ...
-    // Return a HashMap<String, f64>
-    // Example: HashMap::new()
-}
 
 #[pyfunction]
 fn filter_scores(
-    py: Python,
     scores_array: Vec<Vec<f64>>,
     indices_array: Vec<Vec<usize>>,
     unrolled_names: Vec<String>,
@@ -48,7 +31,7 @@ fn filter_scores(
 }
 
 #[pymodule]
-fn my_rust_module(py: Python, m: &PyModule) -> PyResult<()> {
+fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
     // Add your Rust functions to the Python module
     m.add_function(wrap_pyfunction!(filter_scores, m)?)?;
     Ok(())
