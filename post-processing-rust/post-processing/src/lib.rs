@@ -9,62 +9,49 @@ pub struct CHashMap {
     pub values: *const f64,
     pub len: usize,
 }
+use pyo3::prelude::*;
+use pyo3::types::{PyList, PyString};
+use pyo3::wrap_pyfunction;
+use std::collections::HashMap;
 
-#[no_mangle]
-pub extern "C" fn filter_scores(
-    scores_array: *const *const f64,
-    scores_rows: usize,
-    scores_cols: usize,
-    indices_array: *const *const c_ulong,
-    indices_rows: usize,
-    indices_cols: usize,
-    unrolled_names: *const *const c_char,
-    unrolled_names_len: usize,
-) -> CHashMap {
-    println!("Convert the raw pointers to Rust slices");
+fn filter_scores_impl(
+    scores_array: &Vec<Vec<f64>>,
+    indices_array: &Vec<Vec<usize>>,
+    unrolled_names: &Vec<String>,
+) -> HashMap<String, f64> {
+    // Your existing filter_scores_impl function remains unchanged
+    // ...
+    // Implement your existing logic here
+    // ...
+    // Return a HashMap<String, f64>
+    // Example: HashMap::new()
+}
 
-    // Convert the raw pointers to Rust slices
-    let scores_array = unsafe { std::slice::from_raw_parts(scores_array, scores_rows) };
-    let indices_array = unsafe { std::slice::from_raw_parts(indices_array, indices_rows) };
-    let unrolled_names = unsafe { std::slice::from_raw_parts(unrolled_names, unrolled_names_len) };
-
-    println!("Convert the data to Vec<Vec<T>> types");
-
-    // Convert the data to Vec<Vec<T>> types
-    let scores_array: Vec<Vec<f64>> = scores_array
-        .iter()
-        .map(|&ptr| unsafe { std::slice::from_raw_parts(ptr, scores_cols).to_vec() })
-        .collect();
-    let indices_array: Vec<Vec<usize>> = indices_array
-        .iter()
-        .map(|&ptr| unsafe { std::slice::from_raw_parts(ptr, indices_cols).to_vec() })
-        .collect();
-    let unrolled_names: Vec<String> = unrolled_names
-        .iter()
-        .map(|&ptr| unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() })
-        .collect();
-
-    println!("Call the original filter_scores function");
-
-    // Call the original filter_scores function
+#[pyfunction]
+fn filter_scores(
+    py: Python,
+    scores_array: Vec<Vec<f64>>,
+    indices_array: Vec<Vec<usize>>,
+    unrolled_names: Vec<String>,
+) -> PyResult<Py<PyDict>> {
+    // Call the existing filter_scores_impl function
     let filtered_scores = filter_scores_impl(&scores_array, &indices_array, &unrolled_names);
 
-    println!("Convert the result back to C-compatible format");
-
-    // Convert the result back to C-compatible format
-    let mut keys: Vec<*const c_char> = Vec::new();
-    let mut values: Vec<f64> = Vec::new();
+    // Convert the result to a Python dictionary
+    let gil = pyo3::Python::acquire_gil();
+    let py_dict = PyDict::new(gil.python());
     for (key, value) in filtered_scores {
-        let c_string = CString::new(key).expect("Failed to convert key to C string");
-        keys.push(c_string.as_ptr());
-        values.push(value);
+        py_dict.set_item(key, value)?;
     }
 
-    CHashMap {
-        keys: keys.as_mut_ptr(),
-        values: values.as_ptr(),
-        len: keys.len(),
-    }
+    Ok(py_dict.into())
+}
+
+#[pymodule]
+fn my_rust_module(py: Python, m: &PyModule) -> PyResult<()> {
+    // Add your Rust functions to the Python module
+    m.add_function(wrap_pyfunction!(filter_scores, m)?)?;
+    Ok(())
 }
 
 fn filter_scores_impl(
