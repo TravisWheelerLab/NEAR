@@ -1,4 +1,4 @@
-"""" Evaluator class for the contrastive CNN model """
+"""tor class for the contrastive CNN model """
 
 import logging
 from typing import List
@@ -85,3 +85,4 @@ class ContrastiveEvaluator(UniRefEvaluator):
         self.index.nprobe = self.nprobe
 
         faiss.omp_set_num_threads(self.omp_num_threads)
+

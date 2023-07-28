@@ -1,4 +1,4 @@
-"""Evaluator base class for any evaluator using 
+"""tor base class for any evaluator using 
 Uniref database"""
 
 import logging
@@ -17,7 +17,6 @@ import pickle
 
 logger = logging.getLogger("evaluate")
 COLORS = ["r", "c", "g", "k"]
-from ctypes import POINTER, c_char
 
 
 class UniRefEvaluator(Evaluator):
@@ -265,11 +264,9 @@ class UniRefEvaluator(Evaluator):
         total_search_time = 0
         total_filtration_time = 0
 
-        unrolled_names_ptr = self.unrolled_names.ctypes.data_as(POINTER(c_char))
-
         for i in tqdm.tqdm(range(len(queries))):
             filtered_scores, search_time, filtration_time = search(
-                self.index, unrolled_names_ptr, len(self.unrolled_names), queries[i]
+                self.index, self.unrolled_names, queries[i]
             )
             total_search_time += search_time
             total_filtration_time += filtration_time
@@ -287,3 +284,4 @@ class UniRefEvaluator(Evaluator):
 
         print(f"Search time: {total_search_time}")
         print(f"Filtration time: {total_filtration_time}")
+
