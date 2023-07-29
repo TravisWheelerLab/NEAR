@@ -18,15 +18,9 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 50
-evaluator_args:
-    encoding_func: None
-    model_device: "cpu" 
-    index_device: "cpu"
-    index_string: "IVF20000,Flat"
-    normalize_embeddings: True
-    minimum_seq_length: 0
-    max_seq_length: 512
-    nprobe: 50
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
-    omp_num_threads: 16
-    target_embeddings_path: 'target_embeddings.pt'
+encoding_func: None
+model_device: "cpu" 
+index_device: "cpu"
+index_string: "IVF2000,Flat"
+omp_num_threads: 16
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-2K.index"
