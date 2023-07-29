@@ -254,13 +254,15 @@ def evaluate(_config):
     query_sequences = queryfasta.data
 
     filter(
-        query_sequences,
-        model,
-        params.save_dir,
-        index,
-        unrolled_names,
-        params.max_seq_length,
-        params.write_results,
+        [
+            query_sequences,
+            model,
+            params.save_dir,
+            index,
+            unrolled_names,
+            params.max_seq_length,
+            params.write_results,
+        ]
     )
 
 
