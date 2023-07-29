@@ -1,4 +1,5 @@
-"""" Functional version of the evaluator class. 
+"""
+Final version of the evaluator class. 
 This is preferred when using multiprocessing """
 
 import logging
@@ -124,10 +125,9 @@ def search(
 
     filtration_time = time.time()
 
+    # Call the filter_scores function from the Rust module
     filtered_scores = my_rust_module.filter_scores(
-        scores_array.to("cpu").numpy(),
-        indices_array.to("cpu").numpy(),
-        unrolled_names,
+        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
     )
 
     filtration_time = time.time() - filtration_time
