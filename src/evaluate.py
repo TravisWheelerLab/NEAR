@@ -94,6 +94,7 @@ def profile(_config):
 def load_targets(
     target_embeddings,
     target_names,
+    target_lengths,
     target_file,
     num_threads,
     model,
@@ -161,6 +162,7 @@ def evaluate_multiprocessing(_config):
     target_embeddings, target_names, target_lengths = load_targets(
         params.target_embeddings,
         params.target_names,
+        params.target_lengths,
         params.target_file,
         params.num_threads,
         model,
