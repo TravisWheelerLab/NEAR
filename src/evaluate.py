@@ -253,7 +253,7 @@ def evaluate(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    filter(
+    duration, total_search_time, total_filtration_time = filter(
         [
             query_sequences,
             model,
@@ -264,6 +264,9 @@ def evaluate(_config):
             params.write_results,
         ]
     )
+    print(f"Duration: {duration}.")
+    print(f"Search time: {total_search_time}.")
+    print(f"Filtration time: {total_filtration_time}.")
 
 
 if __name__ == "__main__":
