@@ -231,8 +231,8 @@ def evaluate(_config):
     target_embeddings, target_names, target_lengths = load_targets(
         params.target_embeddings,
         params.target_names,
-        params.target_file,
         params.target_lengths,
+        params.target_file,
         params.num_threads,
         model,
         params.max_seq_length,
