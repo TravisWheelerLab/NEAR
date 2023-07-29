@@ -125,7 +125,9 @@ def search(
 
     # Call the filter_scores function from the Rust module
     filtered_scores = my_rust_module.filter_scores(
-        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), unrolled_names
+        [scores_array.to("cpu").numpy()],
+        [indices_array.to("cpu").numpy()],
+        unrolled_names,
     )
 
     filtration_time = time.time() - filtration_time
