@@ -159,7 +159,6 @@ def filter(arg_list):
         output_path,
         index,
         unrolled_names,
-        len_names,
         max_seq_length,
         write_results,
     ) = arg_list
@@ -176,7 +175,7 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, len_names, queries[i]
+            index, unrolled_names,  queries[i]
         )
         total_search_time += search_time
         total_filtration_time += filtration_time
