@@ -8,10 +8,8 @@ from typing import List, Tuple
 import tqdm
 import faiss
 import numpy as np
-import pdb
 import torch
 import time
-from collections import defaultdict
 from src.utils import create_faiss_index, encode_string_sequence
 import my_rust_module
 
@@ -132,6 +130,9 @@ def search(
 
     filtration_time = time.time() - filtration_time
 
+    print(f"Search time: {search_time}")
+    print(f"Filtration time: {filtration_time}")
+
     # TODO: divide by query sequence length and multiply by median sequence length
     return filtered_scores, search_time, filtration_time
 
@@ -169,17 +170,31 @@ def filter(arg_list):
 
     start_time = time.time()
 
-    total_search_time = 0
-    total_filtration_time = 0
+    all_scores = []
+    all_indices = []
 
     for i in tqdm.tqdm(range(len(queries))):
-        filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, len_names, queries[i]
-        )
-        total_search_time += search_time
-        total_filtration_time += filtration_time
+        # filtered_scores, search_time, filtration_time = search(
+        #     index, unrolled_names, queries[i]
+        # )
+        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        all_scores.append(scores.to("cpu").numpy())
+        all_indices.append(indices.to("cpu").numpy())
 
-        if write_results:
+    total_search_time = time.time() - start_time
+
+    filtration_time = 0
+    # Call the filter_scores function from the Rust module
+    filtered_scores_list = my_rust_module.filter_scores(
+        all_scores, all_indices, unrolled_names
+    )
+
+    total_filtration_time = time.time() - filtration_time
+
+    assert len(filtered_scores_list) == len(queries)
+
+    if write_results:
+        for i, filtered_scores in enumerate(filtered_scores_list):
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
             for name, distance in filtered_scores.items():

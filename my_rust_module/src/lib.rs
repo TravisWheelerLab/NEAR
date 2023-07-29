@@ -1,25 +1,33 @@
-use pyo3::types::PyDict;
-use std::collections::HashMap;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
+use std::collections::HashMap;
+
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use pyo3::wrap_pyfunction;
+use std::collections::HashMap;
 
 #[pyfunction]
 fn filter_scores(
-    scores_array: Vec<Vec<f64>>,
-    indices_array: Vec<Vec<usize>>,
+    scores_list: Vec<Vec<Vec<f64>>>,
+    indices_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: Vec<String>,
-) -> PyResult<Py<PyDict>> {
-    // Call the existing filter_scores_impl function
-    let filtered_scores = filter_scores_impl(&scores_array, &indices_array, &unrolled_names);
-
-    // Convert the result to a Python dictionary
-    let gil = pyo3::Python::acquire_gil();
-    let py_dict = PyDict::new(gil.python());
-    for (key, value) in filtered_scores {
-        py_dict.set_item(key, value)?;
+) -> PyResult<Vec<Py<PyDict>>> {
+    // Call the existing filter_scores_impl function for each query
+    let mut filtered_scores_list = Vec::new();
+    for i in 0..scores_list.len() {
+        let filtered_scores =
+            filter_scores_impl(&scores_list[i], &indices_list[i], &unrolled_names);
+        let gil = pyo3::Python::acquire_gil();
+        let py_dict = PyDict::new(gil.python());
+        for (key, value) in filtered_scores {
+            py_dict.set_item(key, value)?;
+        }
+        filtered_scores_list.push(py_dict.into());
     }
 
-    Ok(py_dict.into())
+    Ok(filtered_scores_list)
 }
 
 #[pymodule]
@@ -75,4 +83,3 @@ fn filter_scores_impl(
 
     filtered_scores
 }
-
