@@ -232,6 +232,7 @@ def evaluate(_config):
         params.target_embeddings,
         params.target_names,
         params.target_file,
+        params.target_lengths,
         params.num_threads,
         model,
         params.max_seq_length,
