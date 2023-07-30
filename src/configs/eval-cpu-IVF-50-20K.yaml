@@ -9,7 +9,7 @@ target_file: "data/evaluationtargets.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust-20K"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
 num_threads: 8
 omp_num_threads: 2
 device: 'cpu'
@@ -18,5 +18,5 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 50
-write_results: False
+write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
