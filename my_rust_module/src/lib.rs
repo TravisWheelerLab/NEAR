@@ -3,11 +3,6 @@ use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use pyo3::wrap_pyfunction;
-use std::collections::HashMap;
-
 #[pyfunction]
 fn filter_scores(
     scores_list: Vec<Vec<Vec<f64>>>,
