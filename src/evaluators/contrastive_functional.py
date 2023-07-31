@@ -180,8 +180,8 @@ def filter(arg_list):
         #     index, unrolled_names, queries[i]
         # )
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores.to("cpu").numpy())
-        all_indices.append(indices.to("cpu").numpy())
+        all_scores.append(scores.to("cpu").tolist())
+        all_indices.append(indices.to("cpu").tolist())
 
     total_search_time = time.time() - start_time
 
