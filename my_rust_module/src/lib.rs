@@ -9,6 +9,9 @@ fn filter_scores(
     indices_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: Vec<String>,
 ) -> PyResult<Vec<Py<PyDict>>> {
+    
+//    println!("{} {} {}", scores_list.len(), scores_list[0].len(), scores_list[0][0].len());
+
     // Call the existing filter_scores_impl function for each query
     let mut filtered_scores_list = Vec::new();
     for i in 0..scores_list.len() {
