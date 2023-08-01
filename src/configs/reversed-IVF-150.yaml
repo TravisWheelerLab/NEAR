@@ -9,7 +9,7 @@ target_file: "data/reversedtargets.fa"
 target_embeddings: 'target_embeddings_reversed.pt'
 target_names: 'reversed_names.pickle'
 target_lengths: 'reversed_lengths.pickle'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/reversed-150"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-150-reversed"
 num_threads: 16
 omp_num_threads: 4
 device: 'cpu'
@@ -19,3 +19,4 @@ max_seq_length: 512
 profiler: False
 nprobe: 150
 write_results: True
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-reversed.index"

@@ -409,13 +409,7 @@ def get_data_for_roc(
 
     print(model_results_path)
 
-    if "CPU" in model_results_path:
-        nprobe = model_results_path.split("/")[-1].split("-")[-1]
-        reversed_path = (
-            f"/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-{nprobe}"
-        )
-    else:
-        reversed_path = model_results_path + "-reversed"
+    reversed_path = model_results_path + "-reversed"
     print(f"Reversed path :{reversed_path}")
 
     for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
