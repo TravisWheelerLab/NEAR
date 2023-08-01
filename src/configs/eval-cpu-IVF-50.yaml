@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
-num_threads: 16
+num_threads: 12
 omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True
@@ -18,5 +18,5 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 5
-write_results: True
+write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"

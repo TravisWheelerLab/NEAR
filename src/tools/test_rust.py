@@ -15,4 +15,4 @@ chars = ascii_lowercase + digits
 unrolled_names = ["".join(choice(chars) for _ in range(2)) for _ in range(100)]
 
 scores_list = my_rust_module.filter_scores([scores_array], [indices_array], unrolled_names)
-print(scores_list)
+#print(scores_list)

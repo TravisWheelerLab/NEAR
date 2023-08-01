@@ -180,23 +180,23 @@ def filter(arg_list):
         #     index, unrolled_names, queries[i]
         # )
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores.to("cpu"))
-        all_indices.append(indices.to("cpu"))
+        all_scores.append(scores.to("cpu").numpy())
+        all_indices.append(indices.to("cpu").numpy())
 
     total_search_time = time.time() - start_time
 
-    filtration_time = 0
+    filtration_time = time.time()
     # Call the filter_scores function from the Rust module
-    print(f"Search time: {total_search_time}")
+#    print(f"Search time: {total_search_time}")
 
-    print("Filtering...")
+#    print("Filtering...")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
 
     total_filtration_time = time.time() - filtration_time
 
-    print(f"Filtration time: {total_filtration_time}")
+#    print(f"Filtration time: {total_filtration_time}")
 
     assert len(filtered_scores_list) == len(queries)
 
