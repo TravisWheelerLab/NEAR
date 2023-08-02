@@ -42,7 +42,7 @@ def filter_scores(
 
             for distance, name in zip(new_scores, unrolled_names[new_indices]):
                 filtered_scores[name] += distance
-            filtered_scores_list.append(filtered_scores)
+        filtered_scores_list.append(filtered_scores)
 
     return filtered_scores_list
 
