@@ -15,7 +15,9 @@ from src.evaluators.contrastive_functional import (
 from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
 from src.data.eval_utils import get_evaluation_data
-from multiprocessing.pool import ThreadPool as Pool
+
+# from multiprocessing.pool import ThreadPool as Pool
+from multiprocessing import Pool
 from src.utils.util import (
     load_dataset_class,
     load_evaluator_class,
