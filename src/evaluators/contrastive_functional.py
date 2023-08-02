@@ -149,6 +149,59 @@ def save_target_embeddings(arg_list):
     return target_names, targets, lengths
 
 
+def search_only(arg_list):
+    (
+        query_data,
+        model,
+        output_path,
+        index,
+        max_seq_length,
+    ) = arg_list
+
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    start_time = time.time()
+
+    all_scores = []
+    all_indices = []
+
+    for i in tqdm.tqdm(range(len(queries))):
+        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        all_scores.append(scores.to("cpu").numpy())
+        all_indices.append(indices.to("cpu").numpy())
+
+    total_search_time = time.time() - start_time
+
+    return total_search_time, query_names, all_scores, all_indices
+
+
+def filter_only(
+    all_scores, all_indices, unrolled_names, query_names, write_results, output_path
+):
+    filtration_time = time.time()
+    # Call the filter_scores function from the Rust module
+
+    filtered_scores_list = my_rust_module.filter_scores(
+        all_scores, all_indices, unrolled_names
+    )
+
+    total_filtration_time = time.time() - filtration_time
+
+    assert len(filtered_scores_list) == len(query_names)
+
+    if write_results:
+        for i, filtered_scores in enumerate(filtered_scores_list):
+            f = open(f"{output_path}/{query_names[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
+    return total_filtration_time
+
+
 @torch.no_grad()
 def filter(arg_list):
     """Filters our hits based on
