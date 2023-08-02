@@ -3,6 +3,7 @@ import numpy as np
 from random import choice
 from string import ascii_lowercase, digits
 from src.evaluators.contrastive_functional import filter_scores
+import pdb
 
 scores_array = np.random.random(size=(100, 1000))
 indices_array = np.random.randint(0, 100, size=(100, 1000))
@@ -20,4 +21,5 @@ scores_list = my_rust_module.filter_scores(
 # print(scores_list)
 
 
-scores_list_og = filter_scores()
+scores_list_og = filter_scores([scores_array], [indices_array], unrolled_names)
+pdb.set_trace()
