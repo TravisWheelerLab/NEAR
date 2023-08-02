@@ -273,6 +273,8 @@ def evaluate_for_times_mp2(_config):
             list(query_sequences.keys())[:16], list(query_sequences.values())[:16]
         )
     }
+
+    print(f"number of queries: {len(query_sequences)}")
     print("Beginning search...")
     start = time.time()
 
@@ -285,6 +287,8 @@ def evaluate_for_times_mp2(_config):
     )
 
     q_chunk_size = len(query_sequences) // params.num_threads
+
+    print(f"Chunk size: {q_chunk_size}")
 
     query_names_list = list(split(query_names, params.num_threads))
 
@@ -519,6 +523,6 @@ if __name__ == "__main__":
     if _config["profiler"]:
         profile(_config)
     if _config["num_threads"] > 1:
-        evaluate_for_times_mp2(_config)
+        (_config)
     else:
         evaluate_for_times(_config)
