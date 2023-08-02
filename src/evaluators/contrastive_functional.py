@@ -187,10 +187,12 @@ def filter_only(arg_list):
     ) = arg_list
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
-
+    print("Calling rust function...")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
+
+    print("Filtration complete")
 
     total_filtration_time = time.time() - filtration_time
 

@@ -22,6 +22,7 @@ from src.utils.util import (
     load_model_class,
 )
 import pickle
+import pdb
 
 HOME = os.environ["HOME"]
 
@@ -312,6 +313,7 @@ def evaluate_for_times_mp2(_config):
 
     print("Pool created")
 
+    pdb.set_trace()
     total_filtration_time = 0
     for result in pool.imap(filter_only, arg_list):
         filtration_time = result
