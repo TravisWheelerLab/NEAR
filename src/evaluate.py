@@ -234,7 +234,7 @@ def split(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def evaluate_for_times_mp2(_config):
+def evaluate_mp2(_config):
     params = SimpleNamespace(**_config)
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -269,13 +269,6 @@ def evaluate_for_times_mp2(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:16], list(query_sequences.values())[:16]
-        )
-    }
 
     print(f"number of queries: {len(query_sequences)}")
     print("Beginning search...")
@@ -315,14 +308,12 @@ def evaluate_for_times_mp2(_config):
 
     print("Pool created")
 
-    pdb.set_trace()
-    total_filtration_time = 0
-    for result in pool.imap(filter_only, arg_list):
-        filtration_time = result
-        total_filtration_time += filtration_time
+    total_filtration_time = time.time()
+    pool.map(filter_only, arg_list)
+    total_filtration_time = time.time() - total_filtration_time
 
     print(f"Search time: {total_search_time}.")
-    print(f"Summed filrtation time: {total_filtration_time}.")
+    print(f"Filtration time: {total_filtration_time}.")
 
     print(f"Elapsed time: {time.time() - start}.")
 
@@ -529,6 +520,6 @@ if __name__ == "__main__":
     if _config["profiler"]:
         profile(_config)
     if _config["num_threads"] > 1:
-        evaluate_for_times_mp2(_config)
+        evaluate_mp2(_config)
     else:
         evaluate_for_times(_config)
