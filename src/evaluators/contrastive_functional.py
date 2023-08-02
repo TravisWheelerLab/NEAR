@@ -176,9 +176,6 @@ def filter(arg_list):
     all_indices = []
 
     for i in tqdm.tqdm(range(len(queries))):
-        # filtered_scores, search_time, filtration_time = search(
-        #     index, unrolled_names, queries[i]
-        # )
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
