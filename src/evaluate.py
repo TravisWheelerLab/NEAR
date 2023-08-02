@@ -273,6 +273,8 @@ def evaluate_for_times_mp2(_config):
             list(query_sequences.keys())[:16], list(query_sequences.values())[:16]
         )
     }
+    print("Beginning search...")
+    start = time.time()
 
     total_search_time, query_names, all_scores, all_indices = search_only(
         query_sequences,
@@ -303,9 +305,6 @@ def evaluate_for_times_mp2(_config):
     ]
 
     pool = Pool(params.num_threads)
-
-    print("Beginning search...")
-    start = time.time()
 
     total_filtration_time = 0
     for result in pool.imap(filter_only, arg_list):
