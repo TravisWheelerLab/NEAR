@@ -9,8 +9,7 @@ fn filter_scores(
     indices_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: Vec<String>,
 ) -> PyResult<Vec<Py<PyDict>>> {
-    
-//    println!("{} {} {}", scores_list.len(), scores_list[0].len(), scores_list[0][0].len());
+    //    println!("{} {} {}", scores_list.len(), scores_list[0].len(), scores_list[0][0].len());
 
     // Call the existing filter_scores_impl function for each query
     let mut filtered_scores_list = Vec::new();
@@ -51,8 +50,13 @@ fn filter_scores_impl(
             .collect::<Vec<_>>();
 
         let mut sorted_match_idx: Vec<_> = (0..match_scores.len()).collect();
-        sorted_match_idx
-            .sort_unstable_by(|&a, &b| match_scores[b].partial_cmp(&match_scores[a]).unwrap());
+
+        sorted_match_idx.sort_unstable_by(|&a, &b| {
+            match match_scores[b].partial_cmp(&match_scores[a]) {
+                Some(order) => order,
+                None => std::cmp::Ordering::Equal, // Handle NaNs or any other unorderable values
+            }
+        });
 
         let mut unique_indices: Vec<_> = Vec::new();
         let mut unique_names: HashMap<String, ()> = HashMap::new();
