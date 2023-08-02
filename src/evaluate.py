@@ -423,7 +423,7 @@ if __name__ == "__main__":
         _config = yaml.safe_load(stream)
     if _config["profiler"]:
         profile(_config)
-    if _config["num_threads"] > 1 and _config["omp_num_threads"] != 16:
+    if _config["num_threads"] > 1 and _config["omp_num_threads"] < 16:
         evaluate_for_times_mp(_config)
     else:
         evaluate_for_times(_config)
