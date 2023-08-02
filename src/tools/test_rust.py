@@ -29,17 +29,27 @@ def filter_scores(
         # iterate over query amino scores
         for match_idx in range(len(scores_array)):
             match_scores = scores_array[match_idx]
+            print(f"idx {match_idx}")
+            print(f"indices {indices_array[match_idx]}")
+            #print(f"score {match_scores}")
             names = unrolled_names[
                 indices_array[match_idx]
             ]  # the names of the targets for each 1000 hits
+            print(f"names: {names}")
+            #print(f"scores: {match_scores}")
             sorted_match_idx = np.argsort(match_scores)[::-1]
-
+            
+            
             _, unique_indices = np.unique(names[sorted_match_idx], return_index=True)
             new_indices = list(
                 indices_array[match_idx][sorted_match_idx][unique_indices]
             )
+            print(f"scores: {match_scores[sorted_match_idx]}")
             new_scores = list(match_scores[sorted_match_idx][unique_indices])
-
+            #print(f"names: {names[sorted_match_idx]}")
+            #print(f"scores: {match_scores[sorted_match_idx]}")
+            print(f"indices: {unique_indices}")
+            
             for distance, name in zip(new_scores, unrolled_names[new_indices]):
                 filtered_scores[name] += distance
         filtered_scores_list.append(filtered_scores)
@@ -47,23 +57,38 @@ def filter_scores(
     return filtered_scores_list
 
 
-scores_array = np.random.random(size=(100, 1000))
-indices_array = np.random.randint(0, 100, size=(100, 1000))
+#scores_array = np.random.random(size=(3, 100))
+#indices_array = np.random.randint(0, 3, size=(3, 100))
+
+scores_array = np.load("testscores.npy")
+indices_array = np.load("testindices.npy")
 
 
 # scores_array = np.random.random(size=(5, 100, 1000))
 # indices_array = np.random.randint(0, 100, size=(5, 100, 1000))
 
 chars = ascii_lowercase + digits
-unrolled_names = np.array(
-    ["".join(choice(chars) for _ in range(2)) for _ in range(100)]
-)
+#unrolled_names = np.array(
+#    ["".join(choice(chars) for _ in range(2)) for _ in range(100)]
+#)
+
+unrolled_names = np.array(['z0', 'ci', 'ry', 'qp', 'vx', 'zn', '3j', 'gf', 'kq', 'nf', 'qr',
+       '45', 'kr', 'jp', 'ty', '1o', 'mc', 'ue', 'ee', '32', 'fv', '5f',
+       '31', 'l1', 'ts', 'iv', 'fx', 'qt', 'of', '47', '0t', 'so', 'it',
+       'wi', 'mg', 'fr', 'qw', '7d', 'mf', 'ct', 'm8', 'to', 'cr', 'zq',
+       '7q', 'kc', 'rl', 'fz', '6y', 'rg', 'kv', 'z2', 'dj', 'jv', 'r5',
+       'su', 'fj', 'r3', 'xt', 'tu', '19', 'fo', 'sh', '2z', 'qi', 'a7',
+       'll', 'aq', 'qj', 'h0', 't0', 'q2', 'qf', 'wz', 'cb', 'x0', '2h',
+       'i4', 'ut', '9t', 'nu', 'pf', 'gq', 'r0', '8q', 'ab', '90', 'ya',
+       'lk', 'si', 'ta', 'ex', '1e', 'r8', '03', 'lp', '84', '5f', 'k2',
+       'bm'], dtype='<U2')
+
 
 scores_list = my_rust_module.filter_scores(
     [scores_array], [indices_array], unrolled_names
 )
 # print(scores_list)
 
-
-scores_list_og = filter_scores([scores_array], [indices_array], unrolled_names)
 pdb.set_trace()
+scores_list_og = filter_scores([scores_array], [indices_array], unrolled_names)
+#pdb.set_trace()

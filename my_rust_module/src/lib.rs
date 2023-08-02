@@ -1,31 +1,67 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
+use std::collections::HashSet; // Import HashSet
+use std::cmp::Ordering;
 
 #[pyfunction]
 fn filter_scores(
-    scores_list: Vec<Vec<Vec<f64>>>,
-    indices_list: Vec<Vec<Vec<usize>>>,
+    scores_array_list: Vec<Vec<Vec<f64>>>,
+    indices_array_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: Vec<String>,
-) -> PyResult<Vec<Py<PyDict>>> {
-    
-//    println!("{} {} {}", scores_list.len(), scores_list[0].len(), scores_list[0][0].len());
-
-    // Call the existing filter_scores_impl function for each query
+) -> Vec<HashMap<String, f64>> {
     let mut filtered_scores_list = Vec::new();
-    for i in 0..scores_list.len() {
-        let filtered_scores =
-            filter_scores_impl(&scores_list[i], &indices_list[i], &unrolled_names);
-        let gil = pyo3::Python::acquire_gil();
-        let py_dict = PyDict::new(gil.python());
-        for (key, value) in filtered_scores {
-            py_dict.set_item(key, value)?;
+    for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {
+        let mut filtered_scores: HashMap<String, f64> = HashMap::new();
+        
+        for match_idx in 0..scores_array.len() {
+            let match_scores = &scores_array[match_idx];
+            let indices = &indices_array[match_idx];
+            //println!("match_idx {}", match_idx);
+            //println!("indices {:?}", indices);
+            let names: Vec<_> = indices.iter().map(|&idx| unrolled_names[idx].clone()).collect();
+            
+
+            let mut sorted_match_idx: Vec<usize> = (0..match_scores.len()).collect();
+            sorted_match_idx.sort_unstable_by(|&a, &b| {
+                match match_scores[b].partial_cmp(&match_scores[a]) {
+                    Some(ordering) => ordering,
+                    None => Ordering::Equal,
+                }
+            });
+            
+            let sorted_names: Vec<_> = sorted_match_idx.iter().map(|&idx| names[idx].clone()).collect();
+            let sorted_indices: Vec<_> = sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
+            let sorted_matches: Vec<_> = sorted_match_idx.iter().map(|&idx| match_scores[idx]).collect();
+
+
+            // Create a HashSet to store the unique values
+            let mut unique_values = HashSet::new();
+            let mut unique_indices = Vec::new();
+
+            // Iterate over the elements of some_array along with their indices
+            for (index, &ref value) in sorted_names.iter().enumerate() {
+                if unique_values.insert(value) {
+                // If the value is not already in the HashSet, add it to unique_indices
+                unique_indices.push(index);
+                }
+            }
+
+            let new_indices: Vec<_> = unique_indices.iter().map(|&idx| sorted_indices[idx]).collect();
+            let new_names: Vec<_> = new_indices.iter().map(|&idx| unrolled_names[idx].clone()).collect();
+            let new_scores: Vec<_> = unique_indices.iter().map(|&idx| sorted_matches[idx]).collect();
+
+            //println!("unique indices {:?}", unique_indices); 
+            //println!("sorted_names {:?}", sorted_names);
+            for (distance, name) in new_scores.iter().zip(new_names.iter()) {
+                *filtered_scores.entry(name.to_string()).or_insert(0.0) += *distance;
+            }
         }
-        filtered_scores_list.push(py_dict.into());
+
+        filtered_scores_list.push(filtered_scores);
     }
 
-    Ok(filtered_scores_list)
+    filtered_scores_list
 }
 
 #[pymodule]
@@ -35,49 +71,3 @@ fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-fn filter_scores_impl(
-    scores_array: &Vec<Vec<f64>>,
-    indices_array: &Vec<Vec<usize>>,
-    unrolled_names: &Vec<String>,
-) -> HashMap<String, f64> {
-    let mut filtered_scores: HashMap<String, f64> = HashMap::new();
-
-    // Iterate over query amino scores
-    for match_idx in 0..scores_array.len() {
-        let match_scores = &scores_array[match_idx];
-        let names = indices_array[match_idx]
-            .iter()
-            .map(|&idx| unrolled_names[idx].clone()) // get target names for each 1000 hits
-            .collect::<Vec<_>>();
-
-        let mut sorted_match_idx: Vec<_> = (0..match_scores.len()).collect();
-        sorted_match_idx
-            .sort_unstable_by(|&a, &b| match_scores[b].partial_cmp(&match_scores[a]).unwrap());
-
-        let mut unique_indices: Vec<_> = Vec::new();
-        let mut unique_names: HashMap<String, ()> = HashMap::new();
-
-        for &idx in sorted_match_idx.iter() {
-            let name = &names[idx];
-            if unique_names.insert(name.clone(), ()).is_some() {
-                unique_indices.push(idx);
-            }
-        }
-
-        let new_indices: Vec<_> = unique_indices
-            .iter()
-            .map(|&idx| indices_array[match_idx][idx])
-            .collect();
-        let new_scores: Vec<_> = unique_indices
-            .iter()
-            .map(|&idx| match_scores[idx])
-            .collect();
-
-        for (&distance, name_idx) in new_scores.iter().zip(new_indices.iter()) {
-            let name = &unrolled_names[*name_idx];
-            *filtered_scores.entry(name.clone()).or_insert(0.0) += distance;
-        }
-    }
-
-    filtered_scores
-}
