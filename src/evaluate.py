@@ -310,6 +310,8 @@ def evaluate_for_times_mp2(_config):
 
     pool = Pool(params.num_threads)
 
+    print("Pool created")
+
     total_filtration_time = 0
     for result in pool.imap(filter_only, arg_list):
         filtration_time = result
@@ -523,6 +525,6 @@ if __name__ == "__main__":
     if _config["profiler"]:
         profile(_config)
     if _config["num_threads"] > 1:
-        (_config)
+        evaluate_for_times_mp2(_config)
     else:
         evaluate_for_times(_config)
