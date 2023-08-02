@@ -208,7 +208,7 @@ def evaluate_multiprocessing(_config):
         total_search_time += search_time
         total_filtration_time += filtration_time
 
-    print(f"Summed duration: {duration}.")
+    print(f"Summed duration: {total_duration}.")
     print(f"Summed search time: {total_search_time}.")
     print(f"Summed filrtation time: {total_filtration_time}.")
 

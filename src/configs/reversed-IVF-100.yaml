@@ -9,7 +9,7 @@ target_file: "data/reversedtargets.fa"
 target_embeddings: 'target_embeddings_reversed.pt'
 target_names: 'reversed_names.pickle'
 target_lengths: 'reversed_lengths.pickle'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/reversed-100"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-100-reversed"
 num_threads: 16
 omp_num_threads: 6
 device: 'cpu'
