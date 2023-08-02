@@ -144,91 +144,6 @@ def load_targets(
     return target_embeddings, target_names, target_lengths
 
 
-def evaluate_for_times_mp(_config):
-    params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-
-    model_class = load_model_class(params.model_name)
-
-    print(f"Index path: {params.index_path}")
-
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
-
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:16], list(query_sequences.values())[:16]
-        )
-    }
-
-    q_chunk_size = len(query_sequences) // params.num_threads
-
-    #
-    target_embeddings, target_names, target_lengths = load_targets(
-        params.target_embeddings,
-        params.target_names,
-        params.target_lengths,
-        params.target_file,
-        params.num_threads,
-        model,
-        params.max_seq_length,
-        params.device,
-    )
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
-
-    arg_list = [
-        (
-            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
-            model,
-            params.save_dir,
-            index,
-            unrolled_names,
-            params.max_seq_length,
-            params.write_results,
-        )
-        for i in range(0, len(query_sequences), q_chunk_size)
-    ]
-    del query_sequences
-
-    pool = Pool(params.num_threads)
-
-    print("Beginning search...")
-    start = time.time()
-
-    total_duration = 0
-    total_search_time = 0
-    total_filtration_time = 0
-    for result in pool.imap(filter, arg_list):
-        duration, search_time, filtration_time = result
-        total_duration += duration
-        total_search_time += search_time
-        total_filtration_time += filtration_time
-
-    print(f"Summed duration: {total_duration}.")
-    print(f"Summed search time: {total_search_time}.")
-    print(f"Summed filrtation time: {total_filtration_time}.")
-
-    print(f"Elapsed time: {time.time() - start}.")
-
-    pool.terminate()
-
-
 def split(a, n):
     k, m = divmod(len(a), n)
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
@@ -450,64 +365,6 @@ def evaluate(_config):
     print(f"Filtration time: {total_filtration_time}.")
 
 
-def evaluate_for_times(_config):
-    params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-    model_class = load_model_class(params.model_name)
-
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
-
-    target_embeddings, target_names, target_lengths = load_targets(
-        params.target_embeddings,
-        params.target_names,
-        params.target_lengths,
-        params.target_file,
-        params.num_threads,
-        model,
-        params.max_seq_length,
-        params.device,
-    )
-
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
-
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:16], list(query_sequences.values())[:16]
-        )
-    }
-    duration, total_search_time, total_filtration_time = filter(
-        [
-            query_sequences,
-            model,
-            params.save_dir,
-            index,
-            unrolled_names,
-            params.max_seq_length,
-            params.write_results,
-        ]
-    )
-    print(f"Duration: {duration}.")
-    print(f"Search time: {total_search_time}.")
-    print(f"Filtration time: {total_filtration_time}.")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
@@ -522,4 +379,4 @@ if __name__ == "__main__":
     if _config["num_threads"] > 1:
         evaluate_mp2(_config)
     else:
-        evaluate_for_times(_config)
+        evaluate(_config)
