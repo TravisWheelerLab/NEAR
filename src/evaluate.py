@@ -275,13 +275,11 @@ def evaluate_for_times_mp2(_config):
     }
 
     total_search_time, query_names, all_scores, all_indices = search_only(
-        [
-            query_sequences,
-            model,
-            params.save_dir,
-            index,
-            params.max_seq_length,
-        ]
+        query_sequences,
+        model,
+        params.save_dir,
+        index,
+        params.max_seq_length,
     )
 
     q_chunk_size = len(query_sequences) // params.num_threads

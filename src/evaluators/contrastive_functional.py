@@ -149,15 +149,13 @@ def save_target_embeddings(arg_list):
     return target_names, targets, lengths
 
 
-def search_only(arg_list):
-    (
-        query_data,
-        model,
-        output_path,
-        index,
-        max_seq_length,
-    ) = arg_list
-
+def search_only(
+    query_data,
+    model,
+    output_path,
+    index,
+    max_seq_length,
+):
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
@@ -178,9 +176,15 @@ def search_only(arg_list):
     return total_search_time, query_names, all_scores, all_indices
 
 
-def filter_only(
-    all_scores, all_indices, unrolled_names, query_names, write_results, output_path
-):
+def filter_only(arg_list):
+    (
+        all_scores,
+        all_indices,
+        unrolled_names,
+        query_names,
+        write_results,
+        output_path,
+    ) = arg_list
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
 
