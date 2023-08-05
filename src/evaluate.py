@@ -344,7 +344,7 @@ def evaluate_for_times_mp2(_config):
         for i in range(params.num_threads)
     ]
 
-    pool = MPool(int(params.num_threads / 4))
+    pool = MPool(8)
 
     print("Filtering in Rust...")
 
