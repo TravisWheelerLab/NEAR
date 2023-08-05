@@ -299,7 +299,6 @@ def evaluate_for_times_mp(_config):
         index_path=params.index_path,
     )
 
-    numqueries = len(query_sequences)
     # index.parallel_mode = 1
     arg_list = [
         (
@@ -333,49 +332,24 @@ def evaluate_for_times_mp(_config):
     pool.terminate()
     print("Filtering in Rust")
 
-    query_names_list = list(split(query_names_list, params.num_threads))
-
-    all_scores = list(split(all_scores, params.num_threads))
-
-    all_indices = list(split(all_indices, params.num_threads))
-
-    arg_list = [
-        (
-            all_scores[i],
-            all_indices[i],
-            unrolled_names,
-            query_names_list[i],
-            params.write_results,
-            params.save_dir,
-        )
-        for i in range(0, numqueries, q_chunk_size)
-    ]
-
-    pool = MPool(params.num_threads)
-
-    print("Pool created")
-
     total_filtration_time = time.time()
-    pool.map(filter_only, arg_list)
-    total_filtration_time = time.time() - total_filtration_time
+    filtered_scores_list = my_rust_module.filter_scores(
+        all_scores, all_indices, unrolled_names
+    )
 
+    total_filtration_time = time.time() - total_filtration_time
     print(f"Filtration time: {total_filtration_time}.")
 
+    assert len(filtered_scores_list) == len(query_names)
+
+    if params.write_results:
+        for i, filtered_scores in enumerate(filtered_scores_list):
+            f = open(f"{params.save_dir}/{query_names_list[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
     print(f"Elapsed time: {time.time() - start}.")
-
-    pool.terminate()
-
-    # filtered_scores_list = my_rust_module.filter_scores(
-    #    all_scores, all_indices, unrolled_names
-    # )
-
-
-#    print(f"Filtration time: {time.time() - filtration_time}")
-# print(f"Summed duration: {total_duration}.")
-#    print(f"Summed search time: {total_search_time}.")
-# print(f"Summed filrtation time: {total_filtration_time}.")
-
-#    print(f"Elapsed time: {time.time() - start}.")
 
 
 def evaluate_multiprocessing(_config):
