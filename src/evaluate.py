@@ -263,13 +263,15 @@ def evaluate_for_times_mp(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
-        )
-    }
-    print(f"Number of queries: {len(query_sequences)}")
+    #query_sequences = {
+    #    k: v
+    #    for k, v in zip(
+    #        list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
+    #    )
+    #}
+
+    numqueries = len(query_sequences)
+    print(f"Number of queries: {numqueries}")
 
     q_chunk_size = len(query_sequences) // params.num_threads
 
@@ -315,7 +317,7 @@ def evaluate_for_times_mp(_config):
     pool = Pool(params.num_threads)
     print(f"Length of arglist: {len(arg_list)}")
 
-    print("Beginning search...")
+    print("Searching with FAISS...")
     start = time.time()
 
     total_search_time = 0
@@ -329,8 +331,13 @@ def evaluate_for_times_mp(_config):
         query_names_list += query_names
         all_scores += scores
         all_indices += indices
+    search_time = time.time() - start
+
     pool.terminate()
-    print("Filtering in Rust")
+    print(f"Summed search time: {search_time}")
+    print(f"Search time per query: {search_time/(numqueries*params.num_threads)}")
+
+    print("Filtering in Rust...")
 
     total_filtration_time = time.time()
     filtered_scores_list = my_rust_module.filter_scores(
@@ -340,7 +347,7 @@ def evaluate_for_times_mp(_config):
     total_filtration_time = time.time() - total_filtration_time
     print(f"Filtration time: {total_filtration_time}.")
 
-    assert len(filtered_scores_list) == len(query_names)
+    assert len(filtered_scores_list) == len(query_names_list)
 
     if params.write_results:
         for i, filtered_scores in enumerate(filtered_scores_list):
