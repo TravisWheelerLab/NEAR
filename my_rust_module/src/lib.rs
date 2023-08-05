@@ -11,6 +11,7 @@ fn filter_scores(
     unrolled_names: Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
     let mut filtered_scores_list = Vec::new();
+ //   println!("In new rust module");
     for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {
         let mut filtered_scores: HashMap<String, f64> = HashMap::new();
         
@@ -66,6 +67,12 @@ fn filter_scores(
 
 #[pymodule]
 fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
+ 
+    //#[pyfn(m, "filter_scores")]
+   // fn filter(py: Python, scores_array_list: Vec<Vec<Vec<f64>>>,indices_array_list: Vec<Vec<Vec<usize>>>,unrolled_names: Vec<String>) -> PyResult<Vec<HashMap<String, f64>>> {
+  //      let filtered_scores = py.allow_threads(move || filter_scores(scores_array_list, indices_array_list, unrolled_names));    
+ //       Ok(filtered_scores)
+//    }
     // Add your Rust functions to the Python module
     m.add_function(wrap_pyfunction!(filter_scores, m)?)?;
     Ok(())

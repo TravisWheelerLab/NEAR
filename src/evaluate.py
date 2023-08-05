@@ -16,8 +16,8 @@ from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
 from src.data.eval_utils import get_evaluation_data
 
-# from multiprocessing.pool import ThreadPool as Pool
-from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool as Pool
+from multiprocessing import Pool as MPool
 from src.utils.util import (
     load_dataset_class,
     load_evaluator_class,
@@ -25,7 +25,7 @@ from src.utils.util import (
 )
 import pickle
 import pdb
-
+import my_rust_module
 HOME = os.environ["HOME"]
 
 
@@ -181,10 +181,15 @@ def evaluate_mp2(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
-
+    print("setting index parallel mode")
+    index.parallel_mode = 1
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-
+    query_sequences = {k: v for k, v in zip(list(query_sequences.keys())[:500], list(query_sequences.values())[:500])}
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+    #print(f"Chunk size: {q_chunk_size}")
     print(f"number of queries: {len(query_sequences)}")
     print("Beginning search...")
     start = time.time()
@@ -219,7 +224,7 @@ def evaluate_mp2(_config):
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
 
-    pool = Pool(params.num_threads)
+    pool = MPool(params.num_threads)
 
     print("Pool created")
 
@@ -233,6 +238,128 @@ def evaluate_mp2(_config):
     print(f"Elapsed time: {time.time() - start}.")
 
     pool.terminate()
+
+
+def evaluate_for_times_mp(_config):
+    params = SimpleNamespace(**_config)
+
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+
+    model_class = load_model_class(params.model_name)
+
+    print(f"Index path: {params.index_path}")
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+
+    query_sequences = {k: v for k, v in zip(list(query_sequences.keys())[:1000], list(query_sequences.values())[:1000])}
+    print(f"Number of queries: {len(query_sequences)}")
+
+    q_chunk_size = len(query_sequences) // params.num_threads
+    
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+    print(f"Chunk size: {q_chunk_size}")
+
+
+    target_embeddings, target_names, target_lengths = load_targets(
+        params.target_embeddings,
+        params.target_names,
+        params.target_lengths,
+        params.target_file,
+        params.num_threads,
+        model,
+        params.max_seq_length,
+        params.device,
+    )
+    assert len(target_lengths) == len(target_names) == len(target_embeddings)
+    unrolled_names, index = _setup_targets_for_search(
+        target_embeddings,
+        target_names,
+        target_lengths,
+        params.index_string,
+        params.nprobe,
+        params.omp_num_threads,
+        index_path=params.index_path,
+    )
+
+    numqueries = len(query_sequences)
+    #index.parallel_mode = 1
+    arg_list = [
+        (
+            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            model,
+            params.save_dir,
+            index,
+            params.max_seq_length,
+        )
+        for i in range(0, len(query_sequences), q_chunk_size)
+    ]
+    del query_sequences
+
+    pool = Pool(params.num_threads)
+    print(f"Length of arglist: {len(arg_list)}")
+
+    print("Beginning search...")
+    start = time.time()
+
+    total_duration = 0
+    total_search_time = 0
+    total_filtration_time = 0
+    all_scores = []
+    all_indices = []
+    query_names_list = []
+    for result in pool.imap(search_only, arg_list):
+        search_time, query_names, scores, indices = result
+        total_search_time += search_time
+        query_names_list += query_names
+        all_scores += scores 
+        all_indices += indices 
+    pool.terminate()
+    print("Filtering in Rust")
+    
+    filtration_time = time.time()
+    arg_list = [
+        (
+            all_scores[i],
+            all_indices[i],
+            unrolled_names,
+            query_names_list[i],
+            params.write_results,
+            params.save_dir,
+        )
+        for i in range(0, numqueries, q_chunk_size)
+    ]
+
+    pool = MPool(params.num_threads)
+
+    print("Pool created")
+
+    total_filtration_time = time.time()
+    pool.map(filter_only, arg_list)
+    total_filtration_time = time.time() - total_filtration_time
+
+    print(f"Filtration time: {total_filtration_time}.")
+
+    print(f"Elapsed time: {time.time() - start}.")
+
+    pool.terminate()
+    
+    #filtered_scores_list = my_rust_module.filter_scores(
+    #    all_scores, all_indices, unrolled_names
+    #)
+#    print(f"Filtration time: {time.time() - filtration_time}")
+    #print(f"Summed duration: {total_duration}.")
+#    print(f"Summed search time: {total_search_time}.")
+    #print(f"Summed filrtation time: {total_filtration_time}.")
+
+#    print(f"Elapsed time: {time.time() - start}.")
 
 
 def evaluate_multiprocessing(_config):
@@ -251,7 +378,12 @@ def evaluate_multiprocessing(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-
+    #query_sequences = {
+    #    k: v
+    #    for k, v in zip(
+    #        list(query_sequences.keys())[:100], list(query_sequences.values())[:100]
+    #    )
+    #}
     q_chunk_size = len(query_sequences) // params.num_threads
 
     #
@@ -265,7 +397,7 @@ def evaluate_multiprocessing(_config):
         params.max_seq_length,
         params.device,
     )
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
+    #assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
         target_embeddings,
         target_names,
@@ -348,6 +480,12 @@ def evaluate(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
+    #query_sequences = {
+    #    k: v
+    #    for k, v in zip(
+    #        list(query_sequences.keys())[:100], list(query_sequences.values())[:100]
+    #    )
+    #}
 
     duration, total_search_time, total_filtration_time = filter(
         [
@@ -377,6 +515,6 @@ if __name__ == "__main__":
     if _config["profiler"]:
         profile(_config)
     if _config["num_threads"] > 1:
-        evaluate_mp2(_config)
+       evaluate_for_times_mp(_config)
     else:
         evaluate(_config)

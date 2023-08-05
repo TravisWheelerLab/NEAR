@@ -12,7 +12,7 @@ import torch
 import time
 from src.utils import create_faiss_index, encode_string_sequence
 import my_rust_module
-
+import sys
 from collections import defaultdict
 
 logger = logging.getLogger("evaluate")
@@ -155,13 +155,13 @@ def save_target_embeddings(arg_list):
     return target_names, targets, lengths
 
 
-def search_only(
-    query_data,
+def search_only(args
+):
+    (query_data,
     model,
     output_path,
     index,
-    max_seq_length,
-):
+    max_seq_length) = args
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
@@ -174,6 +174,8 @@ def search_only(
 
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
+    #print(scores.shape)
+    #print(indices.shape)
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
 
@@ -194,6 +196,13 @@ def filter_only(arg_list):
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
     print("Calling rust function...")
+    scoresize = sys.getsizeof(all_scores)
+    indexsize = sys.getsizeof(all_indices)
+    namesize = sys.getsizeof(unrolled_names)
+
+    #print(f"Score size {scoresize}")
+    #print(f"Index size: {indexsize}")
+    #print(f"Name size {namesize}")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
@@ -242,14 +251,21 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores.to("cpu").numpy())
-        all_indices.append(indices.to("cpu").numpy())
+        all_scores.append(scores.numpy())
+        all_indices.append(indices.numpy())
 
     total_search_time = time.time() - start_time
 
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
+    print("Calling rust function...")
+    scoresize = sys.getsizeof(all_scores)
+    indexsize = sys.getsizeof(all_indices)
+    namesize = sys.getsizeof(unrolled_names)
 
+    print(f"Score size {scoresize}")
+    print(f"Index size: {indexsize}")
+    print(f"Name size {namesize}")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
