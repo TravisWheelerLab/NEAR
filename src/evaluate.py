@@ -314,22 +314,19 @@ def evaluate_for_times_mp2(_config):
     print("Searching with FAISS...")
     start = time.time()
 
-    total_search_time = 0
-    total_filtration_time = 0
     all_scores = []
     all_indices = []
     query_names_list = []
     for result in pool.imap(search_only, arg_list):
         search_time, query_names, scores, indices = result
-        total_search_time += search_time
         query_names_list += query_names
         all_scores += scores
         all_indices += indices
     search_time = time.time() - start
 
     pool.terminate()
-    print(f"Summed search time: {search_time}")
-    print(f"Search time per query: {search_time/(numqueries*params.num_threads)}")
+    print(f"Search time: {search_time}")
+    print(f"Search time per query: {search_time/(numqueries)}")
 
     all_scores = list(split(all_scores, params.num_threads))
     all_indices = list(split(all_indices, params.num_threads))
@@ -353,11 +350,17 @@ def evaluate_for_times_mp2(_config):
 
     total_filtration_time = time.time()
     pool.map(filter_only, arg_list)
+    pool.terminate()
 
     total_filtration_time = time.time() - total_filtration_time
-    print(f"Filtration time: {total_filtration_time}.")
+    elapsed_time = time.time() - start
 
-    print(f"Elapsed time: {time.time() - start}.")
+    print(f"Filtration time: {total_filtration_time}.")
+    print(f"Filtation time per query: {total_filtration_time/(numqueries)}")
+
+    print(f"Elapsed time: {elapsed_time}.")
+
+    print(f"Elapsed time per query: {elapsed_time/numqueries}.")
 
 
 def evaluate(_config):
