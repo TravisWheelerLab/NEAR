@@ -189,13 +189,6 @@ def filter_only(arg_list):
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
     print("Calling rust function...")
-    scoresize = sys.getsizeof(all_scores)
-    indexsize = sys.getsizeof(all_indices)
-    namesize = sys.getsizeof(unrolled_names)
-
-    # print(f"Score size {scoresize}")
-    # print(f"Index size: {indexsize}")
-    # print(f"Name size {namesize}")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )

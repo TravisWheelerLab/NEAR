@@ -74,29 +74,6 @@ def save_off_targets(
     return target_names, target_lengths, target_embeddings
 
 
-def profile(_config):
-    params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-    model_class = load_model_class(params.model_name)
-    evaluator_class = load_evaluator_class(params.evaluator_name)
-
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-    if params.num_threads > 1:
-        q_chunk_size = len(query_sequences) // params.num_threads
-        names, sequences, lengths = embed_multithread(
-            query_sequences, model, q_chunk_size
-        )
-
-    else:
-        names, sequences, lengths = profile_embeddings(query_sequences, model, 512)
-
-
 def load_targets(
     target_embeddings,
     target_names,
@@ -150,102 +127,6 @@ def split(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def evaluate_mp2(_config):
-    params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-    model_class = load_model_class(params.model_name)
-
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
-
-    target_embeddings, target_names, target_lengths = load_targets(
-        params.target_embeddings,
-        params.target_names,
-        params.target_lengths,
-        params.target_file,
-        params.num_threads,
-        model,
-        params.max_seq_length,
-        params.device,
-    )
-
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
-    print("setting index parallel mode")
-    index.parallel_mode = 1
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
-        )
-    }
-    print(f"Nprobe: {params.nprobe}")
-    print(f"num threads: {params.num_threads}")
-    print(f"omp_num_threads: {params.omp_num_threads}")
-    # print(f"Chunk size: {q_chunk_size}")
-    print(f"number of queries: {len(query_sequences)}")
-    print("Beginning search...")
-    start = time.time()
-
-    total_search_time, query_names, all_scores, all_indices = search_only(
-        query_sequences,
-        model,
-        params.save_dir,
-        index,
-        params.max_seq_length,
-    )
-
-    q_chunk_size = len(query_sequences) // params.num_threads
-
-    print(f"Chunk size: {q_chunk_size}")
-
-    query_names_list = list(split(query_names, params.num_threads))
-
-    all_scores_list = list(split(all_scores, params.num_threads))
-
-    all_indices_list = list(split(all_indices, params.num_threads))
-
-    arg_list = [
-        (
-            all_scores_list[i],
-            all_indices_list[i],
-            unrolled_names,
-            query_names_list[i],
-            params.write_results,
-            params.save_dir,
-        )
-        for i in range(0, len(query_sequences), q_chunk_size)
-    ]
-
-    pool = MPool(params.num_threads)
-
-    print("Pool created")
-
-    total_filtration_time = time.time()
-    pool.map(filter_only, arg_list)
-    total_filtration_time = time.time() - total_filtration_time
-
-    print(f"Search time: {total_search_time}.")
-    print(f"Filtration time: {total_filtration_time}.")
-
-    print(f"Elapsed time: {time.time() - start}.")
-
-    pool.terminate()
-
-
 def evaluate_for_times_mp(_config):
     params = SimpleNamespace(**_config)
 
@@ -263,12 +144,12 @@ def evaluate_for_times_mp(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    #query_sequences = {
+    # query_sequences = {
     #    k: v
     #    for k, v in zip(
     #        list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
     #    )
-    #}
+    # }
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
@@ -359,7 +240,7 @@ def evaluate_for_times_mp(_config):
     print(f"Elapsed time: {time.time() - start}.")
 
 
-def evaluate_multiprocessing(_config):
+def evaluate_for_times_mp2(_config):
     params = SimpleNamespace(**_config)
 
     print(f"Loading from checkpoint in {params.checkpoint_path}")
@@ -375,15 +256,24 @@ def evaluate_multiprocessing(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
+
     # query_sequences = {
     #    k: v
     #    for k, v in zip(
-    #        list(query_sequences.keys())[:100], list(query_sequences.values())[:100]
+    #        list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
     #    )
     # }
+
+    numqueries = len(query_sequences)
+    print(f"Number of queries: {numqueries}")
+
     q_chunk_size = len(query_sequences) // params.num_threads
 
-    #
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+    print(f"Chunk size: {q_chunk_size}")
+
     target_embeddings, target_names, target_lengths = load_targets(
         params.target_embeddings,
         params.target_names,
@@ -394,7 +284,7 @@ def evaluate_multiprocessing(_config):
         params.max_seq_length,
         params.device,
     )
-    # assert len(target_lengths) == len(target_names) == len(target_embeddings)
+    assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
         target_embeddings,
         target_names,
@@ -405,41 +295,69 @@ def evaluate_multiprocessing(_config):
         index_path=params.index_path,
     )
 
+    # index.parallel_mode = 1
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
             index,
-            unrolled_names,
             params.max_seq_length,
-            params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
     del query_sequences
 
     pool = Pool(params.num_threads)
+    print(f"Length of arglist: {len(arg_list)}")
 
-    print("Beginning search...")
+    print("Searching with FAISS...")
     start = time.time()
 
-    total_duration = 0
     total_search_time = 0
     total_filtration_time = 0
-    for result in pool.imap(filter, arg_list):
-        duration, search_time, filtration_time = result
-        total_duration += duration
+    all_scores = []
+    all_indices = []
+    query_names_list = []
+    for result in pool.imap(search_only, arg_list):
+        search_time, query_names, scores, indices = result
         total_search_time += search_time
-        total_filtration_time += filtration_time
-
-    print(f"Summed duration: {total_duration}.")
-    print(f"Summed search time: {total_search_time}.")
-    print(f"Summed filrtation time: {total_filtration_time}.")
-
-    print(f"Elapsed time: {time.time() - start}.")
+        query_names_list += query_names
+        all_scores += scores
+        all_indices += indices
+    search_time = time.time() - start
 
     pool.terminate()
+    print(f"Summed search time: {search_time}")
+    print(f"Search time per query: {search_time/(numqueries*params.num_threads)}")
+
+    all_scores = list(split(all_scores, params.num_threads))
+    all_indices = list(split(all_indices, params.num_threads))
+    query_names_list = list(split(query_names_list, params.num_threads))
+
+    arg_list = [
+        (
+            all_scores[i],
+            all_indices[i],
+            unrolled_names,
+            query_names_list[i],
+            params.write_results,
+            params.save_dir,
+        )
+        for i in range(params.num_threads)
+    ]
+
+    pool = MPool(params.num_threads)
+
+    print("Filtering in Rust...")
+
+    total_filtration_time = time.time()
+    pool.map(filter_only, arg_list)
+
+    total_filtration_time = time.time() - total_filtration_time
+    print(f"Filtration time: {total_filtration_time}.")
+
+    print(f"Elapsed time: {time.time() - start}.")
 
 
 def evaluate(_config):
