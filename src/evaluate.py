@@ -201,22 +201,19 @@ def evaluate_for_times_mp(_config):
     print("Searching with FAISS...")
     start = time.time()
 
-    total_search_time = 0
-    total_filtration_time = 0
     all_scores = []
     all_indices = []
     query_names_list = []
     for result in pool.imap(search_only, arg_list):
         search_time, query_names, scores, indices = result
-        total_search_time += search_time
         query_names_list += query_names
         all_scores += scores
         all_indices += indices
     search_time = time.time() - start
 
     pool.terminate()
-    print(f"Summed search time: {search_time}")
-    print(f"Search time per query: {search_time/(numqueries*params.num_threads)}")
+    print(f"Search time: {search_time}")
+    print(f"Search time per query: {search_time/(numqueries)}")
 
     print("Filtering in Rust...")
 
@@ -227,6 +224,9 @@ def evaluate_for_times_mp(_config):
 
     total_filtration_time = time.time() - total_filtration_time
     print(f"Filtration time: {total_filtration_time}.")
+    print(f"Filtration time per query: {total_filtration_time/(numqueries)}.")
+
+    elapsed_time = time.time() - start
 
     assert len(filtered_scores_list) == len(query_names_list)
 
@@ -237,7 +237,8 @@ def evaluate_for_times_mp(_config):
             for name, distance in filtered_scores.items():
                 f.write(f"{name}     {distance}" + "\n")
             f.close()
-    print(f"Elapsed time: {time.time() - start}.")
+    print(f"Elapsed time: {elapsed_time}")
+    print(f"Elapsed time per query: {elapsed_time/(numqueries)}")
 
 
 def evaluate_for_times_mp2(_config):
@@ -431,6 +432,6 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_for_times_mp(_config)
+        evaluate_for_times_mp2(_config)
     else:
         evaluate(_config)
