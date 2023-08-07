@@ -277,12 +277,12 @@ def evaluate_for_times_mp2(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    #    query_sequences = {
-    #        k: v
-    #        for k, v in zip(
-    #            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
-    #        )
-    #    }
+    query_sequences = {
+        k: v
+        for k, v in zip(
+            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
+        )
+    }
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
