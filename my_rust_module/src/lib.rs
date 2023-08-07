@@ -20,9 +20,9 @@ use std::collections::HashSet; // Import HashSet
 
 #[pyfunction]
 fn filter_scores(
-    scores_array_list: &Vec<Vec<Vec<f64>>>,
-    indices_array_list: &Vec<Vec<Vec<usize>>>,
-    unrolled_names: &Vec<String>,
+    scores_array_list: Vec<Vec<Vec<f64>>>,
+    indices_array_list: Vec<Vec<Vec<usize>>>,
+    unrolled_names: Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
     let chunk_size = scores_array_list.len() / 96;
     let scores_chunks: Vec<_> = scores_array_list.chunks(chunk_size).collect();
