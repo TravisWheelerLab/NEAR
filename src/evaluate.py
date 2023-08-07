@@ -27,7 +27,7 @@ from src.utils.util import (
 import pickle
 import pdb
 import my_rust_module
-
+import concurrent.futures
 HOME = os.environ["HOME"]
 
 
@@ -242,22 +242,26 @@ def evaluate_for_times_mp(_config):
     print(f"Elapsed time per query: {elapsed_time/(numqueries)}")
 
 
-def search_only(query_data, max_seq_length=512):
-    global model, output_path, index, max_seq_length
-    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
-
+def search_only(query_data):
+    global model, output_path, index
+    #print(query_data[0])
+    max_seq_length = 512
+    #query_data = {q[0] : q[1] for q in query_data}
+    queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+    
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
     all_scores = []
     all_indices = []
 
-    for i in tqdm.tqdm(range(len(queries))):
+    for i in range(len(queries)):
+        
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
 
-    return query_names, all_scores, all_indices
+    return all_scores, all_indices
 
 
 def evaluate_for_times_mp2(_config):
@@ -277,22 +281,29 @@ def evaluate_for_times_mp2(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    query_sequences = {
-        k: v
-        for k, v in zip(
-            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
-        )
-    }
+    #query_sequences = {
+    #    k: v
+    #    for k, v in zip(
+    #        list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
+    #    )
+    #}
 
-    numqueries = len(query_sequences)
+    
+    query_data = list(query_sequences.values())[:1000]
+    #pdb.set_trace()
+
+    query_names_list = list(query_sequences.keys())[:1000]
+    
+    numqueries = len(query_data)
+    #print(query_data[0].shape)
     print(f"Number of queries: {numqueries}")
 
-    q_chunk_size = len(query_sequences) // params.num_threads
+    #q_chunk_size = len(query_sequences) // params.num_threads
 
     print(f"Nprobe: {params.nprobe}")
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
-    print(f"Chunk size: {q_chunk_size}")
+    #print(f"Chunk size: {q_chunk_size}")
 
     target_embeddings, target_names, target_lengths = load_targets(
         params.target_embeddings,
@@ -300,7 +311,7 @@ def evaluate_for_times_mp2(_config):
         params.target_lengths,
         params.target_file,
         params.num_threads,
-        model,
+        model_input,
         params.max_seq_length,
         params.device,
     )
@@ -314,18 +325,6 @@ def evaluate_for_times_mp2(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
-
-    # index.parallel_mode = 1
-    arg_list = [
-        (
-            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
-            model,
-            params.save_dir,
-            index,
-            params.max_seq_length,
-        )
-        for i in range(0, len(query_sequences), q_chunk_size)
-    ]
 
     global model, output_path, index
 
@@ -344,26 +343,38 @@ def evaluate_for_times_mp2(_config):
     #     for i in range(0, len(query_sequences))
     # ]
 
-    pool = Pool(params.num_threads)
-    print(f"Length of arglist: {len(arg_list)}")
+    #pool = Pool(params.num_threads)
 
     print("Searching with FAISS...")
     start = time.time()
 
     all_scores = []
     all_indices = []
-    query_names_list = []
-    for result in pool.imap(search_only, query_sequences):
-        query_names, scores, indices = result
-        #    query_names_list += query_names
-        all_scores += scores
-        all_indices += indices
-        query_names_list += query_names
+
+    query_data = list(split(query_data, params.num_threads))
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = {executor.submit(search_only, query) for query in query_data}
+        
+
+        for future in concurrent.futures.as_completed(futures):
+            scores, indices = future.result()
+            all_scores += scores
+            all_indices += indices
     search_time = time.time() - start
+
+#    with Pool(params.num_threads) as pool:
+    #for result in pool.imap(search_only, query_data):
+ #       result = pool.map(search_only, query_data)
+ #       query_names, scores, indices = result
+ #       #    query_names_list += query_names
+ #       all_scores += scores
+ #       all_indices += indices
+ #       query_names_list += query_names
+   # search_time = time.time() - start
     print(f"Search time: {search_time}")
     print(f"Search time per query: {search_time/(numqueries)}")
 
-    pool.terminate()
+    #pool.terminate()
 
     # all_scores = [scores_array, scores_array, ...]
 
@@ -461,3 +472,4 @@ if __name__ == "__main__":
         evaluate_for_times_mp2(_config)
     else:
         evaluate(_config)
+

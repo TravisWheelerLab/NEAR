@@ -59,7 +59,7 @@ def filter_scores(
     return filtered_scores_list
 
 
-def filter_and_calc_embeddings(
+def filter_and_calc_embeddings_old(
     names: List[str],
     sequences: List[str],
     model_class,
@@ -74,7 +74,7 @@ def filter_and_calc_embeddings(
 
     filtered_names = names.copy()
     num_removed = 0
-    for name, sequence in tqdm.tqdm(zip(names, sequences)):
+    for name, sequence in zip(names, sequences):
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
@@ -93,10 +93,45 @@ def filter_and_calc_embeddings(
             # filtered_sequences.remove(sequence)
     return filtered_names, embeddings, lengths
 
+def filter_and_calc_embeddings(
+    sequences: List[str],
+    model_class,
+    max_seq_length=512,
+    model_device="cpu",
+    minimum_seq_length=0,
+) -> Tuple[List[str], List[str], List[torch.Tensor]]:
+    """Filters the sequences by length thresholding given the
+    minimum and maximum length threshold variables"""
+    embeddings = []
+    lengths = []
+#    print(sequences[0])
+    #filtered_names = names.copy()
+    num_removed = 0
+    #print("Calculating embeddings...")
+    for sequence in sequences:
+        length = len(sequence)
+#        print(length)
+        if max_seq_length >= length >= minimum_seq_length:
+            embed = (
+                model_class(
+                    encode_string_sequence(sequence).unsqueeze(0).to(model_device)
+                )
+                .squeeze()
+                .T
+            )
+#            print(embed.shape)
+            # return: seq_lenxembed_dim shape
+            embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
+            lengths.append(length)
+        else:
+            num_removed += 1
+            #filtered_names.remove(name)
+            # filtered_sequences.remove(sequence)
+    return embeddings, lengths
 
 @torch.no_grad()
 def _calc_embeddings(
-    sequence_data, model_class, max_seq_length
+    sequences, model_class, max_seq_length
 ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Calculates the embeddings for the sequences by
     calling the model forward function. Filters the sequences by max/min
@@ -104,14 +139,16 @@ def _calc_embeddings(
 
     Returns [names], [sequences], [embeddings]"""
 
-    names = list(sequence_data.keys())
-    sequences = list(sequence_data.values())
-
-    filtered_names, embeddings, lengths = filter_and_calc_embeddings(
-        names, sequences, model_class, max_seq_length
+#    names = list(sequence_data.keys())
+#    sequences = list(sequence_data.values())
+ #   print(sequences[0])
+    embeddings, lengths = filter_and_calc_embeddings(
+        sequences, model_class, max_seq_length
     )
 
-    return filtered_names, embeddings, lengths
+    #pdb.set_trace()
+
+    return embeddings, lengths
 
 
 def search(
@@ -164,7 +201,7 @@ def search_only(args):
 
     start_time = time.time()
 
-    all_scores = []
+    a:ll_scores = []
     all_indices = []
 
     for i in tqdm.tqdm(range(len(queries))):
