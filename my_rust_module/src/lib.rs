@@ -84,7 +84,7 @@ fn _filter(
             let mut unique_indices = Vec::new();
 
             // Iterate over the elements of some_array along with their indices
-            for (index, &value) in sorted_names.iter().enumerate() {
+            for (index, &ref value) in sorted_names.iter().enumerate() {
                 if unique_values.insert(value) {
                     // If the value is not already in the HashSet, add it to unique_indices
                     unique_indices.push(index);
