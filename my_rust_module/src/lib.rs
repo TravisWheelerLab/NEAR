@@ -3,16 +3,42 @@ use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 use std::collections::HashSet; // Import HashSet
 use std::cmp::Ordering;
+use rayon::prelude::*;
+
+
+
+//rayon::ThreadPoolBuilder::new().num_threads(22).build_global().unwrap();
+
+
+fn init() {
+    rayon::ThreadPoolBuilder::new().num_threads(36).build_global().unwrap();
+}
+
 
 #[pyfunction]
-fn filter_scores(
-    scores_array_list: Vec<Vec<Vec<f64>>>,
-    indices_array_list: Vec<Vec<Vec<usize>>>,
-    unrolled_names: Vec<String>,
+fn filter_scores(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
+    indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
+    unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
+    filter_scores_in_parallel(scores_array_list, indices_array_list, unrolled_names)
+}
+
+fn filter_scores_in_parallel(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
+    indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
+    unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
+    scores_array_list.par_iter().zip(indices_array_list.par_iter()).flat_map(|(scores_array, indices_array)| {_filter(&scores_array, &indices_array, &unrolled_names)}).collect()
+    }
+    
+
+fn _filter(
+    scores_array_list: &Vec<Vec<Vec<f64>>>,
+    indices_array_list: &Vec<Vec<Vec<usize>>>,
+    unrolled_names: &Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
+    //init();
+    //scores_array_list.par_iter().zip(indices_array_list.par_iter()).map(|(scores_array, indices_array)| {
     let mut filtered_scores_list = Vec::new();
- //   println!("In new rust module");
     for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {
+
         let mut filtered_scores: HashMap<String, f64> = HashMap::new();
         
         for match_idx in 0..scores_array.len() {
@@ -63,6 +89,11 @@ fn filter_scores(
     }
 
     filtered_scores_list
+//}
+//        filtered_scores
+
+ //   })
+   // .collect()
 }
 
 #[pymodule]
