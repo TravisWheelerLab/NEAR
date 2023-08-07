@@ -93,6 +93,7 @@ def filter_and_calc_embeddings_old(
             # filtered_sequences.remove(sequence)
     return filtered_names, embeddings, lengths
 
+
 def filter_and_calc_embeddings(
     sequences: List[str],
     model_class,
@@ -104,13 +105,13 @@ def filter_and_calc_embeddings(
     minimum and maximum length threshold variables"""
     embeddings = []
     lengths = []
-#    print(sequences[0])
-    #filtered_names = names.copy()
+    #    print(sequences[0])
+    # filtered_names = names.copy()
     num_removed = 0
-    #print("Calculating embeddings...")
+    # print("Calculating embeddings...")
     for sequence in sequences:
         length = len(sequence)
-#        print(length)
+        #        print(length)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
                 model_class(
@@ -119,15 +120,16 @@ def filter_and_calc_embeddings(
                 .squeeze()
                 .T
             )
-#            print(embed.shape)
+            #            print(embed.shape)
             # return: seq_lenxembed_dim shape
             embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
             lengths.append(length)
         else:
             num_removed += 1
-            #filtered_names.remove(name)
+            # filtered_names.remove(name)
             # filtered_sequences.remove(sequence)
     return embeddings, lengths
+
 
 @torch.no_grad()
 def _calc_embeddings(
@@ -139,14 +141,14 @@ def _calc_embeddings(
 
     Returns [names], [sequences], [embeddings]"""
 
-#    names = list(sequence_data.keys())
-#    sequences = list(sequence_data.values())
- #   print(sequences[0])
+    #    names = list(sequence_data.keys())
+    #    sequences = list(sequence_data.values())
+    #   print(sequences[0])
     embeddings, lengths = filter_and_calc_embeddings(
         sequences, model_class, max_seq_length
     )
 
-    #pdb.set_trace()
+    # pdb.set_trace()
 
     return embeddings, lengths
 
@@ -185,11 +187,9 @@ def search(
 def save_target_embeddings(arg_list):
     target_data, model, max_seq_length = arg_list
 
-    target_names, targets, lengths = _calc_embeddings(
-        target_data, model, max_seq_length
-    )
+    targets, lengths = _calc_embeddings(target_data, model, max_seq_length)
 
-    return target_names, targets, lengths
+    return targets, lengths
 
 
 def search_only(args):
@@ -201,7 +201,7 @@ def search_only(args):
 
     start_time = time.time()
 
-    a:ll_scores = []
+    all_scores = []
     all_indices = []
 
     for i in tqdm.tqdm(range(len(queries))):
@@ -253,7 +253,8 @@ def filter(arg_list):
     cluster space"""
 
     (
-        query_data,
+        query_names,
+        query_sequences,
         model,
         output_path,
         index,
@@ -262,7 +263,7 @@ def filter(arg_list):
         write_results,
     ) = arg_list
 
-    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+    queries, _ = _calc_embeddings(query_sequences, model, max_seq_length)
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -282,13 +283,7 @@ def filter(arg_list):
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
     print("Calling rust function...")
-    scoresize = sys.getsizeof(all_scores)
-    indexsize = sys.getsizeof(all_indices)
-    namesize = sys.getsizeof(unrolled_names)
 
-    print(f"Score size {scoresize}")
-    print(f"Index size: {indexsize}")
-    print(f"Name size {namesize}")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
