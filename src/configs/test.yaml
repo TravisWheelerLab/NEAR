@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
-num_threads: 24
+num_threads: 28
 omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True
