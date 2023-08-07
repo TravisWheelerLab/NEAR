@@ -24,24 +24,27 @@ fn filter_scores(
     indices_array_list: &Vec<Vec<Vec<usize>>>,
     unrolled_names: &Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
-    scores_array_list
-        .chunks(96)
-        .collect::<Vec<_>>()
+    let chunk_size = scores_array_list.len() / 96;
+    let scores_chunks: Vec<_> = scores_array_list.chunks(chunk_size).collect();
+    let indices_chunks: Vec<_> = indices_array_list.chunks(chunk_size).collect();
+
+    scores_chunks
         .par_iter()
-        .flat_map(|chunk| {
-            chunk
-                .iter()
-                .zip(indices_array_list.iter())
-                .flat_map(|(scores_array, indices_array)| {
-                    _filter(&scores_array, &indices_array, unrolled_names)
-                })
+        .zip(indices_chunks.par_iter())
+        .map(|(scores_chunk, indices_chunk)| {
+            _filter(
+                scores_chunk.to_vec(),
+                indices_chunk.to_vec(),
+                &unrolled_names,
+            )
         })
-        .collect::<Vec<_>>()
+        .flatten()
+        .collect()
 }
 
 fn _filter(
-    scores_array_list: &Vec<Vec<Vec<f64>>>,
-    indices_array_list: &Vec<Vec<Vec<usize>>>,
+    scores_array_list: Vec<Vec<Vec<f64>>>,
+    indices_array_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: &Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
     //init();
