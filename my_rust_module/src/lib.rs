@@ -5,29 +5,33 @@ use std::collections::HashSet; // Import HashSet
 use std::cmp::Ordering;
 use rayon::prelude::*;
 
+//#[pyfunction]
+// fn filter_scores(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
+//     indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
+//     unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
+//     filter_scores_in_parallel(scores_array_list, indices_array_list, unrolled_names)
+// }
 
-
-//rayon::ThreadPoolBuilder::new().num_threads(22).build_global().unwrap();
-
-
-fn init() {
-    rayon::ThreadPoolBuilder::new().num_threads(36).build_global().unwrap();
-}
-
+// fn filter_scores_in_parallel(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
+//     indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
+//     unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
+//     scores_array_list.par_iter().zip(indices_array_list.par_iter()).flat_map(|(scores_array, indices_array)| {_filter(&scores_array, &indices_array, &unrolled_names)}).collect()
+//     }
+    
 
 #[pyfunction]
-fn filter_scores(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
-    indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
-    unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
-    filter_scores_in_parallel(scores_array_list, indices_array_list, unrolled_names)
+fn filter_scores(scores_array_list: &Vec<Vec<Vec<f64>>>,
+    indices_array_list: &Vec<Vec<Vec<usize>>>,
+    unrolled_names: &Vec<String>) -> Vec<HashMap<String, f64> {
+        scores_array_list.chunks(96).collect::<Vec<_>>()
+        .par_iter()
+        .flat_map(|chunk| {chunk.iter().zip(indices_array_list.iter()).flat_map(|(scores_array, indices_array)| {
+            _filter(&scores_array, &indices_array, unrolled_names)
+        })
+})
+.collect::<Vec<_>>()
 }
 
-fn filter_scores_in_parallel(scores_array_list: Vec<Vec<Vec<Vec<f64>>>>,
-    indices_array_list: Vec<Vec<Vec<Vec<usize>>>>,
-    unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
-    scores_array_list.par_iter().zip(indices_array_list.par_iter()).flat_map(|(scores_array, indices_array)| {_filter(&scores_array, &indices_array, &unrolled_names)}).collect()
-    }
-    
 
 fn _filter(
     scores_array_list: &Vec<Vec<Vec<f64>>>,
@@ -44,8 +48,6 @@ fn _filter(
         for match_idx in 0..scores_array.len() {
             let match_scores = &scores_array[match_idx];
             let indices = &indices_array[match_idx];
-            //println!("match_idx {}", match_idx);
-            //println!("indices {:?}", indices);
             let names: Vec<_> = indices.iter().map(|&idx| unrolled_names[idx].clone()).collect();
             
 
@@ -67,7 +69,7 @@ fn _filter(
             let mut unique_indices = Vec::new();
 
             // Iterate over the elements of some_array along with their indices
-            for (index, &ref value) in sorted_names.iter().enumerate() {
+            for (index, &value) in sorted_names.iter().enumerate() {
                 if unique_values.insert(value) {
                 // If the value is not already in the HashSet, add it to unique_indices
                 unique_indices.push(index);
@@ -98,13 +100,6 @@ fn _filter(
 
 #[pymodule]
 fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
- 
-    //#[pyfn(m, "filter_scores")]
-   // fn filter(py: Python, scores_array_list: Vec<Vec<Vec<f64>>>,indices_array_list: Vec<Vec<Vec<usize>>>,unrolled_names: Vec<String>) -> PyResult<Vec<HashMap<String, f64>>> {
-  //      let filtered_scores = py.allow_threads(move || filter_scores(scores_array_list, indices_array_list, unrolled_names));    
- //       Ok(filtered_scores)
-//    }
-    // Add your Rust functions to the Python module
     m.add_function(wrap_pyfunction!(filter_scores, m)?)?;
     Ok(())
 }

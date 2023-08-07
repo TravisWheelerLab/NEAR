@@ -258,12 +258,12 @@ def evaluate_for_times_mp2(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-#    query_sequences = {
-#        k: v
-#        for k, v in zip(
-#            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
-#        )
-#    }
+    #    query_sequences = {
+    #        k: v
+    #        for k, v in zip(
+    #            list(query_sequences.keys())[:500], list(query_sequences.values())[:500]
+    #        )
+    #    }
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
@@ -317,10 +317,10 @@ def evaluate_for_times_mp2(_config):
 
     all_scores = []
     all_indices = []
-    #query_names_list = []
+    # query_names_list = []
     for result in pool.imap(search_only, arg_list):
         search_time, query_names, scores, indices = result
-    #    query_names_list += query_names
+        #    query_names_list += query_names
         all_scores += scores
         all_indices += indices
     search_time = time.time() - start
@@ -329,26 +329,10 @@ def evaluate_for_times_mp2(_config):
     print(f"Search time: {search_time}")
     print(f"Search time per query: {search_time/(numqueries)}")
 
-    #all_scores = [scores_array, scores_array, ...]
+    # all_scores = [scores_array, scores_array, ...]
 
-
-    all_scores = list(split(all_scores, params.num_threads))
-    all_indices = list(split(all_indices, params.num_threads))
- #   query_names_list = list(split(query_names_list, params.num_threads))
-
-#    arg_list = [
-#        (
-#            all_scores[i],
-#            all_indices[i],
-#            unrolled_names,
-#            query_names_list[i],
-#            params.write_results,
-#            params.save_dir,
-#        )
-#        for i in range(params.num_threads)
-#    ]
-#
-    #pool = Pool(16)
+    # all_scores = list(split(all_scores, params.num_threads))
+    # all_indices = list(split(all_indices, params.num_threads))
 
     print("Filtering in Rust...")
 
@@ -356,8 +340,8 @@ def evaluate_for_times_mp2(_config):
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
-    #pool.map(filter_only, arg_list)
-    #pool.terminate()
+    # pool.map(filter_only, arg_list)
+    # pool.terminate()
 
     total_filtration_time = time.time() - total_filtration_time
     elapsed_time = time.time() - start
