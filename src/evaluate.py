@@ -1,5 +1,6 @@
 import torch
 import os
+import tqdm
 from types import SimpleNamespace
 import time
 import yaml
@@ -9,7 +10,7 @@ from src.evaluators.contrastive_functional import (
     filter,
     _setup_targets_for_search,
     save_target_embeddings,
-    search_only,
+    _calc_embeddings,
     filter_only,
 )
 from src.evaluators.profiler import profile_embeddings, embed_multithread
@@ -241,6 +242,24 @@ def evaluate_for_times_mp(_config):
     print(f"Elapsed time per query: {elapsed_time/(numqueries)}")
 
 
+def search_only(query_data, max_seq_length=512):
+    global model, output_path, index, max_seq_length
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    all_scores = []
+    all_indices = []
+
+    for i in tqdm.tqdm(range(len(queries))):
+        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        all_scores.append(scores.to("cpu").numpy())
+        all_indices.append(indices.to("cpu").numpy())
+
+    return query_names, all_scores, all_indices
+
+
 def evaluate_for_times_mp2(_config):
     params = SimpleNamespace(**_config)
 
@@ -250,7 +269,7 @@ def evaluate_for_times_mp2(_config):
 
     print(f"Index path: {params.index_path}")
 
-    model = model_class.load_from_checkpoint(
+    model_input = model_class.load_from_checkpoint(
         checkpoint_path=params.checkpoint_path,
         map_location=torch.device(params.device),
     ).to(params.device)
@@ -286,7 +305,7 @@ def evaluate_for_times_mp2(_config):
         params.device,
     )
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
+    unrolled_names, faiss_index = _setup_targets_for_search(
         target_embeddings,
         target_names,
         target_lengths,
@@ -307,7 +326,23 @@ def evaluate_for_times_mp2(_config):
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
-    del query_sequences
+
+    global model, output_path, index
+
+    model = model_input
+    output_path = params.save_dir
+    index = faiss_index
+
+    # arg_list = [
+    #     (
+    #         dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+    #         model,
+    #         params.save_dir,
+    #         index,
+    #         params.max_seq_length,
+    #     )
+    #     for i in range(0, len(query_sequences))
+    # ]
 
     pool = Pool(params.num_threads)
     print(f"Length of arglist: {len(arg_list)}")
@@ -317,17 +352,18 @@ def evaluate_for_times_mp2(_config):
 
     all_scores = []
     all_indices = []
-    # query_names_list = []
-    for result in pool.imap(search_only, arg_list):
-        search_time, query_names, scores, indices = result
+    query_names_list = []
+    for result in pool.imap(search_only, query_sequences):
+        query_names, scores, indices = result
         #    query_names_list += query_names
         all_scores += scores
         all_indices += indices
+        query_names_list += query_names
     search_time = time.time() - start
-
-    pool.terminate()
     print(f"Search time: {search_time}")
     print(f"Search time per query: {search_time/(numqueries)}")
+
+    pool.terminate()
 
     # all_scores = [scores_array, scores_array, ...]
 
