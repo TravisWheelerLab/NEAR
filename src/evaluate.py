@@ -193,9 +193,14 @@ def evaluate_multiprocessing(_config):
         params.omp_num_threads,
     )
 
+    query_names = list(query_sequences.keys())[:1000]
+
+    sequences = list(query_sequences.values())[:1000]
+
     arg_list = [
         (
-            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            query_names,
+            sequences,
             model,
             params.save_dir,
             index,
@@ -203,7 +208,7 @@ def evaluate_multiprocessing(_config):
             params.max_seq_length,
             params.write_results,
         )
-        for i in range(0, len(query_sequences), q_chunk_size)
+        for i in range(0, len(query_names), q_chunk_size)
     ]
     del query_sequences
 
@@ -471,6 +476,6 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_for_times_mp(_config)
+        evaluate_multiprocessing(_config)
     else:
         evaluate(_config)
