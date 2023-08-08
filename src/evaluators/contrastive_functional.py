@@ -225,12 +225,12 @@ def filter_only(arg_list):
     ) = arg_list
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
-    print("Calling rust function...")
+    #print("Calling rust function...")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
 
-    print("Filtration complete")
+    #print("Filtration complete")
 
     total_filtration_time = time.time() - filtration_time
 
@@ -263,6 +263,7 @@ def filter(arg_list):
         write_results,
     ) = arg_list
 
+    print("Calculating embeddings...")
     queries, _ = _calc_embeddings(query_sequences, model, max_seq_length)
 
     if not os.path.exists(output_path):
@@ -272,8 +273,9 @@ def filter(arg_list):
 
     all_scores = []
     all_indices = []
+    print("Beginning Search...")
 
-    for i in tqdm.tqdm(range(len(queries))):
+    for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.numpy())
         all_indices.append(indices.numpy())
@@ -394,3 +396,4 @@ def evaluate(
     """
 
     filter(query_embeddings, query_names, params, index, unrolled_names, write_results)
+
