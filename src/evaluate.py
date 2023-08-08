@@ -129,32 +129,20 @@ def split(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def evaluate_multiprocessing(_config):
-    params = SimpleNamespace(**_config)
+def load_model(checkpoint_path, model_name, device="cpu"):
+    print(f"Loading from checkpoint in {checkpoint_path}")
 
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-
-    model_class = load_model_class(params.model_name)
+    model_class = load_model_class(model_name)
 
     model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
+        checkpoint_path=checkpoint_path,
+        map_location=torch.device(device),
+    ).to(device)
 
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-
-    q_chunk_size = len(query_sequences) // params.num_threads
-    #print(f"Number of queries: {numqueries}")
-
-    # q_chunk_size = len(query_sequences) // params.num_threads
-
-    print(f"Nprobe: {params.nprobe}")
-    print(f"num threads: {params.num_threads}")
-    print(f"omp_num_threads: {params.omp_num_threads}")
+    return model
 
 
-    # get target embeddings
+def load_targets(params):
     if not os.path.exists(params.target_embeddings):
         print("No saved target embeddings. Calculating them now.")
         targetfasta = FastaFile(params.target_file)
@@ -189,7 +177,24 @@ def evaluate_multiprocessing(_config):
         else:
             raise Exception("Saved target data format not understood")
 
+    return target_embeddings, target_names, target_lengths
+
+
+def evaluate_multiprocessing(_config):
+    params = SimpleNamespace(**_config)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+
+    model = load_model(params.checkpoint_path.params.model_name, params.device)
+
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+
+    target_embeddings, target_names, target_lengths = load_targets(params)
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
+
     unrolled_names, index = _setup_targets_for_search(
         target_embeddings,
         target_names,
@@ -202,9 +207,8 @@ def evaluate_multiprocessing(_config):
     query_names = list(query_sequences.keys())[:1000]
 
     sequences = list(query_sequences.values())[:1000]
-    numqueries = len(query_names)    
+    numqueries = len(query_names)
     print(f"Number of queries: {numqueries}")
-
 
     query_names = list(split(query_names, params.num_threads))
     assert len(query_names) == params.num_threads
@@ -232,7 +236,7 @@ def evaluate_multiprocessing(_config):
 
     start = time.time()
 
-    #with concurrent.futures.ProcessPoolExecutor() as executor:
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
     #    futures = {executor.submit(filter, arg_list[i]) for i in range(len(arg_list))}
 
     #    for future in concurrent.futures.as_completed(futures):
@@ -241,9 +245,9 @@ def evaluate_multiprocessing(_config):
     #        total_search_time += search_time
     #        total_filtration_time += filtration_time
 
-    #total_duration = 0
-    #total_search_time = 0
-    #total_filtration_time = 0
+    # total_duration = 0
+    # total_search_time = 0
+    # total_filtration_time = 0
     for result in pool.imap(filter, arg_list):
         duration, search_time, filtration_time = result
         total_duration += duration
@@ -286,24 +290,21 @@ def search_only(query_data):
 
 def evaluate_for_times_mp2(_config):
     params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-
-    model_class = load_model_class(params.model_name)
-
     print(f"Index path: {params.index_path}")
 
-    model_input = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
+    model_input = load_model(params.checkpoint_path.params.model_name, params.device)
 
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+
+    target_embeddings, target_names, target_lengths = load_targets(params)
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    query_data = list(query_sequences.values())
+    query_data = list(query_sequences.values())[:5000]
 
-    query_names_list = list(query_sequences.keys())
+    query_names_list = list(query_sequences.keys())[:5000]
 
     numqueries = len(query_data)
     print(f"Number of queries: {numqueries}")
@@ -312,16 +313,6 @@ def evaluate_for_times_mp2(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    target_embeddings, target_names, target_lengths = load_targets(
-        params.target_embeddings,
-        params.target_names,
-        params.target_lengths,
-        params.target_file,
-        params.num_threads,
-        model_input,
-        params.max_seq_length,
-        params.device,
-    )
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, faiss_index = _setup_targets_for_search(
         target_embeddings,
@@ -348,7 +339,7 @@ def evaluate_for_times_mp2(_config):
     all_indices = []
 
     query_data = list(split(query_data, params.num_threads))
-    
+
     for result in pool.imap(search_only, query_data):
         scores, indices = result
         all_scores += scores
@@ -356,20 +347,57 @@ def evaluate_for_times_mp2(_config):
     search_time = time.time() - start
     print(f"Search time per query: {search_time/(numqueries)}")
     pool.terminate()
-    
 
     filter_threads = 4
+
     all_scores = list(split(all_scores, filter_threads))
     all_indices = list(split(all_indices, filter_threads))
     query_names = list(split(query_names_list, filter_threads))
-    
-    arg_list = [(all_scores[i], all_indices[i], unrolled_names, query_names[i], params.write_results, params.save_dir) for i in range(filter_threads)]    
-    
-    
+
+    print("Saving to file")
+
+    with open("/xdisk/twheeler/daphnedemekas/all_scores.txt", "w") as f:
+        for score in all_scores:
+            # score is an array of (seq_len, 1000)
+            row = ""
+            column = ""
+            for value in score:
+                row += f"{value[0]}, "
+                column += f"{value[1]}, "
+            f.write(f"{row} : {column}" + "\n")
+
+    with open("/xdisk/twheeler/daphnedemekas/all_indices.txt", "w") as f:
+        for ind in all_indices:
+            # score is an array of (seq_len, 1000)
+            row = ""
+            column = ""
+            for value in ind:
+                row += f"{value[0]}, "
+                column += f"{value[1]}, "
+            f.write(f"{row} : {column}" + "\n")
+
+    with open("/xdisk/twheeler/daphnedemekas/unrolled_names.txt", "w") as f:
+        for name in unrolled_names:
+            f.write(name + "\n")
+
+    print("Saved")
+
+    arg_list = [
+        (
+            all_scores[i],
+            all_indices[i],
+            unrolled_names,
+            query_names[i],
+            params.write_results,
+            params.save_dir,
+        )
+        for i in range(filter_threads)
+    ]
+
     pool = MPool(filter_threads)
     print(f"Filtering with {filter_threads} threads")
     filtration_time = time.time()
-    
+
     pool.map(filter_only, arg_list)
     print(f"Filtration time per query: {(time.time() - filtration_time) / numqueries}")
     pool.terminate()
@@ -382,24 +410,23 @@ def evaluate_for_times_mp2(_config):
     print(f"Search time: {search_time}")
     print(f"Search time per query: {search_time/(numqueries)}")
 
-
     # all_scores = list(split(all_scores, params.num_threads))
     # all_indices = list(split(all_indices, params.num_threads))
 
-    #print("Filtering in Rust...")
+    # print("Filtering in Rust...")
 
-    #total_filtration_time = time.time()
-    #filtered_scores_list = my_rust_module.filter_scores(
+    # total_filtration_time = time.time()
+    # filtered_scores_list = my_rust_module.filter_scores(
     #    all_scores, all_indices, unrolled_names
-    #)
+    # )
     # pool.map(filter_only, arg_list)
     # pool.terminate()
 
-    #total_filtration_time = time.time() - total_filtration_time
+    # total_filtration_time = time.time() - total_filtration_time
     elapsed_time = time.time() - start
 
-    #print(f"Filtration time: {total_filtration_time}.")
-    #print(f"Filtation time per query: {total_filtration_time/(numqueries)}")
+    # print(f"Filtration time: {total_filtration_time}.")
+    # print(f"Filtation time per query: {total_filtration_time/(numqueries)}")
 
     print(f"Elapsed time: {elapsed_time}.")
 
@@ -474,8 +501,7 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        #evaluate_multiprocessing(_config)
+        # evaluate_multiprocessing(_config)
         evaluate_for_times_mp2(_config)
     else:
         evaluate(_config)
-
