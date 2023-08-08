@@ -292,7 +292,7 @@ def evaluate_for_times_mp2(_config):
     params = SimpleNamespace(**_config)
     print(f"Index path: {params.index_path}")
 
-    model_input = load_model(params.checkpoint_path.params.model_name, params.device)
+    model_input = load_model(params.checkpoint_path, params.model_name, params.device)
 
     print(f"Nprobe: {params.nprobe}")
     print(f"num threads: {params.num_threads}")
