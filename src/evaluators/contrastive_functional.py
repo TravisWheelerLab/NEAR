@@ -202,7 +202,7 @@ def search_only(args):
     all_scores = []
     all_indices = []
 
-    for i in tqdm.tqdm(range(len(queries))):
+    for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
