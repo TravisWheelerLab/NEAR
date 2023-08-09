@@ -4,24 +4,34 @@ use std::collections::HashMap;
 use std::collections::HashSet; // Import HashSet
 use std::cmp::Ordering;
 
-//#[pyfunction]
-fn filter_scores_inner(
+#[pyfunction]
+fn filter_scores(
     scores_array_list: Vec<Vec<Vec<f64>>>,
     indices_array_list: Vec<Vec<Vec<usize>>>,
     unrolled_names: Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
+//) -> Result<Vec<HashMap<String, f64>>, std::io::Error> {
     let mut filtered_scores_list = Vec::new();
+
     println!("In new rust module");
+    //let scores_array_list = read_scores("/xdisk/twheeler/daphnedemekas/all_scores-reversed.txt")?;
+    //let indices_array_list = read_indices("/xdisk/twheeler/daphnedemekas/all_indices-reversed.txt")?;
+    //let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled_names.txt")?;
+
+    let mut idx = 0;
     for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {
+        idx += 1;
+        println!("{idx}");
         let mut filtered_scores: HashMap<String, f64> = HashMap::new();
-        
+
+
         for match_idx in 0..scores_array.len() {
             let match_scores = &scores_array[match_idx];
             let indices = &indices_array[match_idx];
             //println!("match_idx {}", match_idx);
             //println!("indices {:?}", indices);
             let names: Vec<_> = indices.iter().map(|&idx| unrolled_names[idx].clone()).collect();
-            
+
 
             let mut sorted_match_idx: Vec<usize> = (0..match_scores.len()).collect();
             sorted_match_idx.sort_unstable_by(|&a, &b| {
@@ -30,19 +40,16 @@ fn filter_scores_inner(
                     None => Ordering::Equal,
                 }
             });
-            
+
             //let sorted_names: Vec<_> = sorted_match_idx.iter().map(|&idx| names[idx].clone()).collect();
             //let sorted_indices: Vec<_> = sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
             //let sorted_matches: Vec<_> = sorted_match_idx.iter().map(|&idx| match_scores[idx]).collect();
-            
-            let sorted_names: Vec<_> = sorted_match_idx.iter().filter_map(|&idx| names.get(idx)).collect();
+
+            let sorted_names: Vec<_> = sorted_match_idx.iter().map(|&idx| names[idx].clone()).collect();
             //let sorted_indices: Vec<_> = sorted_match_idx.iter().filter_map(|&idx| indices.get(idx)).collect();
-            
-            let sorted_indices: Vec<usize> = sorted_match_idx.iter()
-            .filter_map(|&idx| indices.get(idx))
-            .cloned()
-            .collect();
-            let sorted_matches: Vec<_> = sorted_match_idx.iter().filter_map(|&idx| match_scores.get(idx)).collect();
+
+            let sorted_indices: Vec<usize> = sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
+            let sorted_matches: Vec<_> = sorted_match_idx.iter().map(|&idx| match_scores[idx]).collect();
 
             // Create a HashSet to store the unique values
             let mut unique_values = HashSet::new();
@@ -59,9 +66,6 @@ fn filter_scores_inner(
             let new_indices: Vec<_> = unique_indices.iter().map(|&idx| sorted_indices[idx]).collect();
             let new_names: Vec<_> = new_indices.iter().map(|&idx| unrolled_names[idx].clone()).collect();
             let new_scores: Vec<_> = unique_indices.iter().map(|&idx| sorted_matches[idx]).collect();
-
-            //println!("unique indices {:?}", unique_indices); 
-            //println!("sorted_names {:?}", sorted_names);
             for (distance, name) in new_scores.iter().zip(new_names.iter()) {
                 *filtered_scores.entry(name.to_string()).or_insert(0.0) += *distance;
             }
@@ -71,29 +75,20 @@ fn filter_scores_inner(
     }
 
     filtered_scores_list
+
 }
 
-#[pyfunction]
-fn filter_scores(
-    py: Python,
-    scores_array_list: Vec<Vec<Vec<f64>>>,
-    indices_array_list: Vec<Vec<Vec<usize>>>,
-    unrolled_names: Vec<String>,
-) -> PyResult<Vec<HashMap<String, f64>>> {
-    // Convert Python -> Rust types if needed, outside of the allow_threads block
-    
-    let filtered_scores: Vec<HashMap<String, f64>> = py.allow_threads(move || {
-        // Do the Rust-only work here.
-        filter_scores_inner(scores_array_list, indices_array_list, unrolled_names)
-    });
 
-    // Convert Rust -> Python types if needed, outside of the allow_threads block
-
-    Ok(filtered_scores)
-}
 
 #[pymodule]
-fn my_rust_module(py: Python, m: &PyModule) -> PyResult<()> {
+fn my_rust_module(_py: Python, m: &PyModule) -> PyResult<()> {
+ 
+    //#[pyfn(m, "filter_scores")]
+   // fn filter(py: Python, scores_array_list: Vec<Vec<Vec<f64>>>,indices_array_list: Vec<Vec<Vec<usize>>>,unrolled_names: Vec<String>) -> PyResult<Vec<HashMap<String, f64>>> {
+  //      let filtered_scores = py.allow_threads(move || filter_scores(scores_array_list, indices_array_list, unrolled_names));    
+ //       Ok(filtered_scores)
+//    }
+    // Add your Rust functions to the Python module
     m.add_function(wrap_pyfunction!(filter_scores, m)?)?;
     Ok(())
 }

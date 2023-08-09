@@ -12,6 +12,7 @@ from src.evaluators.contrastive_functional import (
     save_target_embeddings,
     _calc_embeddings,
     filter_only,
+    search_only,
 )
 from src.evaluators.profiler import profile_embeddings, embed_multithread
 from src.data.hmmerhits import FastaFile
@@ -267,7 +268,7 @@ def evaluate_multiprocessing(_config):
     pool.terminate()
 
 
-def search_only(query_data):
+def search_only_new(query_data):
     global model, output_path, index
     # print(query_data[0])
     max_seq_length = 512
@@ -302,9 +303,15 @@ def evaluate_for_times_mp2(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    query_data = list(query_sequences.values())[:5000]
+    query_data = list(query_sequences.values())
 
-    query_names_list = list(query_sequences.keys())[:5000]
+    query_names_list = list(query_sequences.keys())
+
+    if not os.path.exists('/xdisk/twheeler/daphnedemekas/query_names.txt'):
+        with open('/xdisk/twheeler/daphnedemekas/query_names.txt',"w") as f:
+            for name in query_names_list:
+                f.write(name + "\n")
+
 
     numqueries = len(query_data)
     print(f"Number of queries: {numqueries}")
@@ -348,15 +355,13 @@ def evaluate_for_times_mp2(_config):
     print(f"Search time per query: {search_time/(numqueries)}")
     pool.terminate()
 
-    filter_threads = 4
-
-    all_scores = list(split(all_scores, filter_threads))
-    all_indices = list(split(all_indices, filter_threads))
-    query_names = list(split(query_names_list, filter_threads))
+    #all_scores = list(split(all_scores, filter_threads))
+    #all_indices = list(split(all_indices, filter_threads))
+    #query_names = list(split(query_names_list, filter_threads))
 
     print("Saving to file")
-
-    with open("/xdisk/twheeler/daphnedemekas/all_scores.txt", "w") as f:
+    
+    with open("/xdisk/twheeler/daphnedemekas/all_scores-reversed.txt", "w") as f:
         for score in all_scores:
             # score is an array of (seq_len, 1000)
             row = ""
@@ -366,7 +371,7 @@ def evaluate_for_times_mp2(_config):
                 column += f"{value[1]}, "
             f.write(f"{row} : {column}" + "\n")
 
-    with open("/xdisk/twheeler/daphnedemekas/all_indices.txt", "w") as f:
+    with open("/xdisk/twheeler/daphnedemekas/all_indices-reversed.txt", "w") as f:
         for ind in all_indices:
             # score is an array of (seq_len, 1000)
             row = ""
@@ -376,62 +381,130 @@ def evaluate_for_times_mp2(_config):
                 column += f"{value[1]}, "
             f.write(f"{row} : {column}" + "\n")
 
-    with open("/xdisk/twheeler/daphnedemekas/unrolled_names.txt", "w") as f:
+    with open("/xdisk/twheeler/daphnedemekas/unrolled_names-reversed.txt", "w") as f:
         for name in unrolled_names:
             f.write(name + "\n")
 
     print("Saved")
 
+def evaluate_multiprocessing(_config):
+    params = SimpleNamespace(**_config)
+
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+
+    model_class = load_model_class(params.model_name)
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+
+    q_chunk_size = len(query_sequences) // params.num_threads
+
+    # get target embeddings
+    if not os.path.exists(params.target_embeddings):
+        print("No saved target embeddings. Calculating them now.")
+        targetfasta = FastaFile(params.target_file)
+        target_sequences = targetfasta.data
+
+        target_names, target_lengths, target_embeddings = save_off_targets(
+            target_sequences,
+            params.num_threads,
+            model,
+            params.max_seq_length,
+            params.device,
+            params.target_embeddings,
+        )
+    else:
+        target_embeddings = torch.load(params.target_embeddings)
+
+        if params.target_names.endswith(".pickle"):
+            with open(params.target_names, "rb") as file_handle:
+                target_names = pickle.load(file_handle)
+
+            with open(params.target_lengths, "rb") as file_handle:
+                target_lengths = pickle.load(file_handle)
+
+        elif params.target_names.endswith(".txt"):
+            with open(params.target_names, "r") as f:
+                target_names = f.readlines()
+                target_names = [t.strip("\n") for t in target_names]
+            with open(params.target_lengths, "r") as f:
+                target_lengths = f.readlines()
+                target_lengths = [int(t.strip("\n")) for t in target_lengths]
+
+        else:
+            raise Exception("Saved target data format not understood")
+
+    assert len(target_lengths) == len(target_names) == len(target_embeddings)
+    unrolled_names, index = _setup_targets_for_search(
+        target_embeddings,
+        target_names,
+        target_lengths,
+        params.index_string,
+        params.nprobe,
+        params.omp_num_threads,
+    )
+
     arg_list = [
         (
-            all_scores[i],
-            all_indices[i],
-            unrolled_names,
-            query_names[i],
-            params.write_results,
+            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            model,
             params.save_dir,
+            index,
+            params.max_seq_length,
         )
-        for i in range(filter_threads)
+        for i in range(0, len(query_sequences), q_chunk_size)
     ]
+    del query_sequences
 
-    pool = MPool(filter_threads)
-    print(f"Filtering with {filter_threads} threads")
-    filtration_time = time.time()
+    pool = Pool(params.num_threads)
 
-    pool.map(filter_only, arg_list)
-    print(f"Filtration time per query: {(time.time() - filtration_time) / numqueries}")
+    print("Beginning search...")
+    start = time.time()
+
+    all_q_names = []
+    all_scores_list = []
+    all_indices_list = []
+    
+    for result in pool.imap(search_only, arg_list):
+        query_names, all_scores, all_indices = result
+    
+        all_q_names += query_names
+        all_scores_list += all_scores 
+        all_indices_list += all_indices
+    
+    print(f"Search time per query: {(time.time() - start) / numqueries}")
     pool.terminate()
-    #      query_names, scores, indices = result
-    #       #    query_names_list += query_names
-    #       all_scores += scores
-    #       all_indices += indices
-    #       query_names_list += query_names
-    # search_time = time.time() - start
-    print(f"Search time: {search_time}")
-    print(f"Search time per query: {search_time/(numqueries)}")
+    print("Saving to file")
 
-    # all_scores = list(split(all_scores, params.num_threads))
-    # all_indices = list(split(all_indices, params.num_threads))
+    with open("/xdisk/twheeler/daphnedemekas/all_scores-reversed.txt", "w") as f:
+        for score in all_scores_list:
+            # score is an array of (seq_len, 1000)
+            row = ""
+            column = ""
+            for value in score:
+                row += f"{value[0]}, "
+                column += f"{value[1]}, "
+            f.write(f"{row} : {column}" + "\n")
 
-    # print("Filtering in Rust...")
+    with open("/xdisk/twheeler/daphnedemekas/all_indices-reversed.txt", "w") as f:
+        for ind in all_indices_list:
+            # score is an array of (seq_len, 1000)
+            row = ""
+            column = ""
+            for value in ind:
+                row += f"{value[0]}, "
+                column += f"{value[1]}, "
+            f.write(f"{row} : {column}" + "\n")
 
-    # total_filtration_time = time.time()
-    # filtered_scores_list = my_rust_module.filter_scores(
-    #    all_scores, all_indices, unrolled_names
-    # )
-    # pool.map(filter_only, arg_list)
-    # pool.terminate()
-
-    # total_filtration_time = time.time() - total_filtration_time
-    elapsed_time = time.time() - start
-
-    # print(f"Filtration time: {total_filtration_time}.")
-    # print(f"Filtation time per query: {total_filtration_time/(numqueries)}")
-
-    print(f"Elapsed time: {elapsed_time}.")
-
-    print(f"Elapsed time per query: {elapsed_time/numqueries}.")
-
+    with open("/xdisk/twheeler/daphnedemekas/unrolled_names-reversed.txt", "w") as f:
+        for name in unrolled_names:
+            f.write(name + "\n")
+    print("Saved.")
 
 def evaluate(_config):
     params = SimpleNamespace(**_config)

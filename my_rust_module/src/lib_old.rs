@@ -17,14 +17,79 @@ use std::collections::HashSet; // Import HashSet
 //     unrolled_names: Vec<String>) -> Vec<HashMap<String, f64>> {
 //     scores_array_list.par_iter().zip(indices_array_list.par_iter()).flat_map(|(scores_array, indices_array)| {_filter(&scores_array, &indices_array, &unrolled_names)}).collect()
 //     }
+fn read_scores(filename: &str) -> io::Result<Vec<Vec<Vec<f64>>>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    let mut matrix = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<_> = line.split(" : ").collect();
+        let row: Vec<f64> = parts[0].split(", ").filter_map(|s| s.parse().ok()).collect();
+        let column: Vec<f64> = parts[1].split(", ").filter_map(|s| s.parse().ok()).collect();
+
+        if row.len() != column.len() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Mismatched row and column lengths"));
+        }
+
+        let combined: Vec<Vec<f64>> = row.into_iter().zip(column.into_iter()).map(|(r,c)| vec![r,c]).collect();
+        matrix.push(combined);
+    }
+
+    Ok(matrix)
+}
+
+fn read_indices(filename: &str) -> io::Result<Vec<Vec<Vec<usize>>>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    let mut matrix = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<_> = line.split(" : ").collect();
+
+        let row: Vec<usize> = parts[0].split(", ")
+                                     .filter_map(|s| s.parse().ok())
+                                     .collect();
+
+        let column: Vec<usize> = parts[1].split(", ")
+                                        .filter_map(|s| s.parse().ok())
+                                        .collect();
+
+        if row.len() != column.len() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Mismatched row and column lengths"));
+        }
+
+        let combined: Vec<Vec<usize>> = row.into_iter().zip(column.into_iter()).map(|(r,c)| vec![r,c]).collect();
+        matrix.push(combined);
+    }
+
+    Ok(matrix)
+}
+
+
+fn read_names(filename: &str) -> io::Result<Vec<String>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+
+    let names: Vec<_> = reader.lines().collect::<Result<_, _>>()?;
+
+    Ok(names)
+}
 
 #[pyfunction]
 fn filter_scores(
-    scores_array_list: Vec<Vec<Vec<f64>>>,
-    indices_array_list: Vec<Vec<Vec<usize>>>,
-    unrolled_names: Vec<String>,
 ) -> Vec<HashMap<String, f64>> {
-    let chunk_size = scores_array_list.len() / 2;
+
+
+    let scores_array_list = read_scores("/xdisk/twheeler/daphnedemekas/all_scores.txt")?;
+    let indices_array_list = read_indices("/xdisk/twheeler/daphnedemekas/all_indices.txt")?;
+    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled_names.txt")?;
+
+
+    let chunk_size = scores_array_list.len() / 16;
     let scores_chunks: Vec<_> = scores_array_list.chunks(chunk_size).collect();
     let indices_chunks: Vec<_> = indices_array_list.chunks(chunk_size).collect();
 

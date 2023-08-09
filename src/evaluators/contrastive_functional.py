@@ -59,7 +59,7 @@ def filter_scores(
     return filtered_scores_list
 
 
-def filter_and_calc_embeddings_old(
+def filter_and_calc_embeddings(
     names: List[str],
     sequences: List[str],
     model_class,
@@ -94,7 +94,7 @@ def filter_and_calc_embeddings_old(
     return filtered_names, embeddings, lengths
 
 
-def filter_and_calc_embeddings(
+def filter_and_calc_embeddings2(
     sequences: List[str],
     model_class,
     max_seq_length=512,
@@ -141,16 +141,16 @@ def _calc_embeddings(
 
     Returns [names], [sequences], [embeddings]"""
 
-    #    names = list(sequence_data.keys())
-    #    sequences = list(sequence_data.values())
+    names = list(sequence_data.keys())
+    sequences = list(sequence_data.values())
     #   print(sequences[0])
     embeddings, lengths = filter_and_calc_embeddings(
-        sequences, model_class, max_seq_length
+        names, sequences, model_class, max_seq_length
     )
 
     # pdb.set_trace()
 
-    return embeddings, lengths
+    return names, embeddings, lengths
 
 
 def search(
@@ -199,7 +199,7 @@ def search_only(args):
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
-    start_time = time.time()
+#    start_time = time.time()
 
     all_scores = []
     all_indices = []
@@ -209,9 +209,9 @@ def search_only(args):
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
 
-    total_search_time = time.time() - start_time
+#    total_search_time = time.time() - start_time
 
-    return total_search_time, query_names, all_scores, all_indices
+    return query_names, all_scores, all_indices
 
 
 def filter_only(arg_list):
