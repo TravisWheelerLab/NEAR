@@ -4,7 +4,7 @@ from random import choice
 from string import ascii_lowercase, digits
 import pdb
 from collections import defaultdict
-
+import h5py
 
 def filter_scores(
     scores_array_list: np.array, indices_array_list: np.array, unrolled_names: np.array
@@ -62,6 +62,13 @@ def filter_scores(
 
 scores_array = np.load("testscores.npy")
 indices_array = np.load("testindices.npy")
+with h5py.File("/xdisk/twheeler/daphnedemekas/all_scores.h5", "w") as hf:
+    for i, arr in enumerate([scores_array]):
+        hf.create_dataset(f"array_{i}", data=arr)
+
+    with h5py.File("/xdisk/twheeler/daphnedemekas/all_indices.h5", "w") as hf:
+        for i, arr in enumerate([indices_array]):
+            hf.create_dataset(f"array_{i}", data=arr)
 
 
 # scores_array = np.random.random(size=(5, 100, 1000))

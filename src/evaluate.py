@@ -233,6 +233,7 @@ def evaluate_multiprocessing(_config):
         params.index_string,
         params.nprobe,
         params.omp_num_threads,
+        index_path = params.index_path,
     )
 
     if not os.path.exists(params.unrolled_names_path):

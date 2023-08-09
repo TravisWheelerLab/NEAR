@@ -74,7 +74,8 @@ def filter_and_calc_embeddings(
 
     filtered_names = names.copy()
     num_removed = 0
-    for name, sequence in tqdm.tqdm(zip(names, sequences)):
+    print("Embedding queries...")
+    for name, sequence in zip(names, sequences):
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
@@ -201,7 +202,8 @@ def search_only(args):
 
     all_scores = []
     all_indices = []
-
+    
+    print("Searching...")
     for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
