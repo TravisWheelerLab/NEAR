@@ -6,6 +6,7 @@ import time
 import yaml
 import argparse
 import itertools
+import h5py
 from src.evaluators.contrastive_functional import (
     filter,
     _setup_targets_for_search,
@@ -185,31 +186,19 @@ def save_FAISS_results(
     query_names,
     all_scores,
     all_indices,
-    scores_path="/xdisk/twheeler/daphnedemekas/all_scores-reversed.txt",
-    indices_path="/xdisk/twheeler/daphnedemekas/all_indices-reversed.txt",
+    scores_path="/xdisk/twheeler/daphnedemekas/all_scores-reversed.h5",
+    indices_path="/xdisk/twheeler/daphnedemekas/all_indices-reversed.h5",
     query_names_path="/xdisk/twheeler/daphnedemekas/query_names-reversed.txt",
 ):
     print("Saving FAISS results")
 
-    with open(scores_path, "w") as f:
-        for score in all_scores:
-            # score is an array of (seq_len, 1000)
-            row = ""
-            column = ""
-            for value in score:
-                row += f"{value[0]}, "
-                column += f"{value[1]}, "
-            f.write(f"{row} : {column}" + "\n")
+    with h5py.File(scores_path, "w") as hf:
+        for i, arr in enumerate(all_scores):
+            hf.create_dataset(f"array_{i}", data=arr)
 
-    with open(indices_path, "w") as f:
-        for ind in all_indices:
-            # score is an array of (seq_len, 1000)
-            row = ""
-            column = ""
-            for value in ind:
-                row += f"{value[0]}, "
-                column += f"{value[1]}, "
-            f.write(f"{row} : {column}" + "\n")
+    with h5py.File(indices_path, "w") as hf:
+        for i, arr in enumerate(all_indices):
+            hf.create_dataset(f"array_{i}", data=arr)
 
     with open(query_names_path, "w") as f:
         for name in query_names:

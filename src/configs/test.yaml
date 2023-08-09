@@ -21,6 +21,6 @@ nprobe: 50
 write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
 unrolled_names_path: "/xdisk/twheeler/daphnedemekas/unrolled-names.txt"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores.txt"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices.h5"
 query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names.txt"
