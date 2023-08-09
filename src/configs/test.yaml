@@ -4,7 +4,7 @@ description: "Use CPU with IVF optimization and multithreading"
 index_string: "IVF20000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
-query_file: "data/queries-filtered.fa"
+query_file: "data/evaluationqueries.fa"
 target_file: "data/targets-filtered.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
