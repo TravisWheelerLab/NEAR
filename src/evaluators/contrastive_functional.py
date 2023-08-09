@@ -74,7 +74,7 @@ def filter_and_calc_embeddings(
 
     filtered_names = names.copy()
     num_removed = 0
-    for name, sequence in zip(names, sequences):
+    for name, sequence in tqdm.tqdm(zip(names, sequences)):
         length = len(sequence)
         if max_seq_length >= length >= minimum_seq_length:
             embed = (
@@ -133,7 +133,7 @@ def filter_and_calc_embeddings2(
 
 @torch.no_grad()
 def _calc_embeddings(
-    sequences, model_class, max_seq_length
+    sequence_data, model_class, max_seq_length
 ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Calculates the embeddings for the sequences by
     calling the model forward function. Filters the sequences by max/min
@@ -143,14 +143,12 @@ def _calc_embeddings(
 
     names = list(sequence_data.keys())
     sequences = list(sequence_data.values())
-    #   print(sequences[0])
-    embeddings, lengths = filter_and_calc_embeddings(
+
+    filtered_names, embeddings, lengths = filter_and_calc_embeddings(
         names, sequences, model_class, max_seq_length
     )
 
-    # pdb.set_trace()
-
-    return names, embeddings, lengths
+    return filtered_names, embeddings, lengths
 
 
 def search(
@@ -199,7 +197,7 @@ def search_only(args):
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
-#    start_time = time.time()
+    #    start_time = time.time()
 
     all_scores = []
     all_indices = []
@@ -209,7 +207,7 @@ def search_only(args):
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
 
-#    total_search_time = time.time() - start_time
+    #    total_search_time = time.time() - start_time
 
     return query_names, all_scores, all_indices
 
@@ -225,12 +223,12 @@ def filter_only(arg_list):
     ) = arg_list
     filtration_time = time.time()
     # Call the filter_scores function from the Rust module
-    #print("Calling rust function...")
+    # print("Calling rust function...")
     filtered_scores_list = my_rust_module.filter_scores(
         all_scores, all_indices, unrolled_names
     )
 
-    #print("Filtration complete")
+    # print("Filtration complete")
 
     total_filtration_time = time.time() - filtration_time
 
@@ -343,6 +341,7 @@ def _setup_targets_for_search(
 ):
     """Creates the Faiss Index object using the unrolled
     target embddings"""
+    faiss.omp_set_num_threads(num_threads)
 
     unrolled_names = np.repeat(target_names, lengths)
     unrolled_targets = torch.cat(
@@ -362,7 +361,6 @@ def _setup_targets_for_search(
             embed_dim=unrolled_targets.shape[-1],
             distance_metric="cosine" if normalize_embeddings else "l2",
             index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            num_threads=num_threads,
             device=index_device,
         )
         logger.info("Adding targets to index.")
@@ -371,7 +369,6 @@ def _setup_targets_for_search(
         else:
             index.add(unrolled_targets)
         faiss.write_index(index, index_path)
-        print(index_path)
     else:
         print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
@@ -396,4 +393,3 @@ def evaluate(
     """
 
     filter(query_embeddings, query_names, params, index, unrolled_names, write_results)
-

@@ -95,14 +95,10 @@ def create_faiss_index(
     embeddings,
     embed_dim,
     index_string,
-    num_threads,
     device="cpu",
     distance_metric="cosine",
 ):
-
     log.info(f"using index with {distance_metric} metric.")
-
-    faiss.omp_set_num_threads(num_threads)
 
     if index_string == "IndexIVFFlat":
         quantizer = faiss.IndexFlatL2(embed_dim)  # the other index
@@ -111,7 +107,9 @@ def create_faiss_index(
     if index_string == "Flat":
         if distance_metric == "cosine":
             log.info("Using normalized embeddings for cosine metric.")
-            index = faiss.index_factory(embed_dim, index_string, faiss.METRIC_INNER_PRODUCT)
+            index = faiss.index_factory(
+                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
+            )
         else:
             index = faiss.index_factory(embed_dim, index_string)
 
@@ -133,7 +131,9 @@ def create_faiss_index(
     else:
         if distance_metric == "cosine":
             log.info("Normalizing embeddings for use with cosine metric.")
-            index = faiss.index_factory(embed_dim, index_string, faiss.METRIC_INNER_PRODUCT)
+            index = faiss.index_factory(
+                embed_dim, index_string, faiss.METRIC_INNER_PRODUCT
+            )
         else:
             index = faiss.index_factory(embed_dim, index_string)
 
@@ -194,7 +194,9 @@ def parse_labels(labelstring: str) -> Union[List[str], None]:
 
     if "(" in labelstring:
         # labelstring: ACC_ID (BEGIN END E_VALUE)
-        labels = labelstring[begin_char + 1 :].replace(")", "").replace("(", "").split(" ")
+        labels = (
+            labelstring[begin_char + 1 :].replace(")", "").replace("(", "").split(" ")
+        )
         labels = list(filter(len, labels))
         labelset = []
 
@@ -354,7 +356,6 @@ class AAIndexFFT:
 
 
 def encode_with_aaindex():
-
     with open("src/resources/indices.txt") as f:
         data = f.read()
     split = data.split("//")
