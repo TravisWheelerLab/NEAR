@@ -10,8 +10,8 @@ target_embeddings: 'target_embeddings_reversed.pt'
 target_names: 'reversed_names.pickle'
 target_lengths: 'reversed_lengths.pickle'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
-num_threads: 22
-omp_num_threads: 6
+num_threads: 16
+omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0
@@ -20,3 +20,7 @@ profiler: False
 nprobe: 50
 write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-reversed.index"
+unrolled_names_path: "/xdisk/twheeler/daphnedemekas/unrolled-names-reversed.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-reversed.txt"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-reversed.txt"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-reversed.txt"
