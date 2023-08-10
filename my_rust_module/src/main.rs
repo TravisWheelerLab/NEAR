@@ -62,8 +62,8 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, std::io::Error> {
     println!("In new rust module");
     let scores_array_list = read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all_scores.h5")?;
     let indices_array_list =
-        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all_indices.h5")?;
-    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled_names-reversed.txt")?;
+        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/new-indices.h5")?;
+    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt")?;
 
     println!("The length of scores array is: {}", scores_array_list.len());
     println!(
@@ -94,21 +94,26 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, std::io::Error> {
                     None => Ordering::Equal,
                 }
             });
-
-            //let sorted_names: Vec<_> = sorted_match_idx.iter().map(|&idx| names[idx].clone()).collect();
-            //let sorted_indices: Vec<_> = sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
-            //let sorted_matches: Vec<_> = sorted_match_idx.iter().map(|&idx| match_scores[idx]).collect();
             let sorted_names: Vec<_> = sorted_match_idx
                 .iter()
-                .map(|&idx| names[idx].clone())
+                .filter_map(|&idx| names.get(idx))
                 .collect();
-            //let sorted_indices: Vec<_> = sorted_match_idx.iter().filter_map(|&idx| indices.get(idx)).collect();
 
-            let sorted_indices: Vec<usize> =
-                sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
+            // let sorted_names: Vec<_> = sorted_match_idx
+            //     .iter()
+            //     .map(|&idx| names[idx].clone())
+            //     .collect();
+
+            let sorted_indices: Vec<_> = sorted_match_idx
+                .iter()
+                .filter_map(|&idx| indices.get(idx))
+                .collect();
+
+            // let sorted_indices: Vec<usize> =
+            //     sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
             let sorted_matches: Vec<_> = sorted_match_idx
                 .iter()
-                .map(|&idx| match_scores[idx])
+                .filter_map(|&idx| match_scores[idx])
                 .collect();
 
             // Create a HashSet to store the unique values
