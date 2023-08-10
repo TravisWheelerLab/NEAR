@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet; // Import HashSet
 use std::env;
+use std::time::Instant;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead, BufReader};
@@ -123,7 +124,7 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, hdf5::Error> {
             //     sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
             let sorted_matches: Vec<_> = sorted_match_idx
                 .iter()
-                .filter_map(|&idx| match_scores[idx])
+                .map(|&idx| match_scores[idx])
                 .collect();
 
             // Create a HashSet to store the unique values
@@ -144,7 +145,7 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, hdf5::Error> {
                 .collect();
             let new_names: Vec<_> = new_indices
                 .iter()
-                .map(|&idx| unrolled_names[idx].clone())
+                .map(|&idx| unrolled_names[*idx].clone())
                 .collect();
             let new_scores: Vec<_> = unique_indices
                 .iter()
@@ -183,7 +184,19 @@ fn write(
     }
 }
 
+fn time_it<F, T>(func: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let result = func();
+    let duration = start.elapsed();
+    println!("Function executed in: {:?}", duration);
+    result
+}
+
 fn main() {
+    time_it(|| {
     let args: Vec<String> = env::args().collect();
     // Ensure there are enough arguments provided
     if args.len() != 4 {
@@ -221,4 +234,5 @@ fn main() {
             return;
         }
     }
+    });
 }
