@@ -12,9 +12,15 @@ def reduce_indices(indices, names, unrolled_names):
 
 print("load indices")
 # Open the file in 'read' mode
+
+indices = []
 with h5py.File("/xdisk/twheeler/daphnedemekas/all-indices.h5", "r") as f:
     # Assuming you know the dataset name in your .h5 file is 'dataset_name'
-    indices = f["dataset_name"][:]
+    i = 0
+    while f"array_{i}" in f:
+        indices.append(f[f"array_{i}"][:])
+        i += 1
+
 
 print(f"Len indices: {len(indices)}")
 
