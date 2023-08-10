@@ -38,8 +38,8 @@ with open("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as f:
 
 print("Reducing")
 new_indices = []
-for indices in new_indices:
-    idx = reduce_indices(indices, target_names, unrolled_names)
+for index_list in indices:
+    idx = reduce_indices(index_list, target_names, unrolled_names)
     new_indices.append(idx)
 
 print("Saving new indices")
