@@ -356,7 +356,6 @@ def evaluate_multiprocessing_python(_config):
             params.save_dir,
             index,
             index_mapping,
-            target_names,
             params.max_seq_length,
             params.write_results,
         )

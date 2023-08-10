@@ -163,14 +163,14 @@ def search(
 
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
-    indices_array = reduce_indices(indices_array, target_names, index_mapping)
+    indices_array = reduce_indices(indices_array.to("cpu").numpy(), index_mapping)
 
     search_time = time.time() - search_start
 
     filtration_time = time.time()
 
     filtered_scores = filter_scores(
-        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), target_names
+        scores_array.to("cpu").numpy(), indices_array, target_names
     )
 
     filtration_time = time.time() - filtration_time
@@ -187,7 +187,7 @@ def save_target_embeddings(arg_list):
     return targets, lengths
 
 
-def reduce_indices(indices, names, index_mapping):
+def reduce_indices(indices, index_mapping):
     # indices is of shape (seq len, 1000)
     new_indices = np.zeros_like(indices)
 
@@ -268,7 +268,6 @@ def filter(arg_list):
         output_path,
         index,
         index_mapping,
-        target_names,
         max_seq_length,
         write_results,
     ) = arg_list
