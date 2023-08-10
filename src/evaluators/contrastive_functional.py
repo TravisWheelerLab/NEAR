@@ -268,10 +268,7 @@ def filter(arg_list):
         model,
         output_path,
         index,
-<<<<<<< HEAD
         target_names,
-=======
->>>>>>> 3716a664ce98ac37a69d680230c5b27ef8436b81
         index_mapping,
         max_seq_length,
         write_results,

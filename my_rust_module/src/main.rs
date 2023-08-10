@@ -75,58 +75,66 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, hdf5::Error> {
     println!("In new rust module");
     let scores_array_list = read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all-scores.h5").expect("Failed to read HDF5 data");
     let indices_array_list = read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/new-indices.h5").expect("Failed to read HDF5 data");
-    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt").expect("Failed to read unrolled names");
+    let target_names = read_names("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt").expect("Failed to read unrolled names");
     println!("The length of scores array is: {}", scores_array_list.len());
     println!(
         "The length of scores array is: {}",
         indices_array_list.len()
     );
-    println!("The length of unrolled names: {}", unrolled_names.len());
+    println!("The length of target names: {}", target_names.len());
     let mut idx = 0;
+ 
+
+
+
+    let mut match_scores: &Vec<f64> = &vec![0.0; 1000];
+    let mut indices: &Vec<usize> = &vec![0;1000];
+
+    let mut names: Vec<&str> = vec![&""; 1000];
+    
+    //let match_indices: Vec<usize> =  (0..1000).collect();
+
+    let mut sorted_match_idx: Vec<usize> = (0..1000).collect();
+
+    let mut sorted_names: Vec<&str> = vec![&""; 1000];
+
+    let mut sorted_indices: Vec<usize> = vec![0; 1000];
+
+    let mut sorted_matches: Vec<f64> = vec![0.0; 1000];
+
     for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {
         idx += 1;
         println!("{idx}");
         let mut filtered_scores: HashMap<String, f64> = HashMap::new();
 
         for match_idx in 0..scores_array.len() {
-            let match_scores = &scores_array[match_idx];
-            let indices = &indices_array[match_idx];
-            //println!("match_idx {}", match_idx);
-            //println!("indices {:?}", indices);
-            let names: Vec<_> = indices
-                .iter()
-                .map(|&idx| unrolled_names[idx].clone())
-                .collect();
-
-            let mut sorted_match_idx: Vec<usize> = (0..match_scores.len()).collect();
+            match_scores = &scores_array[match_idx];
+            
+            indices = &indices_array[match_idx]; 
+           
+            unsafe { 
+            for (i, &idx) in indices.iter().enumerate() {
+                names[i] = &target_names.get_unchecked(idx);
+            } 
+            }
+            sorted_match_idx.sort_unstable();
+            
             sorted_match_idx.sort_unstable_by(|&a, &b| {
                 match match_scores[b].partial_cmp(&match_scores[a]) {
                     Some(ordering) => ordering,
                     None => Ordering::Equal,
                 }
             });
-            let sorted_names: Vec<_> = sorted_match_idx
-                .iter()
-                .filter_map(|&idx| names.get(idx))
-                .collect();
-
-            // let sorted_names: Vec<_> = sorted_match_idx
-            //     .iter()
-            //     .map(|&idx| names[idx].clone())
-            //     .collect();
-
-            let sorted_indices: Vec<_> = sorted_match_idx
-                .iter()
-                .filter_map(|&idx| indices.get(idx))
-                .collect();
-
-            // let sorted_indices: Vec<usize> =
-            //     sorted_match_idx.iter().map(|&idx| indices[idx]).collect();
-            let sorted_matches: Vec<_> = sorted_match_idx
-                .iter()
-                .map(|&idx| match_scores[idx])
-                .collect();
-
+            
+            unsafe {
+            let mut i = 0;
+            for &idx in &sorted_match_idx {
+                sorted_names[i] = &names.get_unchecked(idx);
+                sorted_indices[i] = indices[idx];
+                sorted_matches[i] = match_scores[idx];
+                i += 1;
+            }
+            }
             // Create a HashSet to store the unique values
             let mut unique_values = HashSet::new();
             let mut unique_indices = Vec::new();
@@ -145,16 +153,14 @@ fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, hdf5::Error> {
                 .collect();
             let new_names: Vec<_> = new_indices
                 .iter()
-                .map(|&idx| unrolled_names[*idx].clone())
+                .map(|&idx| target_names[idx].clone())
                 .collect();
             let new_scores: Vec<_> = unique_indices
                 .iter()
                 .map(|&idx| sorted_matches[idx])
                 .collect();
-
-            //println!("unique indices {:?}", unique_indices);
-            //println!("sorted_names {:?}", sorted_names);
-            for (distance, name) in new_scores.iter().zip(new_names.iter()) {
+         
+          for (distance, name) in new_scores.iter().zip(new_names.iter()) {
                 *filtered_scores.entry(name.to_string()).or_insert(0.0) += *distance;
             }
         }
