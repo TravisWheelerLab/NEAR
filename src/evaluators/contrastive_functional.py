@@ -132,14 +132,6 @@ def filter_and_calc_embeddings2(
     return embeddings, lengths
 
 
-def reduce_indices(indices, names, unrolled_names):
-    new_indices = []
-    for idx in indices:
-        new_indices.append(names.index(unrolled_names[idx]))
-
-    return new_indices
-
-
 @torch.no_grad()
 def _calc_embeddings(
     sequence_data, model_class, max_seq_length
@@ -196,9 +188,13 @@ def save_target_embeddings(arg_list):
 
 
 def reduce_indices(indices, names, unrolled_names):
-    new_indices = []
-    for idx in indices:
-        new_indices.append(names.index(unrolled_names[idx]))
+    # indices is of shape (seq len, 1000)
+    new_indices = np.zeros((len(indices), 1000))
+
+    for i, amino_index_list in enumerate(indices):
+        new_indices[i] = np.array(
+            [names.index(unrolled_names[idx]) for idx in amino_index_list]
+        )
 
     return new_indices
 
