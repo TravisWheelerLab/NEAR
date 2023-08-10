@@ -3,6 +3,60 @@ use pyo3::wrap_pyfunction;
 use std::collections::HashMap;
 use std::collections::HashSet; // Import HashSet
 use std::cmp::Ordering;
+extern crate hdf5;
+use ndarray::Array2;
+use std::fs::File;
+use std::io::Write;
+use std::io::{self, BufRead, BufReader};
+
+
+fn read_hdf5_to_vec_f64(path: &str) -> Result<Vec<Vec<Vec<f64>>>, hdf5::Error> {
+    let file = hdf5::File::open(path).map_err(|e| io::Error::new(io::ErrorKind::Other, e)).expect("Failed to open HDF5 file");
+    let mut all_data: Vec<Vec<Vec<f64>>> = Vec::new();
+
+    let mut i = 0;
+    loop {
+        match file.dataset(&format!("array_{}", i)) {
+            Ok(dataset) => {
+                let data: Array2<f64> = dataset.read_2d()?;
+                let mut row_vecs = Vec::new();
+                for row in data.outer_iter() {
+                    row_vecs.push(row.to_vec());
+                }
+                all_data.push(row_vecs);
+                //all_data.push(data.into_raw_vec());
+            }
+            Err(_) => break,
+        }
+        i += 1;
+    }
+
+    Ok(all_data)
+}
+
+fn read_hdf5_to_vec_usize(path: &str) -> Result<Vec<Vec<Vec<usize>>>, hdf5::Error> {
+    let file = hdf5::File::open(path).map_err(|e| io::Error::new(io::ErrorKind::Other, e)).expect("Failed to open HDF5 file");
+    let mut all_data: Vec<Vec<Vec<usize>>> = Vec::new();
+
+    let mut i = 0;
+    loop {
+        match file.dataset(&format!("array_{}", i)) {
+            Ok(dataset) => {
+                let data: Array2<usize> = dataset.read_2d()?;
+ //               all_data.push(data.into_raw_vec());
+                let mut row_vecs = Vec::new();
+                for row in data.outer_iter() {
+                    row_vecs.push(row.to_vec());
+                }
+                all_data.push(row_vecs);
+            }
+            Err(_) => break,
+        }
+        i += 1;
+    }
+
+    Ok(all_data)
+}
 
 #[pyfunction]
 fn filter_scores(
@@ -17,6 +71,9 @@ fn filter_scores(
     //let scores_array_list = read_scores("/xdisk/twheeler/daphnedemekas/all_scores-reversed.txt")?;
     //let indices_array_list = read_indices("/xdisk/twheeler/daphnedemekas/all_indices-reversed.txt")?;
     //let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled_names.txt")?;
+    let scores_array_list = read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all_scores.h5").expect("Failed to read HDF5 data");
+    let indices_array_list =
+        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all_indices.h5").expect("Failed to read HDF5 data");
 
     let mut idx = 0;
     for (scores_array, indices_array) in scores_array_list.iter().zip(indices_array_list.iter()) {

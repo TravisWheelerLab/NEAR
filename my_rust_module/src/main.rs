@@ -7,18 +7,25 @@ use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead, BufReader};
+//use ndarray::Array2;
 extern crate hdf5;
+use ndarray::Array2;
 
-fn read_hdf5_to_vec_f64(path: &str) -> hdf5::Result<Vec<Vec<Vec<f64>>>> {
-    let file = hdf5::File::open(path)?;
+fn read_hdf5_to_vec_f64(path: &str) -> Result<Vec<Vec<Vec<f64>>>, hdf5::Error> {
+    let file = hdf5::File::open(path).map_err(|e| io::Error::new(io::ErrorKind::Other, e)).expect("Failed to open HDF5 file");
     let mut all_data: Vec<Vec<Vec<f64>>> = Vec::new();
 
-    let i = 0;
+    let mut i = 0;
     loop {
         match file.dataset(&format!("array_{}", i)) {
             Ok(dataset) => {
-                let data: hdf5::Array2<f64> = dataset.read_2d()?;
-                all_data.push(data.to_vec());
+                let data: Array2<f64> = dataset.read_2d()?;
+                let mut row_vecs = Vec::new();
+                for row in data.outer_iter() {
+                    row_vecs.push(row.to_vec());
+                }
+                all_data.push(row_vecs);
+                //all_data.push(data.into_raw_vec());
             }
             Err(_) => break,
         }
@@ -28,16 +35,21 @@ fn read_hdf5_to_vec_f64(path: &str) -> hdf5::Result<Vec<Vec<Vec<f64>>>> {
     Ok(all_data)
 }
 
-fn read_hdf5_to_vec_usize(path: &str) -> hdf5::Result<Vec<Vec<Vec<usize>>>> {
-    let file = hdf5::File::open(path)?;
+fn read_hdf5_to_vec_usize(path: &str) -> Result<Vec<Vec<Vec<usize>>>, hdf5::Error> {
+    let file = hdf5::File::open(path).map_err(|e| io::Error::new(io::ErrorKind::Other, e)).expect("Failed to open HDF5 file");
     let mut all_data: Vec<Vec<Vec<usize>>> = Vec::new();
 
-    let i = 0;
+    let mut i = 0;
     loop {
         match file.dataset(&format!("array_{}", i)) {
             Ok(dataset) => {
-                let data: hdf5::Array2<usize> = dataset.read_2d()?;
-                all_data.push(data.to_vec());
+                let data: Array2<usize> = dataset.read_2d()?;
+ //               all_data.push(data.into_raw_vec());
+                let mut row_vecs = Vec::new();
+                for row in data.outer_iter() {
+                    row_vecs.push(row.to_vec());
+                }   
+                all_data.push(row_vecs); 
             }
             Err(_) => break,
         }
@@ -56,14 +68,14 @@ fn read_names(filename: &str) -> io::Result<Vec<String>> {
     Ok(names)
 }
 
-fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, std::io::Error> {
+fn filter_scores_inner() -> Result<Vec<HashMap<String, f64>>, hdf5::Error> {
     let mut filtered_scores_list = Vec::new();
 
     println!("In new rust module");
-    let scores_array_list = read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all_scores.h5")?;
+    let scores_array_list = read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all-scores.h5").expect("Failed to read HDF5 data");
     let indices_array_list =
-        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all_indices.h5")?;
-    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled_names-reversed.txt")?;
+        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/new-indices.h5").expect("Failed to read HDF5 data");
+    let unrolled_names = read_names("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt").expect("Failed to read unrolled names");
 
     println!("The length of scores array is: {}", scores_array_list.len());
     println!(
