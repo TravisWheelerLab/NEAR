@@ -14,12 +14,12 @@ from src.utils import create_faiss_index, encode_string_sequence
 import my_rust_module
 import sys
 from collections import defaultdict
-
+import pdb
 logger = logging.getLogger("evaluate")
 
 
 def filter_scores(
-    scores_array_list: np.array, indices_array_list: np.array, unrolled_names: np.array
+    scores_array: np.array, indices_array: np.array, unrolled_names: np.array
 ) -> dict:
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
@@ -34,29 +34,30 @@ def filter_scores(
     unrolled_names: an array of target names that the indices in indices_array correspond to
     """
 
-    filtered_scores_list = []
-    for scores_array, indices_array in zip(scores_array_list, indices_array_list):
-        filtered_scores: dict = defaultdict(float)
+    #filtered_scores_list = []
+    #for scores_array, indices_array in zip(scores_array_list, indices_array_list):
+    filtered_scores: dict = defaultdict(float)
 
         # iterate over query amino scores
-        for match_idx in range(len(scores_array)):
-            match_scores = scores_array[match_idx]
-            names = unrolled_names[
-                indices_array[match_idx]
-            ]  # the names of the targets for each 1000 hits
-            sorted_match_idx = np.argsort(match_scores)[::-1]
+    for match_idx in range(len(scores_array)):
+        match_scores = scores_array[match_idx]
+        names = unrolled_names[
+            indices_array[match_idx]
+        ]  # the names of the targets for each 1000 hits
+        sorted_match_idx = np.argsort(match_scores)[::-1]
 
-            _, unique_indices = np.unique(names[sorted_match_idx], return_index=True)
-            new_indices = list(
-                indices_array[match_idx][sorted_match_idx][unique_indices]
-            )
-            new_scores = list(match_scores[sorted_match_idx][unique_indices])
+        #pdb.set_trace()           
+        _, unique_indices = np.unique(names[sorted_match_idx], return_index=True)
+        new_indices = list(
+            indices_array[match_idx][sorted_match_idx][unique_indices]
+        )
+        new_scores = list(match_scores[sorted_match_idx][unique_indices])
 
-            for distance, name in zip(new_scores, unrolled_names[new_indices]):
-                filtered_scores[name] += distance
-            filtered_scores_list.append(filtered_scores)
+        for distance, name in zip(new_scores, unrolled_names[new_indices]):
+            filtered_scores[name] += distance
+        #filtered_scores_list.append(filtered_scores)
 
-    return filtered_scores_list
+    return filtered_scores
 
 
 def filter_and_calc_embeddings(
@@ -153,7 +154,7 @@ def _calc_embeddings(
 
 
 def search(
-    index, unrolled_names, target_names, query_embedding: torch.Tensor
+    index, index_mapping, target_names, query_embedding: torch.Tensor
 ) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
@@ -163,14 +164,14 @@ def search(
 
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
-    indices_array = reduce_indices(indices_array, target_names, unrolled_names)
+    indices_array = reduce_indices(indices_array.to("cpu").numpy(), index_mapping)
 
     search_time = time.time() - search_start
 
     filtration_time = time.time()
 
     filtered_scores = filter_scores(
-        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), target_names
+        scores_array.to("cpu").numpy(), indices_array, target_names
     )
 
     filtration_time = time.time() - filtration_time
@@ -187,14 +188,15 @@ def save_target_embeddings(arg_list):
     return targets, lengths
 
 
-def reduce_indices(indices, names, unrolled_names):
+def reduce_indices(indices, index_mapping):
     # indices is of shape (seq len, 1000)
-    new_indices = np.zeros((len(indices), 1000))
+    new_indices = np.zeros_like(indices)
 
     for i, amino_index_list in enumerate(indices):
-        new_indices[i] = np.array(
-            [names.index(unrolled_names[idx]) for idx in amino_index_list]
-        )
+        # new_indices[i] = np.array(
+        #    [names.index(unrolled_names[idx]) for idx in amino_index_list]
+        # )
+        new_indices[i] = np.array([index_mapping[idx] for idx in amino_index_list])
 
     return new_indices
 
@@ -266,8 +268,8 @@ def filter(arg_list):
         model,
         output_path,
         index,
-        unrolled_names,
         target_names,
+        index_mapping,
         max_seq_length,
         write_results,
     ) = arg_list
@@ -284,7 +286,7 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, target_names, queries[i]
+            index, index_mapping, target_names, queries[i]
         )
         total_search_time += search_time
 
@@ -390,3 +392,4 @@ def evaluate(
     """
 
     filter(query_embeddings, query_names, params, index, unrolled_names, write_results)
+

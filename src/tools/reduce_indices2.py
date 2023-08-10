@@ -7,8 +7,8 @@ def reduce_indices(indices, names, index_mapping):
     # indices is of shape (seq len, 1000)
     new_indices = np.zeros_like(indices)
 
-    for i, amino_index_list in enumerate(indices):
-        
+    for i, amino_index_list in tqdm.tqdm(enumerate(indices)):
+
         #new_indices[i] = np.array(
         #    [names.index(unrolled_names[idx]) for idx in amino_index_list]
         #)
@@ -42,34 +42,23 @@ for length in target_lengths:
         k = i + j
         index_mapping[k] = target_idx
     j += length
-    target_idx += 1   
+    target_idx += 1
 
 print(len(index_mapping))
 print(33009630)
 
-print("reading...")
+print("reducing...")
 reduced_indices = []
-
-all_indices = []
 with h5py.File("/xdisk/twheeler/daphnedemekas/all-indices.h5", "r") as f:
     # Assuming you know the dataset name in your .h5 file is 'dataset_name'
     i = 0
     print(i)
     while f"array_{i}" in f:
         myarray = f[f"array_{i}"][:]
-        #reduced_array = reduce_indices(myarray, target_names, index_mapping)
-        #reduced_indices.append(reduced_array)
-        all_indices.append(myarray)
+        reduced_array = reduce_indices(myarray, target_names, index_mapping)
+        reduced_indices.append(reduced_array)
         i += 1
-print('reducing...')
-
-new_indices = []
-for index_list in tqdm.tqdm(all_indices):
-    idx = reduce_indices(index_list, target_names, index_mapping)
-    new_indices.append(idx)
-
 print("Saving new indices")
 with h5py.File("/xdisk/twheeler/daphnedemekas/new-indices.h5", "w") as hf:
     for i, arr in enumerate(new_indices):
         hf.create_dataset(f"array_{i}", data=arr)
-
