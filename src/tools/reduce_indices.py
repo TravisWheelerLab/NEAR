@@ -28,7 +28,7 @@ unrolled_names = []
 
 print("load unrolled names")
 with open("/xdisk/twheeler/daphnedemekas/unrolled-names.txt", "w") as f:
-    unrolled_names = [line.strip("\n") for line in f.readliens()]
+    unrolled_names = [line.strip("\n") for line in f.readlines()]
 
 print("load targets")
 
