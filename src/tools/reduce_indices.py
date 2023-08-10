@@ -37,7 +37,10 @@ with open("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as f:
     target_names = [t.strip("\n") for t in target_names]
 
 print("Reducing")
-new_indices = reduce_indices(indices, target_names, unrolled_names)
+new_indices = []
+for indices in new_indices:
+    idx = reduce_indices(indices, target_names, unrolled_names)
+    new_indices.append(idx)
 
 print("Saving new indices")
 with h5py.File("/xdisk/twheeler/daphnedemekas/new-indices.h5", "w") as hf:
