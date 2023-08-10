@@ -132,6 +132,14 @@ def filter_and_calc_embeddings2(
     return embeddings, lengths
 
 
+def reduce_indices(indices, names, unrolled_names):
+    new_indices = []
+    for idx in indices:
+        new_indices.append(names.index(unrolled_names[idx]))
+
+    return new_indices
+
+
 @torch.no_grad()
 def _calc_embeddings(
     sequence_data, model_class, max_seq_length
@@ -153,7 +161,7 @@ def _calc_embeddings(
 
 
 def search(
-    index, unrolled_names, query_embedding: torch.Tensor
+    index, unrolled_names, target_names, query_embedding: torch.Tensor
 ) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
@@ -163,21 +171,17 @@ def search(
 
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
+    indices_array = reduce_indices(indices_array, target_names, unrolled_names)
+
     search_time = time.time() - search_start
 
     filtration_time = time.time()
 
-    # Call the filter_scores function from the Rust module
-    filtered_scores = my_rust_module.filter_scores(
-        [scores_array.to("cpu").numpy()],
-        [indices_array.to("cpu").numpy()],
-        unrolled_names,
+    filtered_scores = filter_scores(
+        scores_array.to("cpu").numpy(), indices_array.to("cpu").numpy(), target_names
     )
 
     filtration_time = time.time() - filtration_time
-
-    print(f"Search time: {search_time}")
-    print(f"Filtration time: {filtration_time}")
 
     # TODO: divide by query sequence length and multiply by median sequence length
     return filtered_scores, search_time, filtration_time
@@ -262,49 +266,35 @@ def filter(arg_list):
     cluster space"""
 
     (
-        query_names,
-        query_sequences,
+        query_data,
         model,
         output_path,
         index,
         unrolled_names,
+        target_names,
         max_seq_length,
         write_results,
     ) = arg_list
 
-    print("Calculating embeddings...")
-    queries, _ = _calc_embeddings(query_sequences, model, max_seq_length)
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
     start_time = time.time()
 
-    all_scores = []
-    all_indices = []
-    print("Beginning Search...")
+    total_search_time = 0
+    total_filtration_time = 0
 
-    for i in range(len(queries)):
-        scores, indices = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores.numpy())
-        all_indices.append(indices.numpy())
+    for i in tqdm.tqdm(range(len(queries))):
+        filtered_scores, search_time, filtration_time = search(
+            index, unrolled_names, target_names, queries[i]
+        )
+        total_search_time += search_time
 
-    total_search_time = time.time() - start_time
+        total_filtration_time += filtration_time
 
-    filtration_time = time.time()
-    # Call the filter_scores function from the Rust module
-    print("Calling rust function...")
-
-    filtered_scores_list = my_rust_module.filter_scores(
-        all_scores, all_indices, unrolled_names
-    )
-
-    total_filtration_time = time.time() - filtration_time
-
-    assert len(filtered_scores_list) == len(queries)
-
-    if write_results:
-        for i, filtered_scores in enumerate(filtered_scores_list):
+        if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
             for name, distance in filtered_scores.items():
