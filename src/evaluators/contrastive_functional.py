@@ -191,6 +191,14 @@ def save_target_embeddings(arg_list):
     return targets, lengths
 
 
+def reduce_indices(indices, names, unrolled_names):
+    new_indices = []
+    for idx in indices:
+        new_indices.append(names.index(unrolled_names[idx]))
+
+    return new_indices
+
+
 def search_only(args):
     (query_data, model, output_path, index, max_seq_length) = args
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
@@ -202,11 +210,12 @@ def search_only(args):
 
     all_scores = []
     all_indices = []
-    
+
     print("Searching...")
     for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
+
         all_indices.append(indices.to("cpu").numpy())
 
     #    total_search_time = time.time() - start_time
