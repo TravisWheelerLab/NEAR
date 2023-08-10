@@ -153,7 +153,7 @@ def _calc_embeddings(
 
 
 def search(
-    index, unrolled_names, target_names, query_embedding: torch.Tensor
+    index, index_mapping, target_names, query_embedding: torch.Tensor
 ) -> List[Tuple[str, float]]:
     """Searches through the target DB and gathers a
     filtered list of sequences and distances to their centre
@@ -163,7 +163,7 @@ def search(
 
     scores_array, indices_array = index.search(query_embedding.contiguous(), k=1000)
 
-    indices_array = reduce_indices(indices_array, target_names, unrolled_names)
+    indices_array = reduce_indices(indices_array, target_names, index_mapping)
 
     search_time = time.time() - search_start
 
@@ -266,7 +266,7 @@ def filter(arg_list):
         model,
         output_path,
         index,
-        unrolled_names,
+        index_mapping,
         target_names,
         max_seq_length,
         write_results,
@@ -284,7 +284,7 @@ def filter(arg_list):
 
     for i in tqdm.tqdm(range(len(queries))):
         filtered_scores, search_time, filtration_time = search(
-            index, unrolled_names, target_names, queries[i]
+            index, index_mapping, target_names, queries[i]
         )
         total_search_time += search_time
 

@@ -327,7 +327,8 @@ def evaluate_multiprocessing_python(_config):
     print(f"omp_num_threads: {params.omp_num_threads}")
 
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
+    # TODO: don't return unrolled names
+    _, index = _setup_targets_for_search(
         target_embeddings,
         target_names,
         target_lengths,
@@ -337,13 +338,24 @@ def evaluate_multiprocessing_python(_config):
         index_path=params.index_path,
     )
 
+    index_mapping = {}
+
+    target_idx = 0
+    j = 0
+    for length in target_lengths:
+        for i in range(length):
+            k = i + j
+            index_mapping[k] = target_idx
+        j += length
+        target_idx += 1
+
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
             index,
-            unrolled_names,
+            index_mapping,
             target_names,
             params.max_seq_length,
             params.write_results,

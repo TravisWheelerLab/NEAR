@@ -1,11 +1,16 @@
 import h5py
-import time
+import tqdm
+import numpy as np
 
 
 def reduce_indices(indices, names, unrolled_names):
-    new_indices = []
-    for idx in indices:
-        new_indices.append(names.index(unrolled_names[idx]))
+    # indices is of shape (seq len, 1000)
+    new_indices = np.zeros((len(indices), 1000))
+
+    for i, amino_index_list in enumerate(indices):
+        new_indices[i] = np.array(
+            [names.index(unrolled_names[idx]) for idx in amino_index_list]
+        )
 
     return new_indices
 
@@ -38,7 +43,7 @@ with open("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as f:
 
 print("Reducing")
 new_indices = []
-for index_list in indices:
+for index_list in tqdm.tqdm(indices):
     idx = reduce_indices(index_list, target_names, unrolled_names)
     new_indices.append(idx)
 
