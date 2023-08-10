@@ -31,6 +31,7 @@ import pdb
 import my_rust_module
 import concurrent.futures
 import numpy as np
+
 HOME = os.environ["HOME"]
 
 
@@ -224,6 +225,7 @@ def evaluate_multiprocessing(_config):
     q_chunk_size = len(query_sequences) // params.num_threads
 
     target_embeddings, target_names, target_lengths = load_targets(params)
+    index_mapping = get_index_mapping(target_lengths)
 
     assert len(target_lengths) == len(target_names) == len(target_embeddings)
     unrolled_names, index = _setup_targets_for_search(
@@ -246,6 +248,7 @@ def evaluate_multiprocessing(_config):
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
+            index_mapping,
             params.save_dir,
             index,
             params.max_seq_length,
@@ -280,6 +283,20 @@ def evaluate_multiprocessing(_config):
         params.indices_path,
         params.query_names_path,
     )
+
+
+def get_index_mapping(target_lengths):
+    index_mapping = {}
+
+    target_idx = 0
+    j = 0
+    for length in target_lengths:
+        for i in range(length):
+            k = i + j
+            index_mapping[k] = target_idx
+        j += length
+        target_idx += 1
+    return index_mapping
 
 
 def search_only_new(query_data):
@@ -337,17 +354,7 @@ def evaluate_multiprocessing_python(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
-
-    index_mapping = {}
-
-    target_idx = 0
-    j = 0
-    for length in target_lengths:
-        for i in range(length):
-            k = i + j
-            index_mapping[k] = target_idx
-        j += length
-        target_idx += 1
+    index_mapping = get_index_mapping(target_lengths)
     target_names = np.array(target_names)
     arg_list = [
         (
@@ -456,4 +463,3 @@ if __name__ == "__main__":
         evaluate_multiprocessing_python(_config)
     else:
         evaluate(_config)
-

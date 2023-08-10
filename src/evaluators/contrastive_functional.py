@@ -202,7 +202,7 @@ def reduce_indices(indices, index_mapping):
 
 
 def search_only(args):
-    (query_data, model, output_path, index, max_seq_length) = args
+    (query_data, model, index_mapping, output_path, index, max_seq_length) = args
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
     if not os.path.exists(output_path):
@@ -218,7 +218,7 @@ def search_only(args):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
 
-        all_indices.append(indices.to("cpu").numpy())
+        all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
 
     #    total_search_time = time.time() - start_time
 
