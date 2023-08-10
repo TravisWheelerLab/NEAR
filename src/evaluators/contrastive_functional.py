@@ -187,14 +187,15 @@ def save_target_embeddings(arg_list):
     return targets, lengths
 
 
-def reduce_indices(indices, names, unrolled_names):
+def reduce_indices(indices, names, index_mapping):
     # indices is of shape (seq len, 1000)
-    new_indices = np.zeros((len(indices), 1000))
+    new_indices = np.zeros_like(indices)
 
     for i, amino_index_list in enumerate(indices):
-        new_indices[i] = np.array(
-            [names.index(unrolled_names[idx]) for idx in amino_index_list]
-        )
+        # new_indices[i] = np.array(
+        #    [names.index(unrolled_names[idx]) for idx in amino_index_list]
+        # )
+        new_indices[i] = np.array([index_mapping[idx] for idx in amino_index_list])
 
     return new_indices
 
