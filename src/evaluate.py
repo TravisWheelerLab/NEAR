@@ -237,12 +237,12 @@ def evaluate_multiprocessing(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
-    
-    #TODO: DELETE THIS
 
-    if not os.path.exists('/xdisk/twheeler/daphnedemekas/unrolled_names.txt'):
-        #print(f"Saving unrolled names to {params.unrolled_names_path}")
-        with open('/xdisk/twheeler/daphnedemekas/unrolled_names.txt', "w") as f:
+    # TODO: DELETE THIS
+
+    if not os.path.exists("/xdisk/twheeler/daphnedemekas/unrolled_names.txt"):
+        # print(f"Saving unrolled names to {params.unrolled_names_path}")
+        with open("/xdisk/twheeler/daphnedemekas/unrolled_names.txt", "w") as f:
             for name in unrolled_names:
                 f.write(name + "\n")
 
@@ -362,12 +362,10 @@ def evaluate_multiprocessing_python(_config):
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
+            index_mapping,
             params.save_dir,
             index,
-            target_names,
-            index_mapping,
             params.max_seq_length,
-            params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
@@ -378,26 +376,34 @@ def evaluate_multiprocessing_python(_config):
     print("Beginning search...")
     start = time.time()
 
-    total_duration = 0
-    total_search_time = 0
-    total_filtration_time = 0
-    for result in pool.imap(filter, arg_list):
-        duration, search_time, filtration_time = result
-        total_duration += duration
-        total_search_time += search_time
-        total_filtration_time += filtration_time
+    query_names_list = []
+    all_scores_list = []
+    all_indices_list = []
+    for result in pool.imap(search_only, arg_list):
+        query_names, all_scores, all_indices = result
+        query_names_list += query_names
+        all_scores_list += all_scores
+        all_indices_list += all_indices
 
-    print(f"CPU duration per query: {duration/(params.num_threads*numqueries)}.")
-    print(
-        f"CPU search time per query: {total_search_time/(params.num_threads*numqueries)}."
-    )
-    print(
-        f"CPU filtration per query: {total_filtration_time/(params.num_threads*numqueries)}."
-    )
-
-    print(f"Elapsed time: {(time.time() - start)/(numqueries)}.")
+    print(f"Search time: {time.time() - start}.")
 
     pool.terminate()
+
+    filtration_time = time.time()
+
+    my_rust_module.filter_scores(
+        params.scores_path,
+        params.indices_path,
+        params.target_file,
+        params.query_names_path,
+        params.save_dir,
+        params.write_results,
+    )
+
+    filtration_time = time.time() - filtration_time
+    print(f"Filtration time per query: {(filtration_time)/(numqueries)}.")
+
+    print(f"Elapsed time: {(time.time() - start)/(numqueries)}.")
 
 
 def evaluate(_config):
@@ -462,6 +468,7 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_multiprocessing(_config)
+        evaluate_multiprocessing_python(_config)
     else:
         evaluate(_config)
+
