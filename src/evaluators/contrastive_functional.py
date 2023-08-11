@@ -214,10 +214,11 @@ def search_only(args):
     all_indices = []
 
     print("Searching...")
-    for i in range(len(queries)):
+    for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
 
+        #all_indices.append(indices.to("cpu").numpy())
         all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
 
     #    total_search_time = time.time() - start_time

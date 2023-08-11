@@ -237,10 +237,12 @@ def evaluate_multiprocessing(_config):
         params.omp_num_threads,
         index_path=params.index_path,
     )
+    
+    #TODO: DELETE THIS
 
-    if not os.path.exists(params.unrolled_names_path):
-        print(f"Saving unrolled names to {params.unrolled_names_path}")
-        with open(params.unrolled_names_path, "w") as f:
+    if not os.path.exists('/xdisk/twheeler/daphnedemekas/unrolled_names.txt'):
+        #print(f"Saving unrolled names to {params.unrolled_names_path}")
+        with open('/xdisk/twheeler/daphnedemekas/unrolled_names.txt', "w") as f:
             for name in unrolled_names:
                 f.write(name + "\n")
 
@@ -460,6 +462,6 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_multiprocessing_python(_config)
+        evaluate_multiprocessing(_config)
     else:
         evaluate(_config)

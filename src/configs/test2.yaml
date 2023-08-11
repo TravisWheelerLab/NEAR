@@ -4,14 +4,14 @@ description: "Use CPU with IVF optimization and multithreading"
 index_string: "IVF20000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
-query_file: "data/evaluationqueries.fa"
+query_file: "data/queries-test.fa"
 target_file: "data/targets-filtered.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
-num_threads: 24
-omp_num_threads: 4
+num_threads: 2
+omp_num_threads: 16
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0
@@ -20,6 +20,6 @@ profiler: False
 nprobe: 50
 write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-test2.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-test-FULL.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-test2.txt"

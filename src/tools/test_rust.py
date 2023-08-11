@@ -90,7 +90,7 @@ unrolled_names = np.array(['z0', 'ci', 'ry', 'qp', 'vx', 'zn', '3j', 'gf', 'kq',
        'lk', 'si', 'ta', 'ex', '1e', 'r8', '03', 'lp', '84', '5f', 'k2',
        'bm'], dtype='<U2')
 
-
+print(scores_array)
 scores_list = my_rust_module.filter_scores(
     [scores_array], [indices_array], unrolled_names
 )
