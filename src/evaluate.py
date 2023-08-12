@@ -1,6 +1,5 @@
 import torch
 import os
-import tqdm
 from types import SimpleNamespace
 import time
 import yaml
@@ -12,25 +11,17 @@ from src.evaluators.contrastive_functional import (
     _setup_targets_for_search,
     save_target_embeddings,
     _calc_embeddings,
-    filter_only,
-    search_only,
+    search,
 )
-from src.evaluators.profiler import profile_embeddings, embed_multithread
-from src.data.hmmerhits import FastaFile
-from src.data.eval_utils import get_evaluation_data
 
 from multiprocessing.pool import ThreadPool as Pool
-from multiprocessing import Pool as MPool
 from src.utils.util import (
-    load_dataset_class,
-    load_evaluator_class,
     load_model_class,
 )
 import pickle
-import pdb
 import my_rust_module
-import concurrent.futures
 import numpy as np
+from src.data.hmmerhits import FastaFile
 
 HOME = os.environ["HOME"]
 
@@ -267,7 +258,7 @@ def evaluate_multiprocessing(_config):
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-    for result in pool.imap(search_only, arg_list):
+    for result in pool.imap(search, arg_list):
         query_names, all_scores, all_indices = result
         query_names_list += query_names
         all_scores_list += all_scores
@@ -379,7 +370,7 @@ def evaluate_multiprocessing_python(_config):
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-    for result in pool.imap(search_only, arg_list):
+    for result in pool.imap(search, arg_list):
         query_names, all_scores, all_indices = result
         query_names_list += query_names
         all_scores_list += all_scores
@@ -388,7 +379,19 @@ def evaluate_multiprocessing_python(_config):
     print(f"Search time: {time.time() - start}.")
 
     pool.terminate()
+    save_FAISS_results(
+        query_names_list,
+        all_scores_list,
+        all_indices_list,
+        params.scores_path,
+        params.indices_path,
+        params.query_names_path,
+    )
 
+    del all_scores_list
+    del all_indices_list
+    del query_names_list
+    
     filtration_time = time.time()
 
     my_rust_module.filter_scores(
@@ -471,4 +474,3 @@ if __name__ == "__main__":
         evaluate_multiprocessing_python(_config)
     else:
         evaluate(_config)
-

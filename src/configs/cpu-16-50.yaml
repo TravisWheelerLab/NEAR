@@ -5,28 +5,21 @@ index_string: "IVF20000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/evaluationqueries.fa"
-target_file: "data/evaluationtargets.fa"
+target_file: "data/targets-filtered.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
-num_threads: 1
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-100-rust"
+num_threads: 28
 omp_num_threads: 4
 device: 'cpu'
 normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
-nprobe: 150
-evaluator_args:
-    encoding_func: None
-    model_device: "cpu" 
-    index_device: "cpu"
-    index_string: "IVF20000,Flat"
-    normalize_embeddings: True
-    minimum_seq_length: 0
-    max_seq_length: 512
-    nprobe: 150
-    output_path: "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/del"
-    omp_num_threads: 4
-    target_embeddings_path: 'target_embeddings.pt'
+nprobe: 50
+write_results: False
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-50.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-50.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-50.txt"
