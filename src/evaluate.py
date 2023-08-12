@@ -7,7 +7,6 @@ import argparse
 import itertools
 import h5py
 from src.evaluators.contrastive_functional import (
-    filter,
     _setup_targets_for_search,
     save_target_embeddings,
     _calc_embeddings,
@@ -391,7 +390,7 @@ def evaluate_multiprocessing_python(_config):
     del all_scores_list
     del all_indices_list
     del query_names_list
-    
+
     filtration_time = time.time()
 
     my_rust_module.filter_scores(
@@ -409,56 +408,56 @@ def evaluate_multiprocessing_python(_config):
     print(f"Elapsed time: {(time.time() - start)/(numqueries)}.")
 
 
-def evaluate(_config):
-    params = SimpleNamespace(**_config)
+# def evaluate(_config):
+#     params = SimpleNamespace(**_config)
 
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-    model_class = load_model_class(params.model_name)
+#     print(f"Loading from checkpoint in {params.checkpoint_path}")
+#     model_class = load_model_class(params.model_name)
 
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
+#     model = model_class.load_from_checkpoint(
+#         checkpoint_path=params.checkpoint_path,
+#         map_location=torch.device(params.device),
+#     ).to(params.device)
 
-    target_embeddings, target_names, target_lengths = load_targets(
-        params.target_embeddings,
-        params.target_names,
-        params.target_lengths,
-        params.target_file,
-        params.num_threads,
-        model,
-        params.max_seq_length,
-        params.device,
-    )
+#     target_embeddings, target_names, target_lengths = load_targets(
+#         params.target_embeddings,
+#         params.target_names,
+#         params.target_lengths,
+#         params.target_file,
+#         params.num_threads,
+#         model,
+#         params.max_seq_length,
+#         params.device,
+#     )
 
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
+#     assert len(target_lengths) == len(target_names) == len(target_embeddings)
+#     unrolled_names, index = _setup_targets_for_search(
+#         target_embeddings,
+#         target_names,
+#         target_lengths,
+#         params.index_string,
+#         params.nprobe,
+#         params.omp_num_threads,
+#         index_path=params.index_path,
+#     )
 
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
+#     queryfasta = FastaFile(params.query_file)
+#     query_sequences = queryfasta.data
 
-    duration, total_search_time, total_filtration_time = filter(
-        [
-            query_sequences,
-            model,
-            params.save_dir,
-            index,
-            unrolled_names,
-            params.max_seq_length,
-            params.write_results,
-        ]
-    )
-    print(f"Duration: {duration}.")
-    print(f"Search time: {total_search_time}.")
-    print(f"Filtration time: {total_filtration_time}.")
+#     duration, total_search_time, total_filtration_time = filter(
+#         [
+#             query_sequences,
+#             model,
+#             params.save_dir,
+#             index,
+#             unrolled_names,
+#             params.max_seq_length,
+#             params.write_results,
+#         ]
+#     )
+#     print(f"Duration: {duration}.")
+#     print(f"Search time: {total_search_time}.")
+#     print(f"Filtration time: {total_filtration_time}.")
 
 
 if __name__ == "__main__":
