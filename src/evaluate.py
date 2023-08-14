@@ -470,6 +470,6 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_multiprocessing_python(_config)
+        evaluate_multiprocessing(_config)
     else:
         evaluate(_config)
