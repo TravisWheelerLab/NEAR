@@ -11,6 +11,7 @@ from src.evaluators.contrastive_functional import (
     save_target_embeddings,
     _calc_embeddings,
     search,
+    search_and_filter,
 )
 
 from multiprocessing.pool import ThreadPool as Pool
@@ -135,7 +136,7 @@ def load_model(checkpoint_path, model_name, device="cpu"):
     return model
 
 
-def load_targets(params):
+def load_index(params):
     if not os.path.exists(params.target_embeddings):
         print("No saved target embeddings. Calculating them now.")
         targetfasta = FastaFile(params.target_file)
@@ -169,8 +170,21 @@ def load_targets(params):
 
         else:
             raise Exception("Saved target data format not understood")
+    index_mapping = get_index_mapping(target_lengths)
 
-    return target_embeddings, target_names, target_lengths
+    assert (
+        len(target_lengths) == len(target_names) == len(target_embeddings)
+    ), "Target lengths, names and embeddings are not all the same length"
+
+    index = _setup_targets_for_search(
+        target_embeddings,
+        params.index_string,
+        params.nprobe,
+        params.omp_num_threads,
+        index_path=params.index_path,
+    )
+
+    return index, index_mapping
 
 
 def save_FAISS_results(
@@ -214,27 +228,7 @@ def evaluate_multiprocessing(_config):
 
     q_chunk_size = len(query_sequences) // params.num_threads
 
-    target_embeddings, target_names, target_lengths = load_targets(params)
-    index_mapping = get_index_mapping(target_lengths)
-
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    unrolled_names, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
-
-    # TODO: DELETE THIS
-
-    if not os.path.exists("/xdisk/twheeler/daphnedemekas/unrolled_names.txt"):
-        # print(f"Saving unrolled names to {params.unrolled_names_path}")
-        with open("/xdisk/twheeler/daphnedemekas/unrolled_names.txt", "w") as f:
-            for name in unrolled_names:
-                f.write(name + "\n")
+    index, index_mapping = load_index(params)
 
     arg_list = [
         (
@@ -322,7 +316,8 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    target_embeddings, target_names, target_lengths = load_targets(params)
+    index, index_mapping = load_index(params)
+
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
@@ -335,19 +330,6 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    assert len(target_lengths) == len(target_names) == len(target_embeddings)
-    # TODO: don't return unrolled names
-    _, index = _setup_targets_for_search(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
-    index_mapping = get_index_mapping(target_lengths)
-    target_names = np.array(target_names)
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
@@ -356,6 +338,7 @@ def evaluate_multiprocessing_python(_config):
             params.save_dir,
             index,
             params.max_seq_length,
+            params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
@@ -369,100 +352,101 @@ def evaluate_multiprocessing_python(_config):
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-    for result in pool.imap(search, arg_list):
+    for result in pool.imap(search_and_filter, arg_list):
         query_names, all_scores, all_indices = result
         query_names_list += query_names
         all_scores_list += all_scores
         all_indices_list += all_indices
 
-    print(f"Search time: {time.time() - start}.")
+    print(f"Elapsed time: {time.time() - start}.")
 
     pool.terminate()
-    save_FAISS_results(
-        query_names_list,
-        all_scores_list,
-        all_indices_list,
-        params.scores_path,
-        params.indices_path,
-        params.query_names_path,
-    )
 
-    del all_scores_list
-    del all_indices_list
-    del query_names_list
 
-    filtration_time = time.time()
+def evaluate(_config):
+    params = SimpleNamespace(**_config)
 
-    my_rust_module.filter_scores(
-        params.scores_path,
-        params.indices_path,
-        params.target_file,
-        params.query_names_path,
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+
+    model_class = load_model_class(params.model_name)
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+
+    index, index_mapping = load_index(params)
+
+    arg_list = [
+        query_sequences,
+        model,
+        index_mapping,
         params.save_dir,
-        params.write_results,
+        index,
+        params.max_seq_length,
+    ]
+    del query_sequences
+
+    print("Beginning search...")
+    start = time.time()
+
+    query_names, all_scores, all_indices = search(arg_list)
+
+    print(f"Search time: {time.time() - start}.")
+
+    save_FAISS_results(
+        query_names,
+        all_scores,
+        all_indices,
+        params.scores_path,
+        params.indices_path,
+        params.query_names_path,
     )
 
-    filtration_time = time.time() - filtration_time
-    print(f"Filtration time per query: {(filtration_time)/(numqueries)}.")
 
-    print(f"Elapsed time: {(time.time() - start)/(numqueries)}.")
+def evaluate_python(_config):
+    params = SimpleNamespace(**_config)
 
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
 
-# def evaluate(_config):
-#     params = SimpleNamespace(**_config)
+    model_class = load_model_class(params.model_name)
 
-#     print(f"Loading from checkpoint in {params.checkpoint_path}")
-#     model_class = load_model_class(params.model_name)
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
 
-#     model = model_class.load_from_checkpoint(
-#         checkpoint_path=params.checkpoint_path,
-#         map_location=torch.device(params.device),
-#     ).to(params.device)
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
 
-#     target_embeddings, target_names, target_lengths = load_targets(
-#         params.target_embeddings,
-#         params.target_names,
-#         params.target_lengths,
-#         params.target_file,
-#         params.num_threads,
-#         model,
-#         params.max_seq_length,
-#         params.device,
-#     )
+    index, index_mapping = load_index(params)
 
-#     assert len(target_lengths) == len(target_names) == len(target_embeddings)
-#     unrolled_names, index = _setup_targets_for_search(
-#         target_embeddings,
-#         target_names,
-#         target_lengths,
-#         params.index_string,
-#         params.nprobe,
-#         params.omp_num_threads,
-#         index_path=params.index_path,
-#     )
+    arg_list = [
+        query_sequences,
+        model,
+        index_mapping,
+        params.save_dir,
+        index,
+        params.max_seq_length,
+        params.write_results,
+    ]
+    del query_sequences
 
-#     queryfasta = FastaFile(params.query_file)
-#     query_sequences = queryfasta.data
+    print("Beginning search...")
+    start = time.time()
 
-#     duration, total_search_time, total_filtration_time = filter(
-#         [
-#             query_sequences,
-#             model,
-#             params.save_dir,
-#             index,
-#             unrolled_names,
-#             params.max_seq_length,
-#             params.write_results,
-#         ]
-#     )
-#     print(f"Duration: {duration}.")
-#     print(f"Search time: {total_search_time}.")
-#     print(f"Filtration time: {total_filtration_time}.")
+    search_and_filter(arg_list)
+
+    print(f"Elapsed time: {time.time() - start}.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
+    parser.add_argument("--rust", action="store_true")
 
     args = parser.parse_args()
     configfile = args.config.strip(".yaml")
@@ -470,6 +454,16 @@ if __name__ == "__main__":
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)
     if _config["num_threads"] > 1:
-        evaluate_multiprocessing(_config)
+        if args.rust:
+            print("Rust evaluation pipeline")
+            evaluate_multiprocessing(_config)
+        else:
+            print("Python evaluation pipeline")
+            evaluate_multiprocessing_python(_config)
     else:
-        evaluate(_config)
+        if args.rust:
+            print("Rust evaluation pipeline")
+            evaluate(_config)
+        else:
+            print("Python evaluation pipeline")
+            evaluate_python(_config)

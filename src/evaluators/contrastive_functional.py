@@ -16,6 +16,41 @@ import my_rust_module
 logger = logging.getLogger("evaluate")
 
 
+def filter_scores(scores_array, indices_array, unrolled_names):
+    """Filters the scores such that every query amino can only
+    be matched to one amino from each target sequence
+    and it matches the one with the biggest score.
+
+    Then sums the scores that belong to the same target
+    and returns the resulting distances in a dict
+
+    scores_array (numqueryaminos, 1000): an array of 1000 scores per query amino
+    indices_array: (numqueryaminos, 1000) the indices of the target sequence name (in unrolled_names)
+    for each of the scores in scores_array"""
+
+    filtered_scores = defaultdict(float)
+
+    # iterate over query amino scores
+    for match_idx in range(len(scores_array)):
+        match_scores = scores_array[match_idx]
+        names = unrolled_names[
+            indices_array[match_idx]
+        ]  # the names of the targets for each 1000 hits
+        sorted_match_idx = np.argsort(match_scores)[::-1]
+
+        _, unique_indices = np.unique(
+            names[sorted_match_idx], return_index=True
+        )  # the unique names of the targets for each 1000 hits (<= 1000)
+
+        new_indices = list(indices_array[match_idx][sorted_match_idx][unique_indices])
+        new_scores = list(match_scores[sorted_match_idx][unique_indices])
+
+        for distance, name in zip(new_scores, unrolled_names[new_indices]):
+            filtered_scores[name] += distance
+
+    return filtered_scores
+
+
 def filter_and_calc_embeddings(
     names: List[str],
     sequences: List[str],
@@ -109,6 +144,36 @@ def search(args):
     return query_names, all_scores, all_indices
 
 
+@torch.no_grad()
+def search_and_filter(args):
+    (
+        query_data,
+        model,
+        index_mapping,
+        output_path,
+        index,
+        max_seq_length,
+        write_results,
+    ) = args
+
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    print("Searching...")
+    for i in range(len(queries)):
+        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        filtered_scores = filter_scores(scores, reduce_indices(indices, index_mapping))
+
+        if write_results:
+            f = open(f"{output_path}/{query_names[i]}.txt", "w")
+            f.write("Name     Distance" + "\n")
+            for name, distance in filtered_scores.items():
+                f.write(f"{name}     {distance}" + "\n")
+            f.close()
+
+
 def est_nprobe(index, threshold=1):
     # Retrieve centroid vectors for each Voronoi cell
     centroids = index.quantizer.reconstruct_n(0, index.quantizer.ntotal).cpu()
@@ -136,8 +201,6 @@ def est_nprobe(index, threshold=1):
 
 def _setup_targets_for_search(
     target_embeddings: List[torch.Tensor],
-    target_names: List[str],
-    lengths: List[int],
     index_string,
     nprobe,
     num_threads=1,
@@ -149,13 +212,9 @@ def _setup_targets_for_search(
     target embddings"""
     faiss.omp_set_num_threads(num_threads)
 
-    unrolled_names = np.repeat(target_names, lengths)
     unrolled_targets = torch.cat(
         target_embeddings, dim=0
     )  # (num targets x amino per target) x 256
-
-    del lengths
-
     unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
 
     start = time.time()
@@ -184,7 +243,7 @@ def _setup_targets_for_search(
 
     print(f"Index Creation took: {loop_time}.")
 
-    return unrolled_names, index
+    return index
 
 
 def evaluate(
