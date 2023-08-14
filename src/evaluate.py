@@ -15,6 +15,7 @@ from src.evaluators.contrastive_functional import (
 )
 
 from multiprocessing.pool import ThreadPool as Pool
+#from multiprocessing import Pool
 from src.utils.util import (
     load_model_class,
 )
@@ -225,7 +226,7 @@ def evaluate_multiprocessing(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-
+    print(f"Number of queries: {len(query_sequences)}")
     q_chunk_size = len(query_sequences) // params.num_threads
 
     index, index_mapping = load_index(params)
@@ -388,8 +389,9 @@ def evaluate(_config):
         index,
         params.max_seq_length,
     ]
+    #del query_sequences
+    print(f"Number of queries: {len(query_sequences)}")
     del query_sequences
-
     print("Beginning search...")
     start = time.time()
 

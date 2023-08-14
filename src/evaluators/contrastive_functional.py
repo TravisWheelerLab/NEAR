@@ -139,8 +139,8 @@ def search(args):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
 
-        all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
-
+     #   all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
+        all_indices.append(indices.to("cpu").numpy())
     return query_names, all_scores, all_indices
 
 
@@ -164,8 +164,8 @@ def search_and_filter(args):
     print("Searching...")
     for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        filtered_scores = filter_scores(scores, reduce_indices(indices, index_mapping))
-
+        #filtered_scores = filter_scores(scores, reduce_indices(indices, index_mapping))
+        filtered_scores = filter_scores(scores, indices)
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
