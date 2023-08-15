@@ -187,12 +187,12 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
 
     if normal:
         align = load_inputs(_all_hits_normal, "normal", "CPU-20K-50")
-        align2 = load_inputs(_all_hits_normal, "normal", "CPU-20K-250")
+        align2 = load_inputs(_all_hits_normal, "normal", "CPU-20K-150")
     else:
         align = load_inputs(all_hits_max, "max", "CPU-20K-50")
-        align2 = load_inputs(all_hits_max, "max", "CPU-20K-250")
+        align2 = load_inputs(all_hits_max, "max", "CPU-20K-150")
 
-    nprobes = [50, 250]
+    nprobes = [50, 150]
 
     _, axis = plt.subplots(figsize=(10, 10))
 
