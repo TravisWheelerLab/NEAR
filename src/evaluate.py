@@ -5,16 +5,18 @@ import time
 import yaml
 import argparse
 import itertools
+import tqdm
 import h5py
+import faiss
 from src.evaluators.contrastive_functional import (
     _setup_targets_for_search,
     save_target_embeddings,
     _calc_embeddings,
-    search,
+    # search,
     search_and_filter,
 )
 
-#from multiprocessing.pool import ThreadPool as Pool
+# from multiprocessing.pool import ThreadPool as Pool
 from multiprocessing import Pool
 from src.utils.util import (
     load_model_class,
@@ -171,7 +173,6 @@ def load_index(params):
 
         else:
             raise Exception("Saved target data format not understood")
-    index_mapping = get_index_mapping(target_lengths)
 
     assert (
         len(target_lengths) == len(target_names) == len(target_embeddings)
@@ -185,7 +186,7 @@ def load_index(params):
         index_path=params.index_path,
     )
 
-    return index, index_mapping
+    return index
 
 
 def save_FAISS_results(
@@ -212,6 +213,30 @@ def save_FAISS_results(
     print("Saved")
 
 
+def search(args):
+    (query_data, model, output_path, index_path, nprobe, max_seq_length) = args
+    index = faiss.read_index(index_path)
+
+    index.nprobe = nprobe
+    query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    all_scores = []
+    all_indices = []
+
+    print("Searching...")
+
+    for i in tqdm.tqdm(range(len(queries))):
+        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        all_scores.append(scores.to("cpu").numpy())
+
+        #   all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
+        all_indices.append(indices.to("cpu").numpy())
+    return query_names, all_scores, all_indices
+
+
 def evaluate_multiprocessing(_config):
     params = SimpleNamespace(**_config)
 
@@ -229,15 +254,15 @@ def evaluate_multiprocessing(_config):
     print(f"Number of queries: {len(query_sequences)}")
     q_chunk_size = len(query_sequences) // params.num_threads
 
-    index, index_mapping = load_index(params)
+    # index = load_index(params)
 
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
-            index_mapping,
             params.save_dir,
-            index,
+            params.index_path,
+            params.nprobe,
             params.max_seq_length,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
@@ -248,11 +273,11 @@ def evaluate_multiprocessing(_config):
 
     print("Beginning search...")
     start = time.time()
-
+    results = pool.map(search, arg_list)
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-    for result in pool.imap(search, arg_list):
+    for result in results:
         query_names, all_scores, all_indices = result
         query_names_list += query_names
         all_scores_list += all_scores
@@ -389,7 +414,7 @@ def evaluate(_config):
         index,
         params.max_seq_length,
     ]
-    #del query_sequences
+    # del query_sequences
     print(f"Number of queries: {len(query_sequences)}")
     del query_sequences
     print("Beginning search...")
