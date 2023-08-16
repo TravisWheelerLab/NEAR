@@ -15,9 +15,8 @@ from src.evaluators.contrastive_functional import (
     # search,
     search_and_filter,
 )
-
-# from multiprocessing.pool import ThreadPool as Pool
-from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool as Pool
+#from multiprocessing import Pool
 from src.utils.util import (
     load_model_class,
 )
@@ -215,8 +214,8 @@ def save_FAISS_results(
 
 def search(args):
     (query_data, model, output_path, index_path, nprobe, max_seq_length) = args
-    index = faiss.read_index(index_path)
-
+    #index = faiss.read_index(index_path)
+    index = index_path
     index.nprobe = nprobe
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
 
@@ -228,12 +227,13 @@ def search(args):
 
     print("Searching...")
 
-    for i in tqdm.tqdm(range(len(queries))):
+    for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
 
         #   all_indices.append(reduce_indices(indices.to("cpu").numpy(), index_mapping))
         all_indices.append(indices.to("cpu").numpy())
+    index.close()
     return query_names, all_scores, all_indices
 
 
@@ -254,21 +254,22 @@ def evaluate_multiprocessing(_config):
     print(f"Number of queries: {len(query_sequences)}")
     q_chunk_size = len(query_sequences) // params.num_threads
 
-    # index = load_index(params)
+    index = load_index(params)
 
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
-            params.index_path,
+            #params.index_path,
+            index,
             params.nprobe,
             params.max_seq_length,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
     del query_sequences
-
+    print(f"Length of arg list: {len(arg_list)}")
     pool = Pool(params.num_threads)
 
     print("Beginning search...")
@@ -342,7 +343,7 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    index, index_mapping = load_index(params)
+    index, _ = load_index(params)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
@@ -391,7 +392,8 @@ def evaluate_multiprocessing_python(_config):
 
 def evaluate(_config):
     params = SimpleNamespace(**_config)
-
+    print("Why am i here")
+    print(params.num_threads)
     print(f"Loading from checkpoint in {params.checkpoint_path}")
 
     model_class = load_model_class(params.model_name)
@@ -404,12 +406,12 @@ def evaluate(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
 
-    index, index_mapping = load_index(params)
+    index = load_index(params)
 
     arg_list = [
         query_sequences,
         model,
-        index_mapping,
+#        index_mapping,
         params.save_dir,
         index,
         params.max_seq_length,
