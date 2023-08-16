@@ -14,8 +14,8 @@ from src.evaluators.contrastive_functional import (
     search_and_filter,
 )
 
-from multiprocessing.pool import ThreadPool as Pool
-#from multiprocessing import Pool
+#from multiprocessing.pool import ThreadPool as Pool
+from multiprocessing import Pool
 from src.utils.util import (
     load_model_class,
 )
@@ -261,15 +261,15 @@ def evaluate_multiprocessing(_config):
     print(f"Search time: {time.time() - start}.")
 
     pool.terminate()
-
-    save_FAISS_results(
-        query_names_list,
-        all_scores_list,
-        all_indices_list,
-        params.scores_path,
-        params.indices_path,
-        params.query_names_path,
-    )
+    if params.write_results:
+        save_FAISS_results(
+            query_names_list,
+            all_scores_list,
+            all_indices_list,
+            params.scores_path,
+            params.indices_path,
+            params.query_names_path,
+        )
 
 
 def get_index_mapping(target_lengths):

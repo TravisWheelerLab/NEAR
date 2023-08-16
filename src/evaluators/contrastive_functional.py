@@ -135,7 +135,7 @@ def search(args):
     all_indices = []
 
     print("Searching...")
-    for i in range(len(queries)):
+    for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
 
@@ -162,7 +162,7 @@ def search_and_filter(args):
         os.mkdir(output_path)
 
     print("Searching...")
-    for i in range(len(queries)):
+    for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         #filtered_scores = filter_scores(scores, reduce_indices(indices, index_mapping))
         filtered_scores = filter_scores(scores, indices)
@@ -210,17 +210,13 @@ def _setup_targets_for_search(
 ):
     """Creates the Faiss Index object using the unrolled
     target embddings"""
-    faiss.omp_set_num_threads(num_threads)
-
-    unrolled_targets = torch.cat(
-        target_embeddings, dim=0
-    )  # (num targets x amino per target) x 256
-    unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
-
     start = time.time()
     if not os.path.exists(index_path):
         print(f"Creating index: {index_string} and saving to {index_path}")
-
+        unrolled_targets = torch.cat(
+        target_embeddings, dim=0
+        )
+        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
         index: faiss.Index = create_faiss_index(
             embeddings=unrolled_targets,
             embed_dim=unrolled_targets.shape[-1],
