@@ -16,7 +16,9 @@ from src.evaluators.contrastive_functional import (
     search_and_filter,
 )
 from multiprocessing.pool import ThreadPool as Pool
-#from multiprocessing import Pool
+import concurrent.futures
+
+# from multiprocessing import Pool
 from src.utils.util import (
     load_model_class,
 )
@@ -214,7 +216,7 @@ def save_FAISS_results(
 
 def search(args):
     (query_data, model, output_path, index_path, nprobe, max_seq_length) = args
-    #index = faiss.read_index(index_path)
+    # index = faiss.read_index(index_path)
     index = index_path
     index.nprobe = nprobe
     query_names, queries, _ = _calc_embeddings(query_data, model, max_seq_length)
@@ -261,7 +263,7 @@ def evaluate_multiprocessing(_config):
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
-            #params.index_path,
+            # params.index_path,
             index,
             params.nprobe,
             params.max_seq_length,
@@ -274,11 +276,11 @@ def evaluate_multiprocessing(_config):
 
     print("Beginning search...")
     start = time.time()
-    results = pool.map(search, arg_list)
+    # results = pool.map(search, arg_list)
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-    for result in results:
+    for result in pool.imap(search, arg_list):
         query_names, all_scores, all_indices = result
         query_names_list += query_names
         all_scores_list += all_scores
@@ -296,6 +298,61 @@ def evaluate_multiprocessing(_config):
             params.indices_path,
             params.query_names_path,
         )
+
+
+def evaluate_multiprocessing2(_config):
+    params = SimpleNamespace(**_config)
+
+    print(f"Loading from checkpoint in {params.checkpoint_path}")
+
+    model_class = load_model_class(params.model_name)
+
+    model = model_class.load_from_checkpoint(
+        checkpoint_path=params.checkpoint_path,
+        map_location=torch.device(params.device),
+    ).to(params.device)
+
+    queryfasta = FastaFile(params.query_file)
+    query_sequences = queryfasta.data
+    print(f"Number of queries: {len(query_sequences)}")
+    q_chunk_size = len(query_sequences) // params.num_threads
+
+    index = load_index(params)
+
+    arg_list = [
+        (
+            dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            model,
+            params.save_dir,
+            # params.index_path,
+            index,
+            params.nprobe,
+            params.max_seq_length,
+        )
+        for i in range(0, len(query_sequences), q_chunk_size)
+    ]
+    del query_sequences
+    print(f"Length of arg list: {len(arg_list)}")
+
+    print("Beginning search...")
+    start = time.time()
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=params.num_threads
+    ) as executor:
+        future_to_batch = {executor.submit(search, batch): batch for batch in arg_list}
+    query_names_list = []
+    all_scores_list = []
+    all_indices_list = []
+    # Collect results as they become available
+    for future in concurrent.futures.as_completed(future_to_batch):
+        batch = future_to_batch[future]
+        query_names, all_scores, all_indices = future.result()
+        query_names_list += query_names
+        all_scores_list += all_scores
+        all_indices_list += all_indices  # ... combine results ...
+
+    print(f"Search time: {time.time() - start}.")
 
 
 def get_index_mapping(target_lengths):
@@ -411,7 +468,7 @@ def evaluate(_config):
     arg_list = [
         query_sequences,
         model,
-#        index_mapping,
+        #        index_mapping,
         params.save_dir,
         index,
         params.max_seq_length,
