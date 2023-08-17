@@ -17,7 +17,7 @@ normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
-nprobe: 150
+nprobe: 100
 write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-test.h5"

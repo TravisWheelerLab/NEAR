@@ -4,7 +4,7 @@ description: "Use CPU with IVF optimization and multithreading"
 index_string: "IVF20000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
-query_file: "data/evaluationqueries.fa"
+query_file: "data/queries-filtered.fa"
 target_file: "data/targets-filtered.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
@@ -18,7 +18,7 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 50
-write_results: False
+write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-50.h5"
 indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-50.h5"
