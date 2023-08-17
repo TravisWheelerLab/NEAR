@@ -142,7 +142,7 @@ def load_model(checkpoint_path, model_name, device="cpu"):
     return model
 
 
-def load_index(params):
+def load_index(params, model):
     if not os.path.exists(params.target_embeddings):
         print("No saved target embeddings. Calculating them now.")
         targetfasta = FastaFile(params.target_file)
@@ -245,12 +245,14 @@ def search(args):
 
     all_scores = []
     all_indices = []
+    search_time = time.time()
     for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores.to("cpu").numpy())
         all_indices.append(indices.to("cpu").numpy())
+    search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
-    return idx, all_scores, all_indices
+    return idx, all_scores, all_indices, search_time
 
 
 def search_iter(args):
@@ -264,6 +266,8 @@ def search_iter(args):
     all_indices = []
 
     batches = list(split(queries, len(queries) // 100))
+    search_time = time.time()
+
     for batch in tqdm.tqdm(batches):
         lengths = [len(q) for q in batch]
         flatq = torch.cat(batch, dim=0)
@@ -272,8 +276,9 @@ def search_iter(args):
         indices = np.split(indices.to("cpu").numpy(), np.cumsum(lengths)[:-1])
         all_scores += scores
         all_indices += indices
+    search_time = time.time() - search_time
 
-    return i, all_scores, all_indices
+    return i, all_scores, all_indices, search_time
 
 
 def evaluate_multiprocessing(_config):
@@ -471,9 +476,11 @@ def evaluate(_config):
     print("Beginning search...")
     start = time.time()
 
-    _, all_scores, all_indices = search(arg_list)
+    _, all_scores, all_indices, search_time = search(arg_list)
 
-    print(f"Search time per query: {(time.time() - start)/numqueries}.")
+    print(f"Search time per query: {(search_time)/numqueries}.")
+    print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
+
     if params.write_results:
         save_FAISS_results(
             query_names,
