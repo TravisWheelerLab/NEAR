@@ -89,6 +89,24 @@ def filter_and_calc_embeddings(
 
 @torch.no_grad()
 def _calc_embeddings(
+    sequences,
+    model_class,
+    model_device="cpu",
+):
+    embeddings = []
+
+    for sequence in sequences:
+        embed = (
+            model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
+            .squeeze()
+            .T
+        )
+        embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
+    return embeddings
+
+
+@torch.no_grad()
+def _calc_embeddings(
     sequence_data, model_class, max_seq_length
 ) -> Tuple[List[str], List[str], List[torch.Tensor]]:
     """Calculates the embeddings for the sequences by
@@ -97,7 +115,6 @@ def _calc_embeddings(
 
     Returns [names], [sequences], [embeddings]"""
 
-    names = list(sequence_data.keys())
     sequences = list(sequence_data.values())
 
     filtered_names, embeddings, lengths = filter_and_calc_embeddings(

@@ -11,7 +11,7 @@ import faiss
 from src.evaluators.contrastive_functional import (
     _setup_targets_for_search,
     save_target_embeddings,
- #   _calc_embeddings,
+    #   _calc_embeddings,
     # search,
     search_and_filter,
 )
@@ -28,6 +28,7 @@ import numpy as np
 from src.data.hmmerhits import FastaFile
 from src.utils import create_faiss_index, encode_string_sequence
 import pdb
+
 HOME = os.environ["HOME"]
 
 
@@ -223,13 +224,16 @@ def batch_search(args):
         os.mkdir(output_path)
 
     lengths = [len(q) for q in queries]
-    flattened_qs = torch.cat(queries, dim = 0)
-    scores, indices = index.search(flattened_qs.contiguous(), k = 1000)
+    flattened_qs = torch.cat(queries, dim=0)
+
+    search_time = time.time()
+    scores, indices = index.search(flattened_qs.contiguous(), k=1000)
+    search_time = time.time() - search_time
     all_scores = np.split(scores.to("cpu").numpy(), np.cumsum(lengths)[:-1])
     all_indices = np.split(indices.to("cpu").numpy(), np.cumsum(lengths)[:-1])
     print(f"Thread {i} completed search")
-    
-    return i, all_scores, all_indices
+
+    return i, all_scores, all_indices, search_time
 
 
 def search(args):
@@ -258,18 +262,19 @@ def search_iter(args):
 
     all_scores = []
     all_indices = []
-    
-    batches = list(split(queries, len(queries) //100))
+
+    batches = list(split(queries, len(queries) // 100))
     for batch in tqdm.tqdm(batches):
         lengths = [len(q) for q in batch]
-        flatq = torch.cat(batch, dim = 0)
-        scores, indices = index.search(flatq.contiguous(), k = 1000)
-        scores= np.split(scores.to("cpu").numpy(), np.cumsum(lengths)[:-1])
+        flatq = torch.cat(batch, dim=0)
+        scores, indices = index.search(flatq.contiguous(), k=1000)
+        scores = np.split(scores.to("cpu").numpy(), np.cumsum(lengths)[:-1])
         indices = np.split(indices.to("cpu").numpy(), np.cumsum(lengths)[:-1])
-        all_scores += scores 
-        all_indices += indices 
+        all_scores += scores
+        all_indices += indices
 
     return i, all_scores, all_indices
+
 
 def evaluate_multiprocessing(_config):
     params = SimpleNamespace(**_config)
@@ -286,96 +291,24 @@ def evaluate_multiprocessing(_config):
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
     print(f"Number of queries: {len(query_sequences)}")
-    #q_chunk_size = len(query_sequences) // params.num_threads
-    numqueries = len(query_sequences)
-    if os.path.exists(params.index_path):
-        index = faiss.read_index(params.index_path)
-    else:
-        index = load_index(params)
-    print(f"omp_num_threads: {params.omp_num_threads}")
-    
-    #faiss.omp_set_num_threads(params.omp_num_threads)
-    split_queries = list(split(list(query_sequences.values()), params.num_threads))
-    split_names = list(split(list(query_sequences.keys()), params.num_threads))
-    print(len(split_queries))
-    arg_list = [
-        (
-            #dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
-            i,
-            split_queries[i],
-            model,
-            params.save_dir,
-            # params.index_path,
-            index,
-     #       params.nprobe,
-            params.max_seq_length,
-        )
-        for i in range(params.num_threads)
-    ]
+    # q_chunk_size = len(query_sequences) // params.num_threads
 
-    del query_sequences
-    print(f"Length of arg list: {len(arg_list)}")
-    pool = Pool(params.num_threads)
-
-    print("Beginning search...")
-    start = time.time()
-    # results = pool.map(search, arg_list)
-    query_names_list = []
-    all_scores_list = []
-    all_indices_list = []
-    for result in pool.imap(batch_search, arg_list):
-        idx, all_scores, all_indices = result
-        query_names_list += split_names[idx]
-        all_scores_list += all_scores
-        all_indices_list += all_indices
-
-    print(f"Search time per query: {(time.time() - start)/numqueries}.")
-
-    pool.terminate()
-    if params.write_results:
-        save_FAISS_results(
-            query_names_list,
-            all_scores_list,
-            all_indices_list,
-            params.scores_path,
-            params.indices_path,
-            params.query_names_path,
-        )
-
-
-def evaluate_multiprocessing2(_config):
-    params = SimpleNamespace(**_config)
-
-    print(f"Loading from checkpoint in {params.checkpoint_path}")
-
-    model_class = load_model_class(params.model_name)
-
-    model = model_class.load_from_checkpoint(
-        checkpoint_path=params.checkpoint_path,
-        map_location=torch.device(params.device),
-    ).to(params.device)
-
-    queryfasta = FastaFile(params.query_file)
-    query_sequences = queryfasta.data
-    print(f"Number of queries: {len(query_sequences)}")
-    #q_chunk_size = len(query_sequences) // params.num_threads
-    
     numqueries = len(query_sequences)
     if os.path.exists(params.index_path):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
     else:
         index = load_index(params)
-    print(f"nprobe : {params.nprobe}") 
+    print(f"nprobe : {params.nprobe}")
     print(f"omp num threads: {params.omp_num_threads}")
-    #faiss.omp_set_num_threads(params.omp_num_threads)
+    # faiss.omp_set_num_threads(params.omp_num_threads)
     split_queries = list(split(list(query_sequences.values()), params.num_threads))
     split_names = list(split(list(query_sequences.keys()), params.num_threads))
     print(len(split_queries))
     arg_list = [
         (
-            #dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
-            i, 
+            # dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            i,
             split_queries[i],
             model,
             params.save_dir,
@@ -393,19 +326,26 @@ def evaluate_multiprocessing2(_config):
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=params.num_threads
     ) as executor:
-        future_to_batch = {executor.submit(batch_search, batch): batch for batch in arg_list}
+        future_to_batch = {
+            executor.submit(batch_search, batch): batch for batch in arg_list
+        }
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
+
+    full_search_time = 0
     # Collect results as they become available
     for future in concurrent.futures.as_completed(future_to_batch):
-        batch = future_to_batch[future]
-        i, all_scores, all_indices = future.result()
+        #        batch = future_to_batch[future]
+        i, all_scores, all_indices, search_time = future.result()
         query_names_list += split_names[i]
         all_scores_list += all_scores
         all_indices_list += all_indices  # ... combine results ...
+        full_search_time += search_time
     assert len(all_scores_list) == numqueries
-    print(f"Search time per query: {(time.time() - start)/numqueries}.")
+    print(f"Search time per query: {(full_search_time)/numqueries}.")
+
+    print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
     if params.write_results:
         save_FAISS_results(
             query_names_list,
@@ -415,6 +355,8 @@ def evaluate_multiprocessing2(_config):
             params.indices_path,
             params.query_names_path,
         )
+
+
 @torch.no_grad()
 def _calc_embeddings(
     sequences,
@@ -431,6 +373,7 @@ def _calc_embeddings(
         )
         embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
     return embeddings
+
 
 def evaluate_multiprocessing_python(_config):
     params = SimpleNamespace(**_config)
@@ -508,17 +451,17 @@ def evaluate(_config):
         index.nprobe = params.nprobe
     else:
         index = load_index(params)
-    faiss.omp_set_num_threads(params.omp_num_threads) 
-    #index = load_index(params)
+    faiss.omp_set_num_threads(params.omp_num_threads)
+    # index = load_index(params)
     query_names = list(query_sequences.keys())
     arg_list = [
-        0,    
+        0,
         list(query_sequences.values()),
         model,
         #        index_mapping,
         params.save_dir,
         index,
-        #params.nprobe,
+        # params.nprobe,
         params.max_seq_length,
     ]
     # del query_sequences
@@ -591,7 +534,7 @@ if __name__ == "__main__":
     if _config["num_threads"] > 1:
         if args.rust:
             print("Rust evaluation pipeline")
-            evaluate_multiprocessing2(_config)
+            evaluate_multiprocessing(_config)
         else:
             print("Python evaluation pipeline")
             evaluate_multiprocessing_python(_config)
