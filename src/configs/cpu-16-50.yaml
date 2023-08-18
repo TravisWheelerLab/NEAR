@@ -18,7 +18,7 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 50
-write_results: True
+write_results: False
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-50.h5"
 indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-50.h5"

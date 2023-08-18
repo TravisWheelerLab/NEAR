@@ -248,8 +248,8 @@ def search(args):
     search_time = time.time()
     for i in range(len(queries)):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        all_scores.append(scores.to("cpu").numpy())
-        all_indices.append(indices.to("cpu").numpy())
+        all_scores.append(scores)
+        all_indices.append(indices)
     search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
     return idx, all_scores, all_indices, search_time
@@ -325,31 +325,41 @@ def evaluate_multiprocessing(_config):
     del query_sequences
     print(f"Length of arg list: {len(arg_list)}")
 
-    print("Beginning search...")
-    start = time.time()
-
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=params.num_threads
-    ) as executor:
-        future_to_batch = {
-            executor.submit(batch_search, batch): batch for batch in arg_list
-        }
     query_names_list = []
     all_scores_list = []
     all_indices_list = []
-
+    print("Beginning search...")
     full_search_time = 0
-    # Collect results as they become available
-    for future in concurrent.futures.as_completed(future_to_batch):
-        #        batch = future_to_batch[future]
-        i, all_scores, all_indices, search_time = future.result()
-        query_names_list += split_names[i]
-        all_scores_list += all_scores
-        all_indices_list += all_indices  # ... combine results ...
-        full_search_time += search_time
+    concurrent = True
+    start = time.time()
+    
+    if concurrent:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=params.num_threads
+        ) as executor:
+            future_to_batch = {
+                executor.submit(search, batch): batch for batch in arg_list
+            }
+    
+        # Collect results as they become available
+        for future in concurrent.futures.as_completed(future_to_batch):
+            #        batch = future_to_batch[future]
+            i, all_scores, all_indices, search_time = future.result()
+            query_names_list += split_names[i]
+            all_scores_list += all_scores
+            all_indices_list += all_indices  # ... combine results ...
+            full_search_time += search_time
+    else:
+        pool = Pool(params.num_threads)
+        for result in pool.imap(search, arg_list):
+            i, all_scores, all_indices, search_time = result
+            query_names_list += split_names[i]
+            all_scores_list += all_scores
+            all_indices_list += all_indices  # ... combine results ...
+            full_search_time += search_time
+ 
     assert len(all_scores_list) == numqueries
-    print(f"Search time per query: {(full_search_time)/numqueries}.")
-
+    print(f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}.")
     print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
     if params.write_results:
         save_FAISS_results(
@@ -456,7 +466,7 @@ def evaluate(_config):
         index.nprobe = params.nprobe
     else:
         index = load_index(params)
-    faiss.omp_set_num_threads(params.omp_num_threads)
+    #faiss.omp_set_num_threads(params.omp_num_threads)
     # index = load_index(params)
     query_names = list(query_sequences.keys())
     arg_list = [
@@ -478,7 +488,7 @@ def evaluate(_config):
 
     _, all_scores, all_indices, search_time = search(arg_list)
 
-    print(f"Search time per query: {(search_time)/numqueries}.")
+    print(f"Search time per query: {(search_time)/(params.num_threads*numqueries)}.")
     print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
 
     if params.write_results:

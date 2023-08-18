@@ -88,12 +88,12 @@ fn filter_scores_inner() -> Vec<HashMap<String, f64>>{
 
     println!("In new rust module");
     let scores_array_list =
-        read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all-scores-reversed.h5")
+        read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all-scores-250-rev.h5")
             .expect("Failed to read HDF5 data");
     let indices_array_list =
-        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all-indices-reversed.h5")
+        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all-indices-250-rev.h5")
             .expect("Failed to read HDF5 data");
-    let target_names = read_names("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt")
+    let target_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled-names-reversed.txt")
         .expect("Failed to read unrolled names");
     println!("The length of scores array is: {}", scores_array_list.len());
     println!(
