@@ -88,7 +88,7 @@ class Results:
                 generate_roc(roc_filepath, hmmer_hits_dict, temp_file, None)
 
 def compare_models(
-    modelname: str = "CPU-20K-150",
+    modelname: str = "CPU-5K-40",
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     print(f"Comparing models with {modelname}")
@@ -128,7 +128,7 @@ def compare_models(
     labels = [
         "ESM",
         "ProtBERT",
-        "NEAT-150",
+        "NEAR-40",
         "MSV filter",
         "LAST",
         "MMseqs2",
@@ -163,10 +163,10 @@ def compare_models(
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
-        axis.legend()
-        axis.set_xlim(95, 100.1)
+        axis.legend(loc = 'lower left')
+        axis.set_xlim(97.5, 100.1)
         # axis.set_xticks([75, 80, 85, 90, 95, 100])
-        axis.set_xticks([95, 96, 97, 98, 99, 100])
+        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100])
 
         # axis.set_ylim(90, 100.2)
         # axis.set_xlim(99, 100.01)
@@ -192,35 +192,36 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
         align = load_inputs(_all_hits_normal, "normal", "CPU-20K-50")
         align2 = load_inputs(_all_hits_normal, "normal", "CPU-20K-150")
     else:
-        align = load_inputs(all_hits_max, "max", "CPU-20K-50")
-        align2 = load_inputs(all_hits_max, "max", "CPU-20K-150")
-        align3 = load_inputs(all_hits_max, "max", "CPU-20K-25")
-        align4 = load_inputs(all_hits_max, "max", "CPU-20K-250")
+        align = load_inputs(all_hits_max, "max", "CPU-5K-5")
+        align2 = load_inputs(all_hits_max, "max", "CPU-5K-10")
+        align3 = load_inputs(all_hits_max, "max", "CPU-5K-20")
+        align4 = load_inputs(all_hits_max, "max", "CPU-5K-40")
+        align1 = load_inputs(all_hits_max, "max", "CPU-5K-50")
+    nprobes = [5, 10, 20, 40, 50]
 
-    nprobes = [50, 150, 25, 250]
-
-    _, axis = plt.subplots(figsize=(10, 10))
+    #_, axis = plt.subplots(figsize=(10, 10))
 
 
     all_filtrations = []
     all_recalls = []
-    for idx, inputs in enumerate([align, align2, align3, align4]):
+    for idx, inputs in enumerate([align, align2, align3, align4, align1]):
         filtrations, recalls = get_roc_data(**inputs)
         all_filtrations.append(filtrations)
         all_recalls.append(recalls)
     for i in [0, 1, 2, 3]:
         idx = 0
+        _, axis = plt.subplots(figsize=(10, 10))
         for f, r in zip(all_filtrations, all_recalls):
 
             axis.plot(
                 np.array(f)[:, i],
                 np.array(r)[:, i],
-                f"{COLORS[i]}",
+                f"{COLORS[idx]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                linestyle=styles[idx],
+                #linestyle=styles[idx],
             )
-        idx +=1
+            idx +=1
         axis.set_xlabel("filtration", fontsize=12)
         axis.set_ylabel("recall", fontsize=12)
         axis.grid()
@@ -241,22 +242,23 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
 
     for i in [0, 1, 2, 3]:
         idx = 0
+        _, axis = plt.subplots(figsize=(10, 10)) 
         for f, r in zip(all_filtrations, all_recalls):
             axis.plot(
                 np.array(f)[:, i],
                 np.array(r)[:, i],
-                f"{COLORS[i]}",
+                f"{COLORS[idx]}",
                 linewidth=2,
                 label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                linestyle=styles[idx],
+             #   linestyle=styles[idx],
             )
-        idx += 1
+            idx += 1
         axis.set_xlabel("filtration", fontsize=12)
         axis.set_ylabel("recall", fontsize=12)
         axis.set_ylim(90, 100.2)
-        axis.set_xlim(95, 100.2)
+        axis.set_xlim(97.5, 100.1)
         axis.grid()
-        axis.set_xticks([95, 96, 97, 98, 99, 100], fontsize=12)
+        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=12)
         axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
 
         plt.legend()

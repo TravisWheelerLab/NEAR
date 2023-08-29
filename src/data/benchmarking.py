@@ -241,13 +241,14 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwa
         with open(f"{temp_file}_recall.pickle", "rb") as pickle_file:
             recalls = pickle.load(pickle_file)
         return filtrations, recalls
-
-    write_datafile(
-        sorted_pairs,
-        hmmer_hits_dict,
-        evalue_thresholds=[1e-10, 1e-4, 1e-1, 10],
-        filename=temp_file,
-    )
+    
+    if not os.path.exists(temp_file):
+        write_datafile(
+            sorted_pairs,
+            hmmer_hits_dict,
+            evalue_thresholds=[1e-10, 1e-4, 1e-1, 10],
+            filename=temp_file,
+        )
     print("Wrote files")
     filtrations, recalls = get_filtration_recall(filename=temp_file)
 

@@ -246,7 +246,7 @@ def search(args):
     all_scores = []
     all_indices = []
     search_time = time.time()
-    for i in range(len(queries)):
+    for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
         all_scores.append(scores)
         all_indices.append(indices)
@@ -303,7 +303,7 @@ def evaluate_multiprocessing(_config):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
     else:
-        index = load_index(params)
+        index = load_index(params, model)
     print(f"nprobe : {params.nprobe}")
     print(f"omp num threads: {params.omp_num_threads}")
     # faiss.omp_set_num_threads(params.omp_num_threads)
@@ -330,10 +330,10 @@ def evaluate_multiprocessing(_config):
     all_indices_list = []
     print("Beginning search...")
     full_search_time = 0
-    concurrent = True
+    _concurrent = True
     start = time.time()
     
-    if concurrent:
+    if _concurrent:
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=params.num_threads
         ) as executor:
