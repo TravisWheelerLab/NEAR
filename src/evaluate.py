@@ -188,7 +188,6 @@ def load_index(params, model):
         params.omp_num_threads,
         index_path=params.index_path,
     )
-
     return index
 
 
@@ -237,8 +236,8 @@ def batch_search(args):
 
 
 def search(args):
-    (idx, sequences, model, output_path, index, max_seq_length) = args
-    queries = _calc_embeddings(sequences, model)
+    (idx, sequences, model, output_path, index, max_seq_length, device) = args
+    queries = _calc_embeddings(sequences, model, device)
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -303,7 +302,7 @@ def evaluate_multiprocessing(_config):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
     else:
-        index = load_index(params, model)
+        index = load_index(params, model, device)
     print(f"nprobe : {params.nprobe}")
     print(f"omp num threads: {params.omp_num_threads}")
     # faiss.omp_set_num_threads(params.omp_num_threads)
@@ -332,7 +331,7 @@ def evaluate_multiprocessing(_config):
     full_search_time = 0
     _concurrent = True
     start = time.time()
-    
+
     if _concurrent:
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=params.num_threads
@@ -340,7 +339,7 @@ def evaluate_multiprocessing(_config):
             future_to_batch = {
                 executor.submit(search, batch): batch for batch in arg_list
             }
-    
+
         # Collect results as they become available
         for future in concurrent.futures.as_completed(future_to_batch):
             #        batch = future_to_batch[future]
@@ -357,9 +356,11 @@ def evaluate_multiprocessing(_config):
             all_scores_list += all_scores
             all_indices_list += all_indices  # ... combine results ...
             full_search_time += search_time
- 
+
     assert len(all_scores_list) == numqueries
-    print(f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}.")
+    print(
+        f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}."
+    )
     print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
     if params.write_results:
         save_FAISS_results(
@@ -464,9 +465,13 @@ def evaluate(_config):
     if os.path.exists(params.index_path):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
+        if params.device == "cuda":
+            num = 0
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, int(num), index)
     else:
         index = load_index(params)
-    #faiss.omp_set_num_threads(params.omp_num_threads)
+    # faiss.omp_set_num_threads(params.omp_num_threads)
     # index = load_index(params)
     query_names = list(query_sequences.keys())
     arg_list = [
@@ -476,8 +481,8 @@ def evaluate(_config):
         #        index_mapping,
         params.save_dir,
         index,
-        # params.nprobe,
         params.max_seq_length,
+        params.device,
     ]
     # del query_sequences
     print(f"Number of queries: {len(query_sequences)}")
