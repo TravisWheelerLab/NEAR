@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import time
 from src.utils import create_faiss_index, encode_string_sequence
-import my_rust_module
+from collections import defaultdict
 
 logger = logging.getLogger("evaluate")
 
@@ -92,44 +92,25 @@ def _calc_embeddings(
     sequences,
     model_class,
     model_device="cpu",
+    max_seq_length=512,
 ):
     embeddings = []
+    lengths = []
+    indices = []
 
-    for sequence in sequences:
-        embed = (
-            model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
-            .squeeze()
-            .T
-        )
-        embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
-    return embeddings
-
-
-@torch.no_grad()
-def _calc_embeddings(
-    sequence_data, model_class, max_seq_length
-) -> Tuple[List[str], List[str], List[torch.Tensor]]:
-    """Calculates the embeddings for the sequences by
-    calling the model forward function. Filters the sequences by max/min
-    sequence length and returns the filtered sequences/names and embeddings
-
-    Returns [names], [sequences], [embeddings]"""
-
-    sequences = list(sequence_data.values())
-
-    filtered_names, embeddings, lengths = filter_and_calc_embeddings(
-        names, sequences, model_class, max_seq_length
-    )
-
-    return filtered_names, embeddings, lengths
-
-
-def save_target_embeddings(arg_list):
-    target_data, model, max_seq_length = arg_list
-
-    targets, lengths = _calc_embeddings(target_data, model, max_seq_length)
-
-    return targets, lengths
+    for idx, sequence in enumerate(sequences):
+        if len(sequence) < max_seq_length:
+            embed = (
+                model_class(
+                    encode_string_sequence(sequence).unsqueeze(0).to(model_device)
+                )
+                .squeeze()
+                .T
+            )
+            embeddings.append(torch.nn.functional.normalize(embed, dim=-1).to("cpu"))
+            lengths.apend(len(sequence))
+            indices.append(idx)
+    return embeddings, lengths, indices
 
 
 def reduce_indices(indices, index_mapping):
@@ -214,47 +195,6 @@ def est_nprobe(index, threshold=1):
     # Calculate Voronoi cell boundaries (e.g., using Convex Hull algorithm)
 
     # Calculate angles between Voronoi cell boundaries
-
-
-def _setup_targets_for_search(
-    target_embeddings: List[torch.Tensor],
-    index_string,
-    nprobe,
-    num_threads=1,
-    normalize_embeddings=True,
-    index_device="cpu",
-    index_path="/xdisk/twheeler/daphnedemekas/faiss-index-targets.index",
-):
-    """Creates the Faiss Index object using the unrolled
-    target embddings"""
-    start = time.time()
-    if not os.path.exists(index_path):
-        print(f"Creating index: {index_string} and saving to {index_path}")
-        unrolled_targets = torch.cat(target_embeddings, dim=0)
-        unrolled_targets = torch.nn.functional.normalize(unrolled_targets, dim=-1)
-        index: faiss.Index = create_faiss_index(
-            embeddings=unrolled_targets,
-            embed_dim=unrolled_targets.shape[-1],
-            distance_metric="cosine" if normalize_embeddings else "l2",
-            index_string=index_string,  # f"IVF{K},PQ8", #self.index_string, #f"IVF100,PQ8", #"IndexIVFFlat", #self.index_string,
-            device=index_device,
-        )
-        logger.info("Adding targets to index.")
-        if index_device == "cpu":
-            index.add(unrolled_targets.to("cpu"))
-        else:
-            index.add(unrolled_targets)
-        faiss.write_index(index, index_path)
-    else:
-        print(f"Reading index from {index_path}")
-        index = faiss.read_index(index_path)
-
-    index.nprobe = nprobe
-    loop_time = time.time() - start
-
-    print(f"Index Creation took: {loop_time}.")
-
-    return index
 
 
 def evaluate(
