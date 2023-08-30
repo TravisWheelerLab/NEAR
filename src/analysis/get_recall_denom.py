@@ -108,12 +108,3 @@ def prune(results):
         if query[:-4] not in query_sequences:
             print(f"Delete this query: {query}")
             os.remove(f"{results}/{query}")
-
-
-# mmseqs = '/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs'
-# knn = '/xdisk/twheeler/daphnedemekas/prefilter-output/knn-for-homology'
-esm = "/xdisk/twheeler/daphnedemekas/prefilter-output/esm"
-
-# prune(mmseqs)
-# prune(knn)
-# prune(esm)

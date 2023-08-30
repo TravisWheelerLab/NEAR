@@ -57,26 +57,10 @@ def parse_mmseqs():
             bitscore = float(line_split[-1])
             if os.path.exists(f"{outputdir}/{query}.txt"):
                 with open(f"{outputdir}/{query}.txt", "a") as f:
-
                     f.write(f"{target}     {bitscore}" + "\n")
             else:
                 with open(f"{outputdir}/{query}.txt", "w") as f:
                     f.write(f"{target}     {bitscore}" + "\n")
-
-
-def get_mmseqs_recall(e_value_threshold):
-    all_hits_max_4, all_hits_normal_4 = load_hmmer_hits()
-    with open("/xdisk/twheeler/daphnedemekas/mmseqs_hits.pkl", "rb") as file:
-        mmseqs_hits = pickle.load(file)
-
-    for query, target_list in mmseqs_hits.items():
-        if query not in all_hits_max_4:
-            print(f"Query {query} not in HMMER Max")
-            num_decoys += len(target_list)
-        else:
-            hmmer_query_hits = all_hits_max_4[query]
-            if target in hmmer_query_hits:
-                e_value = target[0]
 
 
 if __name__ == "__main__":

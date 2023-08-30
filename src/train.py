@@ -8,7 +8,7 @@ from src.callbacks import CallbackSet
 import time
 import yaml
 import argparse
-from src.utils.util import (
+from src.utils.loaders import (
     load_dataset_class,
     load_model_class,
 )

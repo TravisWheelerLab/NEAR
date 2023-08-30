@@ -43,11 +43,11 @@ def save_FAISS_results(
     query_names,
     all_scores,
     all_indices,
-    scores_path="/xdisk/twheeler/daphnedemekas/all_scores-reversed.h5",
-    indices_path="/xdisk/twheeler/daphnedemekas/all_indices-reversed.h5",
-    query_names_path="/xdisk/twheeler/daphnedemekas/query_names-reversed.txt",
+    scores_path,
+    indices_path,
+    query_names_path,
 ):
-    print("Saving FAISS results")
+    print(f"Saving FAISS results to {scores_path} and {indices_path}")
 
     with h5py.File(scores_path, "w") as hf:
         for i, arr in enumerate(all_scores):
@@ -60,7 +60,6 @@ def save_FAISS_results(
     with open(query_names_path, "w") as f:
         for name in query_names:
             f.write(name + "\n")
-    print("Saved")
 
 
 def _setup_targets_for_search(
@@ -105,25 +104,35 @@ def _setup_targets_for_search(
 
 
 def load_index(params, model):
-    target_embeddings, target_names, target_lengths = load_targets(
-        target_embeddings,
-        target_names,
-        target_lengths,
-        params.target_file,
-        params.num_threads,
-        model,
-        params.max_seq_length,
-        params.device,
-    )
-    assert (
-        len(target_lengths) == len(target_names) == len(target_embeddings)
-    ), "Target lengths, names and embeddings are not all the same length"
+    if os.path.exists(params.index_path):
+        index = faiss.read_index(params.index_path)
+        index.nprobe = params.nprobe
+        if params.device == "cuda":
+            num = 0
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, int(num), index)
+    else:
+        target_embeddings, target_names, target_lengths = load_targets(
+            target_embeddings,
+            target_names,
+            target_lengths,
+            params.target_file,
+            params.num_threads,
+            model,
+            params.max_seq_length,
+            params.device,
+        )
+        assert (
+            len(target_lengths) == len(target_names) == len(target_embeddings)
+        ), "Target lengths, names and embeddings are not all the same length"
 
-    index = _setup_targets_for_search(
-        target_embeddings,
-        params.index_string,
-        params.nprobe,
-        params.omp_num_threads,
-        index_path=params.index_path,
-    )
+        index = _setup_targets_for_search(
+            target_embeddings,
+            params.index_string,
+            params.nprobe,
+            params.omp_num_threads,
+            index_path=params.index_path,
+        )
+    faiss.omp_set_num_threads(params.omp_num_threads)
+
     return index

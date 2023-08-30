@@ -1,6 +1,5 @@
 from src.evaluator.contrastive_evaluator import (
     _calc_embeddings,
-    _setup_targets_for_search,
 )
 import torch
 import itertools
@@ -16,16 +15,12 @@ from src.utils.loaders import load_model_class
 def save_target_embeddings(arg_list):
     target_data, model, max_seq_length = arg_list
 
-    targets, lengths, indices = _calc_embeddings(
-        list(target_data.values()), model, max_seq_length
-    )
+    targets, lengths, indices = _calc_embeddings(list(target_data.values()), model, max_seq_length)
     names = np.array(list(target_data.keys()))[indices]
     return names, targets, lengths
 
 
-def save_off_targets(
-    target_sequences, num_threads, model, max_seq_length, device, savedir
-):
+def save_off_targets(target_sequences, num_threads, model, max_seq_length, device, savedir):
     t_chunk_size = len(target_sequences) // num_threads
 
     print("Embedding targets...")
