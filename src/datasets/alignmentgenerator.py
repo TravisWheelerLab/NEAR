@@ -7,6 +7,7 @@ from src.utils.gen_utils import generate_string_sequence
 import random
 import os
 
+
 class AlignmentGenerator(DataModule):
     """Alignment generator class without indels"""
 
@@ -40,7 +41,9 @@ class AlignmentGenerator(DataModule):
         with open(ali_path, "r") as file:
             self.alignment_file_paths = [f for f in file.readlines() if "\x00" not in f]
             if training is False:
-                self.alignment_file_paths = random.sample(self.alignment_file_paths, 30000)
+                self.alignment_file_paths = random.sample(
+                    self.alignment_file_paths, 30000
+                )
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -70,8 +73,12 @@ class AlignmentGenerator(DataModule):
         seq1, seq2 = self.parse_alignment(alignment_path)
         assert len(seq1) == len(seq2)
 
-        seq1_dots_and_dashes = [i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"]
-        seq2_dots_and_dashes = [i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"]
+        seq1_dots_and_dashes = [
+            i for i in range(len(seq1)) if seq1[i] == "." or seq1[i] == "-"
+        ]
+        seq2_dots_and_dashes = [
+            i for i in range(len(seq2)) if seq2[i] == "." or seq2[i] == "-"
+        ]
 
         clean_seq1 = ""
         clean_seq2 = ""
@@ -124,33 +131,45 @@ class AlignmentGeneratorWithIndels(DataModule):
     def parse_alignment(self, alignment_file: str):
         """Returns the aligned query and target
         sequences from an alignment file"""
-        with open(alignment_file, "r") as file:
+        if not os.path.exists(alignment_file):
+            print("Corrupt file. Random sampling.")
+            alignment_file = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
+        file = open(alignment_file, "r")
+        lines = file.readlines()
+        if len(lines) == 0 or len(lines) < 4:
+            # raise Exception(f"{alignment_file} is empty")
+            print("Alignment file is empty")
+            alignment_file = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
+            file = open(alignment_file, "r")
             lines = file.readlines()
-            if len(lines) == 0:
-                raise Exception(f"{alignment_file} is empty")
-            if len(lines) < 4:
-                raise Exception(f"{alignment_file} has less than 4 lines")
-                seq1 = lines[1].strip("\n")
-                seq2 = lines[2].strip("\n")
-                return seq1.upper(), seq2.upper(), seq1.upper(), seq2.upper()
-            seq1 = lines[1].strip("\n")
-            seq2 = lines[2].strip("\n")
-            seq1_full = lines[3].strip("\n")
-            seq2_full = lines[4].strip("\n")
+        # if len(lines) < 4:
+        #     raise Exception(f"{alignment_file} has less than 4 lines")
+        #     seq1 = lines[1].strip("\n")
+        #     seq2 = lines[2].strip("\n")
+        #     return seq1.upper(), seq2.upper(), seq1.upper(), seq2.upper()
+        seq1 = lines[1].strip("\n")
+        seq2 = lines[2].strip("\n")
+        seq1_full = lines[3].strip("\n")
+        seq2_full = lines[4].strip("\n")
+        file.close()
         return seq1.upper(), seq2.upper(), seq1_full.upper(), seq2_full.upper()
 
     def parse_indels(self, seq1: str, seq2: str):
         """
         Removes dots and dashes
         and keeps track of where the indels are so that
-        we can then apply a mask on the loss function
+         we can then apply a mask on the loss function
         """
 
         length = len(seq1)
 
         # indices of dots and dashes
-        seq1_dots_and_dashes = [i for i in range(length) if seq1[i] == "." or seq1[i] == "-"]
-        seq2_dots_and_dashes = [i for i in range(length) if seq2[i] == "." or seq2[i] == "-"]
+        seq1_dots_and_dashes = [
+            i for i in range(length) if seq1[i] == "." or seq1[i] == "-"
+        ]
+        seq2_dots_and_dashes = [
+            i for i in range(length) if seq2[i] == "." or seq2[i] == "-"
+        ]
 
         # keep track of indices of aligned aminos
         # put 'nan' in where amino has no aligned amino in corresponding sequence
@@ -202,7 +221,9 @@ class AlignmentGeneratorWithIndels(DataModule):
 
         return sequence, indices
 
-    def fix_sequence_length(self, sequence: str, indices: list, full_seq: str, value=float("nan")):
+    def fix_sequence_length(
+        self, sequence: str, indices: list, full_seq: str, value=float("nan")
+    ):
         """Currently we are padding sequences that are less
         than sequence length with randomly generated string sequence
         according to a background distribution.
@@ -221,7 +242,9 @@ class AlignmentGeneratorWithIndels(DataModule):
             seq_chop = self.seq_len - len(sequence)
             subseq_index = full_seq.find(sequence)
             half = seq_chop // 2
-            if len(full_seq) >= self.seq_len:  # we can get all our padding from the full sequence
+            if (
+                len(full_seq) >= self.seq_len
+            ):  # we can get all our padding from the full sequence
                 if (seq_chop) % 2 == 0:  # chop sequence is even
                     addition_left_amt = half
                     addition_right_amt = half
@@ -231,7 +254,8 @@ class AlignmentGeneratorWithIndels(DataModule):
 
                 if (
                     subseq_index >= addition_left_amt
-                    and len(full_seq) - (subseq_index + len(sequence)) >= addition_right_amt
+                    and len(full_seq) - (subseq_index + len(sequence))
+                    >= addition_right_amt
                 ):
                     sequence, indices = self.pad_sequence(
                         sequence,
@@ -244,7 +268,9 @@ class AlignmentGeneratorWithIndels(DataModule):
                     return sequence, indices
 
                 if subseq_index < addition_left_amt:
-                    addition_right_amt = addition_right_amt + (addition_left_amt - subseq_index)
+                    addition_right_amt = addition_right_amt + (
+                        addition_left_amt - subseq_index
+                    )
                     addition_left_amt = subseq_index
 
                     sequence, indices = self.pad_sequence(
@@ -260,7 +286,9 @@ class AlignmentGeneratorWithIndels(DataModule):
                 if len(full_seq) - (subseq_index + len(sequence)) < half:
                     addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
 
-                    addition_left_amt = self.seq_len - addition_right_amt - len(sequence)
+                    addition_left_amt = (
+                        self.seq_len - addition_right_amt - len(sequence)
+                    )
                     sequence, indices = self.pad_sequence(
                         sequence,
                         indices,
@@ -305,7 +333,9 @@ class AlignmentGeneratorWithIndels(DataModule):
         alignment_path = self.alignment_file_paths[idx].strip("\n")
 
         if not os.path.exists(alignment_path):
-            return self.__getitem__(idx + 1)
+            # print(f"Bad path: {alignment_path}")
+
+            alignment_path = random.sample(self.alignment_file_paths, 1)[0].strip("\n")
         seq1_raw, seq2_raw, seq1_full, seq2_full = self.parse_alignment(alignment_path)
 
         seq1, seq1_indices, seq2, seq2_indices = self.parse_indels(seq1_raw, seq2_raw)
@@ -339,7 +369,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
                 f for f in file.readlines() if f.strip("\n").endswith(".txt")
             ]
             if training is False:
-                self.alignment_file_paths = random.sample(self.alignment_file_paths, 6000000)
+                self.alignment_file_paths = random.sample(
+                    self.alignment_file_paths, 6000000
+                )
         print(f"Found {len(self.alignment_file_paths)} alignment files")
 
         self.training = training
@@ -381,14 +413,20 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
         seq_dots_and_dashes = []
         for subsequence in subsequences:
             seq_dots_and_dashes.append(
-                [i for i in range(length) if subsequence[i] == "." or subsequence[i] == "-"]
+                [
+                    i
+                    for i in range(length)
+                    if subsequence[i] == "." or subsequence[i] == "-"
+                ]
             )
 
         subsequence_indices = []
         for idx in range(len(subsequences)):
             seq_indices = []
             other_dots_and_dashes = [
-                seq_dots_and_dashes[i] for i in range(len(seq_dots_and_dashes)) if i != idx
+                seq_dots_and_dashes[i]
+                for i in range(len(seq_dots_and_dashes))
+                if i != idx
             ]
             for i in range(length):
                 index = True
@@ -403,7 +441,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
                     seq_indices.append(float("nan"))
             subsequence_indices.append(seq_indices)
 
-        subseqs_without_gaps = [seq.replace("-", "").replace(".", "") for seq in subsequences]
+        subseqs_without_gaps = [
+            seq.replace("-", "").replace(".", "") for seq in subsequences
+        ]
         return subseqs_without_gaps, subsequence_indices
 
     def pad_sequence(
@@ -431,7 +471,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
 
         return sequence, indices
 
-    def fix_sequence_length(self, sequence: str, indices: list, full_seq: str, value=float("nan")):
+    def fix_sequence_length(
+        self, sequence: str, indices: list, full_seq: str, value=float("nan")
+    ):
         """Currently we are padding sequences that are less
         than sequence length with randomly generated string sequence
         according to a background distribution.
@@ -450,7 +492,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
             seq_chop = self.seq_len - len(sequence)
             subseq_index = full_seq.find(sequence)
             half = seq_chop // 2
-            if len(full_seq) >= self.seq_len:  # we can get all our padding from the full sequence
+            if (
+                len(full_seq) >= self.seq_len
+            ):  # we can get all our padding from the full sequence
                 if (seq_chop) % 2 == 0:  # chop sequence is even
                     addition_left_amt = half
                     addition_right_amt = half
@@ -460,7 +504,8 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
 
                 if (
                     subseq_index >= addition_left_amt
-                    and len(full_seq) - (subseq_index + len(sequence)) >= addition_right_amt
+                    and len(full_seq) - (subseq_index + len(sequence))
+                    >= addition_right_amt
                 ):
                     sequence, indices = self.pad_sequence(
                         sequence,
@@ -473,7 +518,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
                     return sequence, indices
 
                 if subseq_index < addition_left_amt:
-                    addition_right_amt = addition_right_amt + (addition_left_amt - subseq_index)
+                    addition_right_amt = addition_right_amt + (
+                        addition_left_amt - subseq_index
+                    )
                     addition_left_amt = subseq_index
 
                     sequence, indices = self.pad_sequence(
@@ -489,7 +536,9 @@ class AlignmentGeneratorIndelsMultiPos(DataModule):
                 if len(full_seq) - (subseq_index + len(sequence)) < half:
                     addition_right_amt = len(full_seq) - (subseq_index + len(sequence))
 
-                    addition_left_amt = self.seq_len - addition_right_amt - len(sequence)
+                    addition_left_amt = (
+                        self.seq_len - addition_right_amt - len(sequence)
+                    )
                     sequence, indices = self.pad_sequence(
                         sequence,
                         indices,
