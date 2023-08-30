@@ -96,9 +96,7 @@ def parse(task_id):
 
     train_root = "/xdisk/twheeler/daphnedemekas/train-alignments"
     val_root = "/xdisk/twheeler/daphnedemekas/eval-alignments"
-    stdout_path = (
-        f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}-{target_filenum}.txt"
-    )
+    stdout_path = f"/xdisk/twheeler/daphnedemekas/phmmer_max_results/{query_filenum}-{target_filenum}.txt"
     dirpath1 = f"{train_root}/{query_filenum}"
     trainpath = f"{train_root}/{query_filenum}/{target_filenum}"
 

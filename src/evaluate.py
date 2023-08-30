@@ -4,7 +4,7 @@ import time
 import yaml
 import argparse
 import itertools
-from src.evaluator.contrastive_evaluator import (
+from src.evaluator.contrastive import (
     search,
     search_and_filter,
 )
@@ -60,7 +60,9 @@ def evaluate_multiprocessing(_config):
     full_search_time = 0
     start = time.time()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=params.num_threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=params.num_threads
+    ) as executor:
         future_to_batch = {executor.submit(search, batch): batch for batch in arg_list}
 
     # Collect results as they become available
@@ -73,7 +75,9 @@ def evaluate_multiprocessing(_config):
         full_search_time += search_time
 
     assert len(all_scores_list) == numqueries
-    print(f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}.")
+    print(
+        f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}."
+    )
     print(f"Elapsed time per query: {(time.time() - start)/numqueries}.")
     if params.write_results:
         save_FAISS_results(

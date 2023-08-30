@@ -1,6 +1,5 @@
 import torch
 import os
-import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -12,8 +11,6 @@ from src.utils.loaders import (
     load_dataset_class,
     load_model_class,
 )
-from torch import multiprocessing
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 HOME = os.environ["HOME"]
 
@@ -50,7 +47,9 @@ def train(_config):
     logger.experiment.add_text(
         tag="description", text_string=params.description, walltime=time.time()
     )
-    save_path = os.path.join(params.log_dir, params.model_name, f"version_{logger.version}")
+    save_path = os.path.join(
+        params.log_dir, params.model_name, f"version_{logger.version}"
+    )
 
     with open(f"{save_path}/config.yaml", "w") as file:
         yaml.dump(_config, file)
