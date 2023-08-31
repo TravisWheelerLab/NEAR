@@ -85,7 +85,7 @@ def search(args):
     all_indices = []
     search_time = time.time()
     for i in tqdm.tqdm(range(len(queries))):
-        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
         all_scores.append(scores)
         all_indices.append(indices)
     search_time = time.time() - search_time
