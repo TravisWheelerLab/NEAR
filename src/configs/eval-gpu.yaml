@@ -17,9 +17,9 @@ normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
-nprobe: 40
+nprobe: 70
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-gpu.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-40-gpu.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-40-gpu.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-40-gpu.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-70-gpu.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-70-gpu.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-70-gpu.txt"

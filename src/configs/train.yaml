@@ -28,11 +28,7 @@ dataloader_args:
 trainer_args:
     accelerator: "gpu"
     num_nodes: 1
-<<<<<<< HEAD
     max_epochs: 2
-=======
-    max_epochs: 100
->>>>>>> feb16feb3b82bc4c09ec95cf5a97e4b4ee5069f2
     precision: 16
 
 val_dataset_args:

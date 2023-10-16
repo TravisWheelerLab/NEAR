@@ -123,7 +123,6 @@ def evaluate_multiprocessing_python(_config):
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
     del query_sequences
-
     pool = Pool(params.num_threads)
 
     print("Beginning search...")

@@ -1,5 +1,6 @@
 import torch
 import os
+import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger

@@ -36,7 +36,9 @@ def parse_mmseqs():
             "/xdisk/twheeler/daphnedemekas/prefilter-output/AlignmentEvaluation/CPU-20K-150"
         )
     ]
-    with open("/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r") as tnames:
+    with open(
+        "/xdisk/twheeler/daphnedemekas/prefilter/target_names.txt", "r"
+    ) as tnames:
         mytargets = [t.strip("\n") for t in tnames.readlines()]
 
     # assert len(queries) == 16769
