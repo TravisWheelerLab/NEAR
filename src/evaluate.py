@@ -302,7 +302,7 @@ def evaluate_multiprocessing(_config):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
     else:
-        index = load_index(params, model, device)
+        index = load_index(params, model, params.device)
     print(f"nprobe : {params.nprobe}")
     print(f"omp num threads: {params.omp_num_threads}")
     # faiss.omp_set_num_threads(params.omp_num_threads)
@@ -318,6 +318,7 @@ def evaluate_multiprocessing(_config):
             params.save_dir,
             index,
             params.max_seq_length,
+            params.device
         )
         for i in range(params.num_threads)
     ]
