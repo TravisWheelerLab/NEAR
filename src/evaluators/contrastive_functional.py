@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import time
 from src.utils import create_faiss_index, encode_string_sequence
-import my_rust_module
+from collections import defaultdict
 
 logger = logging.getLogger("evaluate")
 

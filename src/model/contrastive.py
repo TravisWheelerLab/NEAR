@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-from src.utils.layers import ResConv
+from src.model.layers import ResConv
 from src.losses import NpairLoss, SupConLoss
 import torch.nn.functional as F
 
@@ -24,7 +24,6 @@ class ResNet1d(pl.LightningModule):
         padding_mode: str = "circular",
         indels=True,
     ):
-
         super(ResNet1d, self).__init__()
 
         self.in_channels = in_channels
@@ -49,7 +48,6 @@ class ResNet1d(pl.LightningModule):
         self.validation_step_outputs = []
 
     def _setup_layers(self):
-
         self.embed = nn.Conv1d(
             in_channels=self.in_channels,
             out_channels=self.res_block_n_filters,
@@ -112,7 +110,6 @@ class ResNet1d(pl.LightningModule):
         return labelmat
 
     def _shared_step(self, batch):
-
         if self.indels:
             (
                 seq1,
@@ -198,7 +195,6 @@ class ResNet1dMultiPos(ResNet1d):
         self.loss_func = SupConLoss()
 
     def _shared_step(self, batch):
-
         (features, labels) = batch  # 32 pairs of sequences, each amino has a label
         # these are now not all the same size so we need to first relabel and then flatten
         embeddings = self.forward(features)

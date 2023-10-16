@@ -8,7 +8,6 @@ def main(train_dir, eval_dir, train_path, eval_path):
     TRAIN_DIR = train_dir
 
     with open(train_path, "w") as tpaths:
-
         print("Writing train paths")
         for Q in range(4):
             print(Q)
@@ -18,16 +17,15 @@ def main(train_dir, eval_dir, train_path, eval_path):
                     for f in files:
                         tpaths.write(f"{TRAIN_DIR}/{Q}/{T}/{f}" + "\n")
 
-    # VAL_DIR = eval_dir
+    VAL_DIR = eval_dir
 
-    # with open(eval_path, "w", encoding="utf-8") as valpaths:
-
-    #     print("Writing val paths")
-    #     for Q in [0, 1, 2]:
-    #         for T in tqdm.tqdm(range(45)):
-    #             files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
-    #             for f in files:
-    #                 valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
+    with open(eval_path, "w", encoding="utf-8") as valpaths:
+        print("Writing val paths")
+        for Q in [0, 1, 2]:
+            for T in tqdm.tqdm(range(45)):
+                files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
+                for f in files:
+                    valpaths.write(f"{VAL_DIR}/{Q}/{T}/{f}" + "\n")
 
 
 if __name__ == "__main__":

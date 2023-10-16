@@ -44,7 +44,9 @@ def get_evaluation_data(
     if save_dir is not None:  # only return those that we don't already have
         existing_queries = [f.strip(".txt") for f in os.listdir(save_dir)]
 
-        print(f"Cleaning out {len(existing_queries)} queries that we already have in results...")
+        print(
+            f"Cleaning out {len(existing_queries)} queries that we already have in results..."
+        )
         for query, value in querysequences.items():
             if query not in existing_queries:
                 filtered_query_sequences.update({query: value})
@@ -85,5 +87,7 @@ def get_outliers(
             outliers_file.write("Target" + "\n" + str(pair[1]) + "\n")
             outliers_file.write(targetsequences_max[pair[1]] + "\n")
 
-            outliers_file.write("Predicted Similarity: " + str(all_similarities[idx]) + "\n")
+            outliers_file.write(
+                "Predicted Similarity: " + str(all_similarities[idx]) + "\n"
+            )
             outliers_file.write("E-value: " + str(all_e_values[idx]) + "\n")

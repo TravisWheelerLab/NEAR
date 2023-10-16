@@ -8,6 +8,13 @@ import src.utils as utils
 __all__ = ["ResConv2d", "PositionalEncoding", "ResConv"]
 
 
+def mask_mask(mask):
+    idxs = torch.sum(~mask, axis=-1).squeeze().detach()
+    for i, idx in enumerate(idxs):
+        mask[i, (idx - 1) :] = True
+    return mask
+
+
 class ResConv(torch.nn.Module):
     def __init__(self, filters, kernel_size, padding, padding_mode):
         super().__init__()

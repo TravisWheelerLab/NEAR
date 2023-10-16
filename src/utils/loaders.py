@@ -2,22 +2,20 @@ from typing import Dict, Type
 
 import pytorch_lightning as pl
 
-from src import datasets, evaluators, models
+from src import datasets, evaluator, model
 from src.utils import pluginloader
 
 
 def load_models() -> Dict[str, Type[pl.LightningModule]]:
-    return {m.__name__: m for m in pluginloader.load_plugin_classes(models, pl.LightningModule)}
+    return {m.__name__: m for m in pluginloader.load_plugin_classes(model, pl.LightningModule)}
 
 
 def load_datasets() -> Dict[str, Type[datasets.DataModule]]:
     return {m.__name__: m for m in pluginloader.load_plugin_classes(datasets, datasets.DataModule)}
 
 
-def load_evaluators() -> Dict[str, Type[evaluators.Evaluator]]:
-    return {
-        m.__name__: m for m in pluginloader.load_plugin_classes(evaluators, evaluators.Evaluator)
-    }
+def load_evaluators() -> Dict[str, Type[evaluator.Evaluator]]:
+    return {m.__name__: m for m in pluginloader.load_plugin_classes(evaluator, evaluator.Evaluator)}
 
 
 def _get_dataset(name: str) -> Type[datasets.DataModule]:
@@ -30,7 +28,7 @@ def _get_dataset(name: str) -> Type[datasets.DataModule]:
     return dataset_dict[name]
 
 
-def _get_evaluator(name: str) -> Type[evaluators.Evaluator]:
+def _get_evaluator(name: str) -> Type[evaluator.Evaluator]:
     evaluator = load_evaluators()
 
     if name not in evaluator:
