@@ -244,6 +244,7 @@ def _setup_targets_for_search(
             index.add(unrolled_targets.to("cpu"))
         else:
             index.add(unrolled_targets)
+        print("Writing index to disk.")
         faiss.write_index(index, index_path)
     else:
         print(f"Reading index from {index_path}")

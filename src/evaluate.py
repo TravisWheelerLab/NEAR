@@ -318,7 +318,7 @@ def evaluate_multiprocessing(_config):
             params.save_dir,
             index,
             params.max_seq_length,
-            params.device
+            params.device,
         )
         for i in range(params.num_threads)
     ]
@@ -402,7 +402,7 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    index, _ = load_index(params)
+    index, _ = load_index(params, model)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
@@ -420,7 +420,6 @@ def evaluate_multiprocessing_python(_config):
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
-            index_mapping,
             params.save_dir,
             index,
             params.max_seq_length,
@@ -471,7 +470,7 @@ def evaluate(_config):
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, int(num), index)
     else:
-        index = load_index(params)
+        index = load_index(params, model)
     # faiss.omp_set_num_threads(params.omp_num_threads)
     # index = load_index(params)
     query_names = list(query_sequences.keys())
@@ -479,7 +478,6 @@ def evaluate(_config):
         0,
         list(query_sequences.values()),
         model,
-        #        index_mapping,
         params.save_dir,
         index,
         params.max_seq_length,
