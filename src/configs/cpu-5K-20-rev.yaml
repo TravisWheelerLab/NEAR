@@ -7,8 +7,8 @@ checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints
 query_file: "data/queries-filtered.fa"
 target_file: "data/reversed-targets.fa"
 target_embeddings: 'target_embeddings_reversed.pt'
-target_names: 'reversed_names.pickle'
-target_lengths: 'reversed_lengths.pickle'
+target_names: 'reversed-target-names.txt'
+target_lengths: 'reversed-target-lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
 num_threads: 16
 omp_num_threads: 1

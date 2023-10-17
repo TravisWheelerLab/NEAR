@@ -49,13 +49,14 @@ def save_off_targets(
 
         for result in pool.imap(save_target_embeddings, arg_list):
             names, embeddings, lengths = result
-            target_names += names
+            target_names += list(names)
             target_lengths += lengths
             target_embeddings += embeddings
     else:
         target_names, target_embeddings, target_lengths = save_target_embeddings[
             (target_sequences, model, max_seq_length, device)
         ]
+    print(f"Number of target embeddings: {len(target_embeddings)}")
 
     torch.save(target_embeddings, savedir)
     with open(f"{savedir.strip('.pt')}_names.pickle", "wb") as handle:
@@ -98,6 +99,7 @@ def load_targets(
         )
     else:
         target_embeddings = torch.load(target_embeddings)
+        print(f"Number of target embeddings: {len(target_embeddings)}")
 
         if target_names.endswith(".pickle"):
             with open(target_names, "rb") as file_handle:

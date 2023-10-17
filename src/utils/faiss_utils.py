@@ -34,8 +34,8 @@ def create_faiss_index(
         index = faiss.index_cpu_to_gpu(res, gpu_num, index)
         index.train(embeddings.numpy())#.to("cuda"))
     else:
-        index.train(embeddings)
-
+        index.train(embeddings.numpy())
+    
     return index
 
 
@@ -87,10 +87,11 @@ def _setup_targets_for_search(
         )
         log.info("Adding targets to index.")
         if index_device == "cpu":
-            index.add(unrolled_targets.to("cpu"))
+            index.add(unrolled_targets.to("cpu").numpy())
             faiss.write_index(index, index_path)
         else:
             index.add(unrolled_targets.numpy())
+            faiss.write_index(index, index_path)
     else:    
         print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
@@ -134,7 +135,7 @@ def load_index(params, model):
             params.nprobe,
             params.omp_num_threads,
             index_path=params.index_path,
-            index_device = params.device,
+            index_device = params.index_device,
         )
     faiss.omp_set_num_threads(params.omp_num_threads)
 
