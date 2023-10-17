@@ -1,5 +1,5 @@
-all_hits_max_file_4 = "data/evaluationtargetdict"
-all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
+all_hits_max_file_4 = "data/evaltargetdictmax"
+all_hits_normal_file_4 = "data/evaltargetdictnormal"
 
 
 def load_inputs(hits, mode, modelname):
