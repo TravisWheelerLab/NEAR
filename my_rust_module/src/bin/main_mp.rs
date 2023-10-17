@@ -1,9 +1,9 @@
 use rayon::prelude::*;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::env;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead, BufReader};
@@ -82,19 +82,19 @@ fn read_names(filename: &str) -> io::Result<Vec<String>> {
     Ok(names)
 }
 
-fn filter_scores_inner() -> Vec<HashMap<String, f64>>{
+fn filter_scores_inner(
+    scores_file: &str,
+    names_file: &str,
+    indices_file: &str,
+) -> Vec<HashMap<String, f64>> {
     // Assuming you have your scores_array_list and indices_array_list defined above here
     //let mut filtered_scores_list = Vec::new();
 
     println!("In new rust module");
-    let scores_array_list =
-        read_hdf5_to_vec_f64("/xdisk/twheeler/daphnedemekas/all-scores-250-rev.h5")
-            .expect("Failed to read HDF5 data");
+    let scores_array_list = read_hdf5_to_vec_f64(scores_file).expect("Failed to read HDF5 data");
     let indices_array_list =
-        read_hdf5_to_vec_usize("/xdisk/twheeler/daphnedemekas/all-indices-250-rev.h5")
-            .expect("Failed to read HDF5 data");
-    let target_names = read_names("/xdisk/twheeler/daphnedemekas/unrolled-names-reversed.txt")
-        .expect("Failed to read unrolled names");
+        read_hdf5_to_vec_usize(indices_file).expect("Failed to read HDF5 data");
+    let target_names = read_names(names_file).expect("Failed to read unrolled names");
     println!("The length of scores array is: {}", scores_array_list.len());
     println!(
         "The length of scores array is: {}",
@@ -188,28 +188,34 @@ fn filter_scores_inner() -> Vec<HashMap<String, f64>>{
             filtered_scores
         })
         .collect();
- //   filtered_scores_inner
-    println!("The length of filtered scores is: {}", filtered_scores_list.len()); 
-    return filtered_scores_list
- // Now use or return filtered_scores_list as needed
+    //   filtered_scores_inner
+    println!(
+        "The length of filtered scores is: {}",
+        filtered_scores_list.len()
+    );
+    return filtered_scores_list;
+    // Now use or return filtered_scores_list as needed
 }
 fn write(
     filtered_scores_list: &Vec<HashMap<String, f64>>,
     output_path: &str,
     query_names: &Vec<String>,
 ) {
-    filtered_scores_list.par_iter().enumerate().for_each(|(i, filtered_scores)| {
-        let file_name = format!("{}/{}.txt", output_path, query_names[i]);
-        let mut f = File::create(&file_name).expect("Unable to create file");
+    filtered_scores_list
+        .par_iter()
+        .enumerate()
+        .for_each(|(i, filtered_scores)| {
+            let file_name = format!("{}/{}.txt", output_path, query_names[i]);
+            let mut f = File::create(&file_name).expect("Unable to create file");
 
-        f.write_all(b"Name     Distance\n")
-            .expect("Unable to write data");
+            f.write_all(b"Name     Distance\n")
+                .expect("Unable to write data");
 
-        for (name, distance) in filtered_scores.iter() {
-            let line = format!("{}     {}\n", name, distance);
-            f.write_all(line.as_bytes()).expect("Unable to write data");
-        }
-    });
+            for (name, distance) in filtered_scores.iter() {
+                let line = format!("{}     {}\n", name, distance);
+                f.write_all(line.as_bytes()).expect("Unable to write data");
+            }
+        });
 }
 
 fn time_it<F, T>(func: F) -> T
@@ -236,27 +242,31 @@ fn main() {
         }
         let query_filename = &args[1];
         let output_path = &args[2];
-        let write_results: bool = match args[3].parse() {
+        let scores_file = &args[3];
+        let indices_file = &args[4];
+        let names_file = &args[5];
+
+        let write_results: bool = match args[6].parse() {
             Ok(val) => val,
             Err(_) => {
                 eprintln!("Error: write_results must be a boolean (true or false)");
                 return;
             }
         };
-        let filtered_scores = filter_scores_inner();        
-//match filter_scores_inner() {
- //           Ok(filtered_scores) => {
-                if write_results {
-                    match read_names(query_filename) {
-                        Ok(query_names) => {
-                            write(&filtered_scores, output_path, &query_names);
-                        }
-                        Err(e) => {
-                            eprintln!("Error reading names: {}", e);
-                            return;
-                        }
-                    }
+
+        let filtered_scores = filter_scores_inner(scores_file, names_file, indices_file);
+        //match filter_scores_inner() {
+        //           Ok(filtered_scores) => {
+        if write_results {
+            match read_names(query_filename) {
+                Ok(query_names) => {
+                    write(&filtered_scores, output_path, &query_names);
                 }
+                Err(e) => {
+                    eprintln!("Error reading names: {}", e);
+                    return;
+                }
+            }
+        }
     });
 }
-
