@@ -13,10 +13,10 @@ from src.utils.loaders import load_model_class
 
 
 def save_target_embeddings(arg_list):
-    target_data, model, max_seq_length = arg_list
+    target_data, model, max_seq_length, device = arg_list
 
     targets, lengths, indices = _calc_embeddings(
-        list(target_data.values()), model, max_seq_length
+        list(target_data.values()), model, device, max_seq_length
     )
     names = np.array(list(target_data.keys()))[indices]
     return names, targets, lengths
@@ -38,7 +38,7 @@ def save_off_targets(
     if num_threads > 1:
         arg_list = [
             (
-                dict(itertools.islice(target_sequences.values(), i, i + t_chunk_size)),
+                dict(itertools.islice(target_sequences.items(), i, i + t_chunk_size)),
                 model,
                 max_seq_length,
             )
@@ -53,7 +53,7 @@ def save_off_targets(
             target_embeddings += embeddings
     else:
         target_names, target_embeddings, target_lengths = save_target_embeddings[
-            (target_sequences, model, max_seq_length)
+            (target_sequences, model, max_seq_length, device)
         ]
 
     torch.save(target_embeddings, savedir)
