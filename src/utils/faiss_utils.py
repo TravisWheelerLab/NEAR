@@ -32,7 +32,7 @@ def create_faiss_index(
     if device == "cuda":
         res = faiss.StandardGpuResources()
         index = faiss.index_cpu_to_gpu(res, gpu_num, index)
-        index.train(embeddings.numpy())#.to("cuda"))
+        index.train(embeddings.numpy())  # .to("cuda"))
     else:
         index.train(embeddings.numpy())
     
@@ -91,8 +91,12 @@ def _setup_targets_for_search(
             faiss.write_index(index, index_path)
         else:
             index.add(unrolled_targets.numpy())
+<<<<<<< HEAD
             faiss.write_index(index, index_path)
     else:    
+=======
+    else:
+>>>>>>> 270241aa386fad2a21b3986e847623372bd18577
         print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
 
@@ -105,7 +109,7 @@ def _setup_targets_for_search(
 
 
 def load_index(params, model):
-    if params.device == 'cpu' and os.path.exists(params.index_path):
+    if os.path.exists(params.index_path):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
         if params.device == "cuda":
@@ -126,9 +130,9 @@ def load_index(params, model):
         assert (
             len(target_lengths) == len(target_names) == len(target_embeddings)
         ), "Target lengths, names and embeddings are not all the same length"
-        
-        #if params.device == 'cuda':
-           # target_embeddings = target_embeddings.to("cpu").numpy()
+
+        # if params.device == 'cuda':
+        # target_embeddings = target_embeddings.to("cpu").numpy()
         index = _setup_targets_for_search(
             target_embeddings,
             params.index_string,
