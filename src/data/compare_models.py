@@ -52,12 +52,6 @@ class Results:
         """evaluates a given model"""
 
         if plot_e_values:
-            (self.similarities, self.e_values, self.biases, sorted_pairs) = get_data(
-                model_results_path,
-                hmmer_hits_dict,
-                data_savedir=data_savedir,
-                plot_roc=plot_roc,
-            )
             print("Plotting e values and saving to")
             print(evaluemeansfile)
             plot_mean_e_values(
@@ -75,15 +69,15 @@ class Results:
                 generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
         elif plot_roc:
             if not os.path.exists(f"{temp_file}_filtration.pickle"):
-                sorted_pairs = get_data_for_roc(
+                (_, _, _, sorted_pairs) = get_data(
                     model_results_path,
                     hmmer_hits_dict,
                     data_savedir=data_savedir,
                     plot_roc=plot_roc,
                 )
-                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
+                generate_roc(hmmer_hits_dict, temp_file, sorted_pairs)
             else:
-                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, None)
+                generate_roc(hmmer_hits_dict, temp_file, None)
 
 
 def compare_models(

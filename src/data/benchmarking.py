@@ -232,7 +232,7 @@ def write_datafile(
             )
 
 
-def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwargs):
+def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None):
     if os.path.exists(f"{temp_file}_filtration.pickle"):
         with open(f"{temp_file}_filtration.pickle", "rb") as pickle_file:
             filtrations = pickle.load(pickle_file)
@@ -263,17 +263,12 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwa
 
 
 def generate_roc(
-    modelhitsfile,
-    figure_path: str,
-    hmmerhits: dict,
-    filename: str,
-    scores: list,
-    pairs: list,
+    modelhitsfile, figure_path: str, hmmerhits: dict, filename: str, sorted_pairs
 ):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
     filtrations, recalls = get_roc_data(
-        modelhitsfile, hmmerhits, filename, scores, pairs
+        modelhitsfile, hmmerhits, filename, sorted_pairs
     )
     plot_roc_curve(figure_path, filtrations, recalls)
 
