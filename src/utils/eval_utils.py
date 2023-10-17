@@ -41,6 +41,7 @@ def save_off_targets(
                 dict(itertools.islice(target_sequences.items(), i, i + t_chunk_size)),
                 model,
                 max_seq_length,
+                device,
             )
             for i in range(0, len(target_sequences), t_chunk_size)
         ]
