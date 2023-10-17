@@ -1,4 +1,4 @@
-from src.data.benchmarking import load_hmmer_hits
+from src.data.compare_models import load_hmmer_hits
 from src.data.hmmerhits import FastaFile
 
 

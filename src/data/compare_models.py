@@ -3,7 +3,6 @@
 from src.data.benchmarking import (
     get_data,
     generate_roc,
-    get_data_for_roc,
     plot_mean_e_values,
     get_roc_data,
     COLORS,
