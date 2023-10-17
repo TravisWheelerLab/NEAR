@@ -359,7 +359,7 @@ def get_data(
     sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
     return (
-        all_similarities,
+        similarities,
         all_e_values,
         all_biases,
         sorted_pairs,
