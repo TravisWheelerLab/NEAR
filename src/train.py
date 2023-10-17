@@ -1,5 +1,6 @@
 import torch
 import os
+import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
 from types import SimpleNamespace
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -7,12 +8,10 @@ from src.callbacks import CallbackSet
 import time
 import yaml
 import argparse
-from src.utils.util import (
+from src.utils.loaders import (
     load_dataset_class,
     load_model_class,
 )
-from torch import multiprocessing
-
 
 HOME = os.environ["HOME"]
 
@@ -49,20 +48,27 @@ def train(_config):
     logger.experiment.add_text(
         tag="description", text_string=params.description, walltime=time.time()
     )
+    save_path = os.path.join(
+        params.log_dir, params.model_name, f"version_{logger.version}"
+    )
+
+    with open(f"{save_path}/config.yaml", "w") as file:
+        yaml.dump(_config, file)
 
     trainer = Trainer(
         **params.trainer_args,
+        #        callbacks=[EarlyStopping(monitor='val_loss')],
         callbacks=CallbackSet.callbacks(),
         logger=logger,
-        val_check_interval=0.2,
+        log_every_n_steps=10000,
+        # val_check_interval=0.2,
         devices=1,
-        #strategy="ddp_find_unused_parameters_false",
-     )
+        # strategy="ddp_find_unused_parameters_false",
+    )
     trainer.fit(
         model,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-
         ckpt_path=params.checkpoint,
     )
 
@@ -73,7 +79,9 @@ if __name__ == "__main__":
     parser.add_argument("config")
 
     args = parser.parse_args()
-    configfile = args.config.strip(".yaml")
+    configfile = args.config
+    if "yaml" in configfile:
+        configfile = configfile[:-5]
 
     with open(f"src/configs/{configfile}.yaml", "r") as stream:
         _config = yaml.safe_load(stream)

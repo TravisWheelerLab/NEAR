@@ -18,4 +18,4 @@ Increasing `nprobe` will lead to more accurate results, but will be slower.
 
 You can run evaluation with 
 
-`python3 -m src.evaluate {configfile}` where configfile is the name of the config file that you changed. 
+`python3 src/evaluate.py {configfile}` where configfile is the name of the config file that you changed. 

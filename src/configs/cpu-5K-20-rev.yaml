@@ -1,0 +1,25 @@
+model_name:  "ResNet1d"
+evaluator_name: "ContrastiveEvaluator"
+description: "Use CPU with IVF optimization and multithreading"
+index_string: "IVF5000,Flat"
+log_verbosity: logging.INFO
+checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
+query_file: "data/queries-filtered.fa"
+target_file: "data/reversed-targets.fa"
+target_embeddings: 'target_embeddings_reversed.pt'
+target_names: 'reversed_names.pickle'
+target_lengths: 'reversed_lengths.pickle'
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
+num_threads: 16
+omp_num_threads: 1
+device: 'cpu'
+normalize_embeddings: True
+minimum_seq_length: 0
+max_seq_length: 512
+profiler: False
+nprobe: 20
+write_results: True
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed.index"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-20-reversed.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-20-reversed.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-20-reversed.txt"
