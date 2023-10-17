@@ -361,16 +361,11 @@ def get_data(
                         similarity = float(line.split()[1].strip("\n"))
                         all_targets.append((queryname, target))
                         all_scores.append(similarity)
+    sorted_pairs = get_sorted_pairs(all_scores, all_targets)
 
-    numhits = np.sum(
-        [len(similarity_hits_dict[q]) for q in list(similarity_hits_dict.keys())]
-    )
-    print(f"Got {numhits} total hits from our model")
     return (
-        similarity_hits_dict,
         all_similarities,
         all_e_values,
         all_biases,
-        numhits,
-        all_targets,
+        sorted_pairs,
     )
