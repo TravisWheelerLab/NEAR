@@ -75,9 +75,9 @@ class Results:
                     data_savedir=data_savedir,
                     plot_roc=plot_roc,
                 )
-                generate_roc(hmmer_hits_dict, temp_file, sorted_pairs)
+                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
             else:
-                generate_roc(hmmer_hits_dict, temp_file, None)
+                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, None)
 
 
 def compare_models(
