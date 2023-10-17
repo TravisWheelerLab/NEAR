@@ -81,9 +81,11 @@ def load_targets(
 ):
     # get target embeddings
     if not os.path.exists(target_embeddings):
-        print("No saved target embeddings. Calculating them now.")
+        print(f"No saved target embeddings. Calculating them now from {target_file}")
         targetfasta = FastaFile(target_file)
         target_sequences = targetfasta.data
+
+        print(f"Number of target sequences: {len(target_sequences)}")
 
         target_names, target_lengths, target_embeddings = save_off_targets(
             target_sequences,
