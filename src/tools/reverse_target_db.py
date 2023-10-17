@@ -24,9 +24,21 @@ print(f"Number of target sequences: {len(targetsequences)}")
 
 targets_to_reverse = []
 
+names = []
+lengths = []
+
+namefile = open(
+    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-names.txt", "w"
+)
+lengthsfile = open(
+    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths.txt", "w"
+)
 with open(
     "/xdisk/twheeler/daphnedemekas/prefilter/data/reversedtargets-filtered.fa", "w"
 ) as f:
     for name, sequence in tqdm.tqdm(targetsequences.items()):
         if name not in targets_that_are_hits:
             f.write(f">{name}\n{sequence}\n")
+            namefile.write(f"{name}\n")
+            lengthsfile.write(f"{len(sequence)}\n")
+
