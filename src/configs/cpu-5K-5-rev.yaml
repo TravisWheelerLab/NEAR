@@ -20,6 +20,6 @@ profiler: False
 nprobe: 5
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-50-reversed.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-50-reversed.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-50-reversed.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-5-reversed.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-5-reversed.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-5-reversed.txt"

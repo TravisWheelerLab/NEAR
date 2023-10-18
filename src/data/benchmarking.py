@@ -241,6 +241,8 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None):
         return filtrations, recalls
 
     if not os.path.exists(temp_file):
+        # TODO:
+        # if sorted_pairs is None: get sorted_pairs
         write_datafile(
             sorted_pairs,
             hmmer_hits_dict,
@@ -262,14 +264,10 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None):
     return filtrations, recalls
 
 
-def generate_roc(
-    figure_path: str, hmmerhits: dict, filename: str, sorted_pairs
-):
+def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs):
     """Pipeline to write data to file and generate the ROC plot
     This will then delete the file as well as its massive and not useful"""
-    filtrations, recalls = get_roc_data(
-        hmmerhits, filename, sorted_pairs
-    )
+    filtrations, recalls = get_roc_data(hmmerhits, filename, sorted_pairs)
     plot_roc_curve(figure_path, filtrations, recalls)
 
 
@@ -301,7 +299,6 @@ def get_data(
             sorted_pairs,
         )
     similarities = []
-
     all_e_values = []
     all_biases = []
     all_targets = []

@@ -69,7 +69,7 @@ def evaluate_multiprocessing(_config):
     for future in concurrent.futures.as_completed(future_to_batch):
         #        batch = future_to_batch[future]
         i, all_scores, all_indices, search_time, query_indices = future.result()
-        query_names_list += np.array(split_names[i])[query_indices]
+        query_names_list += list(np.array(split_names[i])[query_indices])
         all_scores_list += all_scores
         all_indices_list += all_indices  # ... combine results ...
         full_search_time += search_time

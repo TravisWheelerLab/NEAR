@@ -91,12 +91,8 @@ def _setup_targets_for_search(
             faiss.write_index(index, index_path)
         else:
             index.add(unrolled_targets.numpy())
-<<<<<<< HEAD
             faiss.write_index(index, index_path)
     else:    
-=======
-    else:
->>>>>>> 270241aa386fad2a21b3986e847623372bd18577
         print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
 
