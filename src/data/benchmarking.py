@@ -116,7 +116,7 @@ def plot_roc_curve(
         axis.plot(
             np.array(filtrations)[:, i],
             np.array(recalls)[:, i],
-            f"{COLORS[i]}--",
+            f"{COLORS[i]}",
             linewidth=2,
             label=evalue_thresholds[i],
         )
@@ -300,8 +300,7 @@ def get_data(
             all_biases,
             sorted_pairs,
         )
-
-     = []
+    similarities = []
 
     all_e_values = []
     all_biases = []
