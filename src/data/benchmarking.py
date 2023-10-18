@@ -241,6 +241,8 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None):
         return filtrations, recalls
 
     if not os.path.exists(temp_file):
+        # TODO:
+        # if sorted_pairs is None: get sorted_pairs
         write_datafile(
             sorted_pairs,
             hmmer_hits_dict,
