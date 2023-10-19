@@ -39,15 +39,15 @@ def load_hmmer_hits(query_id: int = 4):
 class Results:
     def __init__(
         self,
-#        model_results_path: str,
+        model_results_path: str,
         hmmer_hits_dict: dict,
         data_savedir: str,
-#        evaluemeansfile: str,
-#        evaluemeanstitle: str,
-#        roc_filepath: str,
-#        plot_roc: bool = False,
-#        plot_e_values: bool = False,
-#        temp_file: str = None,
+        evaluemeansfile: str = None,
+        evaluemeanstitle: str = None,
+        roc_filepath: str = None,
+        plot_roc: bool = False,
+        temp_file: str = None,
+        plot_e_values: bool = False,
     ):
         """evaluates a given model"""
 
@@ -179,7 +179,7 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
     styles = ["dashed", "solid"]
 
     print(f"Comparing NEAT models")
-    all_hits_max, _all_hits_normal = load_hmmer_hits(4)
+    all_hits_max, _ = load_hmmer_hits(4)
 
     align = load_inputs(all_hits_max, "max", "CPU-5K-5")
     align2 = load_inputs(all_hits_max, "max", "CPU-5K-10")
