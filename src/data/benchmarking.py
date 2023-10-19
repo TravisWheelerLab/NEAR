@@ -232,7 +232,7 @@ def write_datafile(
             )
 
 
-def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None):
+def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwargs):
     if os.path.exists(f"{temp_file}_filtration.pickle"):
         with open(f"{temp_file}_filtration.pickle", "rb") as pickle_file:
             filtrations = pickle.load(pickle_file)
