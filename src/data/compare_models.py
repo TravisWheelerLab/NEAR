@@ -39,15 +39,15 @@ def load_hmmer_hits(query_id: int = 4):
 class Results:
     def __init__(
         self,
-        model_results_path: str,
+#        model_results_path: str,
         hmmer_hits_dict: dict,
         data_savedir: str,
-        evaluemeansfile: str,
-        evaluemeanstitle: str,
-        roc_filepath: str,
-        plot_roc: bool = False,
-        plot_e_values: bool = False,
-        temp_file: str = None,
+#        evaluemeansfile: str,
+#        evaluemeanstitle: str,
+#        roc_filepath: str,
+#        plot_roc: bool = False,
+#        plot_e_values: bool = False,
+#        temp_file: str = None,
     ):
         """evaluates a given model"""
 
