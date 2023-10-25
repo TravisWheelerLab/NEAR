@@ -138,7 +138,8 @@ def get_filtration_recall(
     if "max" in filename:
         print("max numpos")
         numpos_per_evalue = [355203, 598800, 901348, 3607355]
-        alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
+    #    alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
+        alldecoys = [758500480, 758500480, 758500480, 758500480]
     else:
         print("normal numpos")
         numpos_per_evalue = [354984, 593354, 839953, 886633]
