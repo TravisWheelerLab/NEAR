@@ -61,9 +61,11 @@ def _calc_embeddings(
     indices = []
 
     for idx, sequence in enumerate(sequences):
-        if True:#len(sequence) < max_seq_length:
+        if True:
             embed = (
-                model_class(encode_string_sequence(sequence).unsqueeze(0).to(model_device))
+                model_class(
+                    encode_string_sequence(sequence).unsqueeze(0).to(model_device)
+                )
                 .squeeze()
                 .T
             )
@@ -75,7 +77,7 @@ def _calc_embeddings(
 
 @torch.no_grad()
 def search(args):
-    (idx, sequences, model, output_path, index, max_seq_length, device) = args
+    (idx, sequences, model, output_path, index, unrolled_lengths, device) = args
     queries, _, query_indices = _calc_embeddings(sequences, model, device)
 
     if not os.path.exists(output_path):
@@ -86,7 +88,11 @@ def search(args):
     search_time = time.time()
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
-        all_scores.append(scores)
+        normalized_scores = [
+            score / (len(queries[i]) * len(unrolled_lengths[ind]))
+            for score, ind in zip(scores, indices)
+        ]
+        all_scores.append(normalized_scores)
         all_indices.append(indices)
     search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
@@ -100,13 +106,13 @@ def search_and_filter(args):
         model,
         output_path,
         index,
-        max_seq_length,
+        unrolled_lengths,
         write_results,
     ) = args
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, _, indices = _calc_embeddings(list(query_names.values()), model, max_seq_length)
+    queries, _, indices = _calc_embeddings(list(query_names.values()), model)
 
     query_names = query_names[indices]
 
@@ -116,7 +122,11 @@ def search_and_filter(args):
     print("Searching...")
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        filtered_scores = filter_scores(scores, indices)
+        normalized_scores = [
+            score / (len(queries[i]) * len(unrolled_lengths[ind]))
+            for score, ind in zip(scores, indices)
+        ]
+        filtered_scores = filter_scores(normalized_scores, indices)
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")

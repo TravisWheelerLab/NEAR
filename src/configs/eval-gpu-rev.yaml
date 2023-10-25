@@ -20,6 +20,7 @@ max_seq_length: 512
 profiler: False
 nprobe: 120
 write_results: True
+unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-reversed.txt"
 index_path: "/xdisk/twheeler/daphnedemekas/fais-index-targets-5K-gpu-reversed.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-120-gpu-reversed.h5"
 indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-120-gpu-reversed.h5"

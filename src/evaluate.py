@@ -39,6 +39,9 @@ def evaluate_multiprocessing(_config):
     # faiss.omp_set_num_threads(params.omp_num_threads)
     split_queries = list(split(list(query_sequences.values()), params.num_threads))
     split_names = list(split(list(query_sequences.keys()), params.num_threads))
+
+    with open(params.unrolled_lengths, "r") as f:
+        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
             i,
@@ -46,7 +49,7 @@ def evaluate_multiprocessing(_config):
             model,
             params.save_dir,
             index,
-            params.max_seq_length,
+            unrolled_lengths,
             params.device,
         )
         for i in range(params.num_threads)
@@ -110,14 +113,15 @@ def evaluate_multiprocessing_python(_config):
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
-
+    with open(params.unrolled_lengths, "r") as f:
+        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
             index,
-            params.max_seq_length,
+            unrolled_lengths,
             params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
@@ -154,6 +158,8 @@ def evaluate(_config):
     query_sequences = queryfasta.data
     index = load_index(params, model)
     # index = load_index(params)
+    with open(params.unrolled_lengths, "r") as f:
+        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     query_names = list(query_sequences.keys())
     arg_list = [
         0,
@@ -161,7 +167,7 @@ def evaluate(_config):
         model,
         params.save_dir,
         index,
-        params.max_seq_length,
+        unrolled_lengths,
         params.device,
     ]
     print(f"Number of queries: {len(query_sequences)}")
@@ -200,13 +206,14 @@ def evaluate_python(_config):
     query_sequences = queryfasta.data
 
     index = load_index(params, model)
-
+    with open(params.unrolled_lengths, "r") as f:
+        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         query_sequences,
         model,
         params.save_dir,
         index,
-        params.max_seq_length,
+        unrolled_lengths,
         params.write_results,
     ]
     del query_sequences
