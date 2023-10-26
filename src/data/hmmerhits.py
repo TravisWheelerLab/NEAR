@@ -22,7 +22,7 @@ class FastaFile:
 
         with open(filepath, "r", encoding="utf8") as fastafile:
             data: str = fastafile.read()
-            data: list = data.split(">")
+            data: list = data.split(">")[1:]
 
         self.data: dict = self.clean_data(data)
 
