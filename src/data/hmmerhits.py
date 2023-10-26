@@ -21,7 +21,8 @@ class FastaFile:
             raise f"The filepath is invalud: {filepath}"
 
         with open(filepath, "r", encoding="utf8") as fastafile:
-            data: str = fastafile.readlines()
+            data: str = fastafile.read()
+            data: list = data.split(">")
 
         self.data: dict = self.clean_data(data)
 
@@ -33,12 +34,11 @@ class FastaFile:
         a dictionary mapping names to sequences"""
         data_dict = {}
         for i, line in enumerate(data):
-            if i % 2 == 0:
-                assert line[0] == ">", "This line does not begin with >"
-                uniref_name = line.split()[0].strip(">")
-                sequence_data = data[i + 1]
-                sequence = sequence_data.strip("\n")
-                data_dict[uniref_name] = sequence
+            name, *sequence_data = line.split("\n")
+            uniref_name = name.split()[0].strip(">")
+            sequence_data = "".join(sequence_data)
+            sequence = sequence_data.strip("\n")
+            data_dict[uniref_name] = sequence
         return data_dict
 
 
@@ -101,7 +101,14 @@ class HmmerHits:
             query_name = row_info[2]
             assert "UniRef90" in query_name
 
-            (e_value_full, score_full, bias_full, e_value_best, score_best, bias_best,) = (
+            (
+                e_value_full,
+                score_full,
+                bias_full,
+                e_value_best,
+                score_best,
+                bias_best,
+            ) = (
                 row_info[4],
                 row_info[5],
                 row_info[6],
@@ -132,7 +139,6 @@ class HmmerHits:
         return data_dict
 
     def get_hits(self, directory: str) -> Tuple[dict, np.array]:
-
         assert os.path.exists(
             f"{directory}/hits.tblout"
         ), f"No HMMER hits at {directory}/hits.tblout"

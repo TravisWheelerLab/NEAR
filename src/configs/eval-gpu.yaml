@@ -18,6 +18,7 @@ minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
 nprobe: 120
+unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths.txt"
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-gpu.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-120-gpu.h5"
