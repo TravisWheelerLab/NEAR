@@ -81,8 +81,8 @@ def save_off_targets(
 
 def load_targets(
     target_embeddings,
-    target_names,
-    target_lengths,
+    target_names_file,
+    target_lengths_file,
     target_file,
     num_threads,
     model,
@@ -99,8 +99,8 @@ def load_targets(
 
         target_names, target_lengths, target_embeddings = save_off_targets(
             target_sequences,
-            target_names,
-            target_lengths,
+            target_names_file,
+            target_lengths_file,
             num_threads,
             model,
             max_seq_length,

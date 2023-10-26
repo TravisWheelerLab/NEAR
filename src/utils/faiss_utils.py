@@ -35,7 +35,7 @@ def create_faiss_index(
         index.train(embeddings.numpy())  # .to("cuda"))
     else:
         index.train(embeddings.numpy())
-    
+
     return index
 
 
@@ -92,7 +92,7 @@ def _setup_targets_for_search(
         else:
             index.add(unrolled_targets.numpy())
             faiss.write_index(index, index_path)
-    else:    
+    else:
         print(f"Reading index from {index_path}")
         index = faiss.read_index(index_path)
 
@@ -125,7 +125,7 @@ def load_index(params, model):
         )
         assert (
             len(target_lengths) == len(target_names) == len(target_embeddings)
-        ), "Target lengths, names and embeddings are not all the same length"
+        ), f"Target lengths, names and embeddings are not all the same length: {len(target_lengths)}, {len(target_names)}, {len(target_embeddings)}"
 
         # if params.device == 'cuda':
         # target_embeddings = target_embeddings.to("cpu").numpy()
@@ -135,7 +135,7 @@ def load_index(params, model):
             params.nprobe,
             params.omp_num_threads,
             index_path=params.index_path,
-            index_device = params.index_device,
+            index_device=params.index_device,
         )
     faiss.omp_set_num_threads(params.omp_num_threads)
 
