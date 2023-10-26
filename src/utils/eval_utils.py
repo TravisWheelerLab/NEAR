@@ -57,7 +57,7 @@ def save_off_targets(
         for result in pool.imap(save_target_embeddings, arg_list):
             names, embeddings, lengths = result
             target_names += list(names)
-            target_lengths += lengths
+            target_lengths += list(lengths)
             target_embeddings += embeddings
     else:
         target_names, target_embeddings, target_lengths = save_target_embeddings[
