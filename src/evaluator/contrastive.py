@@ -96,7 +96,7 @@ def search(args):
         norm_factors = np.array(
             [len(queries[i]) * unrolled_lengths[ind] for ind in indices]
         )  # this should be an array of shape (len(queries[i]), 1000))
-        normalized_scores = scores / norm_factors
+        normalized_scores = 100 * scores / norm_factors
 
         all_scores.append(normalized_scores)
         all_indices.append(indices)
