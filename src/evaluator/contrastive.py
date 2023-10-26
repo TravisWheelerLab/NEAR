@@ -61,7 +61,7 @@ def _calc_embeddings(
     indices = []
 
     for idx, sequence in enumerate(sequences):
-        if True:
+        if len(sequence) > 0:
             embed = (
                 model_class(
                     encode_string_sequence(sequence).unsqueeze(0).to(model_device)

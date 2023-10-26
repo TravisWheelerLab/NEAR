@@ -23,7 +23,14 @@ def save_target_embeddings(arg_list):
 
 
 def save_off_targets(
-    target_sequences, num_threads, model, max_seq_length, device, savedir
+    target_sequences,
+    target_names_file,
+    target_lengths_file,
+    num_threads,
+    model,
+    max_seq_length,
+    device,
+    savedir,
 ):
     t_chunk_size = len(target_sequences) // num_threads
 
@@ -59,12 +66,13 @@ def save_off_targets(
     print(f"Number of target embeddings: {len(target_embeddings)}")
 
     torch.save(target_embeddings, savedir)
-    with open(f"{savedir.strip('.pt')}_names.pickle", "wb") as handle:
-        pickle.dump(target_names, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(target_names_file, "w") as handle:
+        for name in target_names:
+            handle.write(f"{name}\n")
 
-    with open(f"{savedir.strip('.pt')}_lengths.pickle", "wb") as handle:
-        pickle.dump(target_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
+    with open(target_lengths_file, "wb") as handle:
+        for length in target_lengths:
+            handle.write(f"{length}\n")
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
 
@@ -91,6 +99,8 @@ def load_targets(
 
         target_names, target_lengths, target_embeddings = save_off_targets(
             target_sequences,
+            target_names,
+            target_lengths,
             num_threads,
             model,
             max_seq_length,
