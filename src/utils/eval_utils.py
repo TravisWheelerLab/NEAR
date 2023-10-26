@@ -70,7 +70,7 @@ def save_off_targets(
         for name in target_names:
             handle.write(f"{name}\n")
 
-    with open(target_lengths_file, "wb") as handle:
+    with open(target_lengths_file, "w") as handle:
         for length in target_lengths:
             handle.write(f"{length}\n")
     loop_time = time.time() - start_time
