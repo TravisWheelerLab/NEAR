@@ -10,6 +10,7 @@ import torch
 import time
 from src.utils import encode_string_sequence
 from collections import defaultdict
+import pdb
 
 logger = logging.getLogger("evaluate")
 
@@ -85,13 +86,19 @@ def search(args):
 
     all_scores = []
     all_indices = []
+    unrolled_lengths = np.array(unrolled_lengths).astype(int)
     search_time = time.time()
+
     for i in tqdm.tqdm(range(len(queries))):
+        # searching all amino acids in queries[i]
+        # returns a list of 1000 scores per amino and the indices of the target sequences per amino
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
-        normalized_scores = [
-            score / (len(queries[i]) * len(unrolled_lengths[ind]))
-            for score, ind in zip(scores, indices)
-        ]
+        norm_factors = np.array(
+            [len(queries[i]) * unrolled_lengths[ind] for ind in indices]
+        )  # this should be an array of shape (len(queries[i]), 1000))
+        assert norm_factors.shape == (len(queries[i]), 1000), pdb.set_trace()
+        normalized_scores = scores / norm_factors
+
         all_scores.append(normalized_scores)
         all_indices.append(indices)
     search_time = time.time() - search_time
