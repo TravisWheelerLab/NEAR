@@ -111,23 +111,12 @@ def load_targets(
         target_embeddings = torch.load(target_embeddings)
         print(f"Number of target embeddings: {len(target_embeddings)}")
 
-        if target_names.endswith(".pickle"):
-            with open(target_names, "rb") as file_handle:
-                target_names = pickle.load(file_handle)
-
-            with open(target_lengths, "rb") as file_handle:
-                target_lengths = pickle.load(file_handle)
-
-        elif target_names.endswith(".txt"):
-            with open(target_names, "r") as f:
-                target_names = f.readlines()
-                target_names = [t.strip("\n") for t in target_names]
-            with open(target_lengths, "r") as f:
-                target_lengths = f.readlines()
-                target_lengths = [int(t.strip("\n")) for t in target_lengths]
-
-        else:
-            raise Exception("Saved target data format not understood")
+        with open(target_names_file, "r") as f:
+            target_names = f.readlines()
+            target_names = [t.strip("\n") for t in target_names]
+        with open(target_lengths_file, "r") as f:
+            target_lengths = f.readlines()
+            target_lengths = [int(t.strip("\n")) for t in target_lengths]
 
     return target_embeddings, target_names, target_lengths
 
