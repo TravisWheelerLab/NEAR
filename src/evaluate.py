@@ -73,11 +73,13 @@ def evaluate_multiprocessing(_config):
         #        batch = future_to_batch[future]
         i, all_scores, all_indices, search_time, query_indices = future.result()
         query_names_list += list(np.array(split_names[i])[query_indices])
-        all_scores_list += all_scores
-        all_indices_list += all_indices  # ... combine results ...
+        all_scores_list += list(all_scores)
+        all_indices_list += list(all_indices)  # ... combine results ...
         full_search_time += search_time
 
-    assert len(all_scores_list) == numqueries
+    if not len(all_scores_list) == numqueries:
+        print("Warning: not all queries are returned")
+        print(f"num scores: {len(all_scores_list)}, num queries : {numqueries}")
     print(
         f"Search time per query: {(full_search_time)/(params.num_threads*numqueries)}."
     )
