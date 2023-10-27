@@ -100,6 +100,7 @@ def search(args):
 
         all_scores.append(normalized_scores)
         all_indices.append(indices)
+    #pdb.set_trace()
     search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
     return idx, all_scores, all_indices, search_time, query_indices

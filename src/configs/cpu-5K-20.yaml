@@ -20,7 +20,7 @@ max_seq_length: 512
 profiler: False
 nprobe: 20
 write_results: True
-unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-maskeds.txt"
+unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked.txt"
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-masked.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-20-5K.h5"
 indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-20-5K.h5"
