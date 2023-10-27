@@ -4,7 +4,7 @@ import tqdm
 
 _, hmmer_hits = load_hmmer_hits(4)
 targetfasta = FastaFile(
-    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-filtered.fa"
+    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-filtered-masked.fa"
 )
 
 targetsequences = targetfasta.data
@@ -28,17 +28,17 @@ names = []
 lengths = []
 
 namefile = open(
-    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-names.txt", "w"
+    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-names-masked.txt", "w"
 )
 lengthsfile = open(
-    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths.txt", "w"
+    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths-masked.txt", "w"
 )
 with open(
-    "/xdisk/twheeler/daphnedemekas/prefilter/data/reversedtargets-filtered.fa", "w"
+    "/xdisk/twheeler/daphnedemekas/prefilter/data/reversedtargets-filtered-masked.fa",
+    "w",
 ) as f:
     for name, sequence in tqdm.tqdm(targetsequences.items()):
         if name not in targets_that_are_hits:
             f.write(f">{name}\n{sequence}\n")
             namefile.write(f"{name}\n")
             lengthsfile.write(f"{len(sequence)}\n")
-
