@@ -33,9 +33,7 @@ names = []
 lengths = []
 
 namefile = open(names_file, "w")
-lengthsfile = open(
-    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths-masked.txt", "w"
-)
+
 with open(
     lengths_file,
     "w",
@@ -44,7 +42,7 @@ with open(
         # if name not in targets_that_are_hits:
         f.write(f">{name}\n{sequence[::-1]}\n")
         namefile.write(f"{name}\n")
-        lengthsfile.write(f"{len(sequence)}\n")
+        f.write(f"{len(sequence)}\n")
 
 target_names = open(names_file, "r")
 target_lengths = open(lengths_file, "r")
