@@ -56,6 +56,8 @@ for name, length in zip(target_names.readlines(), target_lengths.readlines()):
     unrolled_names.extend([name.strip("\n")] * int(length.strip("\n")))
     unrolled_lengths.extend([int(length.strip("\n"))] * int(length.strip("\n")))
 
-with open("/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked.txt", "w") as f:
+with open(
+    "/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked-reversed.txt", "w"
+) as f:
     for length in unrolled_lengths:
         f.write(str(length) + "\n")
