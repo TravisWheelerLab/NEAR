@@ -1,0 +1,24 @@
+model_name:  "ResNet1d"
+evaluator_name: "ContrastiveEvaluator"
+description: "Use CPU with IVF optimization and multithreading"
+index_string: "IVF5000,PQ32"
+log_verbosity: logging.INFO
+checkpoint_path: best_epoch.ckpt
+query_file: "data/queries-filtered.fa"
+target_file: "data/targets-filtered-masked.fa"
+target_embeddings: 'target_embeddings_masked.pt'
+target_names: 'target_names_masked.txt'
+target_lengths: 'target_lengths_masked.txt'
+num_threads: 1
+omp_num_threads: 1
+device: 'cuda'
+normalize_embeddings: True
+max_seq_length: 512
+profiler: False
+nprobe: 50
+unrolled_lengths: "unrolled-lengths-masked.txt"
+write_results: True
+index_path: "faiss-index-targets-gpu-masked.index"
+scores_path: "all-scores-50-gpu.h5"
+indices_path:  "all-indices-50-gpu.h5"
+query_names_path:  "query-names-50-gpu.txt"
