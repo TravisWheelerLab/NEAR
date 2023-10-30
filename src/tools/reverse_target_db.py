@@ -4,7 +4,7 @@ import tqdm
 
 _, hmmer_hits = load_hmmer_hits(4)
 targetfasta = FastaFile(
-    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-filtered-masked.fa"
+    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked.fa"
 )
 
 targetsequences = targetfasta.data
