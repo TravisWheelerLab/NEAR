@@ -61,3 +61,7 @@ with open(
 ) as f:
     for length in unrolled_lengths:
         f.write(str(length) + "\n")
+
+with open("/xdisk/twheeler/daphnedemekas/unrolled-names-masked-reversed.txt", "w") as f:
+    for name in unrolled_names:
+        f.write(str(name) + "\n")
