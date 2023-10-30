@@ -50,9 +50,12 @@ fasta.close()
 target_names = open(names_file, "r")
 target_lengths = open(lengths_file, "r")
 unrolled_names = []
+unrolled_lengths = []
+
 for name, length in zip(target_names.readlines(), target_lengths.readlines()):
     unrolled_names.extend([name.strip("\n")] * int(length.strip("\n")))
+    unrolled_lengths.extend([int(length.strip("\n"))] * int(length.strip("\n")))
 
-with open("/xdisk/twheeler/daphnedemekas/unrolled-names-reversed-masked.txt", "w") as f:
-    for name in unrolled_names:
-        f.write(name + "\n")
+with open("/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked.txt", "w") as f:
+    for length in unrolled_lengths:
+        f.write(str(length) + "\n")
