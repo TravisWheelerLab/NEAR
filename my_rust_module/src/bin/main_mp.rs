@@ -83,13 +83,16 @@ fn read_names(filename: &str) -> io::Result<Vec<String>> {
 }
 
 fn filter_scores_inner(
-    scores_file: &str,
-    names_file: &str,
-    indices_file: &str,
+//    scores_file: &str,
+ //   names_file: &str,
+  //  indices_file: &str,
 ) -> Vec<HashMap<String, f64>> {
     // Assuming you have your scores_array_list and indices_array_list defined above here
     //let mut filtered_scores_list = Vec::new();
-
+    
+    let scores_file = "/xdisk/twheeler/daphnedemekas/all-scores-5K-50-qm.h5";
+    let indices_file = "/xdisk/twheeler/daphnedemekas/all-indices-5K-50-qm.h5";
+    let names_file = "/xdisk/twheeler/daphnedemekas/unrolled-names-masked.txt";
     println!("In new rust module");
     let scores_array_list = read_hdf5_to_vec_f64(scores_file).expect("Failed to read HDF5 data");
     let indices_array_list =
@@ -242,11 +245,11 @@ fn main() {
         }
         let query_filename = &args[1];
         let output_path = &args[2];
-        let scores_file = &args[3];
-        let indices_file = &args[4];
-        let names_file = &args[5];
+     //   let scores_file = &args[3];
+    //    let indices_file = &args[4];
+   //     let names_file = &args[5];
 
-        let write_results: bool = match args[6].parse() {
+        let write_results: bool = match args[3].parse() {
             Ok(val) => val,
             Err(_) => {
                 eprintln!("Error: write_results must be a boolean (true or false)");
@@ -254,7 +257,7 @@ fn main() {
             }
         };
 
-        let filtered_scores = filter_scores_inner(scores_file, names_file, indices_file);
+        let filtered_scores = filter_scores_inner();//scores_file, names_file, indices_file);
         //match filter_scores_inner() {
         //           Ok(filtered_scores) => {
         if write_results {
