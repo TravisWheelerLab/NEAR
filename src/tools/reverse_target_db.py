@@ -9,6 +9,9 @@ names_file = "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-names-mask
 lengths_file = (
     "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths-masked.txt"
 )
+reversed_fasta_file = (
+    "/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked-reversed.fa"
+)
 
 targetfasta = FastaFile(fastafile)
 
@@ -33,16 +36,16 @@ names = []
 lengths = []
 
 namefile = open(names_file, "w")
-
-with open(
-    lengths_file,
-    "w",
-) as f:
-    for name, sequence in tqdm.tqdm(targetsequences.items()):
-        # if name not in targets_that_are_hits:
-        f.write(f">{name}\n{sequence[::-1]}\n")
-        namefile.write(f"{name}\n")
-        f.write(f"{len(sequence)}\n")
+fasta = open(reversed_fasta_file, "w")
+lengthsfile = open(lengths_file, "w")
+for name, sequence in tqdm.tqdm(targetsequences.items()):
+    # if name not in targets_that_are_hits:
+    fasta.write(f">{name}\n{sequence[::-1]}\n")
+    namefile.write(f"{name}\n")
+    lengthsfile.write(f"{len(sequence)}\n")
+lengthsfile.close()
+namefile.close()
+fasta.close()
 
 target_names = open(names_file, "r")
 target_lengths = open(lengths_file, "r")
