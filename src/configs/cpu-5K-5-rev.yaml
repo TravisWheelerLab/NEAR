@@ -5,10 +5,10 @@ index_string: "IVF5000,Flat"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/queries-filtered.fa"
-target_file: "data/reversed-targets.fa"
-target_embeddings: 'target_embeddings_reversed.pt'
-target_names: 'reversed-target-names.txt'
-target_lengths: 'reversed-target-lengths.txt'
+target_file: "data/targets-masked-reversed.fa"
+target_embeddings: 'target_embeddings_reversed_masked.pt'
+target_names: 'reversed-target-names-masked.txt'
+target_lengths: 'reversed-target-lengths-masked.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
 num_threads: 16
 omp_num_threads: 1
@@ -20,8 +20,8 @@ max_seq_length: 512
 profiler: False
 nprobe: 5
 write_results: True
-unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-reversed-masked.txt"
-index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed.index"
+unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked-reversed.txt"
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-masked-reversed.index"
 scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-5-reversed.h5"
 indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-5-reversed.h5"
 query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-5-reversed.txt"
