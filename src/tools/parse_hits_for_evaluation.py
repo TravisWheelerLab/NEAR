@@ -3,8 +3,7 @@ import pickle
 import argparse
 
 
-def main(hmmer_dir_path: str, save_dir=None):
-
+def main(hmmer_path: str, save_dir=None):
     hmmerhits = HmmerHits(dir_path=hmmer_dir_path)
     target_hits = hmmerhits.get_hits(hmmer_dir_path)
     if save_dir is not None:
