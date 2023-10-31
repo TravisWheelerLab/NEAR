@@ -78,11 +78,8 @@ def _calc_embeddings(
 
 @torch.no_grad()
 def search(args):
-    (idx, sequences, model, output_path, index, unrolled_lengths, device) = args
+    (idx, sequences, model, index, unrolled_lengths, device) = args
     queries, _, query_indices = _calc_embeddings(sequences, model, device)
-
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
 
     all_scores = []
     all_indices = []
@@ -100,7 +97,7 @@ def search(args):
 
         all_scores.append(normalized_scores)
         all_indices.append(indices)
-    #pdb.set_trace()
+    # pdb.set_trace()
     search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
     return idx, all_scores, all_indices, search_time, query_indices
