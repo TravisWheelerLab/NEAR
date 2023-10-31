@@ -1,4 +1,4 @@
-all_hits_max_file_4 = "data/evaltargetdictmax"
+all_hits_max_file_4 = "data/hmmerhits-masked"
 all_hits_normal_file_4 = "data/evaltargetdictnormal"
 # all_hits_max_file_4 = "data/evaluationtargetdict"
 # all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
