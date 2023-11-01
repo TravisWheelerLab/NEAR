@@ -117,6 +117,8 @@ def load_index(params, model):
             params.target_embeddings,
             params.target_names,
             params.target_lengths,
+            params.unrolled_names_file,
+            params.unrolled_lengths_file,
             params.target_file,
             params.num_threads,
             model,

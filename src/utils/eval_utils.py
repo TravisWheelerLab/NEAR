@@ -12,13 +12,24 @@ from src.data.hmmerhits import FastaFile
 from src.utils.loaders import load_model_class
 
 
+def filter_masked_targets(target_sequences):
+    filtered_targets = {}
+    for name, sequence in target_sequences.items():
+        filtered_targets[name] = sequence.replace("X", "")
+    return filtered_targets
+
+
 def save_target_embeddings(arg_list):
     target_data, model, max_seq_length, device = arg_list
 
+    filtered_target_data = filter_masked_targets(target_data)
+
     targets, lengths, indices = _calc_embeddings(
-        list(target_data.values()), model, device, max_seq_length
+        list(filtered_target_data.values()), model, device, max_seq_length
     )
+
     names = np.array(list(target_data.keys()))[indices]
+
     return names, targets, lengths
 
 
@@ -26,6 +37,8 @@ def save_off_targets(
     target_sequences,
     target_names_file,
     target_lengths_file,
+    unrolled_names_file,
+    unrolled_lengths_file,
     num_threads,
     model,
     max_seq_length,
@@ -63,6 +76,10 @@ def save_off_targets(
         target_names, target_embeddings, target_lengths = save_target_embeddings[
             (target_sequences, model, max_seq_length, device)
         ]
+
+    unrolled_names = np.repeat(names, lengths)
+    unrolled_lengths = np.repeat(lengths, lengths)
+
     print(f"Number of target embeddings: {len(target_embeddings)}")
 
     torch.save(target_embeddings, savedir)
@@ -76,6 +93,13 @@ def save_off_targets(
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
 
+    with open(unrolled_names_file, "w") as handle:
+        for name in unrolled_names:
+            handle.write(f"{name}\n")
+
+    with open(unrolled_lengths_file, "w") as handle:
+        for length in unrolled_lengths:
+            handle.write(f"{length}\n")
     return target_names, target_lengths, target_embeddings
 
 
@@ -101,6 +125,8 @@ def load_targets(
             target_sequences,
             target_names_file,
             target_lengths_file,
+            unrolled_names_file,
+            unrolled_lengths_file,
             num_threads,
             model,
             max_seq_length,

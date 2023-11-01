@@ -40,7 +40,7 @@ def evaluate_multiprocessing(_config):
     split_queries = list(split(list(query_sequences.values()), params.num_threads))
     split_names = list(split(list(query_sequences.keys()), params.num_threads))
 
-    with open(params.unrolled_lengths, "r") as f:
+    with open(params.unrolled_lengths_file, "r") as f:
         unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
