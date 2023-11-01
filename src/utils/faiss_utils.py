@@ -120,6 +120,7 @@ def load_index(params, model):
             params.unrolled_names_file,
             params.unrolled_lengths_file,
             params.target_file,
+            params.masked_target_file,
             params.num_threads,
             model,
             params.max_seq_length,

@@ -6,6 +6,7 @@ log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/queries-filtered.fa"
 target_file: "data/targets.fa"
+masked_target_file: "data/targets-masked.fa"
 target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'

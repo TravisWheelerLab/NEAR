@@ -12,29 +12,41 @@ from src.data.hmmerhits import FastaFile
 from src.utils.loaders import load_model_class
 
 
-def filter_masked_targets(target_sequences):
-    filtered_targets = {}
-    for name, sequence in target_sequences.items():
-        filtered_targets[name] = sequence.replace("X", "")
-    return filtered_targets
+def filter_targets_by_mask(masked_targets, embeddings, lengths, indices):
+    filtered_embeddings = [0] * len(embeddings)
+    filtered_lengths = [0] * len(lengths)
+    for target_idx in indices:
+        sequence = masked_targets[target_idx]
+        embedding = embeddings[target_idx]
+        assert len(sequence) == len(embedding)
+        Xs = [i for i in sequence if i == "X"]
+        embedding = np.delete(embedding, Xs)
+        filtered_embeddings[target_idx] = embedding
+        filtered_lengths[target_idx] = len(embedding)
+
+    assert 0 not in filtered_embeddings
+    assert 0 not in filtered_lengths
+    return filtered_embeddings, filtered_lengths
 
 
 def save_target_embeddings(arg_list):
-    target_data, model, max_seq_length, device = arg_list
-
-    filtered_target_data = filter_masked_targets(target_data)
+    target_data, masked_targets, model, max_seq_length, device = arg_list
 
     targets, lengths, indices = _calc_embeddings(
-        list(filtered_target_data.values()), model, device, max_seq_length
+        list(target_data.values()), model, device, max_seq_length
+    )
+    filtered_embeddings, filtered_lengths = filter_targets_by_mask(
+        masked_targets, targets, lengths, indices
     )
 
     names = np.array(list(target_data.keys()))[indices]
 
-    return names, targets, lengths
+    return names, filtered_embeddings, filtered_lengths
 
 
 def save_off_targets(
     target_sequences,
+    masked_sequences,
     target_names_file,
     target_lengths_file,
     unrolled_names_file,
@@ -59,6 +71,7 @@ def save_off_targets(
         arg_list = [
             (
                 dict(itertools.islice(target_sequences.items(), i, i + t_chunk_size)),
+                dict(itertools.islice(masked_sequences.items(), i, i + t_chunk_size)),
                 model,
                 max_seq_length,
                 device,
@@ -110,6 +123,7 @@ def load_targets(
     unrolled_names_file,
     unrolled_lengths_file,
     target_file,
+    masked_target_file,
     num_threads,
     model,
     max_seq_length,
@@ -120,11 +134,15 @@ def load_targets(
         print(f"No saved target embeddings. Calculating them now from {target_file}")
         targetfasta = FastaFile(target_file)
         target_sequences = targetfasta.data
+        maskedtargetfasta = FastaFile(masked_target_file)
+        masked_sequences = maskedtargetfasta.data
+        assert list(target_sequences.keys()) == list(masked_sequences.keys())
 
         print(f"Number of target sequences: {len(target_sequences)}")
 
         target_names, target_lengths, target_embeddings = save_off_targets(
             target_sequences,
+            masked_sequences,
             target_names_file,
             target_lengths_file,
             unrolled_names_file,
