@@ -107,6 +107,8 @@ def load_targets(
     target_embeddings,
     target_names_file,
     target_lengths_file,
+    unrolled_names_file,
+    unrolled_lengths_file,
     target_file,
     num_threads,
     model,
