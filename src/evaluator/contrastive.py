@@ -78,7 +78,7 @@ def _calc_embeddings(
 
 @torch.no_grad()
 def search(args):
-    (idx, sequences, model, output_path, index, unrolled_lengths, device) = args
+    (idx, sequences, model, output_path, index, device) = args
     queries, _, query_indices = _calc_embeddings(sequences, model, device)
 
     if not os.path.exists(output_path):
@@ -86,21 +86,16 @@ def search(args):
 
     all_scores = []
     all_indices = []
-    unrolled_lengths = np.array(unrolled_lengths).astype(int)
     search_time = time.time()
 
     for i in tqdm.tqdm(range(len(queries))):
         # searching all amino acids in queries[i]
         # returns a list of 1000 scores per amino and the indices of the target sequences per amino
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
-        norm_factors = np.array(
-            [len(queries[i]) * unrolled_lengths[ind] for ind in indices]
-        )  # this should be an array of shape (len(queries[i]), 1000))
-        normalized_scores = 100 * scores / norm_factors
 
-        all_scores.append(normalized_scores)
+        all_scores.append(scores)
         all_indices.append(indices)
-    #pdb.set_trace()
+    # pdb.set_trace()
     search_time = time.time() - search_time
     print(f"Thread {idx} completed search")
     return idx, all_scores, all_indices, search_time, query_indices
