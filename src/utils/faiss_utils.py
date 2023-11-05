@@ -112,8 +112,13 @@ def load_index(params, model):
             num = 0
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, int(num), index)
+
+        with open(params.unrolled_names_file, "r") as f:
+            unrolled_names = f.readlines()
+            unrolled_names = [t.strip("\n") for t in unrolled_names]
+
     else:
-        target_embeddings, target_names, target_lengths = load_targets(
+        target_embeddings, target_names, target_lengths, unrolled_names = load_targets(
             params.target_embeddings,
             params.target_names,
             params.target_lengths,
@@ -140,4 +145,4 @@ def load_index(params, model):
         )
     faiss.omp_set_num_threads(params.omp_num_threads)
 
-    return index
+    return index, unrolled_names

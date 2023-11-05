@@ -103,13 +103,7 @@ def search(args):
 
 @torch.no_grad()
 def search_and_filter(args):
-    (
-        query_data,
-        model,
-        output_path,
-        index,
-        write_results,
-    ) = args
+    (query_data, model, output_path, index, write_results, unrolled_names) = args
 
     query_names = np.array(list(query_data.keys()))
 

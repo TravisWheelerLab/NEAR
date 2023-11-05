@@ -103,7 +103,7 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    index = load_index(params, model)
+    index, unrolled_names = load_index(params, model)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
@@ -119,6 +119,7 @@ def evaluate_multiprocessing_python(_config):
             params.save_dir,
             index,
             params.write_results,
+            unrolled_names,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]

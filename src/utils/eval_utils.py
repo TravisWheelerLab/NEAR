@@ -66,7 +66,7 @@ def save_off_targets(
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
 
-    return target_names, target_lengths, target_embeddings
+    return target_names, target_lengths, target_embeddings, unrolled_names
 
 
 def load_targets(
@@ -88,7 +88,12 @@ def load_targets(
 
         print(f"Number of target sequences: {len(target_sequences)}")
 
-        target_names, target_lengths, target_embeddings = save_off_targets(
+        (
+            target_names,
+            target_lengths,
+            target_embeddings,
+            unrolled_names,
+        ) = save_off_targets(
             target_sequences,
             target_names_file,
             target_lengths_file,
@@ -109,8 +114,11 @@ def load_targets(
         with open(target_lengths_file, "r") as f:
             target_lengths = f.readlines()
             target_lengths = [int(t.strip("\n")) for t in target_lengths]
+        with open(unrolled_names_file, "r") as f:
+            unrolled_names = f.readlines()
+            unrolled_names = [t.strip("\n") for t in unrolled_names]
 
-    return target_embeddings, target_names, target_lengths
+    return target_embeddings, target_names, target_lengths, unrolled_names
 
 
 def split(a, n):
