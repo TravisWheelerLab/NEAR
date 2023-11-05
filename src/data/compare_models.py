@@ -373,28 +373,6 @@ def evaluate(
         _ = Results(**align_ivf_normal_inputs_4)
 
 
-def evaluate(
-    modes: list = ["normal", "max"],
-    modelname: str = None,
-):
-    """Main function for evaluation"""
-
-    print(f"Evaluating {modelname}")
-
-    all_hits_max, all_hits_normal = load_hmmer_hits(4)
-
-    if "max" in modes:
-        print("Parsing Alignment Model IVF Query 4 Max")
-
-        align_ivf_max_inputs_4 = load_inputs(all_hits_max, "max", modelname)
-        _ = Results(**align_ivf_max_inputs_4)
-    if "normal" in modes:
-        align_ivf_normal_inputs_4 = load_inputs(all_hits_normal, "normal", modelname)
-
-        print("Parsing Alignment Model IVF Query 4 Normal")
-        _ = Results(**align_ivf_normal_inputs_4)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
