@@ -112,15 +112,12 @@ def evaluate_multiprocessing_python(_config):
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
             index,
-            unrolled_lengths,
             params.write_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)

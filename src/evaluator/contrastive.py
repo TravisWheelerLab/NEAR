@@ -108,7 +108,6 @@ def search_and_filter(args):
         model,
         output_path,
         index,
-        unrolled_lengths,
         write_results,
     ) = args
 
@@ -124,11 +123,8 @@ def search_and_filter(args):
     print("Searching...")
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous(), k=1000)
-        normalized_scores = [
-            score / (len(queries[i]) * len(unrolled_lengths[ind]))
-            for score, ind in zip(scores, indices)
-        ]
-        filtered_scores = filter_scores(normalized_scores, indices)
+
+        filtered_scores = filter_scores(scores, indices, unrolled_names)
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")

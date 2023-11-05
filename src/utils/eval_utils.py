@@ -12,9 +12,7 @@ from src.data.hmmerhits import FastaFile
 from src.utils.loaders import load_model_class
 
 
-def save_target_embeddings(arg_list):
-    target_data, model, max_seq_length, device = arg_list
-
+def save_target_embeddings(target_data, model, max_seq_length, device):
     targets, lengths, indices = _calc_embeddings(
         list(target_data.values()), model, device, max_seq_length
     )
@@ -26,6 +24,7 @@ def save_off_targets(
     target_sequences,
     target_names_file,
     target_lengths_file,
+    unrolled_names_file,
     num_threads,
     model,
     max_seq_length,
@@ -42,27 +41,10 @@ def save_off_targets(
     target_embeddings = []
     target_lengths = []
 
-    if num_threads > 1:
-        arg_list = [
-            (
-                dict(itertools.islice(target_sequences.items(), i, i + t_chunk_size)),
-                model,
-                max_seq_length,
-                device,
-            )
-            for i in range(0, len(target_sequences), t_chunk_size)
-        ]
-        pool = Pool(num_threads)
+    target_names, target_embeddings, target_lengths = save_target_embeddings(
+        target_sequences, model, max_seq_length, device
+    )
 
-        for result in pool.imap(save_target_embeddings, arg_list):
-            names, embeddings, lengths = result
-            target_names += list(names)
-            target_lengths += list(lengths)
-            target_embeddings += embeddings
-    else:
-        target_names, target_embeddings, target_lengths = save_target_embeddings[
-            (target_sequences, model, max_seq_length, device)
-        ]
     print(f"Number of target embeddings: {len(target_embeddings)}")
 
     torch.save(target_embeddings, savedir)
@@ -73,6 +55,14 @@ def save_off_targets(
     with open(target_lengths_file, "w") as handle:
         for length in target_lengths:
             handle.write(f"{length}\n")
+
+    unrolled_names = []
+    for name, length in zip(target_names, target_lengths):
+        unrolled_names.append([name] * length)
+    with open(unrolled_names_file, "w") as handle:
+        for name in unrolled_names:
+            handle.write(f"{name}\n")
+
     loop_time = time.time() - start_time
     print(f"Embedding took: {loop_time}.")
 
@@ -80,9 +70,10 @@ def save_off_targets(
 
 
 def load_targets(
-    target_embeddings,
+    target_embeddings_file,
     target_names_file,
     target_lengths_file,
+    unrolled_names_file,
     target_file,
     num_threads,
     model,
@@ -90,7 +81,7 @@ def load_targets(
     device,
 ):
     # get target embeddings
-    if not os.path.exists(target_embeddings):
+    if not os.path.exists(target_embeddings_file):
         print(f"No saved target embeddings. Calculating them now from {target_file}")
         targetfasta = FastaFile(target_file)
         target_sequences = targetfasta.data
@@ -101,11 +92,12 @@ def load_targets(
             target_sequences,
             target_names_file,
             target_lengths_file,
+            unrolled_names_file,
             num_threads,
             model,
             max_seq_length,
             device,
-            target_embeddings,
+            target_embeddings_file,
         )
     else:
         target_embeddings = torch.load(target_embeddings)

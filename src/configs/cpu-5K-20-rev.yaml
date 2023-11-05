@@ -9,7 +9,8 @@ target_file: "data/reversedtargets.fa"
 target_embeddings: 'target_embeddings_reversed.pt'
 target_names: 'reversed-target-names.txt'
 target_lengths: 'reversed-target-lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
+unrolled_names_file: '/xdisk/twheeler/daphnedemekas/unrolled_names_reversed.txt'
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-20-reversed"
 num_threads: 16
 omp_num_threads: 1
 device: 'cpu'
