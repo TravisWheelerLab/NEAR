@@ -107,11 +107,8 @@ def evaluate_multiprocessing_python(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-    if params.mask_queries:
-        maskedqueryfasta = FastaFile(params.masked_query_file)
-        masked_queries = maskedqueryfasta.data
-    else:
-        maskedqueryfasta, masked_queries = None, None
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
 
     q_chunk_size = len(query_sequences) // params.num_threads
 

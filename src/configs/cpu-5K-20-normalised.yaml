@@ -25,3 +25,5 @@ index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K.index"
 normalise_search_results: True
 mask_queries: False 
 mask_targets: False
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked.fa
