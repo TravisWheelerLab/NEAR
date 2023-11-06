@@ -15,7 +15,11 @@ import pdb
 logger = logging.getLogger("evaluate")
 
 
-def filter_scores(scores_array, indices_array, unrolled_names):
+def filter_scores(
+    scores_array,
+    indices_array,
+    unrolled_names,
+):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
     and it matches the one with the biggest score.
@@ -48,6 +52,24 @@ def filter_scores(scores_array, indices_array, unrolled_names):
             filtered_scores[name] += distance
 
     return filtered_scores
+
+
+def filter_sequences_by_mask(masked_targets, embeddings):
+    filtered_embeddings = []
+    filtered_lengths = []
+
+    masked_target_sequences = [m for m in masked_targets if len(m) > 0]
+
+    assert len(masked_target_sequences) == len(embeddings)
+
+    for sequence, embedding in tqdm.tqdm(zip(masked_target_sequences, embeddings)):
+        assert len(sequence) == len(embedding)
+        Xs = [i for i in range(len(sequence)) if sequence[i] == "X"]
+        embedding = np.delete(embedding, Xs, axis=0)
+        filtered_embeddings.append(embedding)
+        filtered_lengths.append(len(embedding))
+
+    return filtered_embeddings, filtered_lengths
 
 
 @torch.no_grad()
@@ -103,11 +125,26 @@ def search(args):
 
 @torch.no_grad()
 def search_and_filter(args):
-    (query_data, model, output_path, index, write_results, unrolled_names) = args
+    (
+        query_data,
+        masked_query_data,
+        model,
+        output_path,
+        index,
+        write_results,
+        unrolled_names,
+        mask_queries,
+        normalise_search_results,
+    ) = args
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, _, indices = _calc_embeddings(list(query_data.values()), model)
+    queries, query_lengths, indices = _calc_embeddings(list(query_data.values()), model)
+
+    if mask_queries:
+        queries, query_lengths = filter_sequences_by_mask(
+            list(masked_query_data.values()), queries
+        )
 
     query_names = query_names[indices]
 
@@ -115,10 +152,16 @@ def search_and_filter(args):
         os.mkdir(output_path)
     unrolled_names = np.array(unrolled_names)
     print("Searching...")
+
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
 
+        if normalise_search_results:
+            assert query_lengths[i] == len(scores)
+            scores /= len(scores)
+
         filtered_scores = filter_scores(scores, indices, unrolled_names)
+
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")
