@@ -107,16 +107,16 @@ def search_and_filter(args):
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, _, indices = _calc_embeddings(list(query_names.values()), model)
+    queries, _, indices = _calc_embeddings(list(query_data.values()), model)
 
     query_names = query_names[indices]
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
-
+    unrolled_names = np.array(unrolled_names)
     print("Searching...")
     for i in tqdm.tqdm(range(len(queries))):
-        scores, indices = index.search(queries[i].contiguous(), k=1000)
+        scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
 
         filtered_scores = filter_scores(scores, indices, unrolled_names)
         if write_results:

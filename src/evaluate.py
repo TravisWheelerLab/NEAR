@@ -129,14 +129,9 @@ def evaluate_multiprocessing_python(_config):
     print("Beginning search...")
     start = time.time()
 
-    query_names_list = []
-    all_scores_list = []
-    all_indices_list = []
+    idx = 0
     for result in pool.imap(search_and_filter, arg_list):
-        query_names, all_scores, all_indices = result
-        query_names_list += query_names
-        all_scores_list += all_scores
-        all_indices_list += all_indices
+        print(f"Finished thread: {idx}")
 
     print(f"Elapsed time: {time.time() - start}.")
 
