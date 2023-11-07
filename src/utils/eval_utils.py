@@ -109,7 +109,7 @@ def load_targets(
             target_embeddings_file,
         )
     else:
-        target_embeddings = torch.load(target_embeddings)
+        target_embeddings = torch.load(target_embeddings_file)
         print(f"Number of target embeddings: {len(target_embeddings)}")
 
         with open(target_names_file, "r") as f:
@@ -151,7 +151,7 @@ def load_targets(
             )
             unrolled_names = []
             for name, length in zip(target_names, target_lengths):
-                unrolled_names.append([name] * length)
+                unrolled_names.extend([name] * length)
             with open(unrolled_names_masked, "w") as handle:
                 for name in unrolled_names:
                     handle.write(f"{name}\n")
