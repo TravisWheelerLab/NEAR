@@ -275,8 +275,12 @@ def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs)
 def get_data(
     model_results_path: str,
     hmmer_hits_dict: dict,
+    query_lengths: dict,
+    target_lengths: dict,
     data_savedir=None,
     plot_roc=True,
+    norm_q=True,
+    norm_t=True,
     **kwargs,
 ):
     """Parses the outputted results and aggregates everything
@@ -307,27 +311,29 @@ def get_data(
 
     print(model_results_path)
 
-    if "CPU" in model_results_path:
-        nprobe = model_results_path.split("/")[-1].split("-")[-1]
-
     reversed_path = model_results_path + "-reversed"
     print(f"Reversed path :{reversed_path}")
 
     for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
         queryname = queryhits.strip(".txt")
+        querylength = query_lengths[queryname]
         # get positives
         with open(f"{model_results_path}/{queryhits}", "r") as file:
             for line in file:
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                similarity = float(line.split()[1].strip("\n"))
+                similarity = float(line.split()[1].strip("\n")) * 100
                 # if there is a decoy, then collect targets from reversed results
                 if (
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
                     continue
+                if norm_q:
+                    similarity /= querylength
+                if norm_t:
+                    similarity /= target_lengths[target]
 
                 all_targets.append((queryname, target))
                 all_scores.append(similarity)
@@ -347,7 +353,11 @@ def get_data(
                         queryname not in hmmer_hits_dict
                         or target not in hmmer_hits_dict[queryname]
                     ):
-                        similarity = float(line.split()[1].strip("\n"))
+                        similarity = float(line.split()[1].strip("\n")) * 100
+                        if norm_q:
+                            similarity /= querylength
+                        if norm_t:
+                            similarity /= target_lengths[target]
                         all_targets.append((queryname, target))
                         all_scores.append(similarity)
     sorted_pairs = get_sorted_pairs(all_scores, all_targets)

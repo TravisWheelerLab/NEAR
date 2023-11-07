@@ -24,4 +24,6 @@ write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed-masked.index"
 mask_queries: True 
 mask_targets: True
-normalise_search_results: True
+normalise_search_results: False
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked-reversed.fa

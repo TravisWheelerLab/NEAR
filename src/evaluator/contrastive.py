@@ -19,6 +19,8 @@ def filter_scores(
     scores_array,
     indices_array,
     unrolled_names,
+    unrolled_lengths,
+    normalise_by_target=False,
 ):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
@@ -39,6 +41,7 @@ def filter_scores(
         names = unrolled_names[
             indices_array[match_idx]
         ]  # the names of the targets for each 1000 hits
+
         sorted_match_idx = np.argsort(match_scores)[::-1]
 
         _, unique_indices = np.unique(

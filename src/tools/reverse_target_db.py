@@ -2,35 +2,45 @@ from src.data.compare_models import load_hmmer_hits
 from src.data.hmmerhits import FastaFile
 import tqdm
 
-#_, hmmer_hits = load_hmmer_hits(4)
+
+def reverse(sequences, save_dir):
+    with open(
+        save_dir,
+        "w",
+    ) as f:
+        for name, sequence in tqdm.tqdm(sequences.items()):
+            f.write(f">{name}\n{sequence[::-1]}\n")
+    # check
+    reversedfasta = FastaFile(save_dir)
+
+    reversedseqs = reversedfasta.data
+
+    assert len(sequences) == len(reversedseqs)
+    assert list(sequences.keys()) == list(reversedseqs.keys())
+
+
 targetfasta = FastaFile(
-    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa"
+    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked.fa"
 )
 
 targetsequences = targetfasta.data
 
-#targets_that_are_hits = set()
-#names = []
-#lengths = []
+targets_reversed = (
+    "/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked-reversed.fa"
+)
+
+
+# targets_that_are_hits = set()
+# names = []
+# lengths = []
 #
-#namefile = open(
+# namefile = open(
 #    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-names-masked.txt", "w"
-#)
-#lengthsfile = open(
+# )
+# lengthsfile = open(
 #    "/xdisk/twheeler/daphnedemekas/prefilter/reversed-target-lengths-masked.txt", "w"
-#)
-with open(
-    "/xdisk/twheeler/daphnedemekas/prefilter/data/targets-reversed.fa",
-    "w",
-) as f:
-    for name, sequence in tqdm.tqdm(targetsequences.items()):
-        f.write(f">{name}\n{sequence[::-1]}\n")
-       # namefile.write(f"{name}\n")
-       #     lengthsfile.write(f"{len(sequence)}\n")
+# )
 
-reversedfasta = FastaFile(f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa")
-
-reversedseqs = reversedfasta.data
-
-assert len(targetsequences) == len(reversedseqs)
-assert list(targetsequences.keys()) == list(reversedseqs.keys())
+targets_reversed = (
+    "/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked-reversed.fa"
+)

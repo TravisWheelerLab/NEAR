@@ -42,15 +42,35 @@ class Results:
         model_results_path: str,
         hmmer_hits_dict: dict,
         data_savedir: str,
+        query_lengths_file: str,
+        target_lengths_file: str,
         evaluemeansfile: str = None,
         evaluemeanstitle: str = None,
         roc_filepath: str = None,
         plot_roc: bool = False,
         temp_file: str = None,
         plot_e_values: bool = False,
+        norm_q=False,
+        norm_t=False,
     ):
         """evaluates a given model"""
 
+        with open(query_lengths_file, "rb") as pickle_file:
+            query_lengths = pickle.load(pickle_file)
+        with open(target_lengths_file, "rb") as pickle_file:
+            target_lengths = pickle.load(pickle_file)
+
+        if not os.path.exists(f"{temp_file}_filtration.pickle"):
+            (_, _, _, sorted_pairs) = get_data(
+                model_results_path,
+                hmmer_hits_dict,
+                data_savedir=data_savedir,
+                plot_roc=plot_roc,
+                query_lengths=query_lengths,
+                target_lengths=target_lengths,
+                norm_t=norm_t,
+                norm_q=norm_q,
+            )
         if plot_e_values:
             print("Plotting e values and saving to")
             print(evaluemeansfile)
@@ -65,9 +85,8 @@ class Results:
                 _plot_lengths=False,
                 title=evaluemeanstitle,
             )
-            if plot_roc:
-                generate_roc(roc_filepath, hmmer_hits_dict, temp_file, sorted_pairs)
-        elif plot_roc:
+
+        if plot_roc:
             if not os.path.exists(f"{temp_file}_filtration.pickle"):
                 (_, _, _, sorted_pairs) = get_data(
                     model_results_path,
@@ -351,33 +370,28 @@ def plot_recall_by_evalue_threshold(
     plt.savefig(f"ResNet1d/results/compared_recall_normal.png")
 
 
-def evaluate(
-    modes: list = ["normal", "max"],
-    modelname: str = None,
-):
+def evaluate(modelname: str = None, norm_q=False, norm_t=False):
     """Main function for evaluation"""
 
     print(f"Evaluating {modelname}")
 
-    all_hits_max, all_hits_normal = load_hmmer_hits(4)
+    all_hits_max, _ = load_hmmer_hits(4)
 
-    if "max" in modes:
-        print("Parsing Alignment Model IVF Query 4 Max")
+    print("Parsing Alignment Model IVF Query 4 Max")
 
-        align_ivf_max_inputs_4 = load_inputs(all_hits_max, "max", modelname)
-        _ = Results(**align_ivf_max_inputs_4)
-    if "normal" in modes:
-        align_ivf_normal_inputs_4 = load_inputs(all_hits_normal, "normal", modelname)
-
-        print("Parsing Alignment Model IVF Query 4 Normal")
-        _ = Results(**align_ivf_normal_inputs_4)
+    align_ivf_max_inputs_4 = load_inputs(
+        all_hits_max, modelname, norm_q=False, norm_t=False
+    )
+    _ = Results(**align_ivf_max_inputs_4)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--query_id", type=int, default=4)
-    parser.add_argument("--modes", type=str, default=["MNF"])
     parser.add_argument("--compare", action="store_true")
+    parser.add_argument("--norm_q", action="store_true")
+    parser.add_argument("--norm_t", action="store_true")
+
     parser.add_argument("--modelname", type=str)
     parser.add_argument("--impose", action="store_true")
 
@@ -386,10 +400,11 @@ if __name__ == "__main__":
     modeinitials = args.modes
     modelname = args.modelname
 
+    norm_q = args.norm_q
+    norm_t = args.norm_t
+
     modes = []
 
-    if "M" in modeinitials:
-        modes.append("max")
     if "N" in modeinitials:
         modes.append("normal")
 
@@ -399,4 +414,4 @@ if __name__ == "__main__":
     elif args.impose:
         compare_nprobe()
     else:
-        evaluate(modes, modelname)
+        evaluate(modes, modelname, norm_q, norm_t)
