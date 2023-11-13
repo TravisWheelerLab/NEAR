@@ -17,8 +17,8 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "roc_filepath": f"ResNet1d/results/{modelname}_roc.png",
             "plot_roc": True,
             "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_masked",
-            "query_lengths": "data/query-lengths-masked.pkl",
-            "target_lengths": "data/target-lengths-masked.pkl",
+            "query_lengths_file": "data/query-lengths-masked.pkl",
+            "target_lengths_file": "data/target-lengths-masked.pkl",
             "norm_q": norm_q,
             "norm_t": norm_t,
         }  # "num_pos_per_evalue": [482667, 1105431, 1519838, 3722920], "num_hits":1341468330,  "plot_roc" : False}
@@ -32,8 +32,8 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "roc_filepath": f"ResNet1d/results/{modelname}_roc.png",
             "plot_roc": True,
             "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}",
-            "query_lengths": "data/query-lengths.pkl",
-            "target_lengths": "data/target-lengths.pkl",
+            "query_lengths_file": "data/query-lengths.pkl",
+            "target_lengths_file": "data/target-lengths.pkl",
             "norm_q": norm_q,
             "norm_t": norm_t,
         }

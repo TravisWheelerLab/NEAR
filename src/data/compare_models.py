@@ -52,6 +52,8 @@ class Results:
         plot_e_values: bool = False,
         norm_q=False,
         norm_t=False,
+        *args,  
+        **kwargs
     ):
         """evaluates a given model"""
 
@@ -370,7 +372,7 @@ def plot_recall_by_evalue_threshold(
     plt.savefig(f"ResNet1d/results/compared_recall_normal.png")
 
 
-def evaluate(modelname: str = None, norm_q=False, norm_t=False):
+def evaluate(modelname, norm_q=False, norm_t=False):
     """Main function for evaluation"""
 
     print(f"Evaluating {modelname}")
@@ -396,17 +398,10 @@ if __name__ == "__main__":
     parser.add_argument("--impose", action="store_true")
 
     args = parser.parse_args()
-
-    modeinitials = args.modes
     modelname = args.modelname
 
     norm_q = args.norm_q
     norm_t = args.norm_t
-
-    modes = []
-
-    if "N" in modeinitials:
-        modes.append("normal")
 
     if args.compare:
         compare_models(modelname=modelname)
@@ -414,4 +409,4 @@ if __name__ == "__main__":
     elif args.impose:
         compare_nprobe()
     else:
-        evaluate(modes, modelname, norm_q, norm_t)
+        evaluate(modelname, norm_q, norm_t)
