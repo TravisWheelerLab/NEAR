@@ -52,8 +52,8 @@ class Results:
         plot_e_values: bool = False,
         norm_q=False,
         norm_t=False,
-        *args,  
-        **kwargs
+        *args,
+        **kwargs,
     ):
         """evaluates a given model"""
 
@@ -93,6 +93,8 @@ class Results:
                 (_, _, _, sorted_pairs) = get_data(
                     model_results_path,
                     hmmer_hits_dict,
+                    query_lengths_file=query_lengths_file,
+                    target_lengths_file=target_lengths_file,
                     data_savedir=data_savedir,
                     plot_roc=plot_roc,
                 )
