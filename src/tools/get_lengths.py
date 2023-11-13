@@ -17,7 +17,7 @@ def get_lengths(targetfasta, queryfasta):
     with open(targetlengthsfile, "wb") as f:
         pickle.dump(targetlengths, f)
     with open(querylengthsfile, "wb") as f:
-        pickle.dump(targetlengths, f)
+        pickle.dump(querylengths, f)
 
 
 def get_lengths_masked(targetfastamasked, queryfastamasked):
@@ -39,7 +39,7 @@ def get_lengths_masked(targetfastamasked, queryfastamasked):
     with open(targetlengthsfile, "wb") as f:
         pickle.dump(targetlengths, f)
     with open(querylengthsfile, "wb") as f:
-        pickle.dump(targetlengths, f)
+        pickle.dump(querylengths, f)
 
 
 targetfasta = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa")
