@@ -57,19 +57,14 @@ class Results:
     ):
         """evaluates a given model"""
 
-        with open(query_lengths_file, "rb") as pickle_file:
-            query_lengths = pickle.load(pickle_file)
-        with open(target_lengths_file, "rb") as pickle_file:
-            target_lengths = pickle.load(pickle_file)
-
         if not os.path.exists(f"{temp_file}_filtration.pickle"):
             (_, _, _, sorted_pairs) = get_data(
                 model_results_path,
                 hmmer_hits_dict,
                 data_savedir=data_savedir,
                 plot_roc=plot_roc,
-                query_lengths=query_lengths,
-                target_lengths=target_lengths,
+                query_lengths_file=query_lengths_file,
+                query_lengths_file=query_lengths_file,
                 norm_t=norm_t,
                 norm_q=norm_q,
             )
