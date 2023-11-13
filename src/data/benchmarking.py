@@ -275,8 +275,8 @@ def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs)
 def get_data(
     model_results_path: str,
     hmmer_hits_dict: dict,
-    query_lengths: dict,
-    target_lengths: dict,
+    query_lengths_file: dict,
+    target_lengths_file: dict,
     data_savedir=None,
     plot_roc=True,
     norm_q=True,
@@ -286,6 +286,10 @@ def get_data(
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
+    with open(query_lengths_file, "rb") as f:
+        query_lengths = pickle.load(f)
+    with open(target_lengths_file, "rb") as f:
+        target_lengths = pickle.load(f)
     if (data_savedir is not None and plot_roc is False) or os.path.exists(
         f"{data_savedir}/sorted_pairs.npy"
     ):
