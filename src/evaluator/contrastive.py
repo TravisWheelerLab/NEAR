@@ -19,7 +19,6 @@ def filter_scores(
     scores_array,
     indices_array,
     unrolled_names,
-    unrolled_lengths,
     normalise_by_target=False,
 ):
     """Filters the scores such that every query amino can only
