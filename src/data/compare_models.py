@@ -64,7 +64,7 @@ class Results:
                 data_savedir=data_savedir,
                 plot_roc=plot_roc,
                 query_lengths_file=query_lengths_file,
-                query_lengths_file=query_lengths_file,
+                target_lengths_file=target_lengths_file,
                 norm_t=norm_t,
                 norm_q=norm_q,
             )
