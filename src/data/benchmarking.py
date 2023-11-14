@@ -173,10 +173,11 @@ def get_filtration_recall(
             recall = [
                 num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)
             ]
-
+            assert all(r <= 1 for r in recall)
             filtrations.append(
                 [100 * (1 - filtration[i]) for i in range(num_thresholds)]
             )
+
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
 
         elif 100 * (1 - filtration[0]) < 75:

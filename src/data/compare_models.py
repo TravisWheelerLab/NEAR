@@ -379,7 +379,7 @@ def evaluate(modelname, norm_q=False, norm_t=False):
     print("Parsing Alignment Model IVF Query 4 Max")
 
     align_ivf_max_inputs_4 = load_inputs(
-        all_hits_max, modelname, norm_q=False, norm_t=False
+        all_hits_max, modelname, norm_q=norm_q, norm_t=norm_t
     )
     _ = Results(**align_ivf_max_inputs_4)
 
@@ -399,7 +399,8 @@ if __name__ == "__main__":
 
     norm_q = args.norm_q
     norm_t = args.norm_t
-
+    print(f"Normalise queries: {norm_q}")
+    print(f"Normalise targets: {norm_t}")
     if args.compare:
         compare_models(modelname=modelname)
         # plot_recall_by_evalue_threshold()

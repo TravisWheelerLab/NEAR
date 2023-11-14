@@ -22,7 +22,8 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
     else:
         roc_filepath = f"ResNet1d/results/{modelname}_roc.png"
         temp_file = f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}"
-
+    print(f"Roc filepath: {roc_filepath}")
+    print(f"temp file: {temp_file}")
     if "masked" in modelname:
         # TODO different hmmer hits for masked
 
@@ -34,7 +35,7 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "evaluemeanstitle": f"Correlation in {modelname} model ",
             "roc_filepath": roc_filepath,
             "plot_roc": True,
-            "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_masked",
+            "temp_file":temp_file,# f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_masked",
             "query_lengths_file": "data/query-lengths-masked.pkl",
             "target_lengths_file": "data/target-lengths-masked.pkl",
             "norm_q": norm_q,
@@ -49,7 +50,7 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "evaluemeanstitle": f"Correlation in {modelname} model",
             "roc_filepath": roc_filepath,
             "plot_roc": True,
-            "temp_file": f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}",
+            "temp_file": temp_file, # f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}",
             "query_lengths_file": "data/query-lengths.pkl",
             "target_lengths_file": "data/target-lengths.pkl",
             "norm_q": norm_q,
