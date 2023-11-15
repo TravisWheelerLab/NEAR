@@ -5,8 +5,8 @@ index_string: "IVF5000,PQ32"
 log_verbosity: logging.INFO
 checkpoint_path: /xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt
 query_file: "data/queries-filtered.fa"
-target_file: "data/targets-filtered-masked.fa"
-target_embeddings: 'target_embeddings_masked.pt'
+target_file: "data/targets.fa"
+target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
@@ -21,6 +21,10 @@ nprobe: 120
 unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths.txt"
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-gpu-masked.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-120-gpu.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-120-gpu.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-120-gpu.txt"
+mask_queries: True 
+mask_targets: True
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked.fa
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-120-gpu-masked.h5"
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-120-gpu-masked.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-120-gpu-masked.txt"

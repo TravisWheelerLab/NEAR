@@ -158,19 +158,20 @@ def evaluate(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-    index = load_index(params, model)
-    # index = load_index(params)
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
+
+    index, unrolled_names = load_index(params, model, params.mask_targets)
+
     query_names = list(query_sequences.keys())
     arg_list = [
         0,
         list(query_sequences.values()),
+        list(masked_queries.values()),
         model,
-        params.save_dir,
         index,
-        unrolled_lengths,
         params.device,
+        params.mask_queries,
     ]
     print(f"Number of queries: {len(query_sequences)}")
     numqueries = len(query_sequences)

@@ -27,3 +27,5 @@ mask_targets: True
 normalise_search_results: False
 masked_query_file: data/queries-masked.fa
 masked_target_file: data/targets-masked.fa
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-20-masked.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-20-masked.txt"
