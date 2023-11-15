@@ -5,7 +5,7 @@ import pickle
 
 hmmer_max_hits, hmmer_normal_hits = load_hmmer_hits(4)
 targetfasta = FastaFile(
-    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-filtered.fa"
+    f"/xdisk/twheeler/daphnedemekas/prefilter/data/targets-filtered-masked.fa"
 )
 
 targetsequences = targetfasta.data

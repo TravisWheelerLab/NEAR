@@ -3,10 +3,9 @@ import pickle
 import argparse
 
 
-def main(hmmer_dir_path: str, save_dir=None):
-
-    hmmerhits = HmmerHits(dir_path=hmmer_dir_path)
-    target_hits = hmmerhits.get_hits(hmmer_dir_path)
+def main(hmmer_path: str, save_dir=None):
+    hmmerhits = HmmerHits(dir_path=hmmer_path)
+    target_hits = hmmerhits.get_hits(hmmer_path)
     if save_dir is not None:
         print(f"Saving hits to {save_dir}")
         with open(f"{save_dir}.pkl", "wb") as evalhitsfile:
