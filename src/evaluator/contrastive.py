@@ -102,12 +102,18 @@ def _calc_embeddings(
 
 @torch.no_grad()
 def search(args):
-    (idx, sequences, model, output_path, index, device) = args
-    queries, _, query_indices = _calc_embeddings(sequences, model, device)
-
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-
+    (
+        idx,
+        query_sequences,
+        masked_query_sequences,
+        model,
+        index,
+        device,
+        mask_queries,
+    ) = args
+    queries, _, query_indices = _calc_embeddings(query_sequences, model, device)
+    if mask_queries:
+        queries, _ = filter_sequences_by_mask(masked_query_sequences, queries)
     all_scores = []
     all_indices = []
     search_time = time.time()
@@ -136,17 +142,14 @@ def search_and_filter(args):
         write_results,
         unrolled_names,
         mask_queries,
-        normalise_search_results,
     ) = args
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, query_lengths, indices = _calc_embeddings(list(query_data.values()), model)
+    queries, _, indices = _calc_embeddings(list(query_data.values()), model)
 
     if mask_queries:
-        queries, query_lengths = filter_sequences_by_mask(
-            list(masked_query_data.values()), queries
-        )
+        queries, _ = filter_sequences_by_mask(list(masked_query_data.values()), queries)
 
     query_names = query_names[indices]
 
@@ -157,10 +160,6 @@ def search_and_filter(args):
 
     for i in tqdm.tqdm(range(len(queries))):
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
-
-        if normalise_search_results:
-            assert query_lengths[i] == len(scores)
-            scores /= len(scores)
 
         filtered_scores = filter_scores(scores, indices, unrolled_names)
 

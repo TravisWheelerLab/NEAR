@@ -27,27 +27,33 @@ def evaluate_multiprocessing(_config):
     print(f"Loading from checkpoint in {params.checkpoint_path}")
 
     model = load_model(params.checkpoint_path, params.model_name, params.device)
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+
+    index, _ = load_index(params, model, params.mask_targets)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-    print(f"Number of queries: {len(query_sequences)}")
-
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
     numqueries = len(query_sequences)
-    index = load_index(params, model)
-    print(f"nprobe : {params.nprobe}")
-    print(f"omp num threads: {params.omp_num_threads}")
-    # faiss.omp_set_num_threads(params.omp_num_threads)
+
     split_queries = list(split(list(query_sequences.values()), params.num_threads))
     split_names = list(split(list(query_sequences.keys()), params.num_threads))
+    split_queries_masked = list(
+        split(list(masked_queries.values()), params.num_threads)
+    )
 
     arg_list = [
         (
             i,
             split_queries[i],
+            split_queries_masked[i],
             model,
-            params.save_dir,
             index,
             params.device,
+            params.mask_queries,
         )
         for i in range(params.num_threads)
     ]
@@ -124,7 +130,6 @@ def evaluate_multiprocessing_python(_config):
             params.write_results,
             unrolled_names,
             params.mask_queries,
-            params.normalise_search_results,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]

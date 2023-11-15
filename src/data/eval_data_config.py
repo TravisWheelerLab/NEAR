@@ -5,6 +5,8 @@ import pickle
 all_hits_max_file_4 = "data/evaluationtargetdict"
 all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
 
+all_hits_max_file_4 = "data/hmmerhits-masked"
+
 
 def load_inputs(hits, modelname, norm_q=False, norm_t=False):
     if norm_q and not norm_t:
@@ -35,7 +37,7 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "evaluemeanstitle": f"Correlation in {modelname} model ",
             "roc_filepath": roc_filepath,
             "plot_roc": True,
-            "temp_file":temp_file,# f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_masked",
+            "temp_file": temp_file,  # f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_masked",
             "query_lengths_file": "data/query-lengths-masked.pkl",
             "target_lengths_file": "data/target-lengths-masked.pkl",
             "norm_q": norm_q,
@@ -50,7 +52,7 @@ def load_inputs(hits, modelname, norm_q=False, norm_t=False):
             "evaluemeanstitle": f"Correlation in {modelname} model",
             "roc_filepath": roc_filepath,
             "plot_roc": True,
-            "temp_file": temp_file, # f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}",
+            "temp_file": temp_file,  # f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}",
             "query_lengths_file": "data/query-lengths.pkl",
             "target_lengths_file": "data/target-lengths.pkl",
             "norm_q": norm_q,
