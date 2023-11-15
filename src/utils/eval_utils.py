@@ -1,6 +1,4 @@
-from src.evaluator.contrastive import (
-    _calc_embeddings,
-)
+from src.evaluator.contrastive import _calc_embeddings, filter_sequences_by_mask
 import torch
 import itertools
 from multiprocessing.pool import ThreadPool as Pool
@@ -12,45 +10,19 @@ from src.data.hmmerhits import FastaFile
 from src.utils.loaders import load_model_class
 
 
-def filter_targets_by_mask(masked_targets, embeddings, lengths, indices):
-    filtered_embeddings = [0] * len(embeddings)
-    filtered_lengths = [0] * len(lengths)
-    for target_idx in indices:
-        sequence = masked_targets[target_idx]
-        embedding = embeddings[target_idx]
-        assert len(sequence) == len(embedding)
-        Xs = [i for i in sequence if i == "X"]
-        embedding = np.delete(embedding, Xs)
-        filtered_embeddings[target_idx] = embedding
-        filtered_lengths[target_idx] = len(embedding)
-
-    assert 0 not in filtered_embeddings
-    assert 0 not in filtered_lengths
-    return filtered_embeddings, filtered_lengths
-
-
-def save_target_embeddings(arg_list):
-    target_data, masked_targets, model, max_seq_length, device = arg_list
-
+def save_target_embeddings(target_data, model, max_seq_length, device):
     targets, lengths, indices = _calc_embeddings(
         list(target_data.values()), model, device, max_seq_length
     )
-    filtered_embeddings, filtered_lengths = filter_targets_by_mask(
-        masked_targets, targets, lengths, indices
-    )
-
     names = np.array(list(target_data.keys()))[indices]
-
-    return names, filtered_embeddings, filtered_lengths
+    return names, targets, lengths
 
 
 def save_off_targets(
     target_sequences,
-    masked_sequences,
     target_names_file,
     target_lengths_file,
     unrolled_names_file,
-    unrolled_lengths_file,
     num_threads,
     model,
     max_seq_length,
@@ -67,31 +39,9 @@ def save_off_targets(
     target_embeddings = []
     target_lengths = []
 
-    if num_threads > 1:
-        arg_list = [
-            (
-                dict(itertools.islice(target_sequences.items(), i, i + t_chunk_size)),
-                dict(itertools.islice(masked_sequences.items(), i, i + t_chunk_size)),
-                model,
-                max_seq_length,
-                device,
-            )
-            for i in range(0, len(target_sequences), t_chunk_size)
-        ]
-        pool = Pool(num_threads)
-
-        for result in pool.imap(save_target_embeddings, arg_list):
-            names, embeddings, lengths = result
-            target_names += list(names)
-            target_lengths += list(lengths)
-            target_embeddings += embeddings
-    else:
-        target_names, target_embeddings, target_lengths = save_target_embeddings[
-            (target_sequences, model, max_seq_length, device)
-        ]
-
-    unrolled_names = np.repeat(names, lengths)
-    unrolled_lengths = np.repeat(lengths, lengths)
+    target_names, target_embeddings, target_lengths = save_target_embeddings(
+        target_sequences, model, max_seq_length, device
+    )
 
     print(f"Number of target embeddings: {len(target_embeddings)}")
 
@@ -103,58 +53,63 @@ def save_off_targets(
     with open(target_lengths_file, "w") as handle:
         for length in target_lengths:
             handle.write(f"{length}\n")
-    loop_time = time.time() - start_time
-    print(f"Embedding took: {loop_time}.")
 
+    unrolled_names = []
+    for name, length in zip(target_names, target_lengths):
+        unrolled_names.append([name] * length)
     with open(unrolled_names_file, "w") as handle:
         for name in unrolled_names:
             handle.write(f"{name}\n")
 
-    with open(unrolled_lengths_file, "w") as handle:
-        for length in unrolled_lengths:
-            handle.write(f"{length}\n")
-    return target_names, target_lengths, target_embeddings
+    loop_time = time.time() - start_time
+    print(f"Embedding took: {loop_time}.")
+
+    return target_names, target_lengths, target_embeddings, unrolled_names
 
 
 def load_targets(
-    target_embeddings,
+    target_embeddings_file,
     target_names_file,
     target_lengths_file,
     unrolled_names_file,
-    unrolled_lengths_file,
-    target_file,
     masked_target_file,
+    target_file,
     num_threads,
     model,
     max_seq_length,
     device,
+    mask_repetetive_sequences=True,
 ):
+    maskedtargetfasta = FastaFile(masked_target_file)
+    masked_sequences = maskedtargetfasta.data
+    targetfasta = FastaFile(target_file)
+    target_sequences = targetfasta.data
+    assert list(target_sequences.keys()) == list(masked_sequences.keys())
+
     # get target embeddings
-    if not os.path.exists(target_embeddings):
+    if not os.path.exists(target_embeddings_file):
         print(f"No saved target embeddings. Calculating them now from {target_file}")
-        targetfasta = FastaFile(target_file)
-        target_sequences = targetfasta.data
-        maskedtargetfasta = FastaFile(masked_target_file)
-        masked_sequences = maskedtargetfasta.data
-        assert list(target_sequences.keys()) == list(masked_sequences.keys())
 
         print(f"Number of target sequences: {len(target_sequences)}")
 
-        target_names, target_lengths, target_embeddings = save_off_targets(
+        (
+            target_names,
+            target_lengths,
+            target_embeddings,
+            unrolled_names,
+        ) = save_off_targets(
             target_sequences,
-            masked_sequences,
             target_names_file,
             target_lengths_file,
             unrolled_names_file,
-            unrolled_lengths_file,
             num_threads,
             model,
             max_seq_length,
             device,
-            target_embeddings,
+            target_embeddings_file,
         )
     else:
-        target_embeddings = torch.load(target_embeddings)
+        target_embeddings = torch.load(target_embeddings_file)
         print(f"Number of target embeddings: {len(target_embeddings)}")
 
         with open(target_names_file, "r") as f:
@@ -163,8 +118,44 @@ def load_targets(
         with open(target_lengths_file, "r") as f:
             target_lengths = f.readlines()
             target_lengths = [int(t.strip("\n")) for t in target_lengths]
+        with open(unrolled_names_file, "r") as f:
+            unrolled_names = f.readlines()
+            unrolled_names = [t.strip("\n") for t in unrolled_names]
 
-    return target_embeddings, target_names, target_lengths
+    if mask_repetetive_sequences:
+        print("Filtering out masked regions of targets")
+        target_embeddings, target_lengths = filter_sequences_by_mask(
+            list(masked_sequences.values()), target_embeddings
+        )
+
+        print(f"Saving masked targets to ")
+        masked_target_lengths_file = target_lengths_file.strip(".txt") + "-masked.txt"
+        if not os.path.exists(masked_target_lengths_file):
+            print(f"Saving masked target lengths to {masked_target_lengths_file}")
+
+            with open(masked_target_lengths_file, "w") as handle:
+                for length in target_lengths:
+                    handle.write(f"{length}\n")
+        else:
+            print(f"Loading masked target lengths from {masked_target_lengths_file}")
+
+            with open(masked_target_lengths_file, "r") as f:
+                target_lengths = f.readlines()
+                target_lengths = [int(t.strip("\n")) for t in target_lengths]
+
+        unrolled_names_masked = unrolled_names_file.strip(".txt") + "-masked.txt"
+
+        if not os.path.exists(unrolled_names_masked):
+            print(
+                f"Loading and saving masked unrolled_names to {unrolled_names_masked}"
+            )
+            unrolled_names = []
+            for name, length in zip(target_names, target_lengths):
+                unrolled_names.extend([name] * length)
+            with open(unrolled_names_masked, "w") as handle:
+                for name in unrolled_names:
+                    handle.write(f"{name}\n")
+    return target_embeddings, target_names, target_lengths, unrolled_names
 
 
 def split(a, n):

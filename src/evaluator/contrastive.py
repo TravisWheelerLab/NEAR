@@ -15,7 +15,12 @@ import pdb
 logger = logging.getLogger("evaluate")
 
 
-def filter_scores(scores_array, indices_array, unrolled_names):
+def filter_scores(
+    scores_array,
+    indices_array,
+    unrolled_names,
+    normalise_by_target=False,
+):
     """Filters the scores such that every query amino can only
     be matched to one amino from each target sequence
     and it matches the one with the biggest score.
@@ -35,6 +40,7 @@ def filter_scores(scores_array, indices_array, unrolled_names):
         names = unrolled_names[
             indices_array[match_idx]
         ]  # the names of the targets for each 1000 hits
+
         sorted_match_idx = np.argsort(match_scores)[::-1]
 
         _, unique_indices = np.unique(
@@ -48,6 +54,24 @@ def filter_scores(scores_array, indices_array, unrolled_names):
             filtered_scores[name] += distance
 
     return filtered_scores
+
+
+def filter_sequences_by_mask(masked_targets, embeddings):
+    filtered_embeddings = []
+    filtered_lengths = []
+
+    masked_target_sequences = [m for m in masked_targets if len(m) > 0]
+
+    assert len(masked_target_sequences) == len(embeddings)
+
+    for sequence, embedding in tqdm.tqdm(zip(masked_target_sequences, embeddings)):
+        assert len(sequence) == len(embedding)
+        Xs = [i for i in range(len(sequence)) if sequence[i] == "X"]
+        embedding = np.delete(embedding, Xs, axis=0)
+        filtered_embeddings.append(embedding)
+        filtered_lengths.append(len(embedding))
+
+    return filtered_embeddings, filtered_lengths
 
 
 @torch.no_grad()
@@ -78,22 +102,26 @@ def _calc_embeddings(
 
 @torch.no_grad()
 def search(args):
-    (idx, sequences, model, index, unrolled_lengths, device) = args
-    queries, _, query_indices = _calc_embeddings(sequences, model, device)
-
+    (
+        idx,
+        query_sequences,
+        masked_query_sequences,
+        model,
+        index,
+        device,
+        mask_queries,
+    ) = args
+    queries, _, query_indices = _calc_embeddings(query_sequences, model, device)
+    if mask_queries:
+        queries, _ = filter_sequences_by_mask(masked_query_sequences, queries)
     all_scores = []
     all_indices = []
-    unrolled_lengths = np.array(unrolled_lengths).astype(int)
     search_time = time.time()
 
     for i in tqdm.tqdm(range(len(queries))):
         # searching all amino acids in queries[i]
         # returns a list of 1000 scores per amino and the indices of the target sequences per amino
         scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
-        norm_factors = np.array(
-            [len(queries[i]) * unrolled_lengths[ind] for ind in indices]
-        )  # this should be an array of shape (len(queries[i]), 1000))
-        normalized_scores = 100 * scores / norm_factors
 
         all_scores.append(scores)
         all_indices.append(indices)
@@ -107,30 +135,35 @@ def search(args):
 def search_and_filter(args):
     (
         query_data,
+        masked_query_data,
         model,
         output_path,
         index,
-        unrolled_lengths,
         write_results,
+        unrolled_names,
+        mask_queries,
+        device,
     ) = args
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, _, indices = _calc_embeddings(list(query_names.values()), model)
+    queries, _, indices = _calc_embeddings(list(query_data.values()), model, device)
+
+    if mask_queries:
+        queries, _ = filter_sequences_by_mask(list(masked_query_data.values()), queries)
 
     query_names = query_names[indices]
 
     if not os.path.exists(output_path):
         os.mkdir(output_path)
-
+    unrolled_names = np.array(unrolled_names)
     print("Searching...")
+
     for i in tqdm.tqdm(range(len(queries))):
-        scores, indices = index.search(queries[i].contiguous(), k=1000)
-        normalized_scores = [
-            score / (len(queries[i]) * len(unrolled_lengths[ind]))
-            for score, ind in zip(scores, indices)
-        ]
-        filtered_scores = filter_scores(normalized_scores, indices)
+        scores, indices = index.search(queries[i].contiguous().numpy(), k=1000)
+
+        filtered_scores = filter_scores(scores, indices, unrolled_names)
+
         if write_results:
             f = open(f"{output_path}/{query_names[i]}.txt", "w")
             f.write("Name     Distance" + "\n")

@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 unrolled_names_file: '/xdisk/twheeler/daphnedemekas/unrolled_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-20"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-20-masked"
 num_threads: 16
 omp_num_threads: 1
 device: 'cpu'
@@ -21,7 +21,12 @@ max_seq_length: 512
 profiler: False
 nprobe: 20
 write_results: True
-index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-20.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-20.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-20.txt"
+index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-masked.index"
+mask_queries: True 
+mask_targets: True
+normalise_search_results: False
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked.fa
+indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-20-masked.h5"
+query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-20-masked.txt"
+scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-120-masked.h5"

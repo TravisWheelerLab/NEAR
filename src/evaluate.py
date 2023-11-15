@@ -27,29 +27,33 @@ def evaluate_multiprocessing(_config):
     print(f"Loading from checkpoint in {params.checkpoint_path}")
 
     model = load_model(params.checkpoint_path, params.model_name, params.device)
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+
+    index, _ = load_index(params, model, params.mask_targets)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-    print(f"Number of queries: {len(query_sequences)}")
-
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
     numqueries = len(query_sequences)
-    index = load_index(params, model)
-    print(f"nprobe : {params.nprobe}")
-    print(f"omp num threads: {params.omp_num_threads}")
-    # faiss.omp_set_num_threads(params.omp_num_threads)
+
     split_queries = list(split(list(query_sequences.values()), params.num_threads))
     split_names = list(split(list(query_sequences.keys()), params.num_threads))
+    split_queries_masked = list(
+        split(list(masked_queries.values()), params.num_threads)
+    )
 
-    with open(params.unrolled_lengths_file, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
             i,
             split_queries[i],
+            split_queries_masked[i],
             model,
             index,
-            unrolled_lengths,
             params.device,
+            params.mask_queries,
         )
         for i in range(params.num_threads)
     ]
@@ -105,25 +109,27 @@ def evaluate_multiprocessing_python(_config):
     print(f"num threads: {params.num_threads}")
     print(f"omp_num_threads: {params.omp_num_threads}")
 
-    index = load_index(params, model)
+    index, unrolled_names = load_index(params, model, params.mask_targets)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
 
     q_chunk_size = len(query_sequences) // params.num_threads
 
     numqueries = len(query_sequences)
     print(f"Number of queries: {numqueries}")
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         (
             dict(itertools.islice(query_sequences.items(), i, i + q_chunk_size)),
+            dict(itertools.islice(masked_queries.items(), i, i + q_chunk_size)),
             model,
             params.save_dir,
             index,
-            unrolled_lengths,
             params.write_results,
+            unrolled_names,
+            params.mask_queries,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]
@@ -133,14 +139,9 @@ def evaluate_multiprocessing_python(_config):
     print("Beginning search...")
     start = time.time()
 
-    query_names_list = []
-    all_scores_list = []
-    all_indices_list = []
+    idx = 0
     for result in pool.imap(search_and_filter, arg_list):
-        query_names, all_scores, all_indices = result
-        query_names_list += query_names
-        all_scores_list += all_scores
-        all_indices_list += all_indices
+        print(f"Finished thread: {idx}")
 
     print(f"Elapsed time: {time.time() - start}.")
 
@@ -157,18 +158,20 @@ def evaluate(_config):
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
-    index = load_index(params, model)
-    # index = load_index(params)
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
+
+    index, unrolled_names = load_index(params, model, params.mask_targets)
+
     query_names = list(query_sequences.keys())
     arg_list = [
         0,
         list(query_sequences.values()),
+        list(masked_queries.values()),
         model,
         index,
-        unrolled_lengths,
         params.device,
+        params.mask_queries,
     ]
     print(f"Number of queries: {len(query_sequences)}")
     numqueries = len(query_sequences)
@@ -201,20 +204,26 @@ def evaluate_python(_config):
     params = SimpleNamespace(**_config)
 
     model = load_model(params.checkpoint_path, params.model_name, params.device)
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+    index, unrolled_names = load_index(params, model, params.mask_targets)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
 
-    index = load_index(params, model)
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
         query_sequences,
+        masked_queries,
         model,
         params.save_dir,
         index,
-        unrolled_lengths,
         params.write_results,
+        unrolled_names,
+        params.mask_queries,
+        params.device,
     ]
     del query_sequences
 

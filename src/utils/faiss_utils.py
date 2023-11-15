@@ -104,7 +104,7 @@ def _setup_targets_for_search(
     return index
 
 
-def load_index(params, model):
+def load_index(params, model, mask_sequences=True):
     if os.path.exists(params.index_path):
         index = faiss.read_index(params.index_path)
         index.nprobe = params.nprobe
@@ -112,19 +112,31 @@ def load_index(params, model):
             num = 0
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, int(num), index)
+
+        if mask_sequences:
+            unrolled_names_file = (
+                params.unrolled_names_file.strip(".txt") + "-masked.txt"
+            )
+        else:
+            unrolled_names_file = params.unrolled_names_file
+
+        with open(unrolled_names_file, "r") as f:
+            unrolled_names = f.readlines()
+            unrolled_names = [t.strip("\n") for t in unrolled_names]
+
     else:
-        target_embeddings, target_names, target_lengths = load_targets(
+        target_embeddings, target_names, target_lengths, unrolled_names = load_targets(
             params.target_embeddings,
             params.target_names,
             params.target_lengths,
             params.unrolled_names_file,
-            params.unrolled_lengths_file,
-            params.target_file,
             params.masked_target_file,
+            params.target_file,
             params.num_threads,
             model,
             params.max_seq_length,
             params.device,
+            params.mask_targets,
         )
         assert (
             len(target_lengths) == len(target_names) == len(target_embeddings)
@@ -142,4 +154,4 @@ def load_index(params, model):
         )
     faiss.omp_set_num_threads(params.omp_num_threads)
 
-    return index
+    return index, unrolled_names

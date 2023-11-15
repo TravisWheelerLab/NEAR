@@ -1,3 +1,4 @@
+model_name:  "ResNet1d"
 evaluator_name: "ContrastiveEvaluator"
 description: "Use CPU with IVF optimization and multithreading"
 index_string: "IVF5000,Flat"
@@ -9,7 +10,7 @@ target_embeddings: 'target_embeddings_reversed.pt'
 target_names: 'reversed-target-names.txt'
 target_lengths: 'reversed-target-lengths.txt'
 unrolled_names_file: '/xdisk/twheeler/daphnedemekas/unrolled_names_reversed.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-20-masked-reversed"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-5-masked-reversed"
 num_threads: 16
 omp_num_threads: 1
 device: 'cpu'
@@ -18,9 +19,11 @@ normalize_embeddings: True
 minimum_seq_length: 0
 max_seq_length: 512
 profiler: False
-nprobe: 20
+nprobe: 5
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed-masked.index"
 mask_queries: True 
 mask_targets: True
 normalise_search_results: False
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked-reversed.fa

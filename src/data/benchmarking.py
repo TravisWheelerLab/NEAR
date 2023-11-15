@@ -135,15 +135,9 @@ def get_filtration_recall(
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
     filename: str = "data.txt",
 ):
-    if "max" in filename:
-        print("max numpos")
-        numpos_per_evalue = [355203, 598800, 901348, 3607355]
-        alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
-        # alldecoys = [758500480, 758500480, 758500480, 758500480]
-    else:
-        print("normal numpos")
-        numpos_per_evalue = [354984, 593354, 839953, 886633]
-        alldecoys = [2345180299, 2345180299, 2345180299, 2345180299]
+    numpos_per_evalue = [355203, 598800, 901348, 3607355]
+    alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
+
     print("Getting Filtration & Recall")
 
     num_thresholds = len(evalue_thresholds)
@@ -173,10 +167,11 @@ def get_filtration_recall(
             recall = [
                 num_positives[i] / numpos_per_evalue[i] for i in range(num_thresholds)
             ]
-
+            assert all(r <= 1 for r in recall)
             filtrations.append(
                 [100 * (1 - filtration[i]) for i in range(num_thresholds)]
             )
+
             recalls.append([100 * recall[i] for i in range(num_thresholds)])
 
         elif 100 * (1 - filtration[0]) < 75:
@@ -275,13 +270,21 @@ def generate_roc(figure_path: str, hmmerhits: dict, filename: str, sorted_pairs)
 def get_data(
     model_results_path: str,
     hmmer_hits_dict: dict,
+    query_lengths_file: dict,
+    target_lengths_file: dict,
     data_savedir=None,
     plot_roc=True,
+    norm_q=True,
+    norm_t=True,
     **kwargs,
 ):
     """Parses the outputted results and aggregates everything
     into lists and dictionaries"""
 
+    with open(query_lengths_file, "rb") as f:
+        query_lengths = pickle.load(f)
+    with open(target_lengths_file, "rb") as f:
+        target_lengths = pickle.load(f)
     if (data_savedir is not None and plot_roc is False) or os.path.exists(
         f"{data_savedir}/sorted_pairs.npy"
     ):
@@ -307,27 +310,29 @@ def get_data(
 
     print(model_results_path)
 
-    if "CPU" in model_results_path:
-        nprobe = model_results_path.split("/")[-1].split("-")[-1]
-
     reversed_path = model_results_path + "-reversed"
     print(f"Reversed path :{reversed_path}")
 
     for queryhits in tqdm.tqdm(os.listdir(model_results_path)):
         queryname = queryhits.strip(".txt")
+        querylength = query_lengths[queryname]
         # get positives
         with open(f"{model_results_path}/{queryhits}", "r") as file:
             for line in file:
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                similarity = float(line.split()[1].strip("\n"))
+                similarity = float(line.split()[1].strip("\n")) * 100
                 # if there is a decoy, then collect targets from reversed results
                 if (
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
                     continue
+                if norm_q:
+                    similarity /= querylength
+                if norm_t:
+                    similarity /= target_lengths[target]
 
                 all_targets.append((queryname, target))
                 all_scores.append(similarity)
@@ -347,7 +352,11 @@ def get_data(
                         queryname not in hmmer_hits_dict
                         or target not in hmmer_hits_dict[queryname]
                     ):
-                        similarity = float(line.split()[1].strip("\n"))
+                        similarity = float(line.split()[1].strip("\n")) * 100
+                        if norm_q:
+                            similarity /= querylength
+                        if norm_t:
+                            similarity /= target_lengths[target]
                         all_targets.append((queryname, target))
                         all_scores.append(similarity)
     sorted_pairs = get_sorted_pairs(all_scores, all_targets)

@@ -1,3 +1,4 @@
+model_name:  "ResNet1d"
 evaluator_name: "ContrastiveEvaluator"
 description: "Use CPU with IVF optimization and multithreading"
 index_string: "IVF5000,Flat"
@@ -24,3 +25,5 @@ index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-reversed-maske
 mask_queries: True 
 mask_targets: True
 normalise_search_results: False
+masked_query_file: data/queries-masked.fa
+masked_target_file: data/targets-masked-reversed.fa
