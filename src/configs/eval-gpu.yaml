@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 target_lengths: 'target_lengths.txt'
 unrolled_names_file: '/xdisk/twheeler/daphnedemekas/unrolled_names.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-20K-50-rust"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/gpu-5K-120-masked"
 num_threads: 1
 omp_num_threads: 1
 device: 'cuda'
