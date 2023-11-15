@@ -142,11 +142,12 @@ def search_and_filter(args):
         write_results,
         unrolled_names,
         mask_queries,
+        device,
     ) = args
 
     query_names = np.array(list(query_data.keys()))
 
-    queries, _, indices = _calc_embeddings(list(query_data.values()), model)
+    queries, _, indices = _calc_embeddings(list(query_data.values()), model, device)
 
     if mask_queries:
         queries, _ = filter_sequences_by_mask(list(masked_query_data.values()), queries)

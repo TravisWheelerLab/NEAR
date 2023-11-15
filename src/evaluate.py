@@ -223,6 +223,7 @@ def evaluate_python(_config):
         params.write_results,
         unrolled_names,
         params.mask_queries,
+        params.device,
     ]
     del query_sequences
 
