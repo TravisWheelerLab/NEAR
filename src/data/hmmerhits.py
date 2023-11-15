@@ -57,11 +57,11 @@ class HmmerHits:
                 query_file2...
             target_dir2/
             ..."""
-        self.dir_path: str = dir_path
-        self.root: str = os.path.dirname(dir_path)
+        # self.dir_path: str = dir_path
+        # self.root: str = os.path.dirname(dir_path)
 
-        self.target_dirs: List[str] = glob.glob(f"{self.dir_path}/*")
-        self.target_dirnums = os.listdir(self.dir_path)
+        # self.target_dirs: List[str] = glob.glob(f"{self.dir_path}/*")
+        # self.target_dirnums = os.listdir(self.dir_path)
 
     def get_targets_from_dirnum(self, dirnum: str) -> FastaFile:
         """Inputs a directory number for a target directory
@@ -138,11 +138,7 @@ class HmmerHits:
 
         return data_dict
 
-    def get_hits(self, directory: str) -> Tuple[dict, np.array]:
-        assert os.path.exists(
-            f"{directory}/hits.tblout"
-        ), f"No HMMER hits at {directory}/hits.tblout"
-
-        hits_dict = self.parse_hits_file(f"{directory}/hits.tblout")
+    def get_hits(self, filename: str) -> Tuple[dict, np.array]:
+        hits_dict = self.parse_hits_file(filename)
 
         return hits_dict
