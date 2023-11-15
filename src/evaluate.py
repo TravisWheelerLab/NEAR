@@ -204,20 +204,25 @@ def evaluate_python(_config):
     params = SimpleNamespace(**_config)
 
     model = load_model(params.checkpoint_path, params.model_name, params.device)
+    print(f"Nprobe: {params.nprobe}")
+    print(f"num threads: {params.num_threads}")
+    print(f"omp_num_threads: {params.omp_num_threads}")
+    index, unrolled_names = load_index(params, model, params.mask_targets)
 
     queryfasta = FastaFile(params.query_file)
     query_sequences = queryfasta.data
+    maskedqueryfasta = FastaFile(params.masked_query_file)
+    masked_queries = maskedqueryfasta.data
 
-    index = load_index(params, model)
-    with open(params.unrolled_lengths, "r") as f:
-        unrolled_lengths = [int(line.strip()) for line in f.readlines()]
     arg_list = [
-        query_sequences,
+        list(query_sequences.values()),
+        list(masked_queries.values()),
         model,
         params.save_dir,
         index,
-        unrolled_lengths,
         params.write_results,
+        unrolled_names,
+        params.mask_queries,
     ]
     del query_sequences
 
