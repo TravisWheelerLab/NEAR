@@ -215,8 +215,8 @@ def evaluate_python(_config):
     masked_queries = maskedqueryfasta.data
 
     arg_list = [
-        list(query_sequences.values()),
-        list(masked_queries.values()),
+        query_sequences,
+        masked_queries,
         model,
         params.save_dir,
         index,
