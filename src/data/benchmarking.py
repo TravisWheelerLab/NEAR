@@ -138,6 +138,12 @@ def get_filtration_recall(
     numpos_per_evalue = [355203, 598800, 901348, 3607355]
     alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
 
+    print(f"Filename: {filename}, adjusting denominators")
+
+    if "masked" in filename:
+        numpos_per_evalue = [320615, 528586, 747950, 1335577]
+        alldecoys = [2344729435, 2344729435, 2344729435, 2344729435]
+
     print("Getting Filtration & Recall")
 
     num_thresholds = len(evalue_thresholds)
