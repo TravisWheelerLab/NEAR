@@ -22,6 +22,6 @@ profiler: False
 nprobe: 20
 write_results: True
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-5K-20.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-5K-20.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-5K-20.txt"
+scores_path: "output/all-scores-5K-50-masked.h5"
+indices_path:  "output/all-indices-5K-50.h5"
+query_names_path:  "output/query-names-5K-50.txt"
