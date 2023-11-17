@@ -130,6 +130,7 @@ def evaluate_multiprocessing_python(_config):
             params.write_results,
             unrolled_names,
             params.mask_queries,
+            params.device,
         )
         for i in range(0, len(query_sequences), q_chunk_size)
     ]

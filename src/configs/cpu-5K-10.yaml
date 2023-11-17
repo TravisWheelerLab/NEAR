@@ -22,6 +22,6 @@ nprobe: 10
 write_results: True
 unrolled_lengths: "/xdisk/twheeler/daphnedemekas/unrolled-lengths-masked.txt"
 index_path: "/xdisk/twheeler/daphnedemekas/faiss-index-targets-5K-masked.index"
-scores_path: "/xdisk/twheeler/daphnedemekas/all-scores-10-5K-qm.h5"
-indices_path:  "/xdisk/twheeler/daphnedemekas/all-indices-10-5K-qm.h5"
-query_names_path:  "/xdisk/twheeler/daphnedemekas/query-names-10-5K-qm.txt"
+scores_path: "output/all-scores-10-5K-masked.h5"
+indices_path:  "output/all-indices-10-5K-masked.h5"
+query_names_path:  "output/query-names-10-5K-masked.txt"
