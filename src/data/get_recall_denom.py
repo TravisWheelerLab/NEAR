@@ -59,14 +59,14 @@ def prune(results):
             os.remove(f"{results}/{query}")
 
 
-all_hits_max_file_4 = "data/hmmerhits-masked"
+all_hits_max_file_4 = "data/hmmerhits-masked-dict"
 
 with open(all_hits_max_file_4 + ".pkl", "rb") as file:
     all_hits_max = pickle.load(file)
 
-targetfile = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa")
+targetfile = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked.fa")
 queriesfile = FastaFile(
-    "/xdisk/twheeler/daphnedemekas/prefilter/data/queries-filtered.fa"
+    "/xdisk/twheeler/daphnedemekas/prefilter/data/queries-masked.fa"
 )
 
 query_sequences = queriesfile.data
