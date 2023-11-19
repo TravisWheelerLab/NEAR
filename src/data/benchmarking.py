@@ -145,6 +145,8 @@ def get_filtration_recall(
 #        alldecoys = [2344729435, 2344729435, 2344729435, 2344729435]
         numpos_per_evalue = [315721, 520070, 735453, 1308259]
         alldecoys = [2344756797, 2344756797, 2344756797, 2344756797]
+        numpos_per_evalue = [315721, 520070, 735453, 1308259]
+        alldecoys = [2344756797, 2344756797, 2344756797, 2344756797]
     print("Getting Filtration & Recall")
 
     num_thresholds = len(evalue_thresholds)

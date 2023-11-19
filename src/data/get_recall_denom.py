@@ -64,7 +64,12 @@ all_hits_max_file_4 = "data/hmmerhits-masked-dict"
 with open(all_hits_max_file_4 + ".pkl", "rb") as file:
     all_hits_max = pickle.load(file)
 
+<<<<<<< HEAD
 targetfile = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets-masked.fa")
+=======
+
+targetfile = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa")
+>>>>>>> 2e631ee2f007964528c9586a61f781e1b8509e39
 queriesfile = FastaFile(
     "/xdisk/twheeler/daphnedemekas/prefilter/data/queries-masked.fa"
 )
