@@ -168,7 +168,9 @@ def compare_models(
 
         plt.title(f"Evalue threshold: {evalue_thresholds[evalue_index]}")
 
-        plt.savefig(f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}-zoomed.png")
+        plt.savefig(
+            f"ResNet1d/results/compared_roc-{evalue_thresholds[evalue_index]}-zoomed.png"
+        )
         plt.clf()
 
 
@@ -178,15 +180,11 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
     print(f"Comparing NEAT models")
     all_hits_max, _all_hits_normal = load_hmmer_hits(4)
 
-    if normal:
-        align = load_inputs(_all_hits_normal, "normal", "CPU-20K-50")
-        align2 = load_inputs(_all_hits_normal, "normal", "CPU-20K-150")
-    else:
-        align = load_inputs(all_hits_max, "max", "CPU-5K-5")
-        align2 = load_inputs(all_hits_max, "max", "CPU-5K-10")
-        align3 = load_inputs(all_hits_max, "max", "CPU-5K-20")
-        align4 = load_inputs(all_hits_max, "max", "CPU-5K-40")
-        align1 = load_inputs(all_hits_max, "max", "CPU-5K-50")
+    align = load_inputs(all_hits_max, "max", "CPU-5K-5-masked_normalised-masked")
+    align2 = load_inputs(all_hits_max, "max", "CPU-5K-10-masked_normalised-masked")
+    align3 = load_inputs(all_hits_max, "max", "CPU-5K-20-masked_normalised-masked")
+    align4 = load_inputs(all_hits_max, "max", "CPU-5K-40-masked_normalised-masked")
+    align1 = load_inputs(all_hits_max, "max", "CPU-5K-50-masked_normalised-masked")
     nprobes = [5, 10, 20, 40, 50]
 
     all_filtrations = []
@@ -242,7 +240,9 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], normal=Fal
         plt.legend()
         print("Saving figure")
 
-        plt.savefig(f"ResNet1d/results/superimposedCPUmax-zoomed-{evalue_thresholds[i]}.png")
+        plt.savefig(
+            f"ResNet1d/results/superimposedCPUmax-zoomed-{evalue_thresholds[i]}.png"
+        )
         plt.clf()
 
 
