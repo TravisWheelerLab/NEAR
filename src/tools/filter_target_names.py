@@ -1,9 +1,13 @@
 import pickle
 import os
-
-all_hits_max_file_4 = "data/hmmerhits-masked"
+from src.data.hmmerhits import FastaFile
+all_hits_max_file_4 = "data/evaluationtargetdictnormal"
 with open(all_hits_max_file_4 + ".pkl", "rb") as file:
     all_hits_max_4 = pickle.load(file)
+
+queries = FastaFile("data/queries-filtered.fa")
+
+querynames = queries.data
 
 filtered_target_names = "data/filtered_target_names.txt"
 
@@ -11,18 +15,21 @@ target_names_file = "target_names.txt"
 
 all_targets = set()
 
-for query in all_hits_max_4:
+for query in querynames:
+    if query not in all_hits_max_4:
+        continue
     targets = list(all_hits_max_4[query].keys())
     all_targets.update(targets)
-
+print(f"Number of targets in hMMER Max output: {len(all_targets)}")
 with open(target_names_file, "r") as file:
     target_names = file.readlines()
 
 print(f"First 5 target names : {target_names[:5]}")
 
 filtered_targets = []
+print(len(target_names))
 for target in target_names:
-    target = target.strip()
+    target = target.strip("\n")
 
     if target not in all_targets:
         filtered_targets.append(target)
