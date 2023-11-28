@@ -8,7 +8,7 @@ all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
 all_hits_max_file_4 = "data/hmmerhits-masked-dict"
 
 
-def load_inputs(hits, modelname, norm_q=False, norm_t=False):
+def load_inputs(hits, modelname, norm_q=True, norm_t=True):
     if norm_q and not norm_t:
         roc_filepath = f"ResNet1d/results/{modelname}_roc_norm_q.png"
         temp_file = f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}_norm_q"

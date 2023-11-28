@@ -105,14 +105,14 @@ def compare_models(
     print(f"Comparing models with {modelname}")
     all_hits_max, _ = load_hmmer_hits(4)
 
-    neat_max = load_inputs(all_hits_max, "max", modelname)
+    neat_max = load_inputs(all_hits_max, modelname)
 
-    esm = load_inputs(all_hits_max, "max", "esm")
-    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_inputs(all_hits_max, "max", "protbert")
-    last = load_inputs(all_hits_max, "max", "last")
-    hmmer_normal = load_inputs(all_hits_max, "max", "msv")
+    esm = load_inputs(all_hits_max, "esm")
+    knn = load_inputs(all_hits_max, "knn-for-homology")
+    mmseqs = load_inputs(all_hits_max, "mmseqs")
+    protbert = load_inputs(all_hits_max, "protbert")
+    last = load_inputs(all_hits_max, "last")
+    hmmer_normal = load_inputs(all_hits_max, "msv")
 
     all_recalls = []
     all_filtrations = []
