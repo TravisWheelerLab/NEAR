@@ -198,11 +198,21 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
 
     print(f"Comparing NEAT models")
     all_hits_max, _ = load_hmmer_hits(4)
-    align = load_inputs(all_hits_max, "max", "CPU-5K-5-masked_normalised-masked")
-    align2 = load_inputs(all_hits_max, "max", "CPU-5K-10-masked_normalised-masked")
-    align3 = load_inputs(all_hits_max, "max", "CPU-5K-20-masked_normalised-masked")
-    align4 = load_inputs(all_hits_max, "max", "CPU-5K-40-masked_normalised-masked")
-    align1 = load_inputs(all_hits_max, "max", "CPU-5K-50-masked_normalised-masked")
+    align = load_inputs(
+        all_hits_max, "max", "CPU-5K-5-masked", norm_q=True, norm_t=True
+    )
+    align2 = load_inputs(
+        all_hits_max, "max", "CPU-5K-10-masked", norm_q=True, norm_t=True
+    )
+    align3 = load_inputs(
+        all_hits_max, "max", "CPU-5K-20-masked", norm_q=True, norm_t=True
+    )
+    align4 = load_inputs(
+        all_hits_max, "max", "CPU-5K-40-masked", norm_q=True, norm_t=True
+    )
+    align1 = load_inputs(
+        all_hits_max, "max", "CPU-5K-50-masked", norm_q=True, norm_t=True
+    )
     nprobes = [5, 10, 20, 40, 50]
 
     # _, axis = plt.subplots(figsize=(10, 10))
