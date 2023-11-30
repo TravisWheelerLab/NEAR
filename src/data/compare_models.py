@@ -213,7 +213,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
         "0.240s/q",
         "0.019s/q",
         "0.129s/q",
-        "0.240s/q",
+        "0.074s/q",
     ]
 
     all_filtrations = []
@@ -250,11 +250,15 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
             idx += 1
         axis.set_xlabel("Percent Filtration", fontsize=15)
         axis.set_ylabel("Percent Recall", fontsize=15)
-        axis.set_ylim(90, 100.2)
-        axis.set_xlim(97.5, 100.1)
+        # axis.set_ylim(90, 100.2)
+        # axis.set_xlim(97.5, 100.1)
         axis.grid()
-        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=15)
-        axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
+        # axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=15)
+        # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
+        axis.set_ylim(50, 100.2)
+        axis.set_xlim(90, 100.2)
+        axis.set_xticks([90, 92, 94, 96, 98, 100], fontsize=15)
+        axis.set_yticks([50, 60, 70, 80, 90, 100], fontsize=15)
 
         plt.legend(fontsize=15)
         print("Saving figure")
