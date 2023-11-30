@@ -290,9 +290,11 @@ def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], gpu=False)
         # if normal:
         # plt.savefig("ResNet1d/results/superimposedCPUnormal-zoomed.png")
         # else:
-        plt.savefig(
-            f"ResNet1d/results/superimposedCPUmax-zoomed-{evalue_thresholds[i]}.png"
-        )
+        if gpu:
+            filename = "ResNet1d/results/superimposedGPUmax-zoomed"
+        else:
+            filename = "ResNet1d/results/superimposedCPUmax-zoomed"
+        plt.savefig(f"{filename}-{evalue_thresholds[i]}.png")
         plt.clf()
 
 
