@@ -243,6 +243,9 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
+        plt.title(
+            f"NEAT Performance on HMMER Max for E-value Threshold {evalue_thresholds[i]}"
+        )
         plt.savefig(f"{filename}-{evalue_thresholds[i]}.png")
         plt.clf()
 
