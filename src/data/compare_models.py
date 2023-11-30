@@ -258,8 +258,8 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
         # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
         axis.set_ylim(75, 100.5)
         axis.set_xlim(95, 100.1)
-        axis.set_xticks([75, 80, 85, 90, 95, 100], fontsize=15)
-        axis.set_yticks([50, 60, 70, 80, 90, 100], fontsize=15)
+        axis.set_xticks([95, 96, 97, 98, 99, 199], fontsize=15)
+        axis.set_yticks([75, 80, 85, 90, 95, 100], fontsize=15)
 
         plt.legend(fontsize=15)
         print("Saving figure")
