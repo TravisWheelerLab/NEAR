@@ -268,7 +268,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
             f"NEAT Performance on HMMER Max for E-value Threshold {evalue_thresholds[i]}",
             fontsize=15,
         )
-        plt.savefig(f"{filename}-{evalue_thresholds[i]}.png")
+        plt.savefig(f"{filename}-{evalue_thresholds[i]}-ndr.png")
         plt.clf()
 
 
