@@ -206,7 +206,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
 
     # nprobes = [50, 150, 5, 10, 20]
     # runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
-    nprobes = [150, 20, 50, 10, 5]
+    nprobes = [None, 150, 20, 50, 10, 5]
     runtimes = [
         "0.290s/q",
         "0.034s/q",
