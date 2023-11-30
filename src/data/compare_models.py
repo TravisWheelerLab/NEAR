@@ -193,6 +193,60 @@ def compare_models(
         plt.clf()
 
 
+def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
+    all_hits_max, _ = load_hmmer_hits(4)
+    gpu_50 = load_inputs(all_hits_max, "GPU-5K-50-masked", norm_q=True, norm_t=True)
+    gpu_150 = load_inputs(all_hits_max, "GPU-5K-150-masked", norm_q=True, norm_t=True)
+
+    cpu_5 = load_inputs(all_hits_max, "CPU-5K-5-masked", norm_q=True, norm_t=True)
+    cpu_10 = load_inputs(all_hits_max, "CPU-5K-10-masked", norm_q=True, norm_t=True)
+    cpu_20 = load_inputs(all_hits_max, "CPU-5K-20-masked", norm_q=True, norm_t=True)
+
+    nprobes = [50, 150, 5, 10, 20]
+    runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q"]
+
+    all_filtrations = []
+    all_recalls = []
+    for idx, inputs in enumerate([gpu_50, gpu_150, cpu_5, cpu_10, cpu_20]):
+        filtrations, recalls = get_roc_data(**inputs)
+        all_filtrations.append(filtrations)
+        all_recalls.append(recalls)
+
+    for i in [0, 1, 2]:
+        idx = 0
+        _, axis = plt.subplots(figsize=(10, 10))
+        for f, r in zip(all_filtrations, all_recalls):
+            if idx in [0, 1]:
+                label = f"NEAT-GPU-{nprobes[idx]},<{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
+                linestyle = "dashed"
+            else:
+                label = f"NEAT-CPU-{nprobes[idx]}, <{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
+                linestyle = "solid"
+            axis.plot(
+                np.array(f)[:, i],
+                np.array(r)[:, i],
+                f"{COLORS[idx]}",
+                linewidth=2,
+                label=label,
+                linestyle=linestyle,
+            )
+            idx += 1
+        axis.set_xlabel("Percent Filtration", fontsize=20)
+        axis.set_ylabel("Percent Recall", fontsize=20)
+        axis.set_ylim(90, 100.2)
+        axis.set_xlim(97.5, 100.1)
+        axis.grid()
+        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=15)
+        axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
+
+        plt.legend(fontsize=20)
+        print("Saving figure")
+
+        filename = "ResNet1d/results/imposedplot"
+        plt.savefig(f"{filename}-{evalue_thresholds[i]}.png")
+        plt.clf()
+
+
 def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], gpu=False):
     styles = ["dashed", "solid"]
 
@@ -427,6 +481,7 @@ if __name__ == "__main__":
         compare_models(modelname=modelname)
         # plot_recall_by_evalue_threshold()
     elif args.impose:
-        compare_nprobe(gpu=args.gpu)
+        # compare_nprobe(gpu=args.gpu)
+        impose_plots()
     else:
         evaluate(modelname, norm_q, norm_t)
