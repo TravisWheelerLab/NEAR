@@ -202,12 +202,16 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
     cpu_10 = load_inputs(all_hits_max, "CPU-5K-10-masked", norm_q=True, norm_t=True)
     cpu_20 = load_inputs(all_hits_max, "CPU-5K-20-masked", norm_q=True, norm_t=True)
 
+    hmmer_normal = load_inputs(all_hits_max, "msv")
+
     nprobes = [50, 150, 5, 10, 20]
-    runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q"]
+    runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
 
     all_filtrations = []
     all_recalls = []
-    for idx, inputs in enumerate([gpu_50, gpu_150, cpu_5, cpu_10, cpu_20]):
+    for idx, inputs in enumerate(
+        [gpu_50, gpu_150, cpu_5, cpu_10, cpu_20, hmmer_normal]
+    ):
         filtrations, recalls = get_roc_data(**inputs)
         all_filtrations.append(filtrations)
         all_recalls.append(recalls)
@@ -217,10 +221,13 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
         _, axis = plt.subplots(figsize=(10, 10))
         for f, r in zip(all_filtrations, all_recalls):
             if idx in [0, 1]:
-                label = f"NEAT-GPU-{nprobes[idx]},<{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
+                label = f"NEAT-GPU-{nprobes[idx]} <{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
                 linestyle = "dashed"
+            elif idx == 5:
+                label = f"MSV filter <{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
+                linestyle = "dotted"
             else:
-                label = f"NEAT-CPU-{nprobes[idx]}, <{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
+                label = f"NEAT-CPU-{nprobes[idx]} <{evalue_thresholds[i]}, run-time: {runtimes[idx]}"
                 linestyle = "solid"
             axis.plot(
                 np.array(f)[:, i],
@@ -231,20 +238,21 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
                 linestyle=linestyle,
             )
             idx += 1
-        axis.set_xlabel("Percent Filtration", fontsize=20)
-        axis.set_ylabel("Percent Recall", fontsize=20)
+        axis.set_xlabel("Percent Filtration", fontsize=15)
+        axis.set_ylabel("Percent Recall", fontsize=15)
         axis.set_ylim(90, 100.2)
         axis.set_xlim(97.5, 100.1)
         axis.grid()
         axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=15)
         axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
 
-        plt.legend(fontsize=20)
+        plt.legend(fontsize=15)
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
         plt.title(
-            f"NEAT Performance on HMMER Max for E-value Threshold {evalue_thresholds[i]}"
+            f"NEAT Performance on HMMER Max for E-value Threshold {evalue_thresholds[i]}",
+            fontsize=15,
         )
         plt.savefig(f"{filename}-{evalue_thresholds[i]}.png")
         plt.clf()
