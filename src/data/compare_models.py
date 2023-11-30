@@ -205,12 +205,15 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
     hmmer_normal = load_inputs(all_hits_max, "msv")
 
     nprobes = [50, 150, 5, 10, 20]
-    runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
+    #runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
+    
+    runtimes = ["0.290s/q", "0.034s/q", "0.240s/q","0.019s/q","0.129s/q", "0.240s/q",]
 
     all_filtrations = []
     all_recalls = []
     for idx, inputs in enumerate(
-        [gpu_50, gpu_150, cpu_5, cpu_10, cpu_20, hmmer_normal]
+        [hmmer_normal, gpu_150, cpu_20, gpu_50,cpu_10,cpu_5]
+        #[gpu_50, gpu_150, cpu_5, cpu_10, cpu_20, hmmer_normal]
     ):
         filtrations, recalls = get_roc_data(**inputs)
         all_filtrations.append(filtrations)
