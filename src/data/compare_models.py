@@ -408,6 +408,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--modelname", type=str)
     parser.add_argument("--impose", action="store_true")
+    parser.add_argument("--gpu", action="store_true")
 
     args = parser.parse_args()
     modelname = args.modelname
@@ -420,6 +421,6 @@ if __name__ == "__main__":
         compare_models(modelname=modelname)
         # plot_recall_by_evalue_threshold()
     elif args.impose:
-        compare_nprobe()
+        compare_nprobe(gpu=args.gpu)
     else:
         evaluate(modelname, norm_q, norm_t)
