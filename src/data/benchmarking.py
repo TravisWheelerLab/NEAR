@@ -283,8 +283,8 @@ def get_data(
     target_lengths_file: dict,
     data_savedir=None,
     plot_roc=True,
-    norm_q=True,
-    norm_t=True,
+    norm_q=False,
+    norm_t=False,
     **kwargs,
 ):
     """Parses the outputted results and aggregates everything
@@ -340,9 +340,11 @@ def get_data(
                     continue
                 if norm_q:
                     similarity /= querylength
-                if norm_t:
+                if norm_t and target_lengths[target] > 0:
                     similarity /= target_lengths[target]
-
+                elif target_lengths[target] == 0:
+                    print(f"Zero length target with similarity {similarity}")
+                    continue
                 all_targets.append((queryname, target))
                 all_scores.append(similarity)
                 all_e_values.append(hmmer_hits_dict[queryname][target][0])

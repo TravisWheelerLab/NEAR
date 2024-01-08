@@ -2,14 +2,15 @@ import os
 import pickle
 import tqdm
 
-def parse_mmseqs():
+def parse_mmseqs(outputdir, mmseqspath):
     # assert len(queries) == 16769
     #print(f"Number of relevant targets: {len(mytargets)}")
-    outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs-reversed"
+    #outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs-reversed"
 
     # for subdir in tqdm.tqdm(os.listdir(directory)):
-
-    mmseqspath = f"/xdisk/twheeler/daphnedemekas/mmseqs-rev/alnRes.m8"
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+    #mmseqspath = f"/xdisk/twheeler/daphnedemekas/mmseqs-rev/alnRes.m8"
     with open(mmseqspath, "r") as f:
         lines = f.readlines()
         for f in tqdm.tqdm(lines):
@@ -28,4 +29,19 @@ def parse_mmseqs():
 
 
 if __name__ == "__main__":
-    parse_mmseqs()
+    outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs-reversed"
+
+    # for subdir in tqdm.tqdm(os.listdir(directory)):
+
+    mmseqspath = f"/xdisk/twheeler/daphnedemekas/mmseqs-rev/alnRes.m8"
+
+    #outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs"
+    
+    parse_mmseqs(outputdir, mmseqspath)
+    # for subdir in tqdm.tqdm(os.listdir(directory)):
+
+    mmseqspath = f"/xdisk/twheeler/daphnedemekas/mmseqs/alnRes.m8"    
+    outputdir = "/xdisk/twheeler/daphnedemekas/prefilter-output/mmseqs"
+
+
+    parse_mmseqs(outputdir, mmseqspath)
