@@ -99,25 +99,28 @@ class Results:
 
 
 def compare_models(
-    modelname: str = "CPU-5K-40",
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     print(f"Comparing models with {modelname}")
     all_hits_max, _ = load_hmmer_hits(4)
 
-    neat_max = load_inputs(all_hits_max, modelname)
+    cpu_model = "CPU-5K-20-masked"
+    gpu_model = "GPU-5K-150-masked"
 
-    esm = load_inputs(all_hits_max, "esm")
+    cpu_near = load_inputs(all_hits_max, cpu_model, norm_q=True, norm_t=True)
+    gpu_near = load_inputs(all_hits_max, gpu_model, norm_q=True, norm_t=True)
+
+    esm = load_inputs(all_hits_max, "esm-masked")
     knn = load_inputs(all_hits_max, "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "mmseqs")
-    protbert = load_inputs(all_hits_max, "protbert")
+    protbert = load_inputs(all_hits_max, "protbert-masked")
     last = load_inputs(all_hits_max, "last")
     hmmer_normal = load_inputs(all_hits_max, "msv")
 
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, protbert, neat_max, hmmer_normal, last, mmseqs, knn]:
+    for inputs in [esm, protbert, cpu_near, gpu_near, hmmer_normal, last, mmseqs, knn]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -139,7 +142,8 @@ def compare_models(
     labels = [
         "ESM",
         "ProtBERT",
-        "NEAR-40",
+        "NEAR-CPU-20",
+        "NEAR-GPU-150",
         "MSV filter",
         "LAST",
         "MMseqs2",
@@ -154,12 +158,12 @@ def compare_models(
             idx += 1
             print(f"IDX: {idx}")
 
-            if labels[idx] in ["LAST", "MMseqs2", "ProtTransT5"]:
+            if labels[idx] in ["LAST", "MMseqs2"]:
                 axis.scatter(
                     np.array(filtrations)[-1, evalue_index],
                     np.array(recalls)[-1, evalue_index],
                     c=COLORS[idx],
-                    s=100,
+                    s=150,
                     label=labels[idx],
                     marker="x",
                 )
@@ -175,9 +179,9 @@ def compare_models(
         axis.set_ylabel("recall")
         axis.grid()
         axis.legend(loc="lower left")
-        axis.set_xlim(97.5, 100.1)
+        axis.set_xlim(97, 100.1)
         # axis.set_xticks([75, 80, 85, 90, 95, 100])
-        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100])
+        axis.set_xticks([97, 98, 99, 100])
 
         # axis.set_ylim(90, 100.2)
         # axis.set_xlim(99, 100.01)
@@ -257,10 +261,14 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
         # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
         axis.set_ylim(75, 100.5)
         axis.set_xlim(95, 100.1)
-        axis.set_xticks([95, 96, 97, 98, 99, 100], labels = [95, 96, 97, 98, 99, 100], fontsize=15)
-        axis.set_yticks([75, 80, 85, 90, 95, 100],labels = [75, 80, 85, 90, 95, 100], fontsize=15)
+        axis.set_xticks(
+            [95, 96, 97, 98, 99, 100], labels=[95, 96, 97, 98, 99, 100], fontsize=15
+        )
+        axis.set_yticks(
+            [75, 80, 85, 90, 95, 100], labels=[75, 80, 85, 90, 95, 100], fontsize=15
+        )
 
-        #plt.legend(fontsize=15)
+        # plt.legend(fontsize=15)
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
@@ -275,7 +283,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1]):
 def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10], gpu=False):
     styles = ["dashed", "solid"]
 
-    print(f"Comparing NEAT models")
+    print(f"Comparing NEAR models")
     all_hits_max, _ = load_hmmer_hits(4)
     if gpu:
         align = load_inputs(all_hits_max, "GPU-5K-50-masked", norm_q=True, norm_t=True)

@@ -16,6 +16,7 @@ COLORS = [
     "dodgerblue",
     "salmon",
     "darkgreen",
+    "darkred",
 ]
 
 
