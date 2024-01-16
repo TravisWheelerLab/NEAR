@@ -5,7 +5,9 @@ import time
 
 
 # load model
-checkpoint_path = "/xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt"
+checkpoint_path = (
+    "/xdisk/twheeler/daphnedemekas/prefilter/ResNet1d/23/checkpoints/best_epoch.ckpt"
+)
 model_name = "ResNet1d"
 device = "cuda"
 
@@ -16,6 +18,7 @@ targetfasta = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa
 sequences = list(targetfasta.data.values())
 
 start = time.time()
+print("Beginning embedding...")
 embeddings = _calc_embeddings(sequences, model, device)
 duration = time.time() - start
 

@@ -20,6 +20,11 @@ COLORS = [
 ]
 
 
+def plot_scatterplot():
+    "Just a scatterplot of the scores vs evalues"
+    pass
+
+
 def plot_mean_e_values(
     distance_list: list,
     e_values_list: list,
