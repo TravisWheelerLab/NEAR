@@ -110,11 +110,11 @@ def compare_models(
     cpu_near = load_inputs(all_hits_max, cpu_model, norm_q=True, norm_t=True)
     gpu_near = load_inputs(all_hits_max, gpu_model, norm_q=True, norm_t=True)
 
-    esm = load_inputs(all_hits_max, "esm-masked")
-    knn = load_inputs(all_hits_max, "knn-for-homology")
-    mmseqs = load_inputs(all_hits_max, "mmseqs")
-    protbert = load_inputs(all_hits_max, "protbert-masked")
-    last = load_inputs(all_hits_max, "last")
+    esm = load_inputs(all_hits_max, "esm-masked", norm_q=False, norm_t=False)
+    knn = load_inputs(all_hits_max, "knn-for-homology", norm_q=False, norm_t=False)
+    mmseqs = load_inputs(all_hits_max, "mmseqs", norm_q=False, norm_t=False)
+    protbert = load_inputs(all_hits_max, "protbert-masked", norm_q=False, norm_t=False)
+    last = load_inputs(all_hits_max, "last", norm_q=False, norm_t=False)
     hmmer_normal = load_inputs(all_hits_max, "msv")
 
     all_recalls = []
@@ -511,7 +511,7 @@ if __name__ == "__main__":
     print(f"Normalise queries: {norm_q}")
     print(f"Normalise targets: {norm_t}")
     if args.compare:
-        compare_models(modelname=modelname)
+        compare_models()
         # plot_recall_by_evalue_threshold()
     elif args.impose:
         # compare_nprobe(gpu=args.gpu)
