@@ -10,7 +10,6 @@ def split(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-model_name = "ResNet1d"
 device = "cpu"
 checkpoint_path = "data/best_epoch.ckpt"
 model_name = "ResNet1d"
@@ -25,19 +24,9 @@ pool = Pool(16)
 start = time.time()
 idx = 0
 
-arg_list = [
-    sequences,
-    model,
-]
 split_sequences = list(split(sequences, 16))
 
-arg_list = [
-    (
-        split_sequences[i],
-        model,
-    )
-    for i in range(16)
-]
+arg_list = [(split_sequences[i], model, "cpu") for i in range(16)]
 
 for result in pool.imap(_calc_embeddings, arg_list):
     print(f"Finished thread: {idx}")
