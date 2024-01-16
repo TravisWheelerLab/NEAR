@@ -110,7 +110,7 @@ def compare_models(
     cpu_near = load_inputs(all_hits_max, cpu_model, norm_q=True, norm_t=True)
     gpu_near = load_inputs(all_hits_max, gpu_model, norm_q=True, norm_t=True)
 
-    esm = load_inputs(all_hits_max, "esm-masked")
+    esm = load_inputs(all_hits_max, "esm-masked", norm_q=False, norm_t=False)
     knn = load_inputs(all_hits_max, "knn-for-homology")
     mmseqs = load_inputs(all_hits_max, "mmseqs")
     protbert = load_inputs(all_hits_max, "protbert-masked")
