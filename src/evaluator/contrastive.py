@@ -81,7 +81,6 @@ def _calc_embeddings(
     model_device="cpu",
     max_seq_length=512,
 ):
-    sequences, model_class, device = args
     embeddings = []
     lengths = []
     indices = []
