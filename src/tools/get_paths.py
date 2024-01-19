@@ -21,7 +21,7 @@ def main(train_dir, eval_dir, train_path, eval_path):
 
     with open(eval_path, "w", encoding="utf-8") as valpaths:
         print("Writing val paths")
-        for Q in [0, 1, 2]:
+        for Q in [3]:
             for T in tqdm.tqdm(range(45)):
                 files = os.listdir(f"{VAL_DIR}/{Q}/{T}")
                 for f in files:
