@@ -51,7 +51,7 @@ def main(trainsequences, evalsequences, clustered_target_dir, target_fastas_dir)
         i = 0
         j = 0
         for seqlist in clustered_seqnames:
-            if i < numseqs * 0.85:
+            if i < numseqs * 0.8:
                 for seq in seqlist:
                     trainseqs.write(seq + "\n")
                     i += 1

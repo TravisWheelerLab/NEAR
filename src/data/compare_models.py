@@ -68,21 +68,6 @@ class Results:
                 norm_t=norm_t,
                 norm_q=norm_q,
             )
-        if plot_e_values:
-            print("Plotting e values and saving to")
-            print(evaluemeansfile)
-            plot_mean_e_values(
-                self.similarities,
-                self.e_values,
-                self.biases,
-                min_threshold=0,
-                max_threshold=np.max(self.similarities),
-                outputfilename=evaluemeansfile,
-                plot_stds=True,
-                _plot_lengths=False,
-                title=evaluemeanstitle,
-            )
-
         if plot_roc:
             if not os.path.exists(f"{temp_file}_filtration.pickle"):
                 (_, _, _, sorted_pairs) = get_data(

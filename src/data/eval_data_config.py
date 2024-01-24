@@ -5,7 +5,7 @@ import pickle
 all_hits_max_file_4 = "data/evaluationtargetdict"
 all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
 
-all_hits_max_file_4 = "data/hmmerhits-masked-dict"
+#all_hits_max_file_4 = "data/hmmerhits-masked-dict"
 
 
 def load_inputs(hits, modelname, norm_q=True, norm_t=True):

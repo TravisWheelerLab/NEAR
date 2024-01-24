@@ -337,13 +337,16 @@ def get_data(
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                similarity = float(line.split()[1].strip("\n")) * 100
+                similarity = float(line.split()[1].strip("\n"))# * 100
                 # if there is a decoy, then collect targets from reversed results
                 if (
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
+                    print(f"NO-HIT: {similarity}")
                     continue
+                print(f"Query {queryname} and Target {target} are a hmmer hit with evalue {hmmer_hits_dict[queryname][target][0]}")
+                print(f"Similarity: {similarity}")
                 if norm_q:
                     similarity /= querylength
                 if norm_t and target_lengths[target] > 0:
