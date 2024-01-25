@@ -110,9 +110,9 @@ def compare_models(
         "ESM": "yellowgreen",
         "ProtBERT": "skyblue",
         "NEAR": "mediumvioletred",
-        "MSV filter": "darkgoldenrod",
+        "MSV filter": "red",
         "LAST": "orange",
-        "MMseqs2": "olivedrab",
+        "MMseqs2": "darkgoldenrod",
         "ProtTransT5": "blue",
     }
 
