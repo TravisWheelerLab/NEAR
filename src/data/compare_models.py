@@ -248,18 +248,18 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
         for f, r in zip(all_filtrations, all_recalls):
             print()
             if idx in [1, 4]:
-                label = f"NEAR-GPU-{nprobes[idx]} <{evalue_thresholds[i]}"
+                label = f"NEAR-GPU-{nprobes[idx]}"
                 linestyle = "dashed"
             elif idx == 0:
-                label = f"MSV filter <{evalue_thresholds[i]}"
+                label = f"MSV filter"
                 linestyle = "dotted"
             else:
-                label = f"NEAR-CPU-{nprobes[idx]} <{evalue_thresholds[i]}"
+                label = f"NEAR-CPU-{nprobes[idx]}"
                 linestyle = "solid"
             axis.plot(
                 np.array(f)[:, i],
                 np.array(r)[:, i],
-                f"{COLORS[idx]}",
+                f"{COLORS[label]}",
                 linewidth=2,
                 label=label,
                 linestyle=linestyle,
@@ -281,7 +281,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
             [75, 80, 85, 90, 95, 100], labels=[75, 80, 85, 90, 95, 100], fontsize=15
         )
 
-        # plt.legend(fontsize=15)
+        plt.legend(fontsize=15)
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
