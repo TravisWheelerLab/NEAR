@@ -214,20 +214,28 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
     gpu_50 = load_inputs(all_hits_max, "GPU-5K-50-masked", norm_q=True, norm_t=True)
     gpu_150 = load_inputs(all_hits_max, "GPU-5K-150-masked", norm_q=True, norm_t=True)
 
-    cpu_5 = load_inputs(all_hits_max, "CPU-5K-5-masked", norm_q=True, norm_t=True)
+    # cpu_5 = load_inputs(all_hits_max, "CPU-5K-5-masked", norm_q=True, norm_t=True)
     cpu_10 = load_inputs(all_hits_max, "CPU-5K-10-masked", norm_q=True, norm_t=True)
     cpu_20 = load_inputs(all_hits_max, "CPU-5K-20-masked", norm_q=True, norm_t=True)
-    cpu_50 = load_inputs(all_hits_max, "CPU-5K-50-masked", norm_q=True, norm_t=True)
+    # cpu_50 = load_inputs(all_hits_max, "CPU-5K-50-masked", norm_q=True, norm_t=True)
     hmmer_normal = load_inputs(all_hits_max, "msv")
 
     # nprobes = [50, 150, 5, 10, 20]
     # runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
-    nprobes = [None, 150, 20, 50, 50, 10, 5]
+    nprobes = [None, 150, 20, 50, 10]
+
+    COLORS = {
+        "NEAR-GPU-50": "blue",
+        "NEAR-CPU-10": "skyblue",
+        "NEAR-CPU-20": "orange",
+        "MSV filter": "darkslategrey",
+        "NEAR-GPU-150": "mediumvioletred",
+    }
 
     all_filtrations = []
     all_recalls = []
     for idx, inputs in enumerate(
-        [hmmer_normal, gpu_150, cpu_20, cpu_50, gpu_50, cpu_10, cpu_5]
+        [hmmer_normal, gpu_150, cpu_20, gpu_50, cpu_10]
         # [gpu_50, gpu_150, cpu_5, cpu_10, cpu_20, hmmer_normal]
     ):
         filtrations, recalls = get_roc_data(**inputs)
