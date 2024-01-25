@@ -249,7 +249,6 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
             print()
             if idx in [1, 3]:
                 label = f"NEAR-GPU-{nprobes[idx]}"
-                linestyle = "dashed"
             elif idx == 0:
                 label = f"MSV filter"
                 linestyle = "dotted"
