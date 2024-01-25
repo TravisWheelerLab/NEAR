@@ -97,7 +97,8 @@ def compare_models(
 
     esm = load_inputs(all_hits_max, "esm-masked", norm_q=False, norm_t=False)
     knn = load_inputs(all_hits_max, "knn-for-homology", norm_q=False, norm_t=False)
-    mmseqs = load_inputs(all_hits_max, "mmseqs", norm_q=False, norm_t=False)
+#    mmseqs = load_inputs(all_hits_max, "mmseqs", norm_q=False, norm_t=False)
+    mmseqs_prefilter = load_inputs(all_hits_max, "mmseqs-prefilter", norm_q=False, norm_t=False)
     protbert = load_inputs(all_hits_max, "protbert-masked", norm_q=False, norm_t=False)
     last = load_inputs(all_hits_max, "last", norm_q=False, norm_t=False)
     hmmer_normal = load_inputs(all_hits_max, "msv")
@@ -105,7 +106,7 @@ def compare_models(
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, protbert, cpu_near, gpu_near, hmmer_normal, last, mmseqs, knn]:
+    for inputs in [esm, protbert, cpu_near, gpu_near, hmmer_normal, last,mmseqs_prefilter, knn]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -131,7 +132,8 @@ def compare_models(
         "NEAR-GPU-150",
         "MSV filter",
         "LAST",
-        "MMseqs2",
+#        "MMseqs2",
+        "MMseqs2 Prefilter",
         "ProtTransT5",
     ]
 
@@ -163,7 +165,7 @@ def compare_models(
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
-        axis.legend(loc="lower left")
+#        axis.legend(loc="lower left")
         axis.set_xlim(97, 100.1)
         # axis.set_xticks([75, 80, 85, 90, 95, 100])
         axis.set_xticks([97, 98, 99, 100])

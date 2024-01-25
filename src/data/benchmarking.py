@@ -16,7 +16,8 @@ COLORS = [
     "dodgerblue",
     "salmon",
     "darkgreen",
-    "darkred",
+#    "darkgreen",
+    "darkorchid"
 ]
 
 
@@ -142,15 +143,14 @@ def get_filtration_recall(
     filename: str = "data.txt",
 ):
     numpos_per_evalue = [355203, 598800, 901348, 3607355]
-    alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
-
+   # alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
+    alldecoys = [839087222, 839087222, 839087222, 839087222]
     print(f"Filename: {filename}, adjusting denominators")
 
     if "masked" in filename:
         #        numpos_per_evalue = [320615, 528586, 747950, 1335577]
         #        alldecoys = [2344729435, 2344729435, 2344729435, 2344729435]
         numpos_per_evalue = [315721, 520070, 735453, 1308259]
-        alldecoys = [2344756797, 2344756797, 2344756797, 2344756797]
         alldecoys = [839087222, 839087222, 839087222, 839087222]
 
     print("Getting Filtration & Recall")
@@ -338,6 +338,8 @@ def get_data(
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
                 similarity = float(line.split()[1].strip("\n"))# * 100
+               # if 'mmseqs-prefilter' in model_results_path:
+               #     similarity *= -1
                 # if there is a decoy, then collect targets from reversed results
                 if (
                     queryname not in hmmer_hits_dict
@@ -372,7 +374,8 @@ def get_data(
                         queryname not in hmmer_hits_dict
                         or target not in hmmer_hits_dict[queryname]
                     ):
-                        similarity = float(line.split()[1].strip("\n")) * 100
+                        similarity = float(line.split()[1].strip("\n"))
+                        
                         if norm_q:
                             similarity /= querylength
                         if norm_t:
