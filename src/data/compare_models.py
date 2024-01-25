@@ -173,8 +173,8 @@ def compare_models(
             elif labels[idx] in ["MSV filter", "MMseqs2"]:
                 print("dotted")
                 axis.plot(
-                    np.array(filtrations)[-1, evalue_index],
-                    np.array(recalls)[-1, evalue_index],
+                    np.array(filtrations)[:, evalue_index],
+                    np.array(recalls)[:, evalue_index],
                     c=COLORS[labels[idx]],
                     label=labels[idx],
                     linestyle="dotted",
