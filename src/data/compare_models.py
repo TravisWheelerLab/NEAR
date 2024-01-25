@@ -108,12 +108,12 @@ def compare_models(
 
     COLORS = {
         "ESM": "yellowgreen",
-        "ProtBERT": "firebrick",
+        "ProtBERT": "skyblue",
         "NEAR": "mediumvioletred",
-        "MSV filter": "darkgreen",
+        "MSV filter": "darkgoldenrod",
         "LAST": "orange",
-        "MMseqs2": "darkblue",
-        "ProtTransT5": "skyblue",
+        "MMseqs2": "olivedrab",
+        "ProtTransT5": "blue",
     }
 
     for inputs in [
