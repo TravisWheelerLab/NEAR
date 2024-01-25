@@ -190,7 +190,7 @@ def compare_models(
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
-        axis.legend(loc="lower left")
+        # axis.legend(loc="lower left")
         axis.set_xlim(97, 100.1)
         # axis.set_xticks([75, 80, 85, 90, 95, 100])
         axis.set_xticks([97, 98, 99, 100])
@@ -281,7 +281,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
             [75, 80, 85, 90, 95, 100], labels=[75, 80, 85, 90, 95, 100], fontsize=15
         )
 
-        plt.legend(fontsize=15)
+        # plt.legend(fontsize=15)
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
