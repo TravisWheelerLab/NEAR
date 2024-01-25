@@ -99,7 +99,7 @@ def compare_models(
     mmseqs_prefilter = load_inputs(
         all_hits_max, "mmseqs-prefilter", norm_q=False, norm_t=False
     )
-    protbert = load_inputs(all_hits_max, "protbert-masked", norm_q=True, norm_t=True)
+    protbert = load_inputs(all_hits_max, "protbert-masked", norm_q=False, norm_t=False)
     last = load_inputs(all_hits_max, "last", norm_q=False, norm_t=False)
     hmmer_normal = load_inputs(all_hits_max, "msv")
 
@@ -273,7 +273,7 @@ def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
             [75, 80, 85, 90, 95, 100], labels=[75, 80, 85, 90, 95, 100], fontsize=15
         )
 
-        # plt.legend(fontsize=15)
+        plt.legend(fontsize=15)
         print("Saving figure")
 
         filename = "ResNet1d/results/imposedplot"
