@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import tqdm
 import numpy as np
 import pickle
-import pdb
 
 COLORS = [
     "mediumseagreen",
@@ -16,14 +15,8 @@ COLORS = [
     "dodgerblue",
     "salmon",
     "darkgreen",
-#    "darkgreen",
-    "darkorchid"
+    "darkorchid",
 ]
-
-
-def plot_scatterplot():
-    "Just a scatterplot of the scores vs evalues"
-    pass
 
 
 def plot_mean_e_values(
@@ -84,11 +77,6 @@ def plot_mean_e_values(
             alpha=0.5,
             color="orange",
         )
-    # plt.title(title + ", Full")
-    # plt.ylabel("Log E value means")
-    # plt.xlabel("Similarity Threshold")
-    # plt.savefig(f"ResNet1d/results/{outputfilename}-full.png")
-
     plt.title(title)
     plt.ylim(-20, 0)
     plt.xlim(0, 100)
@@ -143,22 +131,14 @@ def get_filtration_recall(
     filename: str = "data.txt",
 ):
     numpos_per_evalue = [355203, 598800, 901348, 3607355]
-   # alldecoys = [2342448072, 2342448072, 2342448072, 2342448072]
     alldecoys = [839087222, 839087222, 839087222, 839087222]
     print(f"Filename: {filename}, adjusting denominators")
 
     if "masked" in filename:
-        #        numpos_per_evalue = [320615, 528586, 747950, 1335577]
-        #        alldecoys = [2344729435, 2344729435, 2344729435, 2344729435]
         numpos_per_evalue = [315721, 520070, 735453, 1308259]
         alldecoys = [839087222, 839087222, 839087222, 839087222]
 
     print(f"Filename: {filename}, adjusting denominators")
-
-    if "masked" in filename:
-        numpos_per_evalue = [320615, 528586, 747950, 1335577]
-        alldecoys = [2344729435, 2344729435, 2344729435, 2344729435]
-
     print("Getting Filtration & Recall")
 
     num_thresholds = len(evalue_thresholds)
@@ -258,8 +238,6 @@ def get_roc_data(hmmer_hits_dict: dict, temp_file: str, sorted_pairs=None, **kwa
         return filtrations, recalls
 
     if not os.path.exists(temp_file):
-        # TODO:
-        # if sorted_pairs is None: get sorted_pairs
         write_datafile(
             sorted_pairs,
             hmmer_hits_dict,
@@ -343,17 +321,16 @@ def get_data(
                 if "Distance" in line:
                     continue
                 target = line.split()[0].strip("\n").strip(".pt")
-                similarity = float(line.split()[1].strip("\n"))# * 100
-               # if 'mmseqs-prefilter' in model_results_path:
-               #     similarity *= -1
-                # if there is a decoy, then collect targets from reversed results
+                similarity = float(line.split()[1].strip("\n"))  # * 100
                 if (
                     queryname not in hmmer_hits_dict
                     or target not in hmmer_hits_dict[queryname]
                 ):
                     print(f"NO-HIT: {similarity}")
                     continue
-                print(f"Query {queryname} and Target {target} are a hmmer hit with evalue {hmmer_hits_dict[queryname][target][0]}")
+                print(
+                    f"Query {queryname} and Target {target} are a hmmer hit with evalue {hmmer_hits_dict[queryname][target][0]}"
+                )
                 print(f"Similarity: {similarity}")
                 if norm_q:
                     similarity /= querylength
@@ -381,7 +358,7 @@ def get_data(
                         or target not in hmmer_hits_dict[queryname]
                     ):
                         similarity = float(line.split()[1].strip("\n"))
-                        
+
                         if norm_q:
                             similarity /= querylength
                         if norm_t:

@@ -9,8 +9,7 @@ from src.data.benchmarking import (
 )
 from src.data.eval_data_config import (
     load_inputs,
-    all_hits_max_file_4,
-    all_hits_normal_file_4,
+    hmmer_hits_file,
 )
 import numpy as np
 import pickle
@@ -23,17 +22,12 @@ resource.setrlimit(resource.RLIMIT_DATA, (500 * 1024**3, -1))
 import os
 
 
-def load_hmmer_hits(query_id: int = 4):
+def load_hmmer_hits(hmmer_hits_file):
     """Loads pre-saved hmmer hits dictionaries for a given
     evaluation query id, currently can only be 4 or 0"""
-    if query_id == 4:
-        with open(all_hits_max_file_4 + ".pkl", "rb") as file:
-            all_hits_max_4 = pickle.load(file)
-        with open(all_hits_normal_file_4 + ".pkl", "rb") as file:
-            all_hits_normal_4 = pickle.load(file)
-        return all_hits_max_4, all_hits_normal_4
-    else:
-        raise Exception(f"No evaluation data for given query id {query_id}")
+    with open(hmmer_hits_file + ".pkl", "rb") as file:
+        all_hits_max_4 = pickle.load(file)
+    return all_hits_max_4
 
 
 class Results:
@@ -87,7 +81,7 @@ def compare_models(
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     print(f"Comparing models with {modelname}")
-    all_hits_max, _ = load_hmmer_hits(4)
+    all_hits_max, _ = load_hmmer_hits(hmmer_hits_file)
 
     gpu_model = "GPU-5K-150-masked"
 
@@ -192,14 +186,7 @@ def compare_models(
         axis.grid()
         # axis.legend(loc="lower left")
         axis.set_xlim(97, 100.1)
-        # axis.set_xticks([75, 80, 85, 90, 95, 100])
         axis.set_xticks([97, 98, 99, 100])
-
-        # axis.set_ylim(90, 100.2)
-        # axis.set_xlim(99, 100.01)
-        # axis.grid()
-        # axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
-        # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
 
         plt.title(f"Evalue threshold: {evalue_thresholds[evalue_index]}")
 

@@ -1,14 +1,5 @@
-import pickle
-
-# all_hits_max_file_4 = "data/evaltargetdictmax" THIS WONT WORK
-# all_hits_normal_file_4 = "data/evaltargetdictnormal"
-all_hits_max_file_4 = "data/evaluationtargetdict"
-all_hits_normal_file_4 = "data/evaluationtargetdictnormal"
-
-
-#all_hits_max_file_4 = "data/hmmerhits-masked-dict"
+hmmer_hits_file = "data/evaluationtargetdict"
 # all_hits_max_file_4 = "data/hmmerhits-masked-dict"
-
 
 
 def load_inputs(hits, modelname, norm_q=True, norm_t=True):
@@ -32,12 +23,12 @@ def load_inputs(hits, modelname, norm_q=True, norm_t=True):
         else:
             roc_filepath = f"ResNet1d/results/{modelname}_roc.png"
             temp_file = f"/xdisk/twheeler/daphnedemekas/temp_files/{modelname}"
-        if "masked" in all_hits_max_file_4 and "CPU" in modelname:
+        if "masked" in hmmer_hits_file and "CPU" in modelname:
             roc_filepath = roc_filepath[:-4] + "-masked.png"
             temp_file = temp_file + "-masked"
     print(f"Roc filepath: {roc_filepath}")
     print(f"temp file: {temp_file}")
-    if "masked" in all_hits_max_file_4:
+    if "masked" in hmmer_hits_file:
         roc_filepath = roc_filepath[:-4] + "-masked.png"
         temp_file = temp_file + "-masked"
     if "masked" in modelname:
