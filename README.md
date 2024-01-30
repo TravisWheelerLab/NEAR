@@ -7,7 +7,7 @@ Passing good candidates to the forward/backward algorithm using NNs.
 In particular, we aim to emulate HMMER.
 
 
-## Running the model 
+## Evaluating
 To run on custom query and target sequences, edit one of the config/ files with your specifications. 
 Namely, edit the the `query_file` and  `target_file` parameters to specify your data. 
 The target embedding information will be saved off to the specified `target_embeddings`, `target_names` and `target_lengths` paths to speed up future searches. 
