@@ -1,10 +1,11 @@
-import os
+import argparse
 import pickle
 import tqdm
 from src.data.hmmerhits import FastaFile
 
 
 def get_numpos_per_evalue(hmmer_hits, query_sequences, target_sequences):
+    evalue_thresholds = [1e-10, 1e-5, 1e-1, 10]
     num_pos_per_evalue = [0, 0, 0, 0]
     num_marg_per_evalue = [0, 0, 0, 0]
     num_decoys = [0, 0, 0, 0]
@@ -51,39 +52,40 @@ def get_numpos_per_evalue(hmmer_hits, query_sequences, target_sequences):
     return num_pos_per_evalue, num_decoys
 
 
-def prune(results):
-    print("Pruning...")
-    for query in os.listdir(results):
-        if query[:-4] not in query_sequences:
-            print(f"Delete this query: {query}")
-            os.remove(f"{results}/{query}")
+def main(hmmer_hits_file, targets_file, queries_file, results_file):
+    with open(hmmer_hits_file + ".pkl", "rb") as file:
+        all_hits_max = pickle.load(file)
+
+    targetfile = FastaFile(targets_file)
+    queriesfile = FastaFile(queries_file)
+
+    query_sequences = queriesfile.data
+    target_sequences = targetfile.data
+
+    num_pos_per_evalue, numdecoys = get_numpos_per_evalue(
+        all_hits_max, query_sequences, target_sequences
+    )
+
+    print(f"Num pos per evalue: {num_pos_per_evalue}")
+    print(f"Num decoys: {numdecoys}")
+
+    with open(results_file, "w") as f:
+        f.write(f"HMMER MAX pos: {num_pos_per_evalue}" + "\n")
+        f.write(f"HMMER MAX decoys: {numdecoys}")
+
+    f.close()
 
 
-all_hits_max_file_4 = "data/hmmerhits-masked"
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--hmmer_hits_file", type=str, help="Path to the hmmer hits file"
+    )
+    parser.add_argument("--targets_file", type=str, help="Path to the targets file")
+    parser.add_argument("--queries_file", type=str, help="Path to the queries file")
+    parser.add_argument(
+        "--results_file", type=str, help="Path where to save the results"
+    )
 
-with open(all_hits_max_file_4 + ".pkl", "rb") as file:
-    all_hits_max = pickle.load(file)
-
-
-targetfile = FastaFile("/xdisk/twheeler/daphnedemekas/prefilter/data/targets.fa")
-queriesfile = FastaFile(
-    "/xdisk/twheeler/daphnedemekas/prefilter/data/queries-filtered.fa"
-)
-
-query_sequences = queriesfile.data
-target_sequences = targetfile.data
-
-evalue_thresholds = [1e-10, 1e-4, 1e-1, 10]
-
-num_pos_per_evalue, numdecoys = get_numpos_per_evalue(
-    all_hits_max, query_sequences, target_sequences
-)
-
-print(f"Num pos per evalue: {num_pos_per_evalue}")
-print(f"Num decoys: {numdecoys}")
-
-with open("decoys.txt", "w") as f:
-    f.write(f"HMMER MAX pos: {num_pos_per_evalue}" + "\n")
-    f.write(f"HMMER MAX decoys: {numdecoys}")
-
-f.close()
+    args = parser.parse_args()
+    main(args.hmmer_hits_file, args.targets_file, args.queries_file, args.results_file)

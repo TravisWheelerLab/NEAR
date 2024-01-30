@@ -10,7 +10,7 @@ target_embeddings: 'target_embeddings.pt'
 target_names: 'target_names.txt'
 unrolled_names_file: '/xdisk/twheeler/daphnedemekas/unrolled_names.txt'
 target_lengths: 'target_lengths.txt'
-save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-10-masked"
+save_dir: "/xdisk/twheeler/daphnedemekas/prefilter-output/CPU-5K-50-masked"
 num_threads: 16
 omp_num_threads: 1
 device: 'cpu'

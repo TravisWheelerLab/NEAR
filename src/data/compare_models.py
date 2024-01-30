@@ -9,8 +9,7 @@ from src.data.benchmarking import (
 )
 from src.data.eval_data_config import (
     load_inputs,
-    all_hits_max_file_4,
-    all_hits_normal_file_4,
+    hmmer_hits_file,
 )
 import numpy as np
 import pickle
@@ -23,17 +22,12 @@ resource.setrlimit(resource.RLIMIT_DATA, (500 * 1024**3, -1))
 import os
 
 
-def load_hmmer_hits(query_id: int = 4):
+def load_hmmer_hits(hmmer_hits_file):
     """Loads pre-saved hmmer hits dictionaries for a given
     evaluation query id, currently can only be 4 or 0"""
-    if query_id == 4:
-        with open(all_hits_max_file_4 + ".pkl", "rb") as file:
-            all_hits_max_4 = pickle.load(file)
-        with open(all_hits_normal_file_4 + ".pkl", "rb") as file:
-            all_hits_normal_4 = pickle.load(file)
-        return all_hits_max_4, all_hits_normal_4
-    else:
-        raise Exception(f"No evaluation data for given query id {query_id}")
+    with open(hmmer_hits_file + ".pkl", "rb") as file:
+        all_hits_max_4 = pickle.load(file)
+    return all_hits_max_4
 
 
 class Results:
@@ -68,21 +62,6 @@ class Results:
                 norm_t=norm_t,
                 norm_q=norm_q,
             )
-        if plot_e_values:
-            print("Plotting e values and saving to")
-            print(evaluemeansfile)
-            plot_mean_e_values(
-                self.similarities,
-                self.e_values,
-                self.biases,
-                min_threshold=0,
-                max_threshold=np.max(self.similarities),
-                outputfilename=evaluemeansfile,
-                plot_stds=True,
-                _plot_lengths=False,
-                title=evaluemeanstitle,
-            )
-
         if plot_roc:
             if not os.path.exists(f"{temp_file}_filtration.pickle"):
                 (_, _, _, sorted_pairs) = get_data(
@@ -99,25 +78,47 @@ class Results:
 
 
 def compare_models(
-    modelname: str = "CPU-5K-40",
     evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10],
 ):
     print(f"Comparing models with {modelname}")
-    all_hits_max, _ = load_hmmer_hits(4)
+    all_hits_max, _ = load_hmmer_hits(hmmer_hits_file)
 
-    neat_max = load_inputs(all_hits_max, "max", modelname)
+    gpu_model = "GPU-5K-150-masked"
 
-    esm = load_inputs(all_hits_max, "max", "esm")
-    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_inputs(all_hits_max, "max", "protbert")
-    last = load_inputs(all_hits_max, "max", "last")
-    hmmer_normal = load_inputs(all_hits_max, "max", "msv")
+    gpu_near = load_inputs(all_hits_max, gpu_model, norm_q=True, norm_t=True)
+
+    esm = load_inputs(all_hits_max, "esm-masked", norm_q=False, norm_t=False)
+    knn = load_inputs(all_hits_max, "knn-for-homology", norm_q=False, norm_t=False)
+    #    mmseqs = load_inputs(all_hits_max, "mmseqs", norm_q=False, norm_t=False)
+    mmseqs_prefilter = load_inputs(
+        all_hits_max, "mmseqs-prefilter", norm_q=False, norm_t=False
+    )
+    protbert = load_inputs(all_hits_max, "protbert-masked", norm_q=False, norm_t=False)
+    last = load_inputs(all_hits_max, "last", norm_q=False, norm_t=False)
+    hmmer_normal = load_inputs(all_hits_max, "msv")
 
     all_recalls = []
     all_filtrations = []
 
-    for inputs in [esm, protbert, neat_max, hmmer_normal, last, mmseqs, knn]:
+    COLORS = {
+        "ESM": "yellowgreen",
+        "ProtBERT": "skyblue",
+        "NEAR": "mediumvioletred",
+        "MSV filter": "darkslategrey",
+        "LAST": "orange",
+        "MMseqs2": "darkgoldenrod",
+        "ProtTransT5": "blue",
+    }
+
+    for inputs in [
+        esm,
+        protbert,
+        gpu_near,
+        hmmer_normal,
+        last,
+        mmseqs_prefilter,
+        knn,
+    ]:
         if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
             print("Loading filtration and recall directly")
             with open(f"{inputs['temp_file']}_filtration.pickle", "rb") as pickle_file:
@@ -139,7 +140,7 @@ def compare_models(
     labels = [
         "ESM",
         "ProtBERT",
-        "NEAR-40",
+        "NEAR",
         "MSV filter",
         "LAST",
         "MMseqs2",
@@ -154,36 +155,38 @@ def compare_models(
             idx += 1
             print(f"IDX: {idx}")
 
-            if labels[idx] in ["LAST", "MMseqs2", "ProtTransT5"]:
+            if labels[idx] in ["LAST"]:
                 axis.scatter(
                     np.array(filtrations)[-1, evalue_index],
                     np.array(recalls)[-1, evalue_index],
-                    c=COLORS[idx],
-                    s=100,
+                    c=COLORS[labels[idx]],
+                    s=150,
                     label=labels[idx],
                     marker="x",
+                )
+            elif labels[idx] in ["MSV filter", "MMseqs2"]:
+                print("dotted")
+                axis.plot(
+                    np.array(filtrations)[:, evalue_index],
+                    np.array(recalls)[:, evalue_index],
+                    c=COLORS[labels[idx]],
+                    label=labels[idx],
+                    linestyle="dotted",
                 )
             else:
                 axis.plot(
                     np.array(filtrations)[:, evalue_index],
                     np.array(recalls)[:, evalue_index],
-                    f"{COLORS[idx]}",
+                    c=COLORS[labels[idx]],
                     linewidth=2,
                     label=labels[idx],
                 )
         axis.set_xlabel("filtration")
         axis.set_ylabel("recall")
         axis.grid()
-        axis.legend(loc="lower left")
-        axis.set_xlim(97.5, 100.1)
-        # axis.set_xticks([75, 80, 85, 90, 95, 100])
-        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100])
-
-        # axis.set_ylim(90, 100.2)
-        # axis.set_xlim(99, 100.01)
-        # axis.grid()
-        # axis.set_xticks([99, 99.2, 99.4, 99.6, 99.8, 100], fontsize=12)
-        # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
+        # axis.legend(loc="lower left")
+        axis.set_xlim(97, 100.1)
+        axis.set_xticks([97, 98, 99, 100])
 
         plt.title(f"Evalue threshold: {evalue_thresholds[evalue_index]}")
 
@@ -193,180 +196,89 @@ def compare_models(
         plt.clf()
 
 
-def compare_nprobe(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
-    styles = ["dashed", "solid"]
-
-    print(f"Comparing NEAT models")
+def impose_plots(evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]):
     all_hits_max, _ = load_hmmer_hits(4)
+    gpu_50 = load_inputs(all_hits_max, "GPU-5K-50-masked", norm_q=True, norm_t=True)
+    gpu_150 = load_inputs(all_hits_max, "GPU-5K-150-masked", norm_q=True, norm_t=True)
 
-    align = load_inputs(all_hits_max, "max", "CPU-5K-5")
-    align2 = load_inputs(all_hits_max, "max", "CPU-5K-10")
-    align3 = load_inputs(all_hits_max, "max", "CPU-5K-20")
-    align4 = load_inputs(all_hits_max, "max", "CPU-5K-40")
-    align1 = load_inputs(all_hits_max, "max", "CPU-5K-50")
-    nprobes = [5, 10, 20, 40, 50]
+    # cpu_5 = load_inputs(all_hits_max, "CPU-5K-5-masked", norm_q=True, norm_t=True)
+    cpu_10 = load_inputs(all_hits_max, "CPU-5K-10-masked", norm_q=True, norm_t=True)
+    cpu_20 = load_inputs(all_hits_max, "CPU-5K-20-masked", norm_q=True, norm_t=True)
+    # cpu_50 = load_inputs(all_hits_max, "CPU-5K-50-masked", norm_q=True, norm_t=True)
+    hmmer_normal = load_inputs(all_hits_max, "msv")
 
-    # _, axis = plt.subplots(figsize=(10, 10))
+    # nprobes = [50, 150, 5, 10, 20]
+    # runtimes = ["0.019s/q", "0.034s/q", "0.074s/q", "0.129s/q", "0.240s/q", "0.290s/q"]
+    nprobes = [None, 150, 20, 50, 10]
+
+    COLORS = {
+        "NEAR-GPU-50": "blue",
+        "NEAR-CPU-10": "skyblue",
+        "NEAR-CPU-20": "orange",
+        "MSV filter": "darkslategrey",
+        "NEAR-GPU-150": "mediumvioletred",
+    }
 
     all_filtrations = []
     all_recalls = []
-    for idx, inputs in enumerate([align, align2, align3, align4, align1]):
+    for idx, inputs in enumerate(
+        [hmmer_normal, gpu_150, cpu_20, gpu_50, cpu_10]
+        # [gpu_50, gpu_150, cpu_5, cpu_10, cpu_20, hmmer_normal]
+    ):
         filtrations, recalls = get_roc_data(**inputs)
         all_filtrations.append(filtrations)
         all_recalls.append(recalls)
-    for i in [0, 1, 2, 3]:
+
+    for i in range(len(evalue_thresholds)):
         idx = 0
         _, axis = plt.subplots(figsize=(10, 10))
         for f, r in zip(all_filtrations, all_recalls):
+            print()
+            if idx in [1, 3]:
+                label = f"NEAR-GPU-{nprobes[idx]}"
+                linestyle = "solid"
+
+            elif idx == 0:
+                label = f"MSV filter"
+                linestyle = "dotted"
+            else:
+                label = f"NEAR-CPU-{nprobes[idx]}"
+                linestyle = "solid"
             axis.plot(
                 np.array(f)[:, i],
                 np.array(r)[:, i],
-                f"{COLORS[idx]}",
+                f"{COLORS[label]}",
                 linewidth=2,
-                label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                # linestyle=styles[idx],
+                label=label,
+                linestyle=linestyle,
             )
             idx += 1
-        axis.set_xlabel("filtration", fontsize=12)
-        axis.set_ylabel("recall", fontsize=12)
+        axis.set_xlabel("Percent Filtration", fontsize=15)
+        axis.set_ylabel("Percent Recall", fontsize=15)
+        # axis.set_ylim(90, 100.2)
+        # axis.set_xlim(97.5, 100.1)
         axis.grid()
+        # axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=15)
+        # axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=15)
+        axis.set_ylim(75, 100.5)
+        axis.set_xlim(95, 100.1)
+        axis.set_xticks(
+            [95, 96, 97, 98, 99, 100], labels=[95, 96, 97, 98, 99, 100], fontsize=15
+        )
+        axis.set_yticks(
+            [75, 80, 85, 90, 95, 100], labels=[75, 80, 85, 90, 95, 100], fontsize=15
+        )
+
+        plt.legend(fontsize=15)
         print("Saving figure")
-        plt.legend()
-        # if normal:
-        # plt.savefig("ResNet1d/results/superimposedCPUnormal.png")
-        plt.savefig(f"ResNet1d/results/superimposedCPUmax-{evalue_thresholds[i]}.png")
 
+        filename = "ResNet1d/results/imposedplot"
+        plt.title(
+            f"NEAR Performance on HMMER Max for E-value Threshold {evalue_thresholds[i]}",
+            fontsize=15,
+        )
+        plt.savefig(f"{filename}-{evalue_thresholds[i]}-ndr.png")
         plt.clf()
-
-    # again with different X limit
-
-    _, axis = plt.subplots(figsize=(10, 10))
-
-    # for idx, inputs in enumerate([align, align2]):
-    # filtrations, recalls = get_roc_data(**inputs)
-
-    for i in [0, 1, 2, 3]:
-        idx = 0
-        _, axis = plt.subplots(figsize=(10, 10))
-        for f, r in zip(all_filtrations, all_recalls):
-            axis.plot(
-                np.array(f)[:, i],
-                np.array(r)[:, i],
-                f"{COLORS[idx]}",
-                linewidth=2,
-                label=f"NEAT-{nprobes[idx]}, <{evalue_thresholds[i]}",
-                #   linestyle=styles[idx],
-            )
-            idx += 1
-        axis.set_xlabel("filtration", fontsize=12)
-        axis.set_ylabel("recall", fontsize=12)
-        axis.set_ylim(90, 100.2)
-        axis.set_xlim(97.5, 100.1)
-        axis.grid()
-        axis.set_xticks([97.5, 98, 98.5, 99, 99.5, 100], fontsize=12)
-        axis.set_yticks([90, 92, 94, 96, 98, 100], fontsize=12)
-
-        plt.legend()
-        print("Saving figure")
-        # if normal:
-        # plt.savefig("ResNet1d/results/superimposedCPUnormal-zoomed.png")
-        # else:
-        plt.savefig(
-            f"ResNet1d/results/superimposedCPUmax-zoomed-{evalue_thresholds[i]}.png"
-        )
-        plt.clf()
-
-
-def plot_recall_by_evalue_threshold(
-    modelname: str = "CPU-20K-150", evalue_thresholds: list = [1e-10, 1e-4, 1e-1, 10]
-):
-    print(f"Comparing models with {modelname}")
-    all_hits_max, all_hits_normal = load_hmmer_hits(4)
-
-    neat_max = load_inputs(all_hits_max, "max", modelname)
-    neat_regular = load_inputs(all_hits_normal, "normal", modelname)
-
-    esm = load_inputs(all_hits_max, "max", "esm")
-    knn = load_inputs(all_hits_max, "max", "knn-for-homology")
-    mmseqs = load_inputs(all_hits_max, "max", "mmseqs")
-    protbert = load_inputs(all_hits_max, "max", "protbert-1")
-    last = load_inputs(all_hits_max, "max", "")
-
-    evalue_recalls = []
-    _, axis = plt.subplots(figsize=(10, 10))
-
-    for idx, inputs in enumerate([esm, knn, protbert, neat_max, mmseqs, last]):
-        if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
-            print("Loading filtration and recall directly")
-            with open(f"{inputs['temp_file']}_recall.pickle", "rb") as pickle_file:
-                recalls = pickle.load(pickle_file)
-        else:
-            print(f" No such file {inputs['temp_file']}_filtration.pickle")
-
-            (_, _, _, sorted_pairs) = get_data(**inputs)
-
-            _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
-        # evalue_recalls.append(recalls[-1])
-
-        plt.plot(
-            evalue_thresholds,
-            np.array(recalls)[-1, :],
-            label=[
-                "ESM",
-                "ProtTransT5XLU50",
-                "ProtBERT",
-                "NEAT-150",
-                "MMseqs2",
-                "LAST",
-            ][idx],
-        )
-    plt.legend()
-    plt.title("HMMER Max Recall by Evalue Threshold")
-    # plt.savefig(f"ResNet1d/results/compared_recall.png")
-    plt.xlabel("E-value thresholds")
-    plt.ylabel("Recall")
-    plt.xticks([0, 1, 2, 3], labels=evalue_thresholds)
-    plt.savefig(f"ResNet1d/results/compared_recall.png")
-    plt.clf()
-
-    esm = load_inputs(all_hits_max, "normal", "esm")
-    knn = load_inputs(all_hits_max, "normal", "knn-for-homology")
-    mmseqs = load_inputs(all_hits_max, "normal", "mmseqs")
-    protbert = load_inputs(all_hits_max, "normal", "protbert")
-    last = load_inputs(all_hits_max, "normal", "")
-
-    _, axis = plt.subplots(figsize=(10, 10))
-
-    for idx, inputs in enumerate([esm, knn, protbert, neat_regular, mmseqs, last]):
-        if os.path.exists(f"{inputs['temp_file']}_filtration.pickle"):
-            print("Loading filtration and recall directly")
-            with open(f"{inputs['temp_file']}_recall.pickle", "rb") as pickle_file:
-                recalls = pickle.load(pickle_file)
-        else:
-            print(f" No such file {inputs['temp_file']}_filtration.pickle")
-
-            (_, _, _, sorted_pairs) = get_data(**inputs)
-
-            _, recalls = get_roc_data(**inputs, sorted_pairs=sorted_pairs)
-
-        plt.plot(
-            evalue_thresholds,
-            np.array(recalls)[-1, :],
-            label=[
-                "ESM",
-                "ProtTransT5XLU50",
-                "ProtBERT",
-                "NEAT-150",
-                "MMseqs2",
-                "LAST",
-            ][idx],
-        )
-    plt.legend()
-    plt.xlabel("E- value thresholds")
-    plt.ylabel("Recall")
-
-    plt.title("HMMER Normal Recall by Evalue Threshold")
-    plt.savefig(f"ResNet1d/results/compared_recall_normal.png")
 
 
 def evaluate(modelname, norm_q=False, norm_t=False):
@@ -393,6 +305,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--modelname", type=str)
     parser.add_argument("--impose", action="store_true")
+    parser.add_argument("--gpu", action="store_true")
 
     args = parser.parse_args()
     modelname = args.modelname
@@ -402,9 +315,10 @@ if __name__ == "__main__":
     print(f"Normalise queries: {norm_q}")
     print(f"Normalise targets: {norm_t}")
     if args.compare:
-        compare_models(modelname=modelname)
+        compare_models()
         # plot_recall_by_evalue_threshold()
     elif args.impose:
-        compare_nprobe()
+        # compare_nprobe(gpu=args.gpu)
+        impose_plots()
     else:
         evaluate(modelname, norm_q, norm_t)
