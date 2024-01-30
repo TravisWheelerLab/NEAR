@@ -37,6 +37,9 @@ def load_inputs(hits, modelname, norm_q=True, norm_t=True):
             temp_file = temp_file + "-masked"
     print(f"Roc filepath: {roc_filepath}")
     print(f"temp file: {temp_file}")
+    if "masked" in all_hits_max_file_4:
+        roc_filepath = roc_filepath[:-4] + "-masked.png"
+        temp_file = temp_file + "-masked"
     if "masked" in modelname:
         # TODO different hmmer hits for masked
 
