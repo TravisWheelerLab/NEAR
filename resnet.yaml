@@ -1,0 +1,14 @@
+# Model configuration
+model: "ResNet"  # Options: "ResNet" or "UNet"
+model_args:
+  embedding_dim: 256
+  num_layers: 8
+  kernel_size: 7
+  h_kernel_size: 7
+
+batch_size: 512
+
+
+# Device configuration
+#device: "cpu"  # Options: "cuda" or "cpu" #
+device: "cuda"

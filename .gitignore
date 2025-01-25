@@ -13,11 +13,5 @@ models/*
 *.tblout
 *.domtblout
 *pt
-src/logs/*
-src/lightning_logs/*
-trained_models/*
-/src/.nextflow.log
-*.nextflow*
-/src/work/
 .idea/
 .DS_Store
