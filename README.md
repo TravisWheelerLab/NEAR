@@ -19,20 +19,17 @@ If your system has a working installation of Python3, Conda, and Rust, you can i
 ```bash
 conda create --name near_env 
 conda activate near_env
-conda install numpy matplotlib Bio -c pytorch -c nvidia faiss-gpu=1.9.0
+conda install numpy matplotlib Bio -c pytorch -c nvidia faiss-gpu=1.9.0 anaconda::pyyaml
 conda install conda-forge::maturin
 maturin release
+conda deactivate
 ```
 
-## Evaluating
-To run on custom query and target sequences, edit one of the config/ files with your specifications. 
-Namely, edit the the `query_file` and  `target_file` parameters to specify your data. 
-The target embedding information will be saved off to the specified `target_embeddings`, `target_names` and `target_lengths` paths to speed up future searches. 
+## Running NEAR
 
-To speed up the search, if you have multiple CPUs, you can set `num_threads` to the nucmber of CPUs, which will parallelize embedding creation and search. 
-
-Increasing `nprobe` will lead to more accurate results, but will be slower. 
-
-You can run evaluation with 
+```bash
+conda activate near_env
+python3 src/near_embed.py 
+```
 
 `python3 src/evaluate.py {configfile}` where configfile is the name of the config file that you changed. 
