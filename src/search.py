@@ -156,7 +156,7 @@ def main() -> None:
     print("Creating index from target data")
     start_time = time.time()
 
-    score_adjustment = score_adjustments / target_embeddings.shape[-1]**0.5
+    score_adjustment = score_adjustment / target_embeddings.shape[-1]**0.5
     target_index = faiss.index_factory(
         target_embeddings.shape[-1], index_str, faiss.METRIC_INNER_PRODUCT
     )
