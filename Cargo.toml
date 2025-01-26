@@ -1,3 +1,9 @@
+[package]
+name = "process_hits"
+version = "0.1.0"
+edition = "2021"
+description = "A Python extension for processing hits using Rust"
+
 [lib]
 name = "process_hits"
 crate-type = ["cdylib"]
