@@ -79,9 +79,9 @@ def get_args() -> Args:
     parser.add_argument(
         "-s",
         "--score_adjustment",
-        help="Amount to adjust hits by before accumulation",
+        help="Noise gating adjustment to scores before accumulation",
         type=float,
-        default=0.175)
+        default=3.0)
 
     parser.add_argument(
         "--index",
@@ -155,6 +155,8 @@ def main() -> None:
 
     print("Creating index from target data")
     start_time = time.time()
+
+    score_adjustment = score_adjustments / target_embeddings.shape[-1]**0.5
     target_index = faiss.index_factory(
         target_embeddings.shape[-1], index_str, faiss.METRIC_INNER_PRODUCT
     )
