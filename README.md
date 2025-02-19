@@ -1,5 +1,5 @@
 # Paper
-See https://www.biorxiv.org/content/10.1101/2024.01.25.577287v1.full.pdf
+See https://www.biorxiv.org/content/10.1101/2024.01.25.577287v2.full.pdf
 
 # Prefilter
 [![Generic badge](https://img.shields.io/badge/Contributions-Welcome-brightgreen.svg)](CONTRIBUTING.md)
