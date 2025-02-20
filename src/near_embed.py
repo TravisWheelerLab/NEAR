@@ -80,9 +80,12 @@ def create_tensors_from_fasta(file_path, pad_power_two=False, min_seq_length = 3
         _, idx = index_to_twoindex[i]
 
         seq = str(record.seq).upper()
-        for i, c in enumerate(seq):
-            tensor[idx, i] = alphabet[c]
-    
+        tensor[idx] = torch.tensor(list(seq.encode('ascii')), dtype=int)
+
+    for key in sequence_tensors.keys():
+        for c in alphabet.keys():
+            sequence_tensors[key][sequence_tensors[key] == ord(c)] = alphabet[c]
+
     return sequence_tensors, index_to_twoindex, index_to_id, index_to_length
 
 def embed_sequence_tensors(model, sequence_tensors, device, batch_size=512):
