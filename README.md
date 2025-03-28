@@ -1,5 +1,6 @@
 # Paper
-See https://www.biorxiv.org/content/10.1101/2024.01.25.577287v1.full.pdf
+See https://www.biorxiv.org/content/10.1101/2024.01.25.577287
+Instructions and scripts needed to train NEAR and recreate the results from the NEAR paper can be found at https://github.com/TravisWheelerLab/NEAR/blob/2025_paper_evaluation
 
 # Prefilter
 [![Generic badge](https://img.shields.io/badge/Contributions-Welcome-brightgreen.svg)](CONTRIBUTING.md)
