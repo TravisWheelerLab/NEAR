@@ -64,6 +64,16 @@ python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_bench
 python src/pt5_embed.py -i sparse_benchmark/sparse_query_softmask.fa -o queries.npz
 python src/pt5_embed.py -i sparse_benchmark/sparse_target_softmask_mixed.fa -o targets.npz
 
+
+
 python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o protbert_hits.csv
 
 ```
+
+## Training NEAR
+
+Download NEAR's training data from http://huggingface.co/datasets/WheelerLab/near_2025_train/tree/main
+Extract train_data.tar.gz using `tar -xvzf train_data.tar.gz`
+Place the training_data directory inside the NEAR directory
+Run `python3 src/train.py src/train_near.yaml`
+
