@@ -27,10 +27,21 @@ conda env create -f near_eval_env.yml
 python src/near_embed.py resnet.yaml models/resnet_877_256.pt sparse_benchmark/sparse_query_softmask.fa queries.npz
 python src/near_embed.py resnet.yaml models/resnet_877_256.pt sparse_benchmark/sparse_target_softmask_mixed.fa targets.npz
 
-python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o hits.csv
+python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o near_hits.csv
 
 ```
 
 The output "hits.csv" will have lines such as "1 15274 0.9138156"
 
 Here, 1 is the first query sequence, 15274 is the target sequence, and 0.9138156 is the total score between 1 and 15274. The numbers are the 1-indexed order of sequences in the original fasta files. Softmasking can be done by also providing src/serarch.py with --query_sequence and --target_sequence (the fasta file you provide should be softmasked).
+
+## Running ESMC
+
+```bash
+
+python src/esmc_embed.py esmc_600m sparse_benchmark/sparse_query_softmask.fa queries.npz
+python src/esmc_embed.py esmc_600m sparse_benchmark/sparse_target_softmask_mixed.fa targets.npz
+
+python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o esm_hits.csv
+
+```
