@@ -7,11 +7,11 @@ model_args:
   h_kernel_size: 7
 
 # Training configuration
-alignment_dir: "./training_alignments"
-query_dir: "./train_split_queries"
-target_dir: "./train_split_targets"
+alignment_dir: "./training_data/training_alignments"
+query_dir: "./training_data/train_split_queries"
+target_dir: "./training_data/train_split_targets"
 run_name: "resnet_877_256"
-output_dir: "./models"
+output_dir: "./"
 num_epochs: 1
 batch_size: 512
 num_workers: 28
