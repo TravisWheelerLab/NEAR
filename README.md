@@ -45,3 +45,14 @@ python src/esmc_embed.py esmc_600m sparse_benchmark/sparse_target_softmask_mixed
 python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o esm_hits.csv
 
 ```
+
+## Running PT5
+
+```bash
+
+python src/pt5_embed.py -i sparse_benchmark/sparse_query_softmask.fa -o queries.npz
+python src/pt5_embed.py -i sparse_benchmark/sparse_target_softmask_mixed.fa -o targets.npz
+
+python src/search.py -g -q queries.npz -t targets.npz --query_fasta sparse_benchmark/sparse_query_softmask.fa --target_fasta sparse_benchmark/sparse_target_softmask_mixed.fa -o esm_hits.csv
+
+```
