@@ -1,0 +1,32 @@
+# Model configuration
+model: "ResNet"  # Options: "ResNet" or "UNet"
+model_args:
+  embedding_dim: 256
+  num_layers: 8
+  kernel_size: 7
+  h_kernel_size: 7
+
+# Training configuration
+alignment_dir: "./training_alignments"
+query_dir: "./train_split_queries"
+target_dir: "./train_split_targets"
+run_name: "resnet_877_256"
+output_dir: "./fin_models"
+num_epochs: 1
+batch_size: 512
+num_workers: 28
+sequence_length: 256
+max_offset: 256
+norm_loss: 0.005
+use_random_seq_length: False
+random_mask_rate: 0.005
+softmask: True
+
+# Optimizer configuration
+optimizer: "AdamW"  # Options: "Adam" or "SGD"
+optimizer_args:
+  lr: 0.00001
+  weight_decay: 0.01
+
+# Device configuration
+device: "cuda"
