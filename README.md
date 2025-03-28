@@ -17,7 +17,7 @@ If your system has a working installation of Python3, Conda, and Rust, you can i
 ```bash
 git clone --branch 2025_paper_evaluation https://github.com/TravisWheelerLab/NEAR.git
 cd NEAR
-conda env create -f environment.yml
+conda env create -f near_eval_env.yml
 ```
 
 ## Running NEAR
