@@ -1,6 +1,7 @@
 from Bio import SeqIO
 from collections import defaultdict
 import torch
+import numpy as np
 
 class FASTAData:
     """
@@ -28,9 +29,12 @@ class FASTAData:
         Maps *L* → Boolean mask array with the same shape as
         ``tokens_by_length[L]``; ``True`` marks real residues and
         ``False`` marks residues that should be ignored during search.
-    seqids_by_length : dict[int, torch.Tensor]
+    seqids_by_length : dict[int, np.array]
         Maps *L* → 1-D array of internal sequence IDs that index
         into `seqid_to_name`.
+    tokenids_by_length : dict[int, np.array]
+        Maps *L* → 2-D tensor of uint64-encoded unique residue labels
+        with shape ``(n_sequences_of_length_L, L)``.
     seqid_to_name : list[str]
         Lookup table that converts an internal sequence ID into the
         original FASTA record header.
@@ -39,21 +43,24 @@ class FASTAData:
         self.tokens_by_length = dict()
         self.masks_by_length = dict()
         self.seqids_by_length = dict()
+        self.tokenids_by_length = dict()
         self.seqid_to_name = list()
 
-    """
-        Read a FASTA file and bucket its sequences by length.
 
-        Parameters
-        ----------
-        file_path : str
-            Path to the FASTA file to parse.
-        min_seq_length : int, default 128
-            Sequences shorter than this threshold are ignored.
-        max_seq_length : int, default 99_999_999
-            Sequences longer than this threshold are ignored.
-    """
     def read_fasta(self, fasta_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
+        """
+            Read a FASTA file and bucket its sequences by length.
+
+            Parameters
+            ----------
+            file_path : str
+                Path to the FASTA file to parse.
+            min_seq_length : int, default 128
+                Sequences shorter than this threshold are ignored.
+            max_seq_length : int, default 99_999_999
+                Sequences longer than this threshold are ignored.
+        """
+
         amino_acids = 'XARNDCEQGHILKMFPSTWYVBJZ0'
         alphabet = {aa: i for i, aa in enumerate(amino_acids)}
         alphabet['U'] = 0
@@ -82,6 +89,8 @@ class FASTAData:
             masks = torch.ones(num_seqs, length, dtype=torch.bool)
             seqs = torch.zeros(num_seqs, length, dtype=torch.int)
 
+
+
             for i, s in enumerate(seq_strings_by_length[length]):
                 seqs[i] = torch.tensor(list(s.upper().encode('ascii')), dtype=torch.int)
                 masks[i] = torch.tensor([True if c.isupper() else False for c in s])
@@ -92,6 +101,13 @@ class FASTAData:
 
             self.masks_by_length[length] = masks
             self.tokens_by_length[length] = seqs
-            self.seqids_by_length[length] = torch.arange(len(self.seqid_to_name),
-                                                         len(self.seqid_to_name)+len(self.tokens_by_length[length]))
+
+            seq_ids = np.arange(len(self.seqid_to_name),
+                                len(self.seqid_to_name)+len(self.tokens_by_length[length]),
+                                dtype=np.uint64)
+            token_ids = np.arange(length, dtype=np.uint64)
+            token_ids = (seq_ids[:,None] << 32) | token_ids[None,:]
+
+            self.seqids_by_length[length] = seq_ids
+            self.tokenids_by_length[length] = token_ids
             self.seqid_to_name.extend(seq_names_by_length[length])

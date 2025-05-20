@@ -104,7 +104,6 @@ class NEARResNet(nn.Module):
 
         return x
 
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """ Create NEAR embeddings from an input sequence
 
