@@ -1,0 +1,60 @@
+{% set name = "near" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: .
+
+build:
+  number: 0
+  entry_points:
+    - near = near.main:main  # This will be your command-line entry point
+
+requirements:
+  build:
+    - python {{ python }}
+    - setuptools
+    - numpy
+    - {{ compiler('c') }}  # For compiling the C program
+
+  host:
+    - python
+    - pip
+    - numpy
+    - faiss-gpu-cuvs =1.11.0
+    - pytorch
+    - matplotlib
+    - tqdm
+    - pyyaml
+    - libnvjitlink
+
+  run:
+    - python >=3.11.11
+    - numpy
+    - faiss-gpu-cuvs =1.11.0
+    - pytorch
+    - matplotlib
+    - tqdm
+    - pyyaml
+    - libnvjitlink
+
+test:
+  imports:
+    - near
+  commands:
+    - near --help  # Basic test to ensure the program runs
+
+about:
+  home: https://github.com/username/your-package  # Replace with your repository URL
+  license: BSD-3-Clause license  # Replace with your chosen license
+  summary: 'NEAR is a sequence similarity search tool'
+  description: |
+    A longer description of your package that explains its purpose
+    and main features.
+
+extra:
+  recipe-maintainers:
+    - your-github-username

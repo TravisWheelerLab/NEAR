@@ -1,12 +1,9 @@
-from src.fasta_data import FASTAData
-from src.models import NEARResNet
+from src.near.fasta_data import FASTAData
+from src.near.models import NEARResNet
 
-import torch
-import torch.nn.functional as F
 import faiss
 import numpy as np
 
-from tqdm import tqdm
 
 def search_against_index(output_file_path: str,
                          model: NEARResNet,
@@ -42,3 +39,4 @@ def search_against_index(output_file_path: str,
     verbose : bool
         If true progress will be output and a progress bar will be displayed
     """
+

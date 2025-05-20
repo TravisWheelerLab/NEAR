@@ -8,6 +8,8 @@ Instructions and scripts needed to train NEAR and recreate the results from the 
 
 Finding good alignment candidates for homology search.
 
+conda install -c pytorch -c nvidia -c rapidsai -c conda-forge -c <your-channel> your-package-name
+
 ## Disclaimer
 
 This project is a working prototype. It is not (yet) a polished tool meant for general purpose use. 

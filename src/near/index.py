@@ -1,5 +1,5 @@
-from src.fasta_data import FASTAData
-from src.models import NEARResNet
+from src.near.fasta_data import FASTAData
+from src.near.models import NEARResNet
 
 import torch
 import torch.nn.functional as F
