@@ -89,15 +89,14 @@ class FASTAData:
             masks = torch.ones(num_seqs, length, dtype=torch.bool)
             seqs = torch.zeros(num_seqs, length, dtype=torch.int)
 
-
-
             for i, s in enumerate(seq_strings_by_length[length]):
                 seqs[i] = torch.tensor(list(s.upper().encode('ascii')), dtype=torch.int)
-                masks[i] = torch.tensor([True if c.isupper() else False for c in s])
+                masks[i] = torch.tensor([True if c.isupper() else False for c in s]) # Mask lower case chars
 
             for c in amino_acids:
                 seqs[seqs == ord(c)] = alphabet[c]
             seqs[seqs > len(alphabet)] = 0
+            masks = torch.logical_and(masks, seqs != 0) # Mask ambiguous residues
 
             self.masks_by_length[length] = masks
             self.tokens_by_length[length] = seqs
