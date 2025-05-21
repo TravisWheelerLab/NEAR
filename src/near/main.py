@@ -13,13 +13,6 @@ def parse_args():
 
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    # Embed command
-    embed_parser = subparsers.add_parser('embed', help='Generate embeddings for sequences')
-    embed_parser.add_argument('config', type=str, help='Path to model configuration YAML file')
-    embed_parser.add_argument('model', type=str, help='Path to trained model weights')
-    embed_parser.add_argument('input', type=str, help='Input FASTA file')
-    embed_parser.add_argument('output', type=str, help='Output NPZ file for embeddings')
-
     # Search command
     search_parser = subparsers.add_parser('search', help='Search using embeddings')
     search_parser.add_argument('-q', '--query', required=True, help='Query embeddings NPZ file')
@@ -28,6 +21,17 @@ def parse_args():
     search_parser.add_argument('-g', '--gpu', action='store_true', help='Use GPU for search')
     search_parser.add_argument('--query_sequence', help='Query sequence FASTA file (for softmasking)')
     search_parser.add_argument('--target_sequence', help='Target sequence FASTA file (for softmasking)')
+
+    # Embed command
+    embed_parser = subparsers.add_parser('embed', help='Generate embeddings for sequences')
+    embed_parser.add_argument('config', type=str, help='Path to model configuration YAML file')
+    embed_parser.add_argument('model', type=str, help='Path to trained model weights')
+    embed_parser.add_argument('input', type=str, help='Input FASTA file')
+    embed_parser.add_argument('output', type=str, help='Output NPZ file for embeddings')
+
+    buildidx_parser = subparsers.add_parser('buildidx', help='Build search index')
+    train_parser = subparsers.add_parser('train', help='Train a NEAR model')
+
 
     return parser.parse_args()
 
