@@ -97,7 +97,7 @@ def search_against_index(output_file_path: str,
                     near_processor.add_to_queue(scores, indices, query_ids)
         if verbose:
             print("Search is complete.")
-        while near_processor.not_done:
+        while near_processor.not_done():
             if verbose:
                 print("Waiting for search processor...")
             sleep(0.1)

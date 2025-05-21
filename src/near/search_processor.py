@@ -8,46 +8,85 @@ from time import sleep
 
 
 class AsyncNearResultsProcessor:
-    def __init__(self, output_file,
-                       query_data,
-                       target_data,
-                       target_labels):
+    """Asynchronously processes NEAR search results using a C subprocess.
+
+    This class handles the communication with a C process that formats and writes
+    search results to an output file. It uses a queue to buffer results and processes
+    them in a separate thread.
+
+    Parameters
+    ----------
+    output_file : int
+        Number of input (and output) channels.
+    query_data : FASTAData
+        The query sequence data
+    target_data : FASTAData
+        The target sequence data
+    hits_per_emb : int
+        The number of hits per query embedding
+
+    """
+
+    def __init__(self, output_file: str,
+                       query_data: FASTAData,
+                       target_data: FASTAData,
+                       hits_per_emb: int):
 
         self.output_file = output_file
+        self.query_data = query_data
+        self.target_data = target_data
+        self.hits_per_emb = hits_per_emb
+
         self.queue = queue.Queue()
         self.done = False
         self.error: Optional[Exception] = None
 
         # Start processing thread
-        self.thread = threading.Thread(target=self._process_queue)
+        self.thread = threading.Thread(target=self._start_process)
         self.thread.start()
 
-        # Will be set by first batch
-        self.total_hits = None
         self.process = None
 
-    def add_to_queue(self, scores: np.ndarray, target_indices: np.ndarray, query_ids: np.ndarray) -> None:
+    def add_to_queue(self, scores: np.ndarray, query_ids: np.array, target_ids) -> None:
+        """Add a batch of scores, query_ids, and target_ids to the queue.
+
+        Parameters
+        ----------
+        scores : np.ndarray
+            [N, k] array of nearest neighbor scores
+        query_ids : np.array
+            [N] query IDs
+        target_ids : FASTAData
+            [N, k] target IDs
         """
-        Add a batch of results to the processing queue.
-        batch: Tuple of (query_ids, target_ids, scores) arrays
-        """
+
         if self.error:
             raise RuntimeError("Processor encountered an error") from self.error
-        self.queue.put((scores, target_indices, query_ids))
+        self.queue.put((scores, query_ids, target_ids))
 
-    def _start_process(self, first_batch_size: int) -> None:
-        """Initialize the C process with total hits count"""
+    def _start_process(self) -> None:
         self.process = subprocess.Popen(
-            ["near.process_near_results"],
+            ["near.process_near_results", str(self.hits_per_emb)],
             stdin=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        # Write initial hit count
-        self.process.stdin.write(struct.pack('Q', first_batch_size))
-        self.process.stdin.flush()
+
+        # Write the query data sequence names
+        self.process.stdin.write(struct.pack('Q', len(self.query_data.seqid_to_name)))
+        query_seq_names = ('\0'.join(self.query_data.seqid_to_name) + '\0').encode('utf-8')
+        self.process.stdin.write(struct.pack('Q', len(query_seq_names)))
+        self.process.stdin.stdin.write(query_seq_names)
+
+        # Write the target data sequence names
+        self.process.stdin.write(struct.pack('Q', len(self.target_data.seqid_to_name)))
+        target_seq_names = '\0'.join(self.target_data.seqid_to_name).encode('utf-8')
+        self.process.stdin.write(struct.pack('Q', len(target_seq_names)))
+        self.process.stdin.stdin.write(target_seq_names)
+
+
+        self._process_queue()
 
     def _process_queue(self) -> None:
-        """Worker thread that processes the queue"""
         try:
             while not self.done or not self.queue.empty():
                 try:
@@ -57,15 +96,13 @@ class AsyncNearResultsProcessor:
                     continue
 
                 query_ids, target_ids, scores = batch
-
-                # Initialize process if this is the first batch
-                if self.process is None:
-                    self._start_process(len(scores))
+                query_ids, target_ids, scores = query_ids.flatten(), target_ids.flatten(), scores.flatten()
 
                 # Write batch data to process
-                query_ids.astype(np.uint64).tofile(self.process.stdin)
-                target_ids.astype(np.uint64).tofile(self.process.stdin)
-                scores.astype(np.float32).tofile(self.process.stdin)
+                self.process_stdin.write(struct.pack('Q', len(query_ids)))
+                self.process.stdin.write(query_ids)
+                self.process.stdin.write(target_ids)
+                self.process.stdin.write(scores)
                 self.process.stdin.flush()
 
                 self.queue.task_done()
@@ -81,7 +118,6 @@ class AsyncNearResultsProcessor:
                         f"Process failed: {stderr.decode()}"
                     )
 
-    @property
     def not_done(self) -> bool:
         """Check if processing is still ongoing"""
         return self.thread.is_alive() or not self.queue.empty()

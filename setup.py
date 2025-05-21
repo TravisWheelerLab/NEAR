@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 import os
 
@@ -7,13 +7,14 @@ c_extension = Extension(
     'near.process_near_results',
     sources=['src/c/process_near_results.c'],
     include_dirs=['src/c'],
-    extra_compile_args=['-O3'],  # Add -O3 optimization
+    extra_compile_args=['-O3'],
 )
 
 setup(
     name="near",
     version="0.1.0",
-    packages=['near'],
+    package_dir={"": "src"},  # Add this line
+    packages=find_packages(where="src"),  # Modify this line
     ext_modules=[c_extension],
     install_requires=[
         'numpy',
@@ -21,7 +22,6 @@ setup(
         'matplotlib',
         'tqdm',
         'pyyaml',
-        'faiss-gpu-cuvs==1.11.0'
     ],
     entry_points={
         'console_scripts': [
