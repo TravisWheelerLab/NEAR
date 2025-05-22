@@ -38,6 +38,8 @@ class FASTAData:
     seqid_to_name : list[str]
         Lookup table that converts an internal sequence ID into the
         original FASTA record header.
+    seqid_to_length : np.array[int]
+        The length of a sequence *after* masking
     """
     def __init__(self, file_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
         self.tokens_by_length = dict()
@@ -45,6 +47,8 @@ class FASTAData:
         self.seqids_by_length = dict()
         self.tokenids_by_length = dict()
         self.seqid_to_name = list()
+        self.seqid_to_length = None
+        self.read_fasta(file_path, min_seq_length, max_seq_length)
 
 
     def read_fasta(self, fasta_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
@@ -70,6 +74,7 @@ class FASTAData:
         alphabet['0'] = 0
 
         # We first load the data into memory
+        total_sequences = 0
         with open(fasta_path) as handle:
             seq_names_by_length: dict[int, list] = defaultdict(list)
             seq_strings_by_length: dict[int, list]  = defaultdict(list)
@@ -82,7 +87,9 @@ class FASTAData:
                     continue
                 seq_names_by_length[length].append(name)
                 seq_strings_by_length[length].append(seq)
+                total_sequences += 1
 
+        self.seqid_to_length = np.zeros(total_sequences, dtype=np.uint64)
         # Then we tokenize the data
         for length in seq_strings_by_length:
             num_seqs = len(seq_strings_by_length[length])
@@ -96,7 +103,9 @@ class FASTAData:
             for c in amino_acids:
                 seqs[seqs == ord(c)] = alphabet[c]
             seqs[seqs > len(alphabet)] = 0
+
             masks = torch.logical_and(masks, seqs != 0) # Mask ambiguous residues
+            seqs = seqs.to(torch.long)
 
             self.masks_by_length[length] = masks
             self.tokens_by_length[length] = seqs
@@ -104,8 +113,18 @@ class FASTAData:
             seq_ids = np.arange(len(self.seqid_to_name),
                                 len(self.seqid_to_name)+len(self.tokens_by_length[length]),
                                 dtype=np.uint64)
+
+            self.seqid_to_length[seq_ids] = masks.sum(dim=-1)
+
             token_ids = np.arange(length, dtype=np.uint64)
-            token_ids = (seq_ids[:,None] << 32) | token_ids[None,:]
+            end_cutoff = length - 64
+            middle_emb = np.logical_and(token_ids >= 63, token_ids <= end_cutoff)
+            token_ids[token_ids < 63] = token_ids[token_ids < 63] >> 2
+            token_ids[middle_emb] = 16
+            token_ids[token_ids > end_cutoff] = ((127 - (length - token_ids[token_ids > end_cutoff])) >> 2)
+            token_pos = (np.arange(length, dtype=np.uint64) << 5)
+            
+            token_ids = (seq_ids[:,None] << 32) | token_ids[None,:] | token_pos[None, :]
 
             self.seqids_by_length[length] = seq_ids
             self.tokenids_by_length[length] = token_ids

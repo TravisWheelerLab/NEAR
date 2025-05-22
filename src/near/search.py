@@ -1,6 +1,6 @@
-from src.near.fasta_data import FASTAData
-from src.near.models import NEARResNet
-from src.near.search_processor import AsyncNearResultsProcessor
+from .fasta_data import FASTAData
+from .models import NEARResNet
+from .search_processor import AsyncNearResultsProcessor
 
 import tqdm
 import torch
@@ -52,10 +52,13 @@ def search_against_index(output_file_path: str,
     if verbose:
         print("Creating NEAR search results processor...")
     try:
+        embeddings_per_target = np.bincount(target_labels >> 32, minlength=target_data.num_sequences)
+
         near_processor = AsyncNearResultsProcessor(output_file_path,
                                                    query_data,
                                                    target_data,
-                                                   target_labels)
+                                                   target_labels,
+                                                   embeddings_per_target)
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
@@ -67,7 +70,6 @@ def search_against_index(output_file_path: str,
     model.to(device)
     model.half()
     model.eval()
-
 
     lengths = query_data.tokens_by_length.keys()
     if verbose:
@@ -87,13 +89,12 @@ def search_against_index(output_file_path: str,
                 for i in range(0, token_tensors.shape[1], batch_size):
                     batch_tokens = token_tensors[i:i + batch_size]
                     batch_mask = mask[i:i + batch_size].flatten()
-
-                    embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=1)
+                    embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=0, end_dim=-2)
                     embeddings = F.normalize(embeddings[batch_mask], dim=-1)
                     query_ids = token_ids[i:i+batch_size].flatten()[batch_mask]
 
                     scores, indices = index.search(embeddings, k=top_k)
-
+                    indices = target_labels[indices]
                     near_processor.add_to_queue(scores, indices, query_ids)
         if verbose:
             print("Search is complete.")

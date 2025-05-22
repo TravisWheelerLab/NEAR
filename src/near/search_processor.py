@@ -24,13 +24,15 @@ class AsyncNearResultsProcessor:
         The target sequence data
     hits_per_emb : int
         The number of hits per query embedding
-
+    embeddings_per_target : np.array
+        The number of embeddings corresponding to each target sequence.
     """
 
     def __init__(self, output_file: str,
                        query_data: FASTAData,
                        target_data: FASTAData,
-                       hits_per_emb: int):
+                       hits_per_emb: int,
+                       embeddings_per_target: np.array):
 
         self.output_file = output_file
         self.query_data = query_data

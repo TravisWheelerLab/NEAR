@@ -1,5 +1,5 @@
-from src.near.fasta_data import FASTAData
-from src.near.models import NEARResNet
+from .fasta_data import FASTAData
+from .models import NEARResNet
 
 import torch
 import torch.nn.functional as F
@@ -71,7 +71,7 @@ def create_index(index_type: IndexType = "Default",
         The number of NN descent iterations to use when building the graph with GPU_CAGRA_NN_DESCENT
     """
 
-    match IndexType:
+    match index_type:
         case "Default" | "GPU_CAGRA_NN_DESCENT":
             config = faiss.GpuIndexCagraConfig()
             config.build_algo = faiss.graph_build_algo_NN_DESCENT
@@ -86,16 +86,17 @@ def create_index(index_type: IndexType = "Default",
     return index
 
 def fill_index(index: faiss.Index, embeddings: torch.tensor):
-    index.train(embeddings.float())
-    index.add(embeddings.float())
+    index.train(embeddings)
+    index.add(embeddings)
 
 def embed_data_with_model(model: NEARResNet,
                           data: FASTAData,
-                          discard_frequency: int = 16,
-                          discard_masked : bool = False,
+                          selection_frequency: int = 16,
+                          random_selection_rate: float = 1.0,
+                          discard_masked : bool = True,
                           device: str = "cuda",
-                          residues_per_batch: int =512*1024,
-                          verbose=True) -> tuple[torch.Tensor[float], torch.Tensor[torch.uint64]]:
+                          residues_per_batch: int = 512*1024,
+                          verbose=True) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Embeds `data` with `model` with some (optional) level of sparsity.
     By default, masked embeddings will be discarded.
@@ -106,13 +107,17 @@ def embed_data_with_model(model: NEARResNet,
         The model used for embedding
     data : FASTAData
         The data that will be embedded
-    discard_frequency : int
-        How many embeddings are discarded for each embedding kept.
+    selection_frequency : int
+        How many embeddings are selected for each embedding discarded.
         A value of 0 means all embeddings will be kept
         A value of 1 means that every other embedding will be kept
         A value of 16 means that every 16th embedding will be kept
+    random_selection_rate : float
+        The percentage of embeddings that will be (randomly) kept
+        A value of 1 means that there will be no random selection
+        A value of 0.5 means that only half of embeddings will be selected
     discard_masked : bool
-        If True, masked embeddings will be discarded
+        If True, masked embeddings are discarded
     device : str
         The device being used for embedding data
     residues_per_batch : int
@@ -142,14 +147,18 @@ def embed_data_with_model(model: NEARResNet,
             mask = data.masks_by_length[length].clone()
 
         # Apply the discard to the masks
-        if discard_frequency > 0:
-            half_freq = (discard_frequency + 1) // 2
+        if selection_frequency > 0:
+            half_freq = (selection_frequency + 1) // 2
             discard_mask = torch.zeros(mask.shape[1], dtype=bool)
 
-            discard_mask[half_freq:-half_freq:discard_frequency+1] = True
+            discard_mask[half_freq:-half_freq:selection_frequency] = True
             discard_mask[-half_freq] = True
 
             mask = torch.logical_and(mask, discard_mask.unsqueeze(0))
+
+        if random_selection_rate < 1.0:
+            random_selection_mask = torch.rand(*mask.shape) < random_selection_rate
+            mask = torch.logical_and(mask, random_selection_mask)
 
         masks_by_length[length] = mask
         total_embeddings += mask.sum()
@@ -159,7 +168,7 @@ def embed_data_with_model(model: NEARResNet,
         print(f"Allocating embedding memory on '{device}'...")
 
     embeddings = torch.zeros(total_embeddings, 256, device=device)
-    labels = np.zeros(total_embeddings, dtype=torch.uint64)
+    labels = np.zeros(total_embeddings, dtype=np.uint64)
 
     if verbose:
         print("Pushing model to device...")
@@ -179,22 +188,23 @@ def embed_data_with_model(model: NEARResNet,
             token_tensors = data.tokens_by_length[length].to(device)
             mask = masks_by_length[length]
             length_labels = data.tokenids_by_length[length][mask].flatten()
-            labels[num_embeddings:num_embeddings+length_labels.shape[0]] = length_labels
+            labels[num_embeddings:num_embeddings+len(length_labels)] = length_labels
 
             # Calculate embeddings in batches
             batch_size = (residues_per_batch // length) + 2
-            for i in range(0, token_tensors.shape[1], batch_size):
+            for i in range(0, token_tensors.shape[0], batch_size):
                 #Gather the tokens/masks
-                batch_tokens = token_tensors[i:i+batch_size]
-                batch_mask = mask[i:i+batch_size].flatten()
+                end = min(i+batch_size, token_tensors.shape[0])
+                batch_tokens = token_tensors[i:end]
+                batch_mask = mask[i:end].flatten()
 
                 #Embed and transpose, then mask and normalize
-                batch_embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=1)
-                batch_embeddings = F.normalize(batch_embeddings[batch_mask], dim=-1)
+                batch_embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=0, end_dim=-2)[batch_mask]
+                batch_embeddings = F.normalize(batch_embeddings, dim=-1)
 
                 # Assign embeddings and continue
-                embeddings[num_embeddings:num_embeddings+batch_embeddings.shape[0]] = batch_embeddings.flatten(start_dim=1)
-                num_embeddings += batch_embeddings.shape[0]
+                embeddings[num_embeddings:num_embeddings+len(batch_embeddings)] = batch_embeddings
+                num_embeddings += len(batch_embeddings)
     if verbose:
         print("Done.")
 
