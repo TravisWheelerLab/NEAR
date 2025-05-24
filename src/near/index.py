@@ -51,7 +51,7 @@ IndexType = Literal["Default", "GPU_CAGRA", "GPU_CAGRA_NN_DESCENT"]
 
 
 def create_index(index_type: IndexType = "Default",
-                 graph_degree: int = 64,
+                 topk: int = 64,
                  nn_descent_niter: int = 20) -> faiss.Index:
     """
     Creates a search index without filling it.
@@ -63,7 +63,7 @@ def create_index(index_type: IndexType = "Default",
         - "Default": Currently defaults to GPU_CAGRA_NN_DESCENT
         - "GPU_CAGRA": GPU-based Cagra index with default configuration
         - "GPU_CAGRA_NN_DESCENT": GPU-based Cagra index trained with NN descent
-    graph_degree : int
+    topk : int
         The degree of the graph for the final Cagra index
         Increasing the degree will increase accuracy, but also increase size/build-time
         Note that the top-k search parameter cannot be larger than the graph degree
@@ -74,6 +74,7 @@ def create_index(index_type: IndexType = "Default",
     match index_type:
         case "Default" | "GPU_CAGRA_NN_DESCENT":
             config = faiss.GpuIndexCagraConfig()
+            config.itopk_size=topk
             config.build_algo = faiss.graph_build_algo_NN_DESCENT
             index = faiss.GpuIndexCagra(faiss.StandardGpuResources(), 256, faiss.METRIC_INNER_PRODUCT, config)
 
@@ -149,10 +150,11 @@ def embed_data_with_model(model: NEARResNet,
         # Apply the discard to the masks
         if selection_frequency > 0:
             half_freq = (selection_frequency + 1) // 2
-            discard_mask = torch.zeros(mask.shape[1], dtype=bool)
 
-            discard_mask[half_freq:-half_freq:selection_frequency] = True
-            discard_mask[-half_freq] = True
+            num_emb = (length - selection_frequency) // selection_frequency
+            included_pos = torch.linspace(half_freq, length - half_freq, num_emb, dtype=torch.long)
+            discard_mask = torch.zeros(mask.shape[1], dtype=bool)
+            discard_mask[included_pos] = True
 
             mask = torch.logical_and(mask, discard_mask.unsqueeze(0))
 

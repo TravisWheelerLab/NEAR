@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
-#include "fluxsort/fluxsort.h"
 #include "gumbel_parameters.h"
 
 /// Buffer size for file I/O (32 MiB)
@@ -33,13 +32,21 @@ typedef struct {
     float    score;
 } IndexScore;
 
-static int cmp_idx(const void *a, const void *b) {
-    uint64_t ai = (uint64_t)((const IndexScore*)a)->target_seq_id << 32;
-    uint64_t bi = (uint64_t)((const IndexScore*)b)->target_seq_id << 32;
-    ai = ai | ((const IndexScore*)a)->target_pos;
-    bi = bi | ((const IndexScore*)b)->target_pos;
+static int cmp_idx(const void *a, const void *b)
+{
+    const IndexScore *pa = a;
+    const IndexScore *pb = b;
 
-    return (ai < bi ? -1 : (ai > bi ? 1 : 0));
+    if (pa->query_seq_id  < pb->query_seq_id)  return -1;
+    if (pa->query_seq_id  > pb->query_seq_id)  return  1;
+
+    if (pa->target_seq_id < pb->target_seq_id) return -1;
+    if (pa->target_seq_id > pb->target_seq_id) return  1;
+
+    if (pa->target_pos    < pb->target_pos)    return -1;
+    if (pa->target_pos    > pb->target_pos)    return  1;
+
+    return 0;
 }
 
 static inline float gumbel_r_cdf(float loc, float inverse_scale, float x) {
@@ -91,7 +98,7 @@ static inline uint64_t get_name_list_from_pipe(char** name_list_ptr, uint64_t** 
     }
 
     start_list[count] = string_size + 1;
-    
+
     if (seq_lengths_ptr != NULL) {
         uint64_t* seq_lengths = malloc(sizeof(uint64_t) * num_names);
         if (!seq_lengths) {
@@ -99,7 +106,7 @@ static inline uint64_t get_name_list_from_pipe(char** name_list_ptr, uint64_t** 
             exit(1);
         }
         *seq_lengths_ptr = seq_lengths;
-        
+
         count = fread(seq_lengths, sizeof(uint64_t), num_names, stdin);
         if (count != num_names) {
             fprintf(stderr, "Expected %llu lengths while reading sequence lengths, got %llu\n",
@@ -107,7 +114,7 @@ static inline uint64_t get_name_list_from_pipe(char** name_list_ptr, uint64_t** 
             exit(1);
         }
     }
-    
+
     return num_names;
 }
 
@@ -123,7 +130,8 @@ static inline float convert_lengths_to_scores(uint64_t *seq_lengths, uint64_t nu
 }
 
 static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, int hits_per_query) {
-    // Read the number of queries and calculate the number of hits
+    const float score_penalty = log2f(0.5);
+// Read the number of queries and calculate the number of hits
     uint64_t num_queries;
     if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1) {
         return 0;
@@ -131,7 +139,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
 
     uint64_t num_hits = hits_per_query * num_queries;
 
-    /* allocate */
+/* allocate */
     IndexScore *index_scores = malloc(num_hits * sizeof(IndexScore));
     uint64_t    *buf          = malloc(num_hits * sizeof(uint64_t));
     if (!index_scores || !buf) {
@@ -144,7 +152,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     *index_score_ptr = index_scores;
 
     size_t count;
-    /* read query‐labels (packed: high 32 bits = seq_id) */
+/* read query‐labels (packed: high 32 bits = seq_id) */
     count = fread(buf, sizeof(uint64_t), num_queries, stdin);
     if (count != num_queries) {
         fprintf(stderr, "Expected %llu query labels, got %zu\n",
@@ -162,7 +170,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
 
     }
 
-    /* read target labels */
+/* read target labels */
     count = fread(buf, sizeof(uint64_t), num_hits, stdin);
     if (count != num_hits) {
         fprintf(stderr, "Expected %llu target labels, got %zu\n",
@@ -177,7 +185,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
         index_scores[i].target_pos = target_pos;
     }
 
-    /* read raw float scores into same buffer */
+/* read raw float scores into same buffer */
     float *fbuf = (float*)buf;
     count = fread(fbuf, sizeof(float), num_hits, stdin);
     if (count != num_hits) {
@@ -186,7 +194,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
         free(index_scores); free(buf);
         exit(1);
     }
-    /* convert to log2 E‐values and sort per query block */
+/* convert to log2 E‐values and sort per query block */
     uint64_t last_query = index_scores[0].query_seq_id;
     size_t   query_start = 0;
     for (size_t i = 0; i < num_hits; ++i) {
@@ -198,21 +206,24 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
             uint8_t bin_t = index_scores[i].target_pos & STAT_BIN_MASK;
             float loc   = gumbel_r_params[bin_q][bin_t][0];
             float inv_s = gumbel_r_params[bin_q][bin_t][1];
-            float pval  = 1.0f - gumbel_r_cdf(loc, inv_s, raw);
-            index_scores[i].score = -log2f(1e-20f + pval);
+            float pval  = gumbel_r_cdf(loc, inv_s, raw);
+            float score = score_penalty - log2f(1e-20f + pval) ;
+            if (score < 0)
+                score = 0;
+            index_scores[i].score = logf(1e-60 + pval);
         }
-        /* when query ID changes, sort the last block */
+/* when query ID changes, sort the last block */
         if (index_scores[i].query_seq_id != last_query) {
-            fluxsort_size(&index_scores[query_start],
-                          i - query_start,
-                          sizeof(IndexScore),
-                          cmp_idx);
+            qsort(&index_scores[query_start],
+              i - query_start,
+              sizeof(IndexScore),
+              cmp_idx);
             query_start = i;
             last_query  = index_scores[i].query_seq_id;
         }
     }
-    /* final block */
-    fluxsort_size(&index_scores[query_start],
+/* Sort the last block */
+    qsort(&index_scores[query_start],
                   num_hits - query_start,
                   sizeof(IndexScore),
                   cmp_idx);
@@ -238,14 +249,19 @@ static inline void output_index_scores_to_file(FILE        *out,
 
     uint32_t last_query  = -1;
     uint32_t last_target = -1;
+    uint32_t last_target_pos = -1;
     float    effective_index_size = index_size;
     float    hit_score   = -100.0f;
     float    total_score = -100.0f;
+    float    largest_tp_score = -100.0f;
+
     uint64_t nhits = 0;
     for (uint64_t i = 0; i < num_hits; ++i) {
         uint32_t q = index_scores[i].query_seq_id;
         uint32_t t = index_scores[i].target_seq_id;
+        uint32_t tp = index_scores[i].target_pos;
 
+        index_scores[i].score = log2f(1.0 - exp(index_scores[i].score*target_lengths[index_scores[i].target_seq_id]));
         if (q != last_query || t != last_target) {
             if (total_score > score_threshold) {
                 fprintf(out, "%s\t%s\t%f\t%llu\n",
@@ -253,19 +269,29 @@ static inline void output_index_scores_to_file(FILE        *out,
                         &target_names[target_name_starts[last_target]],
                         total_score, nhits);
             }
-            
-            hit_score = logf(1.0 - (target_lengths[t] / index_size));
-            hit_score = hit_score * hits_per_emb * query_lengths[q];
-            hit_score = -log2f(1.0 - exp(hit_score));
-            
+
+            last_target_pos = tp;
             last_query  = q;
             last_target = t;
-            total_score = 0.0f;
-            nhits = 0;
+            total_score = index_scores[i].score;
+            nhits = 1;
         }
+        else {
+            if (last_target_pos == tp) {
+                if (index_scores[i].score > largest_tp_score) {
+                    total_score -= largest_tp_score;
+                    total_score += index_scores[i].score;
+                    largest_tp_score = index_scores[i].score;
+                }
+            }
 
-        total_score += index_scores[i].score + hit_score;
-        nhits += 1;
+            else {
+                last_target_pos = tp;
+                largest_tp_score = index_scores[i].score;
+                total_score += index_scores[i].score;
+                nhits += 1;
+            }
+        }
     }
 
     /* final flush */
@@ -290,7 +316,7 @@ int main(int argc, const char** argv) {
 
     int hits_per_emb = atoi(argv[2]);
     float score_threshold = (float)atof(argv[3]);
-    
+
     uint64_t num_query_names;
     uint64_t num_target_names;
     IndexScore *scores;
@@ -299,15 +325,15 @@ int main(int argc, const char** argv) {
     char *target_names;
     uint64_t *query_name_starts;
     uint64_t *target_name_starts;
-    
+
     uint64_t *query_lengths;
     uint64_t *target_lengths;
-    
+
     printf("Reading query names...\n");
     num_query_names = get_name_list_from_pipe(&query_names, &query_name_starts, &query_lengths);
     printf("Reading target names...\n");
     num_target_names = get_name_list_from_pipe(&target_names, &target_name_starts, &target_lengths);
-    
+
     convert_lengths_to_scores(query_lengths, num_query_names);
     float index_size = convert_lengths_to_scores(target_lengths, num_target_names);
 

@@ -122,7 +122,7 @@ class FASTAData:
             token_ids[token_ids < 63] = token_ids[token_ids < 63] >> 2
             token_ids[middle_emb] = 16
             token_ids[token_ids > end_cutoff] = ((127 - (length - token_ids[token_ids > end_cutoff])) >> 2)
-            token_pos = (np.arange(length, dtype=np.uint64) << 5)
+            token_pos = (np.arange(length, dtype=np.uint64) << 7)
             
             token_ids = (seq_ids[:,None] << 32) | token_ids[None,:] | token_pos[None, :]
 
