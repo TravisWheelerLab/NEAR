@@ -15,12 +15,43 @@
 #include <math.h>
 #include "gumbel_parameters.h"
 
+#include <float.h>
+
+/**
+ * Compute log(1 - exp(x)) in a numerically stable way for x <= 0.
+ *
+ * For x == 0, returns -INFINITY (log(0)).
+ * For x <= ln(0.5), uses log1p(-exp(x)).
+ * For ln(0.5) < x < 0, uses log(-expm1(x)).
+ * For x > 0, returns NAN.
+ */
+float log1mexp(float x) {
+    const float LN_HALF = -0.6931471805599453;  /* ln(0.5) */
+
+    if (x == 0.0) {
+        /* log(1 - 1) = log(0) = -inf */
+        return -INFINITY;
+    }
+    else if (x <= LN_HALF) {
+        /* exp(x) is small enough that 1 - exp(x) is not too close to 1 */
+        return log1p(-exp(x));
+    }
+    else if (x < 0.0) {
+        /* expm1(x) = exp(x) - 1 is close to -small, so -expm1(x) is small positive */
+        return log(-expm1(x));
+    }
+    else {
+        /* undefined / out-of-domain (x > 0) */
+        return NAN;
+    }
+}
+
 /// Buffer size for file I/O (32 MiB)
 #define OUTPUT_BUF_SIZE   (1 << 25)
 /// Mask to extract high 32 bits (sequence ID
 #define SEQ_LABEL_MASK    0xFFFFFFFF00000000ULL
 /// Mask for stat bin
-#define STAT_BIN_MASK     0x1F
+#define STAT_BIN_MASK     0x7F
 
 #define FLAT_HIT_SCORE    4.0
 
@@ -210,7 +241,7 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
             float score = score_penalty - log2f(1e-20f + pval) ;
             if (score < 0)
                 score = 0;
-            index_scores[i].score = logf(1e-60 + pval);
+            index_scores[i].score = raw; //logf(1e-60 + pval);
         }
 /* when query ID changes, sort the last block */
         if (index_scores[i].query_seq_id != last_query) {
@@ -232,6 +263,9 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     return num_hits;
 }
 
+static inline float score_to_logp(float score, float q_length, float t_length) {
+        return log1mexp(score * q_length * t_length);
+}
 
 
 static inline void output_index_scores_to_file(FILE        *out,
@@ -245,10 +279,15 @@ static inline void output_index_scores_to_file(FILE        *out,
                                                float       *query_lengths,
                                                float       *target_lengths,
                                                float        index_size,
-                                               float        hits_per_emb) {
+                                               float        hits_per_emb,
+                                               uint32_t     sparsity,
+                                               float        num_targets       ) {
 
     uint32_t last_query  = -1;
     uint32_t last_target = -1;
+    uint32_t query_length = 0;
+    uint32_t target_length = 0;
+
     uint32_t last_target_pos = -1;
     float    effective_index_size = index_size;
     float    hit_score   = -100.0f;
@@ -256,39 +295,47 @@ static inline void output_index_scores_to_file(FILE        *out,
     float    largest_tp_score = -100.0f;
 
     uint64_t nhits = 0;
+
     for (uint64_t i = 0; i < num_hits; ++i) {
         uint32_t q = index_scores[i].query_seq_id;
         uint32_t t = index_scores[i].target_seq_id;
         uint32_t tp = index_scores[i].target_pos;
 
-        index_scores[i].score = log2f(1.0 - exp(index_scores[i].score*target_lengths[index_scores[i].target_seq_id]));
+        float score = index_scores[i].score;
+
         if (q != last_query || t != last_target) {
             if (total_score > score_threshold) {
-                fprintf(out, "%s\t%s\t%f\t%llu\n",
+                fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
                         &query_names[query_name_starts[last_query]],
                         &target_names[target_name_starts[last_target]],
-                        total_score, nhits);
+                        expf(total_score), expf(total_score)*num_targets, nhits);
             }
+            query_length = query_lengths[q];
+            target_length = target_lengths[t];
 
             last_target_pos = tp;
             last_query  = q;
             last_target = t;
-            total_score = index_scores[i].score;
+
+            largest_tp_score = score;
+
+            total_score = score_to_logp(score, query_length, target_length);
             nhits = 1;
         }
         else {
+            score = score_to_logp(score, query_length, target_length);
             if (last_target_pos == tp) {
                 if (index_scores[i].score > largest_tp_score) {
-                    total_score -= largest_tp_score;
-                    total_score += index_scores[i].score;
-                    largest_tp_score = index_scores[i].score;
+                    total_score -= score_to_logp(largest_tp_score, query_length - ((nhits - 1) * sparsity), target_length - (nhits - 1));
+                    total_score += score_to_logp(score, query_length - ((nhits - 1) * sparsity), target_length - (nhits - 1));
+                    largest_tp_score = score;
                 }
             }
 
             else {
                 last_target_pos = tp;
-                largest_tp_score = index_scores[i].score;
-                total_score += index_scores[i].score;
+                largest_tp_score = score;
+                total_score += score_to_logp(score, query_length - (nhits * sparsity), target_length - nhits);
                 nhits += 1;
             }
         }
@@ -296,10 +343,10 @@ static inline void output_index_scores_to_file(FILE        *out,
 
     /* final flush */
     if (total_score > score_threshold) {
-        fprintf(out, "%s\t%s\t%f\t%llu\n",
-                &query_names[query_name_starts[last_query]],
-                &target_names[target_name_starts[last_target]],
-                total_score, nhits);
+        fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
+                        &query_names[query_name_starts[last_query]],
+                        &target_names[target_name_starts[last_target]],
+                        expf(total_score), expf(total_score)*num_targets, nhits);
     }
 }
 
@@ -312,10 +359,11 @@ int main(int argc, const char** argv) {
     static char buffer[OUTPUT_BUF_SIZE];
     setvbuf(out, buffer, _IOFBF, sizeof(buffer));
 
-    fprintf(out, "Query\tTarget\tScore\tHits\n");
+    fprintf(out, "Query\tTarget\tp-val\te-val\tHits\n");
 
     int hits_per_emb = atoi(argv[2]);
     float score_threshold = (float)atof(argv[3]);
+    int sparsity = atoi(argv[4]);
 
     uint64_t num_query_names;
     uint64_t num_target_names;
@@ -355,7 +403,9 @@ int main(int argc, const char** argv) {
                                     (float *)query_lengths,
                                     (float *)target_lengths,
                                     index_size,
-                                    hits_per_emb);
+                                    hits_per_emb,
+                                    sparsity,
+                                    num_target_names);
         free(scores);
     }
     printf("Done.\n");
