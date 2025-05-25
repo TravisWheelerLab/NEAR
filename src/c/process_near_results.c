@@ -229,111 +229,117 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     return num_hits;
 }
 
-float log1mexp(float x) {
-    const float LN_HALF = -0.6931471805599453;  /* ln(0.5) */
+static inline float log1mexp(float x) {
+    const float LN_HALF = -0.6931471805599453f;  /* ln(0.5) */
 
-    if (x == 0.0) {
-        /* log(1 - 1) = log(0) = -inf */
+    if (x == 0.0f) {
         return -INFINITY;
-    }
-    else if (x <= LN_HALF) {
-        /* exp(x) is small enough that 1 - exp(x) is not too close to 1 */
-        return log1p(-exp(x));
-    }
-    else if (x < 0.0) {
-        /* expm1(x) = exp(x) - 1 is close to -small, so -expm1(x) is small positive */
-        return log(-expm1(x));
-    }
-    else {
-        /* undefined / out-of-domain (x > 0) */
+    } else if (x <= LN_HALF) {
+        return log1p(-expf(x));
+    } else if (x < 0.0f) {
+        return logf(-expm1f(x));
+    } else {
         return NAN;
     }
 }
 
-static inline float score_to_logp(float score, float q_length, float t_length) {
-    return log1mexp(score * q_length * t_length);
+static inline float score_log_nohit(float logcdf_score,
+                                    float q_len,
+                                    float t_len) {
+    // log P(no see) = q_len * t_len * logPhi(score)
+    return logcdf_score * q_len * t_len;
 }
 
+static inline void output_index_scores_to_file(
+    FILE        *out,
+    uint64_t     num_hits,
+    IndexScore  *index_scores,
+    uint64_t    *query_name_starts,
+    char        *query_names,
+    uint64_t    *target_name_starts,
+    char        *target_names,
+    float        score_threshold,
+    float       *query_lengths,
+    float       *target_lengths,
+    float        index_size,
+    float        hits_per_emb,
+    uint32_t     sparsity,
+    float        num_targets
+) {
+    uint32_t last_query  = (uint32_t)-1;
+    uint32_t last_target = (uint32_t)-1;
+    uint32_t last_target_pos = (uint32_t)-1;
 
-static inline void output_index_scores_to_file(FILE        *out,
-                                               uint64_t     num_hits,
-                                               IndexScore  *index_scores,
-                                               uint64_t    *query_name_starts,
-                                               char        *query_names,
-                                               uint64_t    *target_name_starts,
-                                               char        *target_names,
-                                               float        score_threshold,
-                                               float       *query_lengths,
-                                               float       *target_lengths,
-                                               float        index_size,
-                                               float        hits_per_emb,
-                                               uint32_t     sparsity,
-                                               float        num_targets       ) {
-
-    uint32_t last_query  = -1;
-    uint32_t last_target = -1;
-    uint32_t query_length = 0;
-    uint32_t target_length = 0;
-
-    uint32_t last_target_pos = -1;
-    float    effective_index_size = index_size;
-    float    hit_score   = 0;
-    float    total_score = INFINITY;
-    float    largest_tp_score = INFINITY;
-
+    float sum_log_nohit = 0.0f;
+    float largest_tp_score = -INFINITY;
     uint64_t nhits = 0;
 
     for (uint64_t i = 0; i < num_hits; ++i) {
-        uint32_t q = index_scores[i].query_seq_id;
-        uint32_t t = index_scores[i].target_seq_id;
+        uint32_t q  = index_scores[i].query_seq_id;
+        uint32_t t  = index_scores[i].target_seq_id;
         uint32_t tp = index_scores[i].target_pos;
-
-        float score = index_scores[i].score;
+        float   s  = index_scores[i].score;  // this is logcdf(score)
 
         if (q != last_query || t != last_target) {
-            if (-total_score > score_threshold) {
-                fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
-                        &query_names[query_name_starts[last_query]],
-                        &target_names[target_name_starts[last_target]],
-                        expf(total_score), expf(total_score)*num_targets, nhits);
-            }
-            query_length = query_lengths[q];
-            target_length = target_lengths[t] * sparsity;
-
-            last_target_pos = tp;
-            last_query  = q;
-            last_target = t;
-
-            largest_tp_score = score;
-
-            total_score = score_to_logp(score, query_length, target_length);
-            nhits = 1;
-        }
-        else {
-            score = score_to_logp(score, query_length, target_length);
-            if (last_target_pos == tp) {
-                if (index_scores[i].score > largest_tp_score) {
-                    total_score -= score_to_logp(largest_tp_score, query_length - ((nhits - 1) * sparsity), target_length - ((nhits - 1) * sparsity));
-                    total_score += score_to_logp(score, query_length - ((nhits - 1) * sparsity), target_length - ((nhits - 1) * sparsity));
-                    largest_tp_score = score;
+            // flush previous
+            if (last_query != (uint32_t)-1) {
+                float logp_any = log1mexp(sum_log_nohit);
+                if (-logp_any > score_threshold) {
+                    fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
+                            &query_names[query_name_starts[last_query]],
+                            &target_names[target_name_starts[last_target]],
+                            expf(logp_any),
+                            expf(logp_any) * num_targets,
+                            (unsigned long long)nhits);
                 }
             }
+            // start new pair
+            last_query = q;
+            last_target = t;
+            last_target_pos = tp;
+            nhits = 1;
+            largest_tp_score = s;
 
-            else {
+            float qlen = query_lengths[q];
+            float tlen = target_lengths[t] * sparsity;
+            sum_log_nohit = score_log_nohit(s, qlen, tlen);
+        }
+        else {
+            float qlen = query_lengths[q] - (nhits * sparsity);
+            float tlen = target_lengths[t] * sparsity - (nhits * sparsity);
+
+            if (tp == last_target_pos) {
+                // same position: keep only the max logcdf
+                if (s > largest_tp_score) {
+                    // remove old contribution
+                    sum_log_nohit -= score_log_nohit(largest_tp_score,
+                                                     qlen + sparsity,
+                                                     tlen + sparsity);
+                    // add new contribution
+                    sum_log_nohit += score_log_nohit(s, qlen + sparsity, tlen + sparsity);
+                    largest_tp_score = s;
+                }
+            } else {
+                // new hit position
                 last_target_pos = tp;
-                largest_tp_score = score;
-                total_score += score_to_logp(score, query_length - (nhits * sparsity), target_length - (nhits * sparsity));
-                nhits += 1;
+                largest_tp_score = s;
+                sum_log_nohit += score_log_nohit(s, qlen, tlen);
+                nhits++;
             }
         }
     }
 
-    /* final flush */
-    if (-total_score > score_threshold) {
-        fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
-                &query_names[query_name_starts[last_query]],
-                &target_names[target_name_starts[last_target]],
-                expf(total_score), expf(total_score)*num_targets, nhits);
+    // final flush
+    if (last_query != (uint32_t)-1) {
+        float logp_any = log1mexp(sum_log_nohit);
+        if (-logp_any > score_threshold) {
+            fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
+                    &query_names[query_name_starts[last_query]],
+                    &target_names[target_name_starts[last_target]],
+                    expf(logp_any),
+                    expf(logp_any) * num_targets,
+                    (unsigned long long)nhits);
+        }
     }
 }
 
@@ -392,7 +398,7 @@ int main(int argc, const char** argv) {
                                     index_size,
                                     hits_per_emb,
                                     sparsity,
-                                    num_target_names);
+                                    index_size);
         free(scores);
     }
     printf("Done.\n");
