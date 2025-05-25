@@ -25,26 +25,7 @@
  * For ln(0.5) < x < 0, uses log(-expm1(x)).
  * For x > 0, returns NAN.
  */
-float log1mexp(float x) {
-    const float LN_HALF = -0.6931471805599453;  /* ln(0.5) */
 
-    if (x == 0.0) {
-        /* log(1 - 1) = log(0) = -inf */
-        return -INFINITY;
-    }
-    else if (x <= LN_HALF) {
-        /* exp(x) is small enough that 1 - exp(x) is not too close to 1 */
-        return log1p(-exp(x));
-    }
-    else if (x < 0.0) {
-        /* expm1(x) = exp(x) - 1 is close to -small, so -expm1(x) is small positive */
-        return log(-expm1(x));
-    }
-    else {
-        /* undefined / out-of-domain (x > 0) */
-        return NAN;
-    }
-}
 
 /// Buffer size for file I/O (32 MiB)
 #define OUTPUT_BUF_SIZE   (1 << 25)
@@ -52,8 +33,6 @@ float log1mexp(float x) {
 #define SEQ_LABEL_MASK    0xFFFFFFFF00000000ULL
 /// Mask for stat bin
 #define STAT_BIN_MASK     0x7F
-
-#define FLAT_HIT_SCORE    4.0
 
 typedef struct {
     uint32_t query_seq_id;
@@ -229,42 +208,50 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     uint64_t last_query = index_scores[0].query_seq_id;
     size_t   query_start = 0;
     for (size_t i = 0; i < num_hits; ++i) {
-        float raw = fbuf[i];
-        if (raw < 0 || isnan(raw)) {
-            index_scores[i].score = 0;
-        } else {
-            uint8_t bin_q = index_scores[i].query_pos & STAT_BIN_MASK;
-            uint8_t bin_t = index_scores[i].target_pos & STAT_BIN_MASK;
-            float loc   = gumbel_r_params[bin_q][bin_t][0];
-            float inv_s = gumbel_r_params[bin_q][bin_t][1];
-            float pval  = gumbel_r_cdf(loc, inv_s, raw);
-            float score = score_penalty - log2f(1e-20f + pval) ;
-            if (score < 0)
-                score = 0;
-            index_scores[i].score = raw; //logf(1e-60 + pval);
-        }
+        index_scores[i].score = fbuf[i];
 /* when query ID changes, sort the last block */
         if (index_scores[i].query_seq_id != last_query) {
             qsort(&index_scores[query_start],
-              i - query_start,
-              sizeof(IndexScore),
-              cmp_idx);
+                  i - query_start,
+                  sizeof(IndexScore),
+                  cmp_idx);
             query_start = i;
             last_query  = index_scores[i].query_seq_id;
         }
     }
 /* Sort the last block */
     qsort(&index_scores[query_start],
-                  num_hits - query_start,
-                  sizeof(IndexScore),
-                  cmp_idx);
+          num_hits - query_start,
+          sizeof(IndexScore),
+          cmp_idx);
 
     free(buf);
     return num_hits;
 }
 
+float log1mexp(float x) {
+    const float LN_HALF = -0.6931471805599453;  /* ln(0.5) */
+
+    if (x == 0.0) {
+        /* log(1 - 1) = log(0) = -inf */
+        return -INFINITY;
+    }
+    else if (x <= LN_HALF) {
+        /* exp(x) is small enough that 1 - exp(x) is not too close to 1 */
+        return log1p(-exp(x));
+    }
+    else if (x < 0.0) {
+        /* expm1(x) = exp(x) - 1 is close to -small, so -expm1(x) is small positive */
+        return log(-expm1(x));
+    }
+    else {
+        /* undefined / out-of-domain (x > 0) */
+        return NAN;
+    }
+}
+
 static inline float score_to_logp(float score, float q_length, float t_length) {
-        return log1mexp(score * q_length * t_length);
+    return log1mexp(score * q_length * t_length);
 }
 
 
@@ -290,9 +277,9 @@ static inline void output_index_scores_to_file(FILE        *out,
 
     uint32_t last_target_pos = -1;
     float    effective_index_size = index_size;
-    float    hit_score   = -100.0f;
-    float    total_score = -100.0f;
-    float    largest_tp_score = -100.0f;
+    float    hit_score   = 0;
+    float    total_score = INFINITY;
+    float    largest_tp_score = INFINITY;
 
     uint64_t nhits = 0;
 
@@ -304,14 +291,14 @@ static inline void output_index_scores_to_file(FILE        *out,
         float score = index_scores[i].score;
 
         if (q != last_query || t != last_target) {
-            if (total_score > score_threshold) {
+            if (-total_score > score_threshold) {
                 fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
                         &query_names[query_name_starts[last_query]],
                         &target_names[target_name_starts[last_target]],
                         expf(total_score), expf(total_score)*num_targets, nhits);
             }
             query_length = query_lengths[q];
-            target_length = target_lengths[t];
+            target_length = target_lengths[t] * sparsity;
 
             last_target_pos = tp;
             last_query  = q;
@@ -326,8 +313,8 @@ static inline void output_index_scores_to_file(FILE        *out,
             score = score_to_logp(score, query_length, target_length);
             if (last_target_pos == tp) {
                 if (index_scores[i].score > largest_tp_score) {
-                    total_score -= score_to_logp(largest_tp_score, query_length - ((nhits - 1) * sparsity), target_length - (nhits - 1));
-                    total_score += score_to_logp(score, query_length - ((nhits - 1) * sparsity), target_length - (nhits - 1));
+                    total_score -= score_to_logp(largest_tp_score, query_length - ((nhits - 1) * sparsity), target_length - ((nhits - 1) * sparsity));
+                    total_score += score_to_logp(score, query_length - ((nhits - 1) * sparsity), target_length - ((nhits - 1) * sparsity));
                     largest_tp_score = score;
                 }
             }
@@ -335,18 +322,18 @@ static inline void output_index_scores_to_file(FILE        *out,
             else {
                 last_target_pos = tp;
                 largest_tp_score = score;
-                total_score += score_to_logp(score, query_length - (nhits * sparsity), target_length - nhits);
+                total_score += score_to_logp(score, query_length - (nhits * sparsity), target_length - (nhits * sparsity));
                 nhits += 1;
             }
         }
     }
 
     /* final flush */
-    if (total_score > score_threshold) {
+    if (-total_score > score_threshold) {
         fprintf(out, "%s\t%s\t%f\t%f\t%llu\n",
-                        &query_names[query_name_starts[last_query]],
-                        &target_names[target_name_starts[last_target]],
-                        expf(total_score), expf(total_score)*num_targets, nhits);
+                &query_names[query_name_starts[last_query]],
+                &target_names[target_name_starts[last_target]],
+                expf(total_score), expf(total_score)*num_targets, nhits);
     }
 }
 
