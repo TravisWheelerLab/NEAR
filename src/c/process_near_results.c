@@ -5,14 +5,15 @@
 #include <math.h>
 #include <float.h>
 
-#define OUTPUT_BUF_SIZE   (1 << 25)
-#define TID_TO_SEQID(x)         ((x >> 32) )
-#define TID_TO_BIN(x)           (x & 0x7F)
-#define TID_TO_POS(x)           ((x & 0xFFFFFFFF) >> 7)
+#define OUTPUT_BUF_SIZE     (1 << 25)
+#define TID_TO_SEQID(x)     ((x >> 32))
+#define DP_STACK_LIM        1048576
+#define TID_TO_BIN(x)       (x & 0x7F)
+#define TID_TO_POS(x)       ((x & 0xFFFFFFFF) >> 7)
 
-#define LOG_LAM_SMALL  (-10.0)
-#define LOG_LAM_LARGE    50.0
-#define LOG_HALF       (-0.6931471805599453)
+#define LOG_LAM_SMALL       (-10.0)
+#define LOG_LAM_LARGE       50.0
+#define LOG_HALF            (-0.6931471805599453)
 
 typedef struct {
     uint32_t query_seq_id;
@@ -289,12 +290,112 @@ double log_pval_from_independent_hits(const Hit *hits,
     return log_poisson_tail(log_lambda);
 }
 
-// Filter 2 only considers the maximum logpval for coherent hits
-static inline double pval_from_coherent_hits(Hit *hits,
+
+static inline double log_odds_transition(uint32_t q_i, uint32_t t_i,
+                                         uint32_t q_j, uint32_t t_j,
+                                         double   logp_i, double   logp_j)
+{
+
+}
+
+/* --------------------------------------------------------------------------
+ *  Filter-2 : coherent-path p-value
+ * --------------------------------------------------------------------------*/
+static inline double
+logpval_from_coherent_hits(Hit      *restrict hits,
+                           uint64_t  start,
+                           uint64_t  end,
+                           uint64_t  n_rows,
+                           uint64_t  n_cols)
+{
+    const size_t N = (size_t)(end - start);
+    if (N == 0) return 0.0;                    /* empty slice → p = 1 */
+
+    /* ---- scratch, stack-backed when N ≤ 1024 ------------------------ */
+    double dp_st [DP_STACK_LIM];
+    int    ln_st [DP_STACK_LIM];
+    double *dp   = (N <= DP_STACK_LIM) ? dp_st : (double *)malloc(N*sizeof(*dp));
+    int    *plen = (N <= DP_STACK_LIM) ? ln_st : (int    *)malloc(N*sizeof(*plen));
+
+    double best_score = hits[start].logpval;
+    int    best_len   = 1;
+
+    for (size_t i = 0; i < N; ++i) {
+        const Hit *restrict hi  = &hits[start + i];
+
+        double best_i = hi->logpval;  /* path that starts at i */
+        int    len_i  = 1;
+
+        /* ---------- inner scan, backwards, branch-light ------------- */
+        for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
+            const Hit *restrict hj = &hits[start + j];
+
+            /* cheap rejection first */
+            if (hj->target_pos == hi->target_pos)   continue;   /* same col */
+            if (hj->query_pos  >= hi->query_pos)    continue;   /* wrong col */
+
+            /* passed the two filters -> valid predecessor */
+            double trans = log_odds_transition(hj->query_pos, hj->target_pos,
+                                               hi->query_pos, hi->target_pos,
+                                               hj->logpval,   hi->logpval);
+
+            double cand  = dp[j] + trans + hi->logpval;
+            if (cand < best_i) {         /* smaller -> rarer -> better -> faster ->stronger*/
+                best_i = cand;
+                len_i  = plen[j] + 1;
+            }
+        }
+
+        dp[i]   = best_i;
+        plen[i] = len_i;
+
+        if (best_i < best_score) { best_score = best_i; best_len = len_i; }
+    }
+
+    /* convert path score to Poisson tail, same as Filter-1 */
+    double log_lambda = best_score
+                        + log_rook((int)n_rows, (int)n_cols, best_len);
+    double log_pval   = log_poisson_tail(log_lambda);
+
+    if (dp != dp_st)   free(dp);
+    if (plen != ln_st) free(plen);
+    return log_pval;                       /* already log(p-value) */
+}
+
+// Filter 2 considers a path through the hits that is coherent
+static inline double losssgpval_from_coherent_hits(Hit *hits,
                                             uint64_t start,
                                             uint64_t end,
                                             uint64_t query_length,
                                             uint64_t target_length) {
+    /* the hit structure
+     * typedef struct {
+    uint32_t query_seq_id;
+    uint32_t target_seq_id;
+    uint32_t query_pos; // includes bin
+    uint32_t target_pos; // includes bin
+    double    logpval;
+} Hit;
+     * */
+    // The goal of this function is to calculate a maximal path
+    // through hits.
+    // The path is not allowed to re-use query_pos/target_pos
+    // The path is not allowed to traverse to decreasing query_pos/target_pos
+    // All transitions will have an associated log odds value that gets added to query_pos/targetpos
+    // The transition score may be positive or negative
+    // Transitions can be calculated via the function
+    // double log_odds_transition(query_pos_i,
+                                // target_pos_i,
+                                // query_pos_j,
+                                // target_pos_j,
+                                // hiti_logpval
+                                // hitj_logpval)
+
+    // By default, hits[start:end] is sorted in ascending order of target_pos
+    // although there will never be two hits with the same target pos AND query pos
+    // there may be hits with the same target pos or the same query pos
+
+    // Write the code here.
 
     return 0;
 }
