@@ -4,6 +4,21 @@
 #include <stdint.h>
 #include <math.h>
 #include <float.h>
+#include <stdint.h>
+
+static inline void ftz_enable(void)
+{
+#if defined(__SSE2__)
+    #include <immintrin.h>
+    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#elif defined(__aarch64__)
+    uint64_t fpcr;
+    __asm__ volatile ("mrs %0, fpcr" : "=r"(fpcr));
+    fpcr |= 1ULL << 24;          /* FZ bit */
+    __asm__ volatile ("msr fpcr, %0" :: "r"(fpcr));
+#endif
+}
 
 #define OUTPUT_BUF_SIZE     (1 << 25)
 #define TID_TO_SEQID(x)     ((x >> 32))
@@ -26,8 +41,8 @@ typedef struct {
 typedef struct {
     FILE        *out;
 
-    double       filter_1_logpval_threshold;
-    double       filter_2_logpval_threshold;
+    double      filter_1_logpval_threshold;
+    double      filter_2_logpval_threshold;
 
     uint64_t    num_hits;
     Hit         *hits;
@@ -38,15 +53,27 @@ typedef struct {
     uint64_t    *target_name_starts;
     char        *target_names;
 
-    uint64_t       *query_lengths;
-    uint64_t       *target_lengths;
+    uint64_t    *query_lengths;
+    uint64_t    *target_lengths;
 
-    double        index_size;
-    double        hits_per_emb;
-    uint32_t     sparsity;
-    double        num_targets;
+    double      index_size;
+    double      hits_per_emb;
+    double      num_targets;
+
+    double      sparsity;
 
 } ProcessHitArgs;
+
+typedef struct {
+    uint32_t query_seq_id;
+    uint32_t target_seq_id;
+
+    uint32_t num_unique_hits;
+    uint32_t coherent_length;
+
+    double log_pval_filter_1;
+    double log_pval_filter_2;
+} QueryTargetStats;
 
 static int cmp_hit(const void *a, const void *b)
 {
@@ -227,13 +254,6 @@ uint64_t seqlist_size (uint64_t *seq_lengths, uint64_t num_lengths) {
     return total_embeddings;
 }
 
-static inline double log_binom(double n, double k) {
-    if (k > n - k) {
-        k = n - k;
-    }
-    return lgamma(n + 1.0) - lgamma(k + 1.0) - lgamma(n - k + 1.0);
-}
-
 static inline double log1mexp(double x)
 {
     return (x > LOG_HALF) ? log(-expm1(x))
@@ -244,7 +264,7 @@ static inline double log_rook(int a, int b, int k)
 {
     return  lgamma(a + 1.0) - lgamma(a - k + 1.0) +
             lgamma(b + 1.0) - lgamma(b - k + 1.0) -
-            lgamma(k + 1.0);
+            (2 * lgamma(k + 1.0));
 }
 
 static inline double log_poisson_tail(double log_lambda)
@@ -302,12 +322,14 @@ static inline double log_odds_transition(uint32_t q_i, uint32_t t_i,
  *  Filter-2 : coherent-path p-value
  * --------------------------------------------------------------------------*/
 static inline double
-logpval_from_coherent_hits(Hit      *restrict hits,
+log_pval_from_coherent_hits(Hit      *restrict hits,
                            uint64_t  start,
                            uint64_t  end,
                            uint64_t  n_rows,
                            uint64_t  n_cols)
 {
+
+   // return -1000000000.0;
     const size_t N = (size_t)(end - start);
     if (N == 0) return 0.0;                    /* empty slice → p = 1 */
 
@@ -353,86 +375,56 @@ logpval_from_coherent_hits(Hit      *restrict hits,
     }
 
     /* convert path score to Poisson tail, same as Filter-1 */
-    double log_lambda = best_score
-                        + log_rook((int)n_rows, (int)n_cols, best_len);
+    double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, best_len);
     double log_pval   = log_poisson_tail(log_lambda);
 
     if (dp != dp_st)   free(dp);
     if (plen != ln_st) free(plen);
+
     return log_pval;                       /* already log(p-value) */
 }
 
-// Filter 2 considers a path through the hits that is coherent
-static inline double losssgpval_from_coherent_hits(Hit *hits,
-                                            uint64_t start,
-                                            uint64_t end,
-                                            uint64_t query_length,
-                                            uint64_t target_length) {
-    /* the hit structure
-     * typedef struct {
-    uint32_t query_seq_id;
-    uint32_t target_seq_id;
-    uint32_t query_pos; // includes bin
-    uint32_t target_pos; // includes bin
-    double    logpval;
-} Hit;
-     * */
-    // The goal of this function is to calculate a maximal path
-    // through hits.
-    // The path is not allowed to re-use query_pos/target_pos
-    // The path is not allowed to traverse to decreasing query_pos/target_pos
-    // All transitions will have an associated log odds value that gets added to query_pos/targetpos
-    // The transition score may be positive or negative
-    // Transitions can be calculated via the function
-    // double log_odds_transition(query_pos_i,
-                                // target_pos_i,
-                                // query_pos_j,
-                                // target_pos_j,
-                                // hiti_logpval
-                                // hitj_logpval)
 
-    // By default, hits[start:end] is sorted in ascending order of target_pos
-    // although there will never be two hits with the same target pos AND query pos
-    // there may be hits with the same target pos or the same query pos
+void output_qt_pair(ProcessHitArgs      args,
+                    QueryTargetStats    qt_stats) {
 
-    // Write the code here.
+    char *query_name = &args.query_names[args.query_name_starts[qt_stats.query_seq_id]];
+    char *target_name = &args.target_names[args.target_name_starts[qt_stats.target_seq_id]];
 
-    return 0;
-}
-
-void output_qt_pair(uint32_t query_id,
-                    uint32_t target_id,
-                    double filter1_pval,
-                    double filter2_pval,
-                    ProcessHitArgs args) {
+    fprintf(args.out, "%s\t%s\t%.5e\t%.5e\t%.5e\n",
+            query_name,
+            target_name,
+            qt_stats.log_pval_filter_1,
+            qt_stats.log_pval_filter_2,
+            exp(qt_stats.log_pval_filter_2 +  log(args.num_targets))
+            );
 
 }
 
 static inline void process_hit_range(uint64_t starting_index,
                                     uint64_t ending_index,
                                     ProcessHitArgs args) {
+    QueryTargetStats hit_stats;
     uint64_t query_length = args.query_lengths[args.hits[starting_index].query_seq_id];
     uint64_t target_length = args.target_lengths[args.hits[starting_index].target_seq_id];
     // Calculate first filter pval
-    double qt_filter1_logpval = log_pval_from_independent_hits(args.hits,
+    hit_stats.log_pval_filter_1 = log_pval_from_independent_hits(args.hits,
                                                           starting_index,
                                                           ending_index,
                                                           query_length,
                                                           target_length);
-    if (qt_filter1_logpval < args.filter_1_logpval_threshold) {
-
+    if (hit_stats.log_pval_filter_1 < args.filter_1_logpval_threshold) {
         // If it passes first filter, calculate second filter pval
-        double qt_filter2_logpval = pval_from_coherent_hits(args.hits,
+        hit_stats.log_pval_filter_2 = log_pval_from_coherent_hits(args.hits,
                                                            starting_index,
                                                            ending_index,
                                                            query_length,
                                                            target_length);
-        if (qt_filter2_logpval < args.filter_2_logpval_threshold) {
+        if (hit_stats.log_pval_filter_2 < args.filter_2_logpval_threshold) {
             // Output the query target pair it passes the second filter
-            output_qt_pair(args.hits[starting_index].query_seq_id,
-                           args.hits[starting_index].target_seq_id,
-                           qt_filter1_logpval,
-                           qt_filter2_logpval, args);
+            hit_stats.query_seq_id = args.hits[starting_index].query_seq_id;
+            hit_stats.target_seq_id = args.hits[starting_index].target_seq_id;
+            output_qt_pair(args, hit_stats);
         }
     }
 }
@@ -465,10 +457,10 @@ static inline void output_index_scores_to_file(ProcessHitArgs args) {
     }
 }
 
-
-
 int main(int argc, const char** argv) {
     printf("Opening file\n");
+    ftz_enable();
+
     FILE *out = fopen(argv[1], "w");
 
     if (!out) { perror("fopen"); exit(1); }
