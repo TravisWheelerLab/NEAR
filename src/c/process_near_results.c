@@ -1,51 +1,56 @@
-/**
- *
- * Written by Daniel Olson on May 16th
- *
- * Program to read index scores from stdin,
- *  interpret scores as coming from a Gumbel distribution,
- *      combine query->target scores,
- *      output results to a file.
- *
- */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
-#include "gumbel_parameters.h"
-
 #include <float.h>
 
-/**
- * Compute log(1 - exp(x)) in a numerically stable way for x <= 0.
- *
- * For x == 0, returns -INFINITY (log(0)).
- * For x <= ln(0.5), uses log1p(-exp(x)).
- * For ln(0.5) < x < 0, uses log(-expm1(x)).
- * For x > 0, returns NAN.
- */
-
-
-/// Buffer size for file I/O (32 MiB)
 #define OUTPUT_BUF_SIZE   (1 << 25)
-/// Mask to extract high 32 bits (sequence ID
-#define SEQ_LABEL_MASK    0xFFFFFFFF00000000ULL
-/// Mask for stat bin
-#define STAT_BIN_MASK     0x7F
+#define TID_TO_SEQID(x)         ((x >> 32) )
+#define TID_TO_BIN(x)           (x & 0x7F)
+#define TID_TO_POS(x)           ((x & 0xFFFFFFFF) >> 7)
+
+#define LOG_LAM_SMALL  (-10.0)
+#define LOG_LAM_LARGE    50.0
+#define LOG_HALF       (-0.6931471805599453)
 
 typedef struct {
     uint32_t query_seq_id;
     uint32_t target_seq_id;
-    uint32_t query_pos;
-    uint32_t target_pos;
-    float    score;
-} IndexScore;
+    uint32_t query_pos; // includes bin
+    uint32_t target_pos; // includes bin
+    double    logpval;
+} Hit;
 
-static int cmp_idx(const void *a, const void *b)
+typedef struct {
+    FILE        *out;
+
+    double       filter_1_logpval_threshold;
+    double       filter_2_logpval_threshold;
+
+    uint64_t    num_hits;
+    Hit         *hits;
+
+    uint64_t    *query_name_starts;
+    char        *query_names;
+
+    uint64_t    *target_name_starts;
+    char        *target_names;
+
+    uint64_t       *query_lengths;
+    uint64_t       *target_lengths;
+
+    double        index_size;
+    double        hits_per_emb;
+    uint32_t     sparsity;
+    double        num_targets;
+
+} ProcessHitArgs;
+
+static int cmp_hit(const void *a, const void *b)
 {
-    const IndexScore *pa = a;
-    const IndexScore *pb = b;
+    const Hit *pa = a;
+    const Hit *pb = b;
 
     if (pa->query_seq_id  < pb->query_seq_id)  return -1;
     if (pa->query_seq_id  > pb->query_seq_id)  return  1;
@@ -59,12 +64,7 @@ static int cmp_idx(const void *a, const void *b)
     return 0;
 }
 
-static inline float gumbel_r_cdf(float loc, float inverse_scale, float x) {
-    float z = (x - loc) * inverse_scale;
-    return expf(-expf(-z));
-}
-
-static inline uint64_t get_name_list_from_pipe(char** name_list_ptr, uint64_t** start_list_ptr, uint64_t**seq_lengths_ptr) {
+static inline uint64_t get_seq_list_from_pipe(char** name_list_ptr, uint64_t** start_list_ptr, uint64_t**seq_lengths_ptr) {
     uint64_t num_names;
     uint64_t string_size;
 
@@ -128,19 +128,8 @@ static inline uint64_t get_name_list_from_pipe(char** name_list_ptr, uint64_t** 
     return num_names;
 }
 
-// Note, this uses the same memory
-static inline float convert_lengths_to_scores(uint64_t *seq_lengths, uint64_t num_lengths) {
-    float *scores = (float*)seq_lengths;
-    float total_embeddings = 0;
-    for (uint64_t i = 0; i < num_lengths; ++i) {
-        total_embeddings += seq_lengths[i];
-        scores[i] = seq_lengths[i];
-    }
-    return total_embeddings;
-}
-
-static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, int hits_per_query) {
-    const float score_penalty = log2f(0.5);
+static inline uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
+    const double score_penalty = log2f(0.5);
 // Read the number of queries and calculate the number of hits
     uint64_t num_queries;
     if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1) {
@@ -150,16 +139,16 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     uint64_t num_hits = hits_per_query * num_queries;
 
 /* allocate */
-    IndexScore *index_scores = malloc(num_hits * sizeof(IndexScore));
+    Hit *hits = malloc(num_hits * sizeof(Hit));
     uint64_t    *buf          = malloc(num_hits * sizeof(uint64_t));
-    if (!index_scores || !buf) {
+    if (!hits || !buf) {
         perror("malloc");
-        free(index_scores);
+        free(hits);
         free(buf);
         exit(1);
     }
 
-    *index_score_ptr = index_scores;
+    *hit_list_ptr = hits;
 
     size_t count;
 /* read query‐labels (packed: high 32 bits = seq_id) */
@@ -167,15 +156,15 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     if (count != num_queries) {
         fprintf(stderr, "Expected %llu query labels, got %zu\n",
                 (unsigned long long)num_queries, count);
-        free(index_scores); free(buf);
+        free(hits); free(buf);
         exit(1);
     }
     for (size_t i = 0; i < num_queries; ++i) {
-        uint32_t query_seq_id = (buf[i] & SEQ_LABEL_MASK) >> 32;
+        uint32_t query_seq_id = TID_TO_SEQID(buf[i]);
         uint32_t query_pos = (uint32_t)(buf[i]);
         for (size_t j = (i*hits_per_query); j < (i*hits_per_query) + hits_per_query; ++j) {
-            index_scores[j].query_seq_id  = query_seq_id;
-            index_scores[j].query_pos = query_pos;
+            hits[j].query_seq_id  = query_seq_id;
+            hits[j].query_pos = query_pos;
         }
 
     }
@@ -185,174 +174,196 @@ static inline uint64_t get_index_scores_from_pipe(IndexScore **index_score_ptr, 
     if (count != num_hits) {
         fprintf(stderr, "Expected %llu target labels, got %zu\n",
                 (unsigned long long)num_hits, count);
-        free(index_scores); free(buf);
+        free(hits); free(buf);
         exit(1);
     }
     for (size_t i = 0; i < num_hits; ++i) {
-        uint32_t target_seq_id = (buf[i] & SEQ_LABEL_MASK) >> 32;
+        uint32_t target_seq_id = TID_TO_SEQID(buf[i]);
         uint32_t target_pos = (uint32_t)(buf[i]);
-        index_scores[i].target_seq_id = target_seq_id;
-        index_scores[i].target_pos = target_pos;
+        hits[i].target_seq_id = target_seq_id;
+        hits[i].target_pos = target_pos;
     }
 
-/* read raw float scores into same buffer */
-    float *fbuf = (float*)buf;
-    count = fread(fbuf, sizeof(float), num_hits, stdin);
+/* read raw double scores into same buffer */
+    double *fbuf = (double*)buf;
+    count = fread(fbuf, sizeof(double), num_hits, stdin);
     if (count != num_hits) {
         fprintf(stderr, "Expected %llu scores, got %zu\n",
                 (unsigned long long)num_hits, count);
-        free(index_scores); free(buf);
+        free(hits); free(buf);
         exit(1);
     }
 /* convert to log2 E‐values and sort per query block */
-    uint64_t last_query = index_scores[0].query_seq_id;
+    uint64_t last_query = hits[0].query_seq_id;
     size_t   query_start = 0;
     for (size_t i = 0; i < num_hits; ++i) {
-        index_scores[i].score = fbuf[i];
+        hits[i].logpval = fbuf[i];
 /* when query ID changes, sort the last block */
-        if (index_scores[i].query_seq_id != last_query) {
-            qsort(&index_scores[query_start],
+        if (hits[i].query_seq_id != last_query) {
+            qsort(&hits[query_start],
                   i - query_start,
-                  sizeof(IndexScore),
-                  cmp_idx);
+                  sizeof(Hit),
+                  cmp_hit);
             query_start = i;
-            last_query  = index_scores[i].query_seq_id;
+            last_query  = hits[i].query_seq_id;
         }
     }
 /* Sort the last block */
-    qsort(&index_scores[query_start],
+    qsort(&hits[query_start],
           num_hits - query_start,
-          sizeof(IndexScore),
-          cmp_idx);
+          sizeof(Hit),
+          cmp_hit);
 
     free(buf);
     return num_hits;
 }
 
-static inline float log1mexp(float x) {
-    const float LN_HALF = -0.6931471805599453f;  /* ln(0.5) */
+uint64_t seqlist_size (uint64_t *seq_lengths, uint64_t num_lengths) {
+    uint64_t total_embeddings = 0;
+    for (uint64_t i = 0; i < num_lengths; ++i) {
+        total_embeddings += seq_lengths[i];
+    }
+    return total_embeddings;
+}
 
-    if (x == 0.0f) {
-        return -INFINITY;
-    } else if (x <= LN_HALF) {
-        return log1p(-expf(x));
-    } else if (x < 0.0f) {
-        return logf(-expm1f(x));
-    } else {
-        return NAN;
+static inline double log_binom(double n, double k) {
+    if (k > n - k) {
+        k = n - k;
+    }
+    return lgamma(n + 1.0) - lgamma(k + 1.0) - lgamma(n - k + 1.0);
+}
+
+static inline double log1mexp(double x)
+{
+    return (x > LOG_HALF) ? log(-expm1(x))
+                          : log1p(-exp(x));
+}
+
+static inline double log_rook(int a, int b, int k)
+{
+    return  lgamma(a + 1.0) - lgamma(a - k + 1.0) +
+            lgamma(b + 1.0) - lgamma(b - k + 1.0) -
+            lgamma(k + 1.0);
+}
+
+static inline double log_poisson_tail(double log_lambda)
+{
+    if (log_lambda <= LOG_LAM_SMALL)                 /* tiny lambda */
+        return log_lambda;                           /* log p ~ log lambda        */
+
+    if (log_lambda >= LOG_LAM_LARGE)                 /* huge lambda */
+        return 0.0;                                 /* p ~ 1, log p ~ 0     */
+
+    double lambda = exp(log_lambda);                 /* safe: lambda < e^50 */
+    return log1mexp(-lambda);
+}
+
+// Filter 1 treats hits as independent
+double log_pval_from_independent_hits(const Hit *hits,
+                                      uint64_t   start,
+                                      uint64_t   end,
+                                      int        n_rows,   /* a  */
+                                      int        n_cols)   /* b  */
+{
+    /* keep only the rarest hit per target */
+    uint32_t last_tid      = hits[start].target_pos;
+    double   tid_best_logp = hits[start].logpval;
+    double   logp_sum      = tid_best_logp;
+    int      nhits         = 1;
+
+    for (uint64_t i = start + 1; i < end; ++i) {
+        if (hits[i].target_pos == last_tid) {            /* same target */
+            if (hits[i].logpval < tid_best_logp) {
+                logp_sum      += hits[i].logpval - tid_best_logp;
+                tid_best_logp  = hits[i].logpval;
+            }
+        } else {                                         /* new target  */
+            last_tid        = hits[i].target_pos;
+            tid_best_logp   = hits[i].logpval;
+            logp_sum       += tid_best_logp;
+            ++nhits;
+        }
+    }
+
+    double log_lambda = logp_sum + log_rook(n_rows, n_cols, nhits);
+    return log_poisson_tail(log_lambda);
+}
+
+// Filter 2 only considers the maximum logpval for coherent hits
+static inline double pval_from_coherent_hits(Hit *hits,
+                                            uint64_t start,
+                                            uint64_t end,
+                                            uint64_t query_length,
+                                            uint64_t target_length) {
+
+    return 0;
+}
+
+void output_qt_pair(uint32_t query_id,
+                    uint32_t target_id,
+                    double filter1_pval,
+                    double filter2_pval,
+                    ProcessHitArgs args) {
+
+}
+
+static inline void process_hit_range(uint64_t starting_index,
+                                    uint64_t ending_index,
+                                    ProcessHitArgs args) {
+    uint64_t query_length = args.query_lengths[args.hits[starting_index].query_seq_id];
+    uint64_t target_length = args.target_lengths[args.hits[starting_index].target_seq_id];
+    // Calculate first filter pval
+    double qt_filter1_logpval = log_pval_from_independent_hits(args.hits,
+                                                          starting_index,
+                                                          ending_index,
+                                                          query_length,
+                                                          target_length);
+    if (qt_filter1_logpval < args.filter_1_logpval_threshold) {
+
+        // If it passes first filter, calculate second filter pval
+        double qt_filter2_logpval = pval_from_coherent_hits(args.hits,
+                                                           starting_index,
+                                                           ending_index,
+                                                           query_length,
+                                                           target_length);
+        if (qt_filter2_logpval < args.filter_2_logpval_threshold) {
+            // Output the query target pair it passes the second filter
+            output_qt_pair(args.hits[starting_index].query_seq_id,
+                           args.hits[starting_index].target_seq_id,
+                           qt_filter1_logpval,
+                           qt_filter2_logpval, args);
+        }
     }
 }
 
-/*
-static inline p_not_see(scores) {
-    sum(norm.lognormcdf(scores))
-}
+static inline void output_index_scores_to_file(ProcessHitArgs args) {
 
-static inline p_see_scores(scores) {
-    return 1 - exp(p_not_see(scores))
-}
-*/
-static inline float score_log_nohit(float logcdf_score,
-                                    float q_len,
-                                    float t_len) {
-    // log P(no see) = q_len * t_len * logPhi(score)
-    return log1mexp(logcdf_score * q_len * t_len);
-}
+    Hit *hits = args.hits;
 
-static inline void output_index_scores_to_file(
-    FILE        *out,
-    uint64_t     num_hits,
-    IndexScore  *index_scores,
-    uint64_t    *query_name_starts,
-    char        *query_names,
-    uint64_t    *target_name_starts,
-    char        *target_names,
-    float        score_threshold,
-    float       *query_lengths,
-    float       *target_lengths,
-    float        index_size,
-    float        hits_per_emb,
-    uint32_t     sparsity,
-    float        num_targets
-) {
-    uint32_t last_query  = (uint32_t)-1;
-    uint32_t last_target = (uint32_t)-1;
-    uint32_t last_target_pos = (uint32_t)-1;
+    uint32_t last_query  = hits[0].query_seq_id;
+    uint32_t last_target = hits[0].target_seq_id;
 
-    float sum_log_nohit = 0.0f;
-    float largest_tp_score = -INFINITY;
-    uint64_t nhits = 0;
+    uint64_t starting_index = 0;
 
-    for (uint64_t i = 0; i < num_hits; ++i) {
-        uint32_t q  = index_scores[i].query_seq_id;
-        uint32_t t  = index_scores[i].target_seq_id;
-        uint32_t tp = index_scores[i].target_pos;
-        float   s  = index_scores[i].score;  // this is logcdf(score)
+    for (uint64_t i = 1; i < args.num_hits; ++i) {
+        uint32_t q  = hits[i].query_seq_id;
+        uint32_t t  = hits[i].target_seq_id;
 
         if (q != last_query || t != last_target) {
-            // flush previous
-            if (last_query != (uint32_t)-1) {
-                float exp_logp_any = expf(sum_log_nohit);
-                float e_value = exp_logp_any * (float)num_targets * (float)sparsity * query_lengths[last_query];
-                if (e_value < score_threshold) {
-                    fprintf(out, "%s\t%s\t%e\t%e\t%llu\n",
-                            &query_names[query_name_starts[last_query]],
-                            &target_names[target_name_starts[last_target]],
-                            exp_logp_any,
-                            e_value,
-                            (unsigned long long)nhits);
-                }
-            }
-            // start new pair
+            process_hit_range(starting_index, i, args);
+
+            starting_index = i;
             last_query = q;
             last_target = t;
-            last_target_pos = tp;
-            nhits = 1;
-            largest_tp_score = s;
-
-            float qlen = query_lengths[q];
-            float tlen = target_lengths[t] * sparsity;
-            sum_log_nohit = score_log_nohit(s, qlen, tlen);
-        }
-        else {
-            float qlen = query_lengths[q] - (nhits * sparsity);
-            float tlen = target_lengths[t] * sparsity - (nhits * sparsity);
-
-            if (tp == last_target_pos) {
-                // same position: keep only the max logcdf
-                if (s > largest_tp_score) {
-                    // remove old contribution
-                    sum_log_nohit -= score_log_nohit(largest_tp_score,
-                                                     qlen + sparsity,
-                                                     tlen + sparsity);
-                    // add new contribution
-                    sum_log_nohit += score_log_nohit(s, qlen + sparsity, tlen + sparsity);
-                    largest_tp_score = s;
-                }
-            } else {
-                // new hit position
-                last_target_pos = tp;
-                largest_tp_score = s;
-                sum_log_nohit += score_log_nohit(s, qlen, tlen);
-                nhits++;
-            }
         }
     }
 
     // final flush
     if (last_query != (uint32_t)-1) {
-        float exp_logp_any = expf(sum_log_nohit);
-        float e_value = exp_logp_any * (float)num_targets * (float)sparsity * query_lengths[last_query];
-        if (e_value < score_threshold) {
-            fprintf(out, "%s\t%s\t%e\t%e\t%llu\n",
-                    &query_names[query_name_starts[last_query]],
-                    &target_names[target_name_starts[last_target]],
-                    exp_logp_any,
-                    e_value,
-                    (unsigned long long)nhits);
-        }
+        process_hit_range(starting_index, args.num_hits, args);
     }
 }
+
 
 
 int main(int argc, const char** argv) {
@@ -366,12 +377,12 @@ int main(int argc, const char** argv) {
     fprintf(out, "Query\tTarget\tp-val\te-val\tHits\n");
 
     int hits_per_emb = atoi(argv[2]);
-    float score_threshold = (float)atof(argv[3]);
+    double score_threshold = (double)atof(argv[3]);
     int sparsity = atoi(argv[4]);
 
     uint64_t num_query_names;
     uint64_t num_target_names;
-    IndexScore *scores;
+    Hit *hits;
 
     char *query_names;
     char *target_names;
@@ -382,35 +393,37 @@ int main(int argc, const char** argv) {
     uint64_t *target_lengths;
 
     printf("Reading query names...\n");
-    num_query_names = get_name_list_from_pipe(&query_names, &query_name_starts, &query_lengths);
+    num_query_names = get_seq_list_from_pipe(&query_names, &query_name_starts, &query_lengths);
     printf("Reading target names...\n");
-    num_target_names = get_name_list_from_pipe(&target_names, &target_name_starts, &target_lengths);
+    num_target_names = get_seq_list_from_pipe(&target_names, &target_name_starts, &target_lengths);
 
-    convert_lengths_to_scores(query_lengths, num_query_names);
-    float index_size = convert_lengths_to_scores(target_lengths, num_target_names);
+    double index_size = seqlist_size(target_lengths, num_target_names);
+    ProcessHitArgs args;
+    args.out = out;
+    args.query_name_starts = query_name_starts;
+    args.query_names = query_names;
+    args.target_name_starts = target_name_starts;
+    args.target_names = target_names;
+    args.filter_1_logpval_threshold = score_threshold;
+    args.filter_2_logpval_threshold = score_threshold;
+    args.query_lengths = query_lengths;
+    args.target_lengths = target_lengths;
+    args.index_size = index_size;
+    args.hits_per_emb = hits_per_emb;
+    args.sparsity = sparsity;
+    args.num_targets = num_target_names;
 
     while (1) {
         printf("Reading hits...\n");
-        uint64_t num_hits = get_index_scores_from_pipe(&scores, hits_per_emb);
+        uint64_t num_hits = get_hits_from_pipe(&hits, hits_per_emb);
         if (num_hits == 0) {
             break;
         }
+        args.num_hits = num_hits;
+        args.hits = hits;
         printf("Outting hits...\n");
-        output_index_scores_to_file(out,
-                                    num_hits,
-                                    scores,
-                                    query_name_starts,
-                                    query_names,
-                                    target_name_starts,
-                                    target_names,
-                                    score_threshold,
-                                    (float *)query_lengths,
-                                    (float *)target_lengths,
-                                    index_size,
-                                    hits_per_emb,
-                                    sparsity,
-                                    num_target_names);
-        free(scores);
+        output_index_scores_to_file(args);
+        free(hits);
     }
     printf("Done.\n");
     free(query_names);
