@@ -26,8 +26,8 @@ void output_similarity(const ProcessHitArgs*    args,
     fprintf(args->out, "%s\t%s\t%.5e\t%.5e\t%.5e\n",
             query_name,
             target_name,
-            qt_sim.log_pval_filter_1,
-            qt_sim.log_pval_filter_2,
+            exp(qt_sim.log_pval_filter_1),
+            exp(qt_sim.log_pval_filter_2),
             exp(qt_sim.log_pval_filter_2 + log(args->num_target_seqs))
     );
 }
@@ -196,6 +196,7 @@ ProcessHitArgs read_arguments(int argc, const char** argv)
     args.out = fopen(argv[1], "w");
 
     if (!args.out) { perror("fopen"); exit(EXIT_FAILURE);}
+    fprintf(args.out, "Query\tTarget\tfilter1_pvalue\tfilter2_pvalue\tevalue\n");
     args.hits_per_emb = atoi(argv[2]);
 
     args.filter_1_logpval_threshold = atof(argv[3]);

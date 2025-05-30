@@ -58,7 +58,6 @@ double log_pval_from_coherent_hits(const ProcessHitArgs*    args,
                                     uint64_t                n_cols)
 {
 
-    return -1000000000.0;
     const Hit * restrict hits = args->hits;
     const size_t N = (size_t)(end - start);
     if (N == 0) return 0.0;                    /* empty slice → p = 1 */
@@ -120,6 +119,7 @@ void process_hit_range(const ProcessHitArgs*     args,
 
     uint64_t query_length = args->query_lengths[args->hits[starting_index].query_seq_id];
     uint64_t target_length = args->target_lengths[args->hits[starting_index].target_seq_id];
+
     // Calculate first filter pval
     qt_sim.log_pval_filter_1 = log_pval_from_independent_hits(args->hits,
                                                                  starting_index,
