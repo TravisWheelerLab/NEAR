@@ -9,7 +9,7 @@ void err_crash(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
-    vfprintf(stderr, fmt, args);
+    fprintf(stderr, fmt, args);
     fprintf(stderr, "\n");
 
     va_end(args);
@@ -107,7 +107,6 @@ uint64_t get_hits_from_pipe(Hit**   hit_list_ptr,
     if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1) {
         return 0;
     }
-
     uint64_t num_hits = hits_per_query * num_queries;
 
 /* allocate */
@@ -195,6 +194,7 @@ ProcessHitArgs read_arguments(int argc, const char** argv)
     if (argc != 6) err_crash("Usage: %s <output_file> <filter1 threshold> <filter2 threshold> <hits per emb>", argv[0]);
     ProcessHitArgs args;
     args.out = fopen(argv[1], "w");
+
     if (!args.out) { perror("fopen"); exit(EXIT_FAILURE);}
     args.hits_per_emb = atoi(argv[2]);
 
@@ -215,16 +215,14 @@ void read_name_lists(ProcessHitArgs *args) {
     uint64_t *query_lengths;
     uint64_t *target_lengths;
 
-    printf("Reading query names...\n");
     args->num_query_seqs = get_seq_list_from_pipe(&query_names,
                                                       &query_name_starts,
                                                       &query_lengths);
-    printf("Reading target names...\n");
     args->num_target_seqs = get_seq_list_from_pipe(&target_names,
                                                        &target_name_starts,
                                                        &target_lengths);
 
-    args->index_size = seqlist_size(args->target_lengths, args->num_target_seqs);
+
     args->query_names = query_names;
     args->target_names = target_names;
     args->query_name_starts = query_name_starts;
@@ -233,4 +231,16 @@ void read_name_lists(ProcessHitArgs *args) {
     args->target_lengths = target_lengths;
     args->n_threads = 1;
     args->thread_id = 0;
+    args->index_size = seqlist_size(args->target_lengths, args->num_target_seqs);
+
+    args->dp_st = (double *)malloc(sizeof(double) * DP_STACK_LIM);
+    args->ln_st = (int *)malloc(sizeof(int) * DP_STACK_LIM);
+}
+
+void print_arg(ProcessHitArgs args) {
+    printf("num hits %llu \n", args.num_hits);
+    printf("num query %llu \n", args.num_query_seqs);
+    printf("num target %llu \n", args.num_target_seqs);
+    printf("index size %llu \n", args.index_size);
+    printf("hits per emb %u \n", args.hits_per_emb);
 }

@@ -16,7 +16,7 @@
 #define TID_TO_SEQID(x)     ((x >> 32))
 #define DP_STACK_LIM        1048576
 #define TID_TO_BIN(x)       (x & 0x7F)
-#define TID_TO_POS(x)       ((x & 0xFFFFFFFF) >> 7)
+#define TID_TO_POS(x)       (x & 0xFFFFFFFF)
 
 #define LOG_LAM_SMALL       (-10.0)
 #define LOG_LAM_LARGE       50.0
@@ -51,6 +51,9 @@ typedef struct {
 
     uint64_t            num_hits;
     const Hit           *hits;
+
+    double              *dp_st;
+    int                 *ln_st;
 
     uint64_t            num_query_seqs;
     const uint64_t      *query_name_starts;

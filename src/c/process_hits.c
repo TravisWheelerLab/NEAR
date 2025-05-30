@@ -33,7 +33,6 @@ double log_pval_from_independent_hits(const Hit* restrict   hits,
         }
     }
 
-    printf("%f\n", logp_sum);
     double log_lambda = logp_sum + log_rook(n_rows, n_cols, nhits);
     return log_poisson_tail(log_lambda);
 }
@@ -52,7 +51,7 @@ double log_odds_transition(uint32_t q_i,
 /* --------------------------------------------------------------------------
  *  Filter-2 : coherent-path p-value
  * --------------------------------------------------------------------------*/
-double log_pval_from_coherent_hits( const Hit* restrict     hits,
+double log_pval_from_coherent_hits(const ProcessHitArgs*    args,
                                     uint64_t                start,
                                     uint64_t                end,
                                     uint64_t                n_rows,
@@ -60,14 +59,14 @@ double log_pval_from_coherent_hits( const Hit* restrict     hits,
 {
 
     return -1000000000.0;
+    const Hit * restrict hits = args->hits;
     const size_t N = (size_t)(end - start);
     if (N == 0) return 0.0;                    /* empty slice → p = 1 */
 
     /* ---- scratch, stack-backed when N ≤ 1024 ------------------------ */
-    double dp_st [DP_STACK_LIM];
-    int    ln_st [DP_STACK_LIM];
-    double *dp   = (N <= DP_STACK_LIM) ? dp_st : (double *)malloc(N*sizeof(*dp));
-    int    *plen = (N <= DP_STACK_LIM) ? ln_st : (int    *)malloc(N*sizeof(*plen));
+
+    double *dp   = (N <= DP_STACK_LIM) ? args->dp_st : (double *)malloc(N*sizeof(*dp));
+    int    *plen = (N <= DP_STACK_LIM) ? args->ln_st : (int    *)malloc(N*sizeof(*plen));
 
     double best_score = hits[start].logpval;
     int    best_len   = 1;
@@ -108,8 +107,8 @@ double log_pval_from_coherent_hits( const Hit* restrict     hits,
     double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, best_len);
     double log_pval   = log_poisson_tail(log_lambda);
 
-    if (dp != dp_st)   free(dp);
-    if (plen != ln_st) free(plen);
+    if (dp != args->dp_st)   free(dp);
+    if (plen != args->ln_st) free(plen);
 
     return log_pval;                       /* already log(p-value) */
 }
@@ -118,6 +117,7 @@ void process_hit_range(const ProcessHitArgs*     args,
                                      uint64_t           starting_index,
                                      uint64_t           ending_index) {
     QueryTargetSimilarity qt_sim;
+
     uint64_t query_length = args->query_lengths[args->hits[starting_index].query_seq_id];
     uint64_t target_length = args->target_lengths[args->hits[starting_index].target_seq_id];
     // Calculate first filter pval
@@ -128,7 +128,7 @@ void process_hit_range(const ProcessHitArgs*     args,
                                                                  target_length);
     if (qt_sim.log_pval_filter_1 < args->filter_1_logpval_threshold) {
         // If it passes first filter, calculate second filter pval
-        qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(args->hits,
+        qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(args,
                                                                   starting_index,
                                                                   ending_index,
                                                                   query_length,
@@ -139,9 +139,6 @@ void process_hit_range(const ProcessHitArgs*     args,
             qt_sim.target_seq_id = args->hits[starting_index].target_seq_id;
             output_similarity(args, qt_sim);
         }
-    }
-    else {
-    printf("Rejected %f\n", qt_sim.log_pval_filter_1);
     }
 }
 
@@ -166,7 +163,6 @@ void process_hits(ProcessHitArgs args) {
             last_target = t;
         }
     }
-
     // final flush
     if (last_query != (uint32_t)-1) {
         process_hit_range(&args, starting_index, args.num_hits);
