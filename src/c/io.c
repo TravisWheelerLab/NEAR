@@ -32,6 +32,15 @@ void output_similarity(const ProcessHitArgs*    args,
     );
 }
 
+void get_doubles_from_pipe(double* values,
+                            uint64_t num_values) {
+    uint64_t values_read = 0;
+    if (fread(values, sizeof(double), 1, stdin) != num_values) {
+        fprintf(stderr, "Failed to read doubles\n");
+        exit(1);
+    }
+}
+
 uint64_t get_seq_list_from_pipe(char**      name_list_ptr,
                                 uint64_t**  start_list_ptr,
                                 uint64_t**  seq_lengths_ptr) {
@@ -205,7 +214,6 @@ ProcessHitArgs read_arguments(int argc, const char** argv)
 
     return args;
 }
-
 
 void read_name_lists(ProcessHitArgs *args) {
     char *query_names;
