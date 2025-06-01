@@ -58,10 +58,6 @@ with np.load(sys.argv[1], allow_pickle=True) as data:
     tnames=list(data['tnames'])
     qnames=list(data['qnames'])
 
-
-qpos = queries & 0x7F
-tpos = targets & 0x7F
-
 scores = scores.astype(np.float64)
 
 
