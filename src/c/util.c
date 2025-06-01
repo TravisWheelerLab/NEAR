@@ -5,19 +5,6 @@
 #include "util.h"
 #include "types.h"
 
-void ftz_enable(void) {
-#if defined(__SSE2__)
-#include <immintrin.h>
-  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-#elif defined(__aarch64__)
-  uint64_t fpcr;
-  __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
-  fpcr |= 1ULL << 24; /* FZ bit */
-  __asm__ volatile("msr fpcr, %0" ::"r"(fpcr));
-#endif
-}
-
 double log1mexp(double x) {
   return (x > LOG_HALF) ? log(-expm1(x)) : log1p(-exp(x));
 }
@@ -36,12 +23,6 @@ double log_poisson_tail(double log_lambda) {
 
   double lambda = exp(log_lambda); /* safe: lambda < e^50 */
   return log1mexp(-lambda);
-}
-
-static inline double genpareto_logsf(double x, double loc, double scale,
-                                     double shape) {
-  x = (x - loc) / scale;
-  x = log(1 + (x * shape)) * (-1.0 / shape) return x;
 }
 
 uint64_t seqlist_size(const uint64_t *seq_lengths, uint64_t num_lengths) {

@@ -196,9 +196,10 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 }
 
 ProcessHitArgs read_arguments(int argc, const char **argv) {
-  if (argc != 8)
-    err_crash("Usage: %s <output_file> <filter1 threshold> <filter2 threshold> "
-              "<hits per emb> <num_stats_bins> <flat_log_addition>\n",
+  if (argc != 7)
+    err_crash("Recieved %i args.\n Usage: %s <output_file> <num_hits> <filter1 threshold> <filter2 threshold> <sparsity> "
+              "<num_stats_bins> <flat_log_addition>\n",
+              argc,
               argv[0]);
   ProcessHitArgs args;
   args.out = fopen(argv[1], "w");
@@ -220,11 +221,11 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
 
   args.genpareto_locs = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
   args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
-  args.genpareto_shape = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
+  args.genpareto_shapes = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
   args.expected_log_cosine_dvg = (double *)malloc(sizeof(double) * args.num_stat_bins);
   if (!args.genpareto_locs    ||
       !args.genpareto_scales  ||
-      !args.genpareto_shape   ||
+      !args.genpareto_shapes   ||
       !args.expected_log_cosine_dvg)
   {
     perror("malloc");
