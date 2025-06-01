@@ -31,7 +31,7 @@ void output_similarity(const ProcessHitArgs *args,
 
 void get_doubles_from_pipe(double *values, uint64_t num_values) {
   uint64_t values_read = 0;
-  if (fread(values, sizeof(double), 1, stdin) != num_values) {
+  if (fread(values, sizeof(double), num_values, stdin) != num_values) {
     fprintf(stderr, "Failed to read doubles\n");
     exit(1);
   }
