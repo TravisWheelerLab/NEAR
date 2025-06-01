@@ -49,7 +49,7 @@ loc = np.array(loc).astype(np.float64)
 scale = np.array(scale).astype(np.float64)
 shape = np.array(shape).astype(np.float64)
 
-angle_divergence = np.load('/home/danielolson/expected_angle_deviation.npy')
+angle_divergence = np.load('/home/danielolson/expected_angle_deviation.npy').astype(np.float64)
 
 with np.load(sys.argv[1], allow_pickle=True) as data:
     scores=data['scores'][:100000]
