@@ -1,30 +1,9 @@
 import numpy as np
 import sys
 import struct
-from scipy.stats import norm, expon, laplace
-def log1mexp(x: np.ndarray) -> np.ndarray:
-    """
-    Compute log(1 - exp(x)) in a numerically stable way for x <= 0.
-    """
-    x = x.astype(np.float64)
-    thresh = -0.6931471805599453  # ln(0.5)
-    out = np.empty_like(x)
 
-    # 1) x == 0 => log(1 - 1) = -inf
-    zero_mask = (x == 0)
-    out[zero_mask] = -np.inf
 
-    # 2) x <= ln(0.5): safe to use log1p
-    mask1 = (x <= thresh) & ~zero_mask
-    out[mask1] = np.log1p(-np.exp(x[mask1]))
-
-    # 3) ln(0.5) < x < 0: use expm1
-    mask2 = (x > thresh) & (x < 0)
-    out[mask2] = np.log(-np.expm1(x[mask2]))
-
-    return out
-
-with np.load('/home/danielolson/gpd_dist_0.001.npz') as data:
+with np.load(sys.argv[1]) as data:
     rloc = data['threshold']
     rscale =  data['scale']
     rshape = data['xi']
@@ -49,33 +28,53 @@ loc = np.array(loc).astype(np.float64)
 scale = np.array(scale).astype(np.float64)
 shape = np.array(shape).astype(np.float64)
 
-angle_divergence = np.load('/home/danielolson/expected_angle_deviation.npy').astype(np.float64)
+angle_divergence = np.load(sys.argv[2]).astype(np.float64)
 
-with np.load(sys.argv[1], allow_pickle=True) as data:
-    scores=data['scores'][:100000]
-    queries=data['qids'][:100000]
-    targets=data['tids'][:100000]
+with np.load(sys.argv[3], allow_pickle=True) as data:
+    scores=data['scores']
+    queries=data['qids']
+    targets=data['tids']
     tnames=list(data['tnames'])
     qnames=list(data['qnames'])
 
 scores = scores.astype(np.float64)
 
 
-query_lengths = np.load(sys.argv[2])
-target_lengths = np.load(sys.argv[3])
-
-sys.stdout.buffer.write(loc.flatten().tobytes())
-sys.stdout.buffer.write(scale.flatten().tobytes())
-sys.stdout.buffer.write(shape.flatten().tobytes())
-
-sys.stdout.buffer.write(angle_divergence.tobytes())
-sys.stdout.buffer.write(struct.pack('Q', int(0)))
+query_lengths = np.load(sys.argv[4])
+target_lengths = np.load(sys.argv[5])
 
 queries = queries[:,0]
 
 query_seq_names = ('\0'.join(qnames) + '\0').encode('utf-8')
-target_seq_names = '\0'.join(tnames).encode('utf-8')
+target_seq_names = ('\0'.join(tnames) + '\0').encode('utf-8')
 
+#print(type(loc), loc.dtype, loc.size, loc.shape)
+#print(type(scale), scale.dtype, scale.size, scale.shape)
+#print(type(shape), shape.dtype, shape.size, shape.shape)
+#print("--")
+#print(type(angle_divergence), angle_divergence.dtype, angle_divergence.size, angle_divergence.shape)
+#print("--")
+#print(len(qnames))
+#print(len(query_seq_names))
+#print(len(query_lengths))
+#print("--")
+#print(len(tnames))
+#print(len(target_seq_names))
+#print(len(target_lengths))
+#print("--")
+#print(queries.shape, queries.dtype, queries.size)
+#print(targets.shape, targets.dtype, targets.size)
+#print(scores.shape, scores.dtype, scores.size)
+
+#exit(0)
+
+
+sys.stdout.buffer.write(loc.flatten().tobytes())        # send loc
+sys.stdout.buffer.write(scale.flatten().tobytes())      # send scale
+sys.stdout.buffer.write(shape.flatten().tobytes())      # send shape
+
+sys.stdout.buffer.write(angle_divergence.tobytes())     # send angle divergence (127 double)
+sys.stdout.buffer.write(struct.pack('Q', int(0))) # send 1 extra double
 
 sys.stdout.buffer.write(struct.pack('Q', len(qnames)))
 sys.stdout.buffer.write(struct.pack('Q', len(query_seq_names)))

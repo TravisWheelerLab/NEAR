@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if DEBUG == 1
+#define DPRINTF(...) printf(__VA_ARGS__)
+#else
+#define DPRINTF(...) ((void)0)
+#endif
+
 void err_crash(const char *fmt, ...);
 void output_similarity(const ProcessHitArgs *args,
                        QueryTargetSimilarity similarity);

@@ -30,7 +30,6 @@ void output_similarity(const ProcessHitArgs *args,
 }
 
 void get_doubles_from_pipe(double *values, uint64_t num_values) {
-  uint64_t values_read = 0;
   if (fread(values, sizeof(double), num_values, stdin) != num_values) {
     fprintf(stderr, "Failed to read doubles\n");
     exit(1);
@@ -46,10 +45,13 @@ uint64_t get_seq_list_from_pipe(char **name_list_ptr, uint64_t **start_list_ptr,
     fprintf(stderr, "Failed to read num_names\n");
     exit(1);
   }
+  DPRINTF("num names %llu %llX \n", num_names, num_names);
+
   if (fread(&string_size, sizeof(string_size), 1, stdin) != 1) {
     fprintf(stderr, "Failed to read size of string\n");
     exit(1);
   }
+  DPRINTF("string_size %llu %llX \n", string_size, string_size);
 
   uint64_t *start_list = malloc(sizeof(uint64_t) * (num_names + 1));
   char *name_list = malloc(sizeof(char) * (string_size + 1));
@@ -112,7 +114,9 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
   if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1) {
     return 0;
   }
+  DPRINTF("num queries %llu %llx \n", num_queries, num_queries);
   uint64_t num_hits = hits_per_query * num_queries;
+  DPRINTF("num hits %llu %llx \n", num_hits, num_hits);
 
   /* allocate */
   Hit *hits = malloc(num_hits * sizeof(Hit));
@@ -197,7 +201,9 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 
 ProcessHitArgs read_arguments(int argc, const char **argv) {
   if (argc != 8)
-    err_crash("Usage:<output_file> <num_hits> <filter1 threshold> <filter2 threshold> <sparsity> <num_stats_bins> <flat_log_addition>\n");
+    err_crash(
+        "Usage:proc <output_file> <num_hits> <filter1 threshold> <filter2 "
+        "threshold> <sparsity> <num_stats_bins> <flat_log_addition>\n");
   ProcessHitArgs args;
   args.out = fopen(argv[1], "w");
 
@@ -216,26 +222,29 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   if (args.num_stat_bins != 128)
     err_crash("Only 128 bins supported for now\n");
 
-  args.genpareto_locs = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
-  args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
-  args.genpareto_shapes = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
-  args.expected_log_cosine_dvg = (double *)malloc(sizeof(double) * args.num_stat_bins);
-  
-  if (!args.genpareto_locs    ||
-      !args.genpareto_scales  ||
-      !args.genpareto_shapes   ||
-      !args.expected_log_cosine_dvg)
-  {
+  args.genpareto_locs = (double *)malloc(sizeof(double) * args.num_stat_bins *
+                                         args.num_stat_bins);
+  args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins *
+                                           args.num_stat_bins);
+  args.genpareto_shapes = (double *)malloc(sizeof(double) * args.num_stat_bins *
+                                           args.num_stat_bins);
+  args.expected_log_cosine_dvg =
+      (double *)malloc(sizeof(double) * args.num_stat_bins);
+
+  if (!args.genpareto_locs || !args.genpareto_scales ||
+      !args.genpareto_shapes || !args.expected_log_cosine_dvg) {
     perror("malloc");
     exit(1);
   }
 
   get_doubles_from_pipe(args.genpareto_locs,
-                        args.num_stat_bins*args.num_stat_bins);
+                        args.num_stat_bins * args.num_stat_bins);
   get_doubles_from_pipe(args.genpareto_scales,
-                        args.num_stat_bins*args.num_stat_bins);
+                        args.num_stat_bins * args.num_stat_bins);
   get_doubles_from_pipe(args.genpareto_shapes,
-                        args.num_stat_bins*args.num_stat_bins);
+                        args.num_stat_bins * args.num_stat_bins);
+
+  get_doubles_from_pipe(args.expected_log_cosine_dvg, args.num_stat_bins);
 
   args.flat_log_addition = atof(argv[7]);
 
@@ -261,9 +270,10 @@ void read_name_lists(ProcessHitArgs *args) {
 
   uint64_t *query_lengths;
   uint64_t *target_lengths;
-
+  DPRINTF("Reading query list\n");
   args->num_query_seqs =
       get_seq_list_from_pipe(&query_names, &query_name_starts, &query_lengths);
+  DPRINTF("Reading target list\n");
   args->num_target_seqs = get_seq_list_from_pipe(
       &target_names, &target_name_starts, &target_lengths);
 
@@ -273,14 +283,15 @@ void read_name_lists(ProcessHitArgs *args) {
   args->target_name_starts = target_name_starts;
   args->query_lengths = query_lengths;
   args->target_lengths = target_lengths;
-  args->index_size = seqlist_size(args->target_lengths, args->num_target_seqs);
 
+  DPRINTF("Calculating seqlist size\n");
+  args->index_size = seqlist_size(args->target_lengths, args->num_target_seqs);
 }
 
 void print_arg(ProcessHitArgs args) {
-  printf("num hits %llu \n", args.num_hits);
-  printf("num query %llu \n", args.num_query_seqs);
-  printf("num target %llu \n", args.num_target_seqs);
-  printf("index size %llu \n", args.index_size);
-  printf("hits per emb %u \n", args.hits_per_emb);
+  DPRINTF("num hits %llu \n", args.num_hits);
+  DPRINTF("num query %llu \n", args.num_query_seqs);
+  DPRINTF("num target %llu \n", args.num_target_seqs);
+  DPRINTF("index size %llu \n", args.index_size);
+  DPRINTF("hits per emb %u \n", args.hits_per_emb);
 }
