@@ -25,10 +25,13 @@ typedef struct {
   uint32_t query_seq_id;
   uint32_t target_seq_id;
 
-  uint32_t query_pos;  // includes bin
-  uint32_t target_pos; // includes bin
+  uint32_t query_pos;
+  uint32_t target_pos;
 
-  double logpval;
+  uint8_t query_bin;
+  uint8_t target_bin;
+
+  double cosine_sim;
 } Hit;
 
 typedef struct {
@@ -72,6 +75,17 @@ typedef struct {
 
   int n_threads;
   int thread_id;
+  int num_stat_bins;
+
+  double flat_log_addition;
+
+  // Each of these is expected to be num_stat_bins X num_stat_bins
+  double *genpareto_locs;
+  double *genpareto_scales;
+  double *genpareto_shapes;
+
+  // Expected to be num_stat_bins
+  double *expected_log_cosine_dvg;
 
 } ProcessHitArgs;
 

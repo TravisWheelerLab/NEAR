@@ -105,7 +105,7 @@ uint64_t get_seq_list_from_pipe(char **name_list_ptr, uint64_t **start_list_ptr,
   return num_names;
 }
 
-uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
+uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 
   // Read the number of queries and calculate the number of hits
   uint64_t num_queries;
@@ -142,7 +142,8 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
     for (size_t j = (i * hits_per_query);
          j < (i * hits_per_query) + hits_per_query; ++j) {
       hits[j].query_seq_id = query_seq_id;
-      hits[j].query_pos = query_pos;
+      hits[j].query_pos = TID_TO_POS(query_pos);
+      hits[j].query_bin = TID_TO_BIN(query_pos);
     }
   }
 
@@ -158,8 +159,11 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
   for (size_t i = 0; i < num_hits; ++i) {
     uint32_t target_seq_id = TID_TO_SEQID(buf[i]);
     uint32_t target_pos = (uint32_t)(buf[i]);
+
     hits[i].target_seq_id = target_seq_id;
-    hits[i].target_pos = target_pos;
+
+    hits[i].target_pos = TID_TO_POS(target_pos);
+    hits[i].target_bin = TID_TO_BIN(target_pos);
   }
 
   /* read raw double scores into the same buffer */
@@ -176,7 +180,7 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
   uint64_t last_query = hits[0].query_seq_id;
   size_t query_start = 0;
   for (size_t i = 0; i < num_hits; ++i) {
-    hits[i].logpval = fbuf[i];
+    hits[i].cosine_sim = fbuf[i];
     /* when query ID changes, sort the last block */
     if (hits[i].query_seq_id != last_query) {
       qsort(&hits[query_start], i - query_start, sizeof(Hit), cmp_hit);
@@ -192,9 +196,9 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, int hits_per_query) {
 }
 
 ProcessHitArgs read_arguments(int argc, const char **argv) {
-  if (argc != 6)
+  if (argc != 8)
     err_crash("Usage: %s <output_file> <filter1 threshold> <filter2 threshold> "
-              "<hits per emb>",
+              "<hits per emb> <num_stats_bins> <flat_log_addition>\n",
               argv[0]);
   ProcessHitArgs args;
   args.out = fopen(argv[1], "w");
@@ -209,6 +213,43 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   args.filter_1_logpval_threshold = atof(argv[3]);
   args.filter_2_logpval_threshold = atof(argv[4]);
   args.sparsity = atoi(argv[5]);
+
+  args.num_stat_bins = atoi(argv[6]);
+  if (args.num_stat_bins != 128)
+    err_crash("Only 128 bins supported for now\n");
+
+  args.genpareto_locs = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
+  args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
+  args.genpareto_shape = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
+  args.expected_log_cosine_dvg = (double *)malloc(sizeof(double) * args.num_stat_bins);
+  if (!args.genpareto_locs    ||
+      !args.genpareto_scales  ||
+      !args.genpareto_shape   ||
+      !args.expected_log_cosine_dvg)
+  {
+    perror("malloc");
+    exit(1);
+  }
+
+  get_doubles_from_pipe(args.genpareto_locs,
+                        args.num_stat_bins*args.num_stat_bins);
+  get_doubles_from_pipe(args.genpareto_scales,
+                        args.num_stat_bins*args.num_stat_bins);
+  get_doubles_from_pipe(args.genpareto_shapes,
+                        args.num_stat_bins*args.num_stat_bins);
+
+  args.flat_log_addition = atof(argv[7]);
+
+  args.n_threads = 1;
+  args.thread_id = 0;
+
+  args.dp_st = (double *)malloc(sizeof(double) * DP_STACK_LIM);
+  args.ln_st = (int *)malloc(sizeof(int) * DP_STACK_LIM);
+
+  if (!args.dp_st || !args.ln_st) {
+    perror("malloc");
+    exit(1);
+  }
 
   return args;
 }
@@ -233,12 +274,8 @@ void read_name_lists(ProcessHitArgs *args) {
   args->target_name_starts = target_name_starts;
   args->query_lengths = query_lengths;
   args->target_lengths = target_lengths;
-  args->n_threads = 1;
-  args->thread_id = 0;
   args->index_size = seqlist_size(args->target_lengths, args->num_target_seqs);
 
-  args->dp_st = (double *)malloc(sizeof(double) * DP_STACK_LIM);
-  args->ln_st = (int *)malloc(sizeof(int) * DP_STACK_LIM);
 }
 
 void print_arg(ProcessHitArgs args) {
