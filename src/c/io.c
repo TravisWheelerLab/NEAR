@@ -220,6 +220,7 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
   args.genpareto_shapes = (double *)malloc(sizeof(double) * args.num_stat_bins * args.num_stat_bins);
   args.expected_log_cosine_dvg = (double *)malloc(sizeof(double) * args.num_stat_bins);
+  
   if (!args.genpareto_locs    ||
       !args.genpareto_scales  ||
       !args.genpareto_shapes   ||

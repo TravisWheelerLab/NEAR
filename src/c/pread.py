@@ -73,7 +73,7 @@ sys.stdout.buffer.write(scale.tobytes())
 sys.stdout.buffer.write(shape.tobytes())
 
 sys.stdout.buffer.write(angle_divergence.tobytes())
-sys.stdout.buffer.write(struct.pack('Q', 0))
+sys.stdout.buffer.write(struct.pack('Q', int(0)))
 
 queries = queries[:,0]
 
