@@ -4,7 +4,6 @@
 #include "util.h"
 
 int main(int argc, const char **argv) {
-  printf("%i argc\n", argc);
   ProcessHitArgs args = read_arguments(argc, argv);
 
   read_name_lists(&args);
