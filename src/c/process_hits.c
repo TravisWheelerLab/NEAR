@@ -7,10 +7,11 @@
 #include "util.h"
 
 double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
-  double log_pval = args->flat_log_addition;
   uint32_t stat_bin = hit->query_bin * args->num_stat_bins + hit->target_bin;
-  if (log_pval < args->genpareto_locs[stat_bin])
+  if (hit->cosine_sim < args->genpareto_locs[stat_bin])
     return 0;
+
+  double log_pval = args->flat_log_addition;
   log_pval += genpareto_logsf(hit->cosine_sim,
                               args->genpareto_locs[stat_bin],
                               args->genpareto_scales[stat_bin],
@@ -24,14 +25,14 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       uint64_t end, int n_rows, int n_cols) {
   /* keep only the rarest hit per target */
   uint32_t last_tid = hits[start].target_pos;
-  double tid_best_logp = hits[start].cosine_sim;
+  double tid_best_logp = log_pval_for_hit(&hits[start], args);
   double logp_sum = tid_best_logp;
   int nhits = 1;
 
   for (uint64_t i = start + 1; i < end; ++i) {
     double hit_logp = log_pval_for_hit(&hits[i], args);
     if (hits[i].target_pos == last_tid) { /* same target */
-      if (hit_logp < tid_best_logp) {
+      if (hit_logp < tid_best_logp) { /* better hit*/
         logp_sum += hit_logp - tid_best_logp;
         tid_best_logp = hit_logp;
       }
@@ -42,7 +43,6 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
       ++nhits;
     }
   }
-
   double log_lambda = logp_sum + log_rook(n_rows, n_cols, nhits);
   return log_poisson_tail(log_lambda);
 }
@@ -52,20 +52,23 @@ double log_odds_transition(const ProcessHitArgs *args,
                            const Hit *second_hit)
 {
   double expected_cosine_hit = args->expected_log_cosine_dvg[first_hit->query_bin] *
-                                  (second_hit->query_pos - first_hit->query_pos);
-
+                               (second_hit->query_pos - first_hit->query_pos);
   expected_cosine_hit += args->expected_log_cosine_dvg[first_hit->target_bin] *
                          (second_hit->target_pos - first_hit->target_pos);
-
   expected_cosine_hit = exp(expected_cosine_hit);
 
   uint32_t stat_bin = second_hit->query_bin * args->num_stat_bins + second_hit->target_bin;
-  double log_adjustment = -genpareto_logsf(expected_cosine_hit,
-                              args->genpareto_locs[stat_bin],
-                              args->genpareto_scales[stat_bin],
-                              args->genpareto_shapes[stat_bin]);
 
-  return log_adjustment;
+  if (expected_cosine_hit < args->genpareto_locs[stat_bin])
+    return 0;
+
+  double log_adjustment = genpareto_logsf(expected_cosine_hit,
+                                           args->genpareto_locs[stat_bin],
+                                           args->genpareto_scales[stat_bin],
+                                           args->genpareto_shapes[stat_bin]);
+  log_adjustment += args->flat_log_addition;
+
+  return -log_adjustment;
 }
 
 /* --------------------------------------------------------------------------
@@ -148,7 +151,7 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
 
   // Calculate first filter pval
   qt_sim.log_pval_filter_1 = log_pval_from_independent_hits(args,
-      args->hits, starting_index, ending_index, query_length, target_length);
+                                                            args->hits, starting_index, ending_index, query_length, target_length);
   if (qt_sim.log_pval_filter_1 < args->filter_1_logpval_threshold) {
     // If it passes first filter, calculate second filter pval
     qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(

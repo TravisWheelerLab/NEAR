@@ -48,6 +48,7 @@ queries = queries[:,0]
 query_seq_names = ('\0'.join(qnames) + '\0').encode('utf-8')
 target_seq_names = ('\0'.join(tnames) + '\0').encode('utf-8')
 
+
 #print(type(loc), loc.dtype, loc.size, loc.shape)
 #print(type(scale), scale.dtype, scale.size, scale.shape)
 #print(type(shape), shape.dtype, shape.size, shape.shape)

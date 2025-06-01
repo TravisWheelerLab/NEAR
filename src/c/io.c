@@ -141,13 +141,11 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
     exit(1);
   }
   for (size_t i = 0; i < num_queries; ++i) {
-    uint32_t query_seq_id = TID_TO_SEQID(buf[i]);
-    uint32_t query_pos = (uint32_t)(buf[i]);
     for (size_t j = (i * hits_per_query);
          j < (i * hits_per_query) + hits_per_query; ++j) {
-      hits[j].query_seq_id = query_seq_id;
-      hits[j].query_pos = TID_TO_POS(query_pos);
-      hits[j].query_bin = TID_TO_BIN(query_pos);
+      hits[j].query_seq_id = TID_TO_SEQID((buf[i]));
+      hits[j].query_pos = TID_TO_POS((buf[i]));
+      hits[j].query_bin = TID_TO_BIN((buf[i]));
     }
   }
 
@@ -161,13 +159,10 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
     exit(1);
   }
   for (size_t i = 0; i < num_hits; ++i) {
-    uint32_t target_seq_id = TID_TO_SEQID(buf[i]);
-    uint32_t target_pos = (uint32_t)(buf[i]);
 
-    hits[i].target_seq_id = target_seq_id;
-
-    hits[i].target_pos = TID_TO_POS(target_pos);
-    hits[i].target_bin = TID_TO_BIN(target_pos);
+    hits[i].target_seq_id = TID_TO_SEQID((buf[i]));
+    hits[i].target_pos = TID_TO_POS((buf[i]));
+    hits[i].target_bin = TID_TO_BIN((buf[i]));
   }
 
   /* read raw double scores into the same buffer */
@@ -294,4 +289,5 @@ void print_arg(ProcessHitArgs args) {
   DPRINTF("num target %llu \n", args.num_target_seqs);
   DPRINTF("index size %llu \n", args.index_size);
   DPRINTF("hits per emb %u \n", args.hits_per_emb);
+
 }
