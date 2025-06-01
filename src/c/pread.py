@@ -41,9 +41,9 @@ with np.load('/home/danielolson/gpd_dist_0.001.npz') as data:
         for j in range(128):
             if j > 64:
                 j = j + 1
-                loc[-1].append(rloc[i,j])
-                scale[-1].append(rscale[i,j])
-                shape[-1].append(rshape[i,j])
+            loc[-1].append(rloc[i,j])
+            scale[-1].append(rscale[i,j])
+            shape[-1].append(rshape[i,j])
 
 loc = np.array(loc).astype(np.float64)
 scale = np.array(scale).astype(np.float64)
