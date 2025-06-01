@@ -68,9 +68,9 @@ scores = scores.astype(np.float64)
 query_lengths = np.load(sys.argv[2])
 target_lengths = np.load(sys.argv[3])
 
-sys.stdout.buffer.write(loc.tobytes())
-sys.stdout.buffer.write(scale.tobytes())
-sys.stdout.buffer.write(shape.tobytes())
+sys.stdout.buffer.write(loc.flatten().tobytes())
+sys.stdout.buffer.write(scale.flatten().tobytes())
+sys.stdout.buffer.write(shape.flatten().tobytes())
 
 sys.stdout.buffer.write(angle_divergence.tobytes())
 sys.stdout.buffer.write(struct.pack('Q', int(0)))
