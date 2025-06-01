@@ -196,11 +196,10 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 }
 
 ProcessHitArgs read_arguments(int argc, const char **argv) {
+  printf("%i\n", argc);
   if (argc != 7)
-    err_crash("Recieved %i args.\n Usage: %s <output_file> <num_hits> <filter1 threshold> <filter2 threshold> <sparsity> "
-              "<num_stats_bins> <flat_log_addition>\n",
-              argc,
-              argv[0]);
+    err_crash("Recieved %i args.\n Usage:<output_file> <num_hits> <filter1 threshold> <filter2 threshold> <sparsity> <num_stats_bins> <flat_log_addition>\n",
+              argc;
   ProcessHitArgs args;
   args.out = fopen(argv[1], "w");
 
