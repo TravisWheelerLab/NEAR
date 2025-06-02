@@ -16,6 +16,7 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
                               args->genpareto_locs[stat_bin],
                               args->genpareto_scales[stat_bin],
                               args->genpareto_shapes[stat_bin]);
+
   return log_pval;
 }
 
@@ -49,23 +50,29 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
 
 double log_odds_transition(const ProcessHitArgs *args,
                            const Hit *first_hit,
-                           const Hit *second_hit)
+                           const Hit *second_hit,
+                           double *k)
 {
   double expected_cosine_hit = args->expected_log_cosine_dvg[first_hit->query_bin] *
                                (second_hit->query_pos - first_hit->query_pos);
   expected_cosine_hit += args->expected_log_cosine_dvg[first_hit->target_bin] *
                          (second_hit->target_pos - first_hit->target_pos);
   expected_cosine_hit = exp(expected_cosine_hit);
+  *k = 1.0 - expected_cosine_hit;
 
   uint32_t stat_bin = second_hit->query_bin * args->num_stat_bins + second_hit->target_bin;
 
-  if (expected_cosine_hit < args->genpareto_locs[stat_bin])
+  if (expected_cosine_hit < args->genpareto_locs[stat_bin]) {
+    *k = 1;
     return 0;
+  }
 
   double log_adjustment = genpareto_logsf(expected_cosine_hit,
                                            args->genpareto_locs[stat_bin],
                                            args->genpareto_scales[stat_bin],
                                            args->genpareto_shapes[stat_bin]);
+
+
   log_adjustment += args->flat_log_addition;
 
   return -log_adjustment;
@@ -92,6 +99,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
   double best_score = hits[start].cosine_sim;
   int best_len = 1;
+  double k_sum = 1;
 
   for (size_t i = 0; i < N; ++i) {
     const Hit *restrict hi = &hits[start + i];
@@ -110,7 +118,9 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
         continue; /* wrong col */
 
       /* passed the two filters -> valid predecessor */
-      double trans = log_odds_transition(args, hi, hj);
+      double new_k = 0;
+      double trans = log_odds_transition(args, hi, hj, &new_k);
+      k_sum += new_k;
 
       double cand = dp[j] + trans + log_pval_for_hit(hi, args);
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
@@ -129,14 +139,13 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   }
 
   /* convert path score to Poisson tail, same as Filter-1 */
-  double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, best_len);
+  double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, 1);
   double log_pval = log_poisson_tail(log_lambda);
 
   if (dp != args->dp_st)
     free(dp);
   if (plen != args->ln_st)
     free(plen);
-
   return log_pval; /* already log(p-value) */
 }
 

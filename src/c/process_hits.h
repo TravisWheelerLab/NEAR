@@ -15,7 +15,8 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
 
 double log_odds_transition(const ProcessHitArgs *args,
                            const Hit *first_hit,
-                           const Hit *second_hit);
+                           const Hit *second_hit,
+                           double *k);
 double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                    uint64_t end, uint64_t n_rows,
                                    uint64_t n_cols);
