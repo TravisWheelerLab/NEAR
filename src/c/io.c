@@ -40,6 +40,7 @@ void get_distributions_from_pipe(ProcessHitArgs *args) {
 
   uint64_t num_distribution_params = args->num_distributions *
                                      args->num_stat_bins * args->num_stat_bins;
+  DPRINTF("%llu = %llu * %llu * %llu\n", num_distribution_params, args->num_distributions, args->num_stat_bins,  args->num_stat_bins);
   args->indices_per_stat_row = args->num_distributions * args->num_stat_bins;
 
   args->flat_log_additions = malloc(sizeof(double) * args->num_distributions);
@@ -48,8 +49,6 @@ void get_distributions_from_pipe(ProcessHitArgs *args) {
   args->genpareto_shapes = malloc(sizeof(double) * num_distribution_params);
   args->genpareto_locs = malloc(sizeof(double) * num_distribution_params);
   args->genpareto_scales = malloc(sizeof(double) * num_distribution_params);
-
-  args->flat_log_additions = malloc(sizeof(double) * args->num_distributions);
   if (!args->flat_log_additions || !args->genpareto_shapes ||
       !args->genpareto_locs || !args->genpareto_scales) {
     perror("malloc");
@@ -245,8 +244,10 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   if (args.num_stat_bins != 128)
     err_crash("Only 128 bins supported for now\n");
 
+   DPRINTF("Getting distributions from pipe\n");
   get_distributions_from_pipe(&args);
 
+  DPRINTF("Getting log cosine divergence\n");
   args.expected_log_cosine_dvg =
       (double *)malloc(sizeof(double) * args.num_stat_bins);
 

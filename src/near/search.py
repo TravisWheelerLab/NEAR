@@ -2,7 +2,7 @@ from .fasta_data import FASTAData
 from .models import NEARResNet
 from .search_processor import AsyncNearResultsProcessor
 
-import tqdm
+from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 import faiss
@@ -15,7 +15,7 @@ def search_against_index(output_file_path: str,
                          index: faiss.Index,
                          query_data: FASTAData,
                          target_data: FASTAData,
-                         target_labels: np.array[np.uint64],
+                         target_labels,
                          filter1,
                          filter2,
                          sparsity,
@@ -70,7 +70,7 @@ def search_against_index(output_file_path: str,
 
     query_lengths = np.zeros(len(query_data.seqid_to_name), dtype=np.uint64)
     for length in query_data.masks_by_length.keys():
-        query_masks = query_data.masks_by_length[length].sum(-1).numpy()
+        query_masks = query_data.masks_by_length[length].sum(-1).numpy().astype(np.uint64)
         query_indices = query_data.tokenids_by_length[length][:,0] >> 32
         query_lengths[query_indices] += query_masks
 
@@ -114,16 +114,19 @@ def search_against_index(output_file_path: str,
                     embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=0, end_dim=-2)
                     embeddings = F.normalize(embeddings[batch_mask], dim=-1)
                     query_ids = token_ids[i:i+batch_size].flatten()[batch_mask]
-
+                    if len(query_ids) == 0:
+                        continue
+                    embeddings = embeddings.cpu().numpy()
                     scores, indices = index.search(embeddings, k=top_k)
                     indices = target_labels[indices]
                     near_processor.add_to_queue(query_ids, indices, scores)
+        near_processor.add_to_queue(None, None, None)
         if verbose:
             print("Search is complete.")
         while near_processor.not_done():
             if verbose:
                 print("Waiting for search processor...")
-            sleep(0.1)
+            sleep(0.5)
 
     finally:
         near_processor.finalize()

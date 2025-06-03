@@ -20,10 +20,12 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
                                   args->genpareto_locs[stat_bin],
                                   args->genpareto_scales[stat_bin],
                                   args->genpareto_shapes[stat_bin]);
+     // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
+      //log_pval, args->genpareto_locs[stat_bin], args->genpareto_scales[stat_bin], args->genpareto_shapes[stat_bin]);
+
       return log_pval;
     }
   }
-
   return 0;
 }
 
@@ -51,7 +53,9 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
       ++nhits;
     }
   }
+
   double log_lambda = logp_sum + log_rook(n_rows, n_cols, nhits);
+  //printf("%llu %llu %llu %f %f %f\n", nhits, n_rows, n_cols, logp_sum, log_lambda, log_poisson_tail(log_lambda));
   return log_poisson_tail(log_lambda);
 }
 

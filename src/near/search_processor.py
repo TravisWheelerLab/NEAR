@@ -3,11 +3,12 @@ import threading
 import subprocess
 import numpy as np
 import struct
-from fasta_data import FASTAData
+from .fasta_data import FASTAData
 from typing import Optional, Tuple
 from time import sleep
-import math
-
+from importlib.resources import files
+import os
+import sys
 
 class AsyncNearResultsProcessor:
     """Asynchronously processes NEAR search results using a C subprocess.
@@ -88,45 +89,73 @@ class AsyncNearResultsProcessor:
         self.queue.put((scores, query_ids, target_ids))
 
     def _start_process(self) -> None:
+        executable_path = str(files('near').joinpath('bin/process_near_results'))
+
+        if not os.path.exists(executable_path):
+            raise FileNotFoundError(f"Could not find executable at {executable_path}")
+        self.log_file1 = open('near_log1.txt', 'w')
+        self.log_file2 = open('near_log2.txt', 'w')
+
         self.process = subprocess.Popen(
-            ["near.process_near_results",
+            [executable_path,
              self.output_file,
              str(self.hits_per_emb),
              str(self.filter_1),
              str(self.filter_2),
              str(self.sparsity),
+             str(len(self.stats[0])),
              str(128),
-             str(len(self.stats))
              ],
             stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdout=self.log_file1,
+            stderr=self.log_file2
         )
 
         log_adds = self.stats[0]
         distributions = self.stats[1]
 
         self.process.stdin.write(log_adds.tobytes())
+        self.process.stdin.flush()
 
-        self.process.stdin.write(distributions[0].flatten().tobytes()) # Shape
+        self.process.stdin.write(distributions[0].flatten().tobytes())  # Shape
+        self.process.stdin.flush()
+
         self.process.stdin.write(distributions[1].flatten().tobytes())  # Loc
+        self.process.stdin.flush()
+
         self.process.stdin.write(distributions[2].flatten().tobytes())  # Scale
+        self.process.stdin.flush()
 
-        self.process.stdin.write(self.angle_deviation_data.tobytes())  # Scale
-
+        self.process.stdin.write(self.angle_deviation_data.tobytes())  # cosine info
+        self.process.stdin.flush()
 
         # Write the query data sequence names
         self.process.stdin.write(struct.pack('Q', len(self.query_data.seqid_to_name)))
+        self.process.stdin.flush()
+
         query_seq_names = ('\0'.join(self.query_data.seqid_to_name) + '\0').encode('utf-8')
         self.process.stdin.write(struct.pack('Q', len(query_seq_names)))
-        self.process.stdin.stdin.write(query_seq_names)
-        self.process.stdin.stdin.write(self.query_lengths.tobytes())
+        self.process.stdin.flush()
+
+        self.process.stdin.write(query_seq_names)
+        self.process.stdin.flush()
+
+        self.process.stdin.write(self.query_lengths.tobytes())
+        self.process.stdin.flush()
 
         # Write the target data sequence names
         self.process.stdin.write(struct.pack('Q', len(self.target_data.seqid_to_name)))
+        self.process.stdin.flush()
+
         target_seq_names = ('\0'.join(self.target_data.seqid_to_name) + '\0').encode('utf-8')
         self.process.stdin.write(struct.pack('Q', len(target_seq_names)))
-        self.process.stdin.stdin.write(target_seq_names)
-        self.process.stdin.stdin.write(self.target_lengths.tobytes())
+        self.process.stdin.flush()
+
+        self.process.stdin.write(target_seq_names)
+        self.process.stdin.flush()
+
+        self.process.stdin.write(self.target_lengths.tobytes())
+        self.process.stdin.flush()
 
         self._process_queue()
 
@@ -140,10 +169,18 @@ class AsyncNearResultsProcessor:
                     continue
 
                 query_ids, target_ids, scores = batch
-                query_ids, target_ids, scores = query_ids.flatten(), target_ids.flatten(), scores.flatten()
+                if query_ids is None:
+                    self.process.stdin.write(struct.pack('Q', 0))
+                    self.process.stdin.flush()
+                    self.queue.task_done()
+                    return
 
+                query_ids, target_ids, scores = query_ids.flatten(), target_ids.flatten(), scores.flatten()
                 # Write batch data to process
-                self.process_stdin.write(struct.pack('Q', len(query_ids)))
+                #print(query_ids.shape, target_ids.shape, scores.shape)
+                #print(query_ids.dtype, target_ids.dtype, scores.dtype)
+                scores = scores.astype(np.float64)
+                self.process.stdin.write(struct.pack('Q', len(query_ids)))
                 self.process.stdin.write(query_ids)
                 self.process.stdin.write(target_ids)
                 self.process.stdin.write(scores)
@@ -156,19 +193,16 @@ class AsyncNearResultsProcessor:
         finally:
             if self.process:
                 self.process.stdin.close()
-                stderr = self.process.stderr.read()
-                if self.process.wait() != 0:
-                    self.error = RuntimeError(
-                        f"Process failed: {stderr.decode()}"
-                    )
 
     def not_done(self) -> bool:
-        """Check if processing is still ongoing"""
         return self.thread.is_alive() or not self.queue.empty()
 
     def finalize(self) -> None:
         """Signal completion and wait for processing to finish"""
         self.done = True
         self.thread.join()
+        self.log_file1.close()
+        self.log_file2.close()
+
         if self.error:
             raise self.error
