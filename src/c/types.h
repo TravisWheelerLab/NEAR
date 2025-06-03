@@ -75,11 +75,13 @@ typedef struct {
 
   int n_threads;
   int thread_id;
-  int num_stat_bins;
 
-  double flat_log_addition;
+  int num_distributions;
+  int num_stat_bins;
+  int indices_per_stat_row;
 
   // Each of these is expected to be num_stat_bins X num_stat_bins
+  double *flat_log_additions;
   double *genpareto_locs;
   double *genpareto_scales;
   double *genpareto_shapes;

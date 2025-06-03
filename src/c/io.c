@@ -36,6 +36,33 @@ void get_doubles_from_pipe(double *values, uint64_t num_values) {
   }
 }
 
+void get_distributions_from_pipe(ProcessHitArgs *args) {
+
+  uint64_t num_distribution_params = args->num_distributions *
+                                     args->num_stat_bins * args->num_stat_bins;
+  args->indices_per_stat_row = args->num_distributions * args->num_stat_bins;
+
+  args->flat_log_additions = malloc(sizeof(double) * args->num_distributions);
+
+  // Memory order will be [statbin,statbin,distribution]
+  args->genpareto_shapes = malloc(sizeof(double) * num_distribution_params);
+  args->genpareto_locs = malloc(sizeof(double) * num_distribution_params);
+  args->genpareto_scales = malloc(sizeof(double) * num_distribution_params);
+
+  args->flat_log_additions = malloc(sizeof(double) * args->num_distributions);
+  if (!args->flat_log_additions || !args->genpareto_shapes ||
+      !args->genpareto_locs || !args->genpareto_scales) {
+    perror("malloc");
+    exit(1);
+  }
+
+  get_doubles_from_pipe(args->flat_log_additions, args->num_distributions);
+
+  get_doubles_from_pipe(args->genpareto_shapes, num_distribution_params);
+  get_doubles_from_pipe(args->genpareto_locs, num_distribution_params);
+  get_doubles_from_pipe(args->genpareto_scales, num_distribution_params);
+}
+
 uint64_t get_seq_list_from_pipe(char **name_list_ptr, uint64_t **start_list_ptr,
                                 uint64_t **seq_lengths_ptr) {
   uint64_t num_names;
@@ -198,7 +225,7 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   if (argc != 8)
     err_crash(
         "Usage:proc <output_file> <num_hits> <filter1 threshold> <filter2 "
-        "threshold> <sparsity> <num_stats_bins> <flat_log_addition>\n");
+        "threshold> <sparsity> <num_distributions> <num_stats_bins>\n");
   ProcessHitArgs args;
   args.out = fopen(argv[1], "w");
 
@@ -213,35 +240,17 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   args.filter_2_logpval_threshold = atof(argv[4]);
   args.sparsity = atoi(argv[5]);
 
-  args.num_stat_bins = atoi(argv[6]);
+  args.num_distributions = atoi(argv[6]);
+  args.num_stat_bins = atoi(argv[7]);
   if (args.num_stat_bins != 128)
     err_crash("Only 128 bins supported for now\n");
 
-  args.genpareto_locs = (double *)malloc(sizeof(double) * args.num_stat_bins *
-                                         args.num_stat_bins);
-  args.genpareto_scales = (double *)malloc(sizeof(double) * args.num_stat_bins *
-                                           args.num_stat_bins);
-  args.genpareto_shapes = (double *)malloc(sizeof(double) * args.num_stat_bins *
-                                           args.num_stat_bins);
+  get_distributions_from_pipe(&args);
+
   args.expected_log_cosine_dvg =
       (double *)malloc(sizeof(double) * args.num_stat_bins);
 
-  if (!args.genpareto_locs || !args.genpareto_scales ||
-      !args.genpareto_shapes || !args.expected_log_cosine_dvg) {
-    perror("malloc");
-    exit(1);
-  }
-
-  get_doubles_from_pipe(args.genpareto_locs,
-                        args.num_stat_bins * args.num_stat_bins);
-  get_doubles_from_pipe(args.genpareto_scales,
-                        args.num_stat_bins * args.num_stat_bins);
-  get_doubles_from_pipe(args.genpareto_shapes,
-                        args.num_stat_bins * args.num_stat_bins);
-
   get_doubles_from_pipe(args.expected_log_cosine_dvg, args.num_stat_bins);
-
-  args.flat_log_addition = atof(argv[7]);
 
   args.n_threads = 1;
   args.thread_id = 0;
