@@ -5,7 +5,11 @@ import os
 # Define the C extension with optimization flags
 c_extension = Extension(
     'near.process_near_results',
-    sources=['src/c/process_near_results.c'],
+    sources=['src/c/main.c',
+             'src/c/types.c',
+             'src/c/io.c',
+             'src/c/process_hits.c',
+             'src/c/util.c'],
     include_dirs=['src/c'],
     extra_compile_args=['-O3'],
 )
