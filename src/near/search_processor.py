@@ -33,24 +33,32 @@ class AsyncNearResultsProcessor:
     def __init__(self, output_file: str,
                         query_data: FASTAData,
                         target_data: FASTAData,
+                        query_lengths,
+                        target_lengths,
                         hits_per_emb: int,
                         filter_1,
                         filter_2,
                         sparsity,
                         angle_deviation_data,
-                        stats,
-                        embeddings_per_target: np.array):
+                        stats):
 
         self.output_file = output_file
+
         self.query_data = query_data
         self.target_data = target_data
+
+        self.query_lengths = query_lengths
+        self.target_lengths = target_lengths
+
         self.hits_per_emb = hits_per_emb
+
         self.filter_1 = filter_1
         self.filter_2 = filter_2
+
         self.sparsity = sparsity
+
         self.angle_deviation_data = angle_deviation_data
         self.stats = stats
-        self.embeddings_per_target = embeddings_per_target
 
         self.queue = queue.Queue()
         self.done = False
@@ -81,30 +89,44 @@ class AsyncNearResultsProcessor:
 
     def _start_process(self) -> None:
         self.process = subprocess.Popen(
-            ["near.process_near_results", self.output_file,
+            ["near.process_near_results",
+             self.output_file,
              str(self.hits_per_emb),
              str(self.filter_1),
              str(self.filter_2),
              str(self.sparsity),
              str(128),
-             str(math.log(1e-3)),
-             str(self.hits_per_emb)],
+             str(len(self.stats))
+             ],
             stdin=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
+
+        log_adds = self.stats[0]
+        distributions = self.stats[1]
+
+        self.process.stdin.write(log_adds.tobytes())
+
+        self.process.stdin.write(distributions[0].flatten().tobytes()) # Shape
+        self.process.stdin.write(distributions[1].flatten().tobytes())  # Loc
+        self.process.stdin.write(distributions[2].flatten().tobytes())  # Scale
+
+        self.process.stdin.write(self.angle_deviation_data.tobytes())  # Scale
+
 
         # Write the query data sequence names
         self.process.stdin.write(struct.pack('Q', len(self.query_data.seqid_to_name)))
         query_seq_names = ('\0'.join(self.query_data.seqid_to_name) + '\0').encode('utf-8')
         self.process.stdin.write(struct.pack('Q', len(query_seq_names)))
         self.process.stdin.stdin.write(query_seq_names)
+        self.process.stdin.stdin.write(self.query_lengths.tobytes())
 
         # Write the target data sequence names
         self.process.stdin.write(struct.pack('Q', len(self.target_data.seqid_to_name)))
-        target_seq_names = '\0'.join(self.target_data.seqid_to_name).encode('utf-8')
+        target_seq_names = ('\0'.join(self.target_data.seqid_to_name) + '\0').encode('utf-8')
         self.process.stdin.write(struct.pack('Q', len(target_seq_names)))
         self.process.stdin.stdin.write(target_seq_names)
-
+        self.process.stdin.stdin.write(self.target_lengths.tobytes())
 
         self._process_queue()
 

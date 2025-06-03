@@ -19,7 +19,8 @@ def search_against_index(output_file_path: str,
                          filter1,
                          filter2,
                          sparsity,
-                         edge_start=20,
+                         angle_deviation_data,
+                         stats,
                          device: str = "cuda",
                          residues_per_batch: int = 512*1024,
                          verbose=False,
@@ -51,22 +52,6 @@ def search_against_index(output_file_path: str,
     verbose : bool
         If true progress will be output and a progress bar will be displayed
     """
-
-    # Create the AsyncNearResultsProcessor
-    if verbose:
-        print("Creating NEAR search results processor...")
-    try:
-        embeddings_per_target = np.bincount(target_labels >> 32, minlength=target_data.num_sequences)
-
-        near_processor = AsyncNearResultsProcessor(output_file_path,
-                                                   query_data,
-                                                   target_data,
-                                                   target_labels,
-                                                   embeddings_per_target)
-    except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
-        sys.exit(1)
-
     # Prepare the model / move the model
     if verbose:
         print(f"Moving model to {device}...")
@@ -75,10 +60,43 @@ def search_against_index(output_file_path: str,
     model.half()
     model.eval()
 
+    if verbose:
+        print("Calculating target lengths...")
+
+    target_lengths = np.bincount((target_labels >> 32).astype(np.int64))
+
+    if verbose:
+        print("Calculating query lengths...")
+
+    query_lengths = np.zeros(len(query_data.seqid_to_name), dtype=np.uint64)
+    for length in query_data.masks_by_length.keys():
+        query_masks = query_data.masks_by_length[length].sum(-1).numpy()
+        query_indices = query_data.tokenids_by_length[length][:,0] >> 32
+        query_lengths[query_indices] += query_masks
+
     lengths = query_data.tokens_by_length.keys()
     if verbose:
         print(f"Searching sequences...")
         lengths = tqdm(lengths)
+
+    # Create the AsyncNearResultsProcessor
+    if verbose:
+        print("Creating NEAR search results processor...")
+    try:
+        near_processor = AsyncNearResultsProcessor(output_file_path,
+                                                   query_data,
+                                                   target_data,
+                                                   query_lengths,
+                                                   target_lengths,
+                                                   top_k,
+                                                   filter1,
+                                                   filter2,
+                                                   sparsity,
+                                                   angle_deviation_data,
+                                                   stats,)
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         for length in lengths:
@@ -99,7 +117,7 @@ def search_against_index(output_file_path: str,
 
                     scores, indices = index.search(embeddings, k=top_k)
                     indices = target_labels[indices]
-                    near_processor.add_to_queue(scores, indices, query_ids)
+                    near_processor.add_to_queue(query_ids, indices, scores)
         if verbose:
             print("Search is complete.")
         while near_processor.not_done():
