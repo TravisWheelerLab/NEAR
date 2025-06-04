@@ -64,74 +64,80 @@ void get_distributions_from_pipe(ProcessHitArgs *args) {
 
 uint64_t get_seq_list_from_pipe(char **name_list_ptr, uint64_t **start_list_ptr,
                                 uint64_t **seq_lengths_ptr) {
-  uint64_t num_names;
-  uint64_t string_size;
+    uint64_t num_names;
+    uint64_t string_size;
 
-  if (fread(&num_names, sizeof(num_names), 1, stdin) != 1) {
-    fprintf(stderr, "Failed to read num_names\n");
-    exit(1);
-  }
-  DPRINTF("num names %llu %llX \n", num_names, num_names);
-
-  if (fread(&string_size, sizeof(string_size), 1, stdin) != 1) {
-    fprintf(stderr, "Failed to read size of string\n");
-    exit(1);
-  }
-  DPRINTF("string_size %llu %llX \n", string_size, string_size);
-
-  uint64_t *start_list = malloc(sizeof(uint64_t) * (num_names + 1));
-  char *name_list = malloc(sizeof(char) * (string_size + 1));
-  if (!start_list || !name_list) {
-    perror("malloc");
-    free(start_list);
-    free(name_list);
-    exit(1);
-  }
-  *name_list_ptr = name_list;
-  *start_list_ptr = start_list;
-
-  uint64_t count = fread(name_list, sizeof(char), string_size, stdin);
-  if (count != string_size) {
-    fprintf(stderr,
-            "Expected %llu characters while reading name list, got %llu\n",
-            (unsigned long long)string_size, count);
-    free(start_list);
-    free(name_list);
-    exit(1);
-  }
-  name_list[count] = '\0';
-
-  start_list[0] = 0;
-  count = 1;
-  for (uint64_t i = 0; i < string_size; ++i) {
-    if (name_list[i] == '\0') {
-      start_list[count] = i + 1;
-      ++count;
+    if (fread(&num_names, sizeof(num_names), 1, stdin) != 1) {
+        fprintf(stderr, "Failed to read num_names\n");
+        exit(1);
     }
-  }
+    DPRINTF("num names %llu %llX \n", num_names, num_names);
 
-  start_list[count] = string_size + 1;
-
-  if (seq_lengths_ptr != NULL) {
-    uint64_t *seq_lengths = malloc(sizeof(uint64_t) * num_names);
-    if (!seq_lengths) {
-      perror("malloc");
-      exit(1);
+    if (fread(&string_size, sizeof(string_size), 1, stdin) != 1) {
+        fprintf(stderr, "Failed to read size of string\n");
+        exit(1);
     }
-    *seq_lengths_ptr = seq_lengths;
+    DPRINTF("string_size %llu %llX \n", string_size, string_size);
 
-    count = fread(seq_lengths, sizeof(uint64_t), num_names, stdin);
-    if (count != num_names) {
-      fprintf(
-          stderr,
-          "Expected %llu lengths while reading sequence lengths, got %llu\n",
-          (unsigned long long)num_names, count);
-      exit(1);
+    // Allocate memory (keep +2 for safety)
+    uint64_t *start_list = malloc(sizeof(uint64_t) * (num_names + 2));
+    char *name_list = malloc(sizeof(char) * (string_size + 2));
+    if (!start_list || !name_list) {
+        perror("malloc");
+        free(start_list);
+        free(name_list);
+        exit(1);
     }
-  }
+    *name_list_ptr = name_list;
+    *start_list_ptr = start_list;
 
-  return num_names;
+    // Read the names
+    uint64_t count = fread(name_list, sizeof(char), string_size, stdin);
+    if (count != string_size) {
+        fprintf(stderr,
+                "Expected %llu characters while reading name list, got %llu\n",
+                (unsigned long long)string_size, count);
+        free(start_list);
+        free(name_list);
+        exit(1);
+    }
+
+    // Ensure proper null termination
+    name_list[count] = '\0';
+    name_list[count + 1] = '\0';
+
+    // Build start list
+    start_list[0] = 0;
+    count = 1;
+    for (uint64_t i = 0; i < string_size; ++i) {
+        if (name_list[i] == '\0') {
+            start_list[count++] = i + 1;
+            if (count > num_names + 1) break;  // Prevent buffer overflow
+        }
+    }
+    // Always set the final position
+    start_list[count] = string_size + 1;
+
+    if (seq_lengths_ptr != NULL) {
+        uint64_t *seq_lengths = malloc(sizeof(uint64_t) * num_names);
+        if (!seq_lengths) {
+            perror("malloc");
+            exit(1);
+        }
+        *seq_lengths_ptr = seq_lengths;
+
+        count = fread(seq_lengths, sizeof(uint64_t), num_names, stdin);
+        if (count != num_names) {
+            fprintf(stderr,
+                    "Expected %llu lengths while reading sequence lengths, got %llu\n",
+                    (unsigned long long)num_names, count);
+            exit(1);
+        }
+    }
+    DPRINTF("%s %s %s %s \n", &name_list[0], &name_list[start_list[0]], &name_list[start_list[num_names - 1]], &name_list[start_list[num_names - 1]]);
+    return num_names;
 }
+
 
 uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 

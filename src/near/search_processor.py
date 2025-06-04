@@ -71,7 +71,7 @@ class AsyncNearResultsProcessor:
 
         self.process = None
 
-    def add_to_queue(self, scores: np.ndarray, query_ids: np.array, target_ids) -> None:
+    def add_to_queue(self, query_ids: np.array, target_ids, scores: np.ndarray) -> None:
         """Add a batch of scores, query_ids, and target_ids to the queue.
 
         Parameters
@@ -86,7 +86,7 @@ class AsyncNearResultsProcessor:
 
         if self.error:
             raise RuntimeError("Processor encountered an error") from self.error
-        self.queue.put((scores, query_ids, target_ids))
+        self.queue.put((query_ids, target_ids, scores))
 
     def _start_process(self) -> None:
         executable_path = str(files('near').joinpath('bin/process_near_results'))
@@ -110,6 +110,9 @@ class AsyncNearResultsProcessor:
             stdout=self.log_file1,
             stderr=self.log_file2
         )
+        print(self.query_data.seqid_to_name[0], self.query_data.seqid_to_name[-1])
+        print(self.target_data.seqid_to_name[0], self.target_data.seqid_to_name[-1])
+        sys.stdout.flush()
 
         log_adds = self.stats[0]
         distributions = self.stats[1]
@@ -134,6 +137,7 @@ class AsyncNearResultsProcessor:
         self.process.stdin.flush()
 
         query_seq_names = ('\0'.join(self.query_data.seqid_to_name) + '\0').encode('utf-8')
+
         self.process.stdin.write(struct.pack('Q', len(query_seq_names)))
         self.process.stdin.flush()
 
@@ -146,6 +150,7 @@ class AsyncNearResultsProcessor:
         # Write the target data sequence names
         self.process.stdin.write(struct.pack('Q', len(self.target_data.seqid_to_name)))
         self.process.stdin.flush()
+
 
         target_seq_names = ('\0'.join(self.target_data.seqid_to_name) + '\0').encode('utf-8')
         self.process.stdin.write(struct.pack('Q', len(target_seq_names)))

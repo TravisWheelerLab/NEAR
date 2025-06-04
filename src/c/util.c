@@ -10,8 +10,9 @@ double log1mexp(double x) {
 }
 
 double log_rook(double a, double b, double k) {
-  return lgamma(a + 1.0) - lgamma(a - k + 1.0) + lgamma(b + 1.0) -
-         lgamma(b - k + 1.0) - (2 * lgamma(k + 1.0));
+  return lgamma(a + 1.0) - lgamma(a - k + 1.0) +
+         lgamma(b + 1.0) - lgamma(b - k + 1.0) -
+         (2 * lgamma(k + 1.0));
 }
 
 double log_poisson_tail(double log_lambda) {

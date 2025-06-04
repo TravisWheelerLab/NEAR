@@ -138,7 +138,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   }
 
   /* convert path score to Poisson tail, same as Filter-1 */
-  double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, 1);
+  double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, best_len);
   double log_pval = log_poisson_tail(log_lambda);
 
   if (dp != args->dp_st)
@@ -160,11 +160,15 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
 
   // Calculate first filter pval
   qt_sim.log_pval_filter_1 = log_pval_from_independent_hits(args,
-                                                            args->hits, starting_index, ending_index, query_length, target_length);
+                                                            args->hits,
+                                                            starting_index,
+                                                            ending_index,
+                                                            query_length,
+                                                            target_length*args->sparsity);
   if (qt_sim.log_pval_filter_1 < args->filter_1_logpval_threshold) {
     // If it passes first filter, calculate second filter pval
     qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(
-        args, starting_index, ending_index, query_length, target_length);
+        args, starting_index, ending_index, query_length, target_length*args->sparsity);
     if (qt_sim.log_pval_filter_2 < args->filter_2_logpval_threshold) {
       // Output the query target pair it passes the second filter
       qt_sim.query_seq_id = args->hits[starting_index].query_seq_id;

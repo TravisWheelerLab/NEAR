@@ -10,12 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DEBUG 1
-
+#define DEBUG       1
 #if DEBUG == 1
 #define DPRINTF(...)    fprintf(stdout, __VA_ARGS__); fflush(stdout)
 #else
-#define DPRINTF(...) ((void)0)
+#define DPRINTF(...)
 #endif
 
 void err_crash(const char *fmt, ...);

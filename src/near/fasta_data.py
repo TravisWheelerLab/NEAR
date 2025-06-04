@@ -4,128 +4,71 @@ import torch
 import numpy as np
 
 class FASTAData:
-    """
-    Read a FASTA file and bucket its sequences by length.
-
-    Each sequence is tokenized and stored in per-length buckets
-    so that downstream models can operate on batches of
-    equal-length sequences.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the FASTA file to parse.
-    min_seq_length : int, default 128
-        Sequences shorter than this threshold are ignored.
-    max_seq_length : int, default 99_999_999
-        Sequences longer than this threshold are ignored.
-
-    Attributes
-    ----------
-    tokens_by_length : dict[int, torch.Tensor]
-        Maps *L* → 2-D tensor of integer-encoded residues with shape
-        ``(n_sequences_of_length_L, L)``.
-    masks_by_length : dict[int, torch.Tensor]
-        Maps *L* → Boolean mask array with the same shape as
-        ``tokens_by_length[L]``; ``True`` marks real residues and
-        ``False`` marks residues that should be ignored during search.
-    seqids_by_length : dict[int, np.array]
-        Maps *L* → 1-D array of internal sequence IDs that index
-        into `seqid_to_name`.
-    tokenids_by_length : dict[int, np.array]
-        Maps *L* → 2-D tensor of uint64-encoded unique residue labels
-        with shape ``(n_sequences_of_length_L, L)``.
-    seqid_to_name : list[str]
-        Lookup table that converts an internal sequence ID into the
-        original FASTA record header.
-    seqid_to_length : np.array[int]
-        The length of a sequence *after* masking
-    """
     def __init__(self, file_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
-        self.tokens_by_length = dict()
-        self.masks_by_length = dict()
-        self.seqids_by_length = dict()
-        self.tokenids_by_length = dict()
-        self.seqid_to_name = list()
+        self.tokens_by_length = {}
+        self.masks_by_length = {}
+        self.seqids_by_length = {}
+        self.tokenids_by_length = {}
+        self.seqid_to_name = []
         self.seqid_to_length = None
         self.read_fasta(file_path, min_seq_length, max_seq_length)
 
-
     def read_fasta(self, fasta_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
-        """
-            Read a FASTA file and bucket its sequences by length.
+        amino_acids = 'XARNDCEQGHILKMFPSTWYV'
+        alphabet = np.zeros(256, dtype=np.int64)
+        alphabet[[ord(c) for c in amino_acids]] = np.arange(len(amino_acids))
 
-            Parameters
-            ----------
-            file_path : str
-                Path to the FASTA file to parse.
-            min_seq_length : int, default 128
-                Sequences shorter than this threshold are ignored.
-            max_seq_length : int, default 99_999_999
-                Sequences longer than this threshold are ignored.
-        """
+        seq_names_by_length = defaultdict(list)
+        seq_strings_by_length = defaultdict(list)
 
-        amino_acids = 'XARNDCEQGHILKMFPSTWYVBJZ0'
-        alphabet = {aa: i for i, aa in enumerate(amino_acids)}
-        alphabet['U'] = 0
-        alphabet['B'] = 0
-        alphabet['J'] = 0
-        alphabet['Z'] = 0
-        alphabet['0'] = 0
-
-        # We first load the data into memory
         total_sequences = 0
-        with open(fasta_path) as handle:
-            seq_names_by_length: dict[int, list] = defaultdict(list)
-            seq_strings_by_length: dict[int, list]  = defaultdict(list)
 
+        with open(fasta_path, "r") as handle:
             for record in SeqIO.parse(handle, "fasta"):
                 seq = str(record.seq)
-                name = record.id
                 length = len(seq)
-                if length < 32:
+                if length < min_seq_length or length > max_seq_length:
                     continue
-                seq_names_by_length[length].append(name)
+                seq_names_by_length[length].append(record.id)
                 seq_strings_by_length[length].append(seq)
                 total_sequences += 1
 
         self.seqid_to_length = np.zeros(total_sequences, dtype=np.uint64)
-        # Then we tokenize the data
-        for length in seq_strings_by_length:
-            num_seqs = len(seq_strings_by_length[length])
-            masks = torch.ones(num_seqs, length, dtype=torch.bool)
-            seqs = torch.zeros(num_seqs, length, dtype=torch.int)
 
-            for i, s in enumerate(seq_strings_by_length[length]):
-                seqs[i] = torch.tensor(list(s.upper().encode('ascii')), dtype=torch.int)
-                masks[i] = torch.tensor([True if c.isupper() else False for c in s]) # Mask lower case chars
+        seq_id_counter = 0
 
-            for c in amino_acids:
-                seqs[seqs == ord(c)] = alphabet[c]
-            seqs[seqs > len(alphabet)] = 0
+        for length, sequences in seq_strings_by_length.items():
+            num_seqs = len(sequences)
 
-            masks = torch.logical_and(masks, seqs != 0) # Mask ambiguous residues
-            seqs = seqs.to(torch.long)
+            seq_array = np.zeros((num_seqs, length), dtype=np.uint8)
+            masks = np.ones((num_seqs, length), dtype=bool)
 
-            self.masks_by_length[length] = masks
-            self.tokens_by_length[length] = seqs
+            for i, seq in enumerate(sequences):
+                seq_bytes = np.frombuffer(seq.upper().encode('ascii'), dtype=np.uint8)
+                seq_array[i, :] = seq_bytes
+                masks[i, :] = np.array([c.isupper() for c in seq])
 
-            seq_ids = np.arange(len(self.seqid_to_name),
-                                len(self.seqid_to_name)+len(self.tokens_by_length[length]),
-                                dtype=np.uint64)
+            tokens = alphabet[seq_array]
+            masks &= tokens > 0
 
-            self.seqid_to_length[seq_ids] = masks.sum(dim=-1)
+            self.tokens_by_length[length] = torch.from_numpy(tokens)
+            self.masks_by_length[length] = torch.from_numpy(masks)
+
+            seq_ids = np.arange(seq_id_counter, seq_id_counter + num_seqs, dtype=np.uint64)
+            seq_id_counter += num_seqs
+            self.seqids_by_length[length] = seq_ids
+
+            self.seqid_to_length[seq_ids] = masks.sum(axis=1)
 
             token_ids = np.arange(length, dtype=np.uint64)
             end_cutoff = length - 64
-            middle_emb = np.logical_and(token_ids >= 63, token_ids <= end_cutoff)
-            token_ids[token_ids < 63] = token_ids[token_ids < 63]
-            token_ids[middle_emb] = 64
+            middle_emb = (token_ids >= 63) & (token_ids <= end_cutoff)
             token_ids[token_ids > end_cutoff] = (127 - (length - token_ids[token_ids > end_cutoff]))
-            token_pos = (np.arange(length, dtype=np.uint64) << 7)
-            
-            token_ids = (seq_ids[:,None] << 32) | token_ids[None,:] | token_pos[None, :]
+            token_ids[middle_emb] = 64
 
-            self.seqids_by_length[length] = seq_ids
+            token_pos = (np.arange(length, dtype=np.uint64) << 7)
+            token_ids = (seq_ids[:, None] << 32) | token_ids[None, :] | token_pos[None, :]
+
             self.tokenids_by_length[length] = token_ids
+
             self.seqid_to_name.extend(seq_names_by_length[length])
