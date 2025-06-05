@@ -125,6 +125,8 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
   /* ---- scratch, stack-backed when N ≤ 1024 ------------------------ */
 
+  n_cols = n_cols * args->sparsity;
+
   double *dp =
       (N <= DP_STACK_LIM) ? args->dp_st : (double *)malloc(N * sizeof(*dp));
   int *tplen =
@@ -236,7 +238,7 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
     if (qt_sim.log_pval_filter_2 < args->filter_2_logpval_threshold) {
       // Output the query target pair it passes the second filter
       qt_sim.query_seq_id = args->hits[starting_index].query_seq_id;
-      qt_sim.target_seq_id = args->hits[starting_index].target_seq_id * args->sparsity;
+      qt_sim.target_seq_id = args->hits[starting_index].target_seq_id;
       output_similarity(args, qt_sim);
     }
   }
