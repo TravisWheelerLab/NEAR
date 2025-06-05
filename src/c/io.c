@@ -24,9 +24,17 @@ void output_similarity(const ProcessHitArgs *args,
   const char *target_name =
       &args->target_names[args->target_name_starts[qt_sim.target_seq_id]];
 
-  fprintf(args->out, "%s\t%s\t%.5e\t%.5e\t%.5e\n", query_name, target_name,
-          exp(qt_sim.log_pval_filter_1), exp(qt_sim.log_pval_filter_2),
+  fprintf(args->out, "%s\t%s\t%.7f\t%.7f\t%.5e\n", query_name, target_name,
+          qt_sim.log_pval_filter_1, qt_sim.log_pval_filter_2,
           exp(qt_sim.log_pval_filter_2 + log(args->num_target_seqs)));
+
+/*
+  fprintf(args->out, " %llu %llu %i %i\n",
+  args->query_lengths[qt_sim.query_seq_id],
+  args->target_lengths[qt_sim.target_seq_id],
+  qt_sim.num_unique_hits,
+  qt_sim.coherent_length
+  );*/
 }
 
 void get_doubles_from_pipe(double *values, uint64_t num_values) {
@@ -173,8 +181,7 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
     exit(1);
   }
   for (size_t i = 0; i < num_queries; ++i) {
-    for (size_t j = (i * hits_per_query);
-         j < (i * hits_per_query) + hits_per_query; ++j) {
+    for (size_t j = (i * hits_per_query); j < (i * hits_per_query) + hits_per_query; ++j) {
       hits[j].query_seq_id = TID_TO_SEQID((buf[i]));
       hits[j].query_pos = TID_TO_POS((buf[i]));
       hits[j].query_bin = TID_TO_BIN((buf[i]));

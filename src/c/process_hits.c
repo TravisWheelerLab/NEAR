@@ -20,7 +20,7 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
                                   args->genpareto_locs[stat_bin],
                                   args->genpareto_scales[stat_bin],
                                   args->genpareto_shapes[stat_bin]);
-     // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
+      // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
       //log_pval, args->genpareto_locs[stat_bin], args->genpareto_scales[stat_bin], args->genpareto_shapes[stat_bin]);
 
       return log_pval;
@@ -32,7 +32,8 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
 // Filter 1 treats hits as independent
 double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       const Hit *restrict hits, uint64_t start,
-                                      uint64_t end, int n_rows, int n_cols) {
+                                      uint64_t end, int n_rows, int n_cols,
+                                      int *nhitsp) {
   /* keep only the rarest hit per target */
   uint32_t last_tid = hits[start].target_pos;
   double tid_best_logp = log_pval_for_hit(&hits[start], args);
@@ -54,20 +55,50 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
     }
   }
 
-  double log_lambda = logp_sum + log_rook(n_rows, n_cols, nhits);
-  //printf("%llu %llu %llu %f %f %f\n", nhits, n_rows, n_cols, logp_sum, log_lambda, log_poisson_tail(log_lambda));
-  return log_poisson_tail(log_lambda);
+  if (nhits > n_cols) {
+    nhits = n_cols;
+  }
+  if (nhits > n_rows) {
+    nhits = n_rows;
+  }
+
+  double logpval_adjust = lgamma(n_cols + 1) + lgamma(n_rows + 1) -
+                     (lgamma(nhits + 1) +
+                      lgamma(n_cols + 1.0 - nhits) +
+                      lgamma(n_rows + 1.0 - nhits));
+
+    double h = nhits;
+    double c = n_cols;
+    double r = n_rows;
+
+    double score_adjust = log_ch(r, h) + log_ch(c, h);
+    //logp_sum = logpval_adjust + score_adjust;//logp_sum - (h * log(h / (c * (r - h))));
+
+    double log_arg = logp_sum + score_adjust;
+
+    double log_pval = log_poisson_tail(log_arg);
+    return log_pval;
 }
 
 double log_odds_transition(const ProcessHitArgs *args,
                            const Hit *first_hit,
-                           const Hit *second_hit)
+                           const Hit *second_hit,
+                           float *k)
 {
+
+  //printf("%i %i %i %i    ", first_hit->query_pos, second_hit->query_pos,
+  //first_hit->target_pos, second_hit->target_pos);
   double expected_cosine_hit = args->expected_log_cosine_dvg[first_hit->query_bin] *
                                (second_hit->query_pos - first_hit->query_pos);
+  //printf("%f %f ", args->expected_log_cosine_dvg[first_hit->query_bin], expected_cosine_hit);
+
   expected_cosine_hit += args->expected_log_cosine_dvg[first_hit->target_bin] *
                          (second_hit->target_pos - first_hit->target_pos);
   expected_cosine_hit = exp(expected_cosine_hit);
+
+  //printf("%f\n", expected_cosine_hit);
+
+  *k = 1.0 - expected_cosine_hit;
 
   Hit hit = {.query_pos=second_hit->query_pos,
              .target_pos=second_hit->target_pos,
@@ -85,7 +116,7 @@ double log_odds_transition(const ProcessHitArgs *args,
  * --------------------------------------------------------------------------*/
 double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                    uint64_t end, uint64_t n_rows,
-                                   uint64_t n_cols) {
+                                   uint64_t n_cols, int*nhits) {
 
   const Hit *restrict hits = args->hits;
   const size_t N = (size_t)(end - start);
@@ -96,17 +127,17 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
   double *dp =
       (N <= DP_STACK_LIM) ? args->dp_st : (double *)malloc(N * sizeof(*dp));
-  int *plen =
-      (N <= DP_STACK_LIM) ? args->ln_st : (int *)malloc(N * sizeof(*plen));
-
-  double best_score = hits[start].cosine_sim;
-  int best_len = 1;
+  int *tplen =
+      (N <= DP_STACK_LIM) ? args->ln_st : (int *)malloc(N * sizeof(int));
+  float *plen = (float *)tplen;
+  double best_score = 1;
+  double best_len = 1;
 
   for (size_t i = 0; i < N; ++i) {
     const Hit *restrict hi = &hits[start + i];
 
-    double best_i = log_pval_for_hit(hi, args); /* path that starts at i */
-    int len_i = 1;
+    double best_i = log_pval_for_hit(hi, args) + LOG_HALF; /* path that starts at i */
+    float len_i = 1;
 
     /* ---------- inner scan, backwards, branch-light ------------- */
     for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
@@ -119,12 +150,12 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
         continue; /* wrong col */
 
       /* passed the two filters -> valid predecessor */
-      double trans = log_odds_transition(args, hi, hj);
-
-      double cand = dp[j] + trans + log_pval_for_hit(hi, args);
+      float ki = 0;
+      double trans = log_odds_transition(args, hj, hi, &ki);
+      double cand = dp[j] + trans + log_pval_for_hit(hi, args) + LOG_HALF;
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
-        len_i = plen[j] + 1;
+        len_i = plen[j] + ki;
       }
     }
 
@@ -138,15 +169,45 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   }
 
   /* convert path score to Poisson tail, same as Filter-1 */
-  double log_lambda = best_score + log_rook((int)n_rows, (int)n_cols, best_len);
+  double r = n_rows;
+  double c = n_cols;
+
+
+
+  double log_adjust = lgamma(r + 1.0) + lgamma(c + 1.0) -
+                       lgamma(r - best_len + 1.0) - lgamma(c - best_len + 1.0) -
+                       lgamma(best_len + 1.0);
+
+
+  double score_adjust = log_ch(r, best_len) + log_ch(c, best_len);
+
+  double log_lambda = best_score + score_adjust; // (best_len * (lgamma(k + 1) - lgamma()));
   double log_pval = log_poisson_tail(log_lambda);
+
+  int query_seq_id = hits[start].query_seq_id;
+  int target_seq_id = hits[start].target_seq_id;
+
+    const char *query_name =
+      &args->query_names[args->query_name_starts[query_seq_id]];
+  const char *target_name =
+      &args->target_names[args->target_name_starts[target_seq_id]];
+
+  /*printf("%i %i ", query_name[0], target_name[0]);
+  printf("%s %s ", query_name, target_name);
+  printf("%llu %llu\n", args->query_name_starts[query_seq_id], args->target_name_starts[target_seq_id]);
+  printf("%i %i ", query_seq_id, target_seq_id);*/
+  //,
+  //args->query_names[args->query_name_starts[query_seq_id]],
+  //args->target_names[args->target_name_starts[target_seq_id]]);
+  //printf("%f %f %f %f %f\n", best_score, best_len, score_adjust, log_lambda, log_pval);
 
   if (dp != args->dp_st)
     free(dp);
   if (plen != args->ln_st)
     free(plen);
+  *nhits = best_len;
 
-  return log_pval; /* already log(p-value) */
+  return log_pval;
 }
 
 void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
@@ -164,15 +225,18 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
                                                             starting_index,
                                                             ending_index,
                                                             query_length,
-                                                            target_length*args->sparsity);
+                                                            target_length,
+                                                            &qt_sim.num_unique_hits);
+
   if (qt_sim.log_pval_filter_1 < args->filter_1_logpval_threshold) {
     // If it passes first filter, calculate second filter pval
     qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(
-        args, starting_index, ending_index, query_length, target_length*args->sparsity);
+        args, starting_index, ending_index, query_length, target_length,
+        &qt_sim.coherent_length);
     if (qt_sim.log_pval_filter_2 < args->filter_2_logpval_threshold) {
       // Output the query target pair it passes the second filter
       qt_sim.query_seq_id = args->hits[starting_index].query_seq_id;
-      qt_sim.target_seq_id = args->hits[starting_index].target_seq_id;
+      qt_sim.target_seq_id = args->hits[starting_index].target_seq_id * args->sparsity;
       output_similarity(args, qt_sim);
     }
   }
@@ -191,7 +255,11 @@ void process_hits(ProcessHitArgs args) {
     uint32_t q = hits[i].query_seq_id;
     uint32_t t = hits[i].target_seq_id;
 
+   // if (q == 1)
+      //  printf(":::::::::::(%i %i) %i %i %i :::::::::::::\n",last_query, last_target, i, q, t);
+
     if (q != last_query || t != last_target) {
+      //printf("%i to %i:  %i %i %i %i\n", starting_index, i, q, t, last_query, last_target);
       process_hit_range(&args, starting_index, i);
 
       starting_index = i;

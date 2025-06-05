@@ -107,12 +107,14 @@ class AsyncNearResultsProcessor:
              str(128),
              ],
             stdin=subprocess.PIPE,
-            stdout=self.log_file1,
-            stderr=self.log_file2
+           # stdout=self.log_file1,
+           # stderr=self.log_file2#,
+            bufsize=1024 * 1024 * 512
         )
-        print(self.query_data.seqid_to_name[0], self.query_data.seqid_to_name[-1])
-        print(self.target_data.seqid_to_name[0], self.target_data.seqid_to_name[-1])
-        sys.stdout.flush()
+
+       # print(self.query_data.seqid_to_name[0], self.query_data.seqid_to_name[-1])
+       # print(self.target_data.seqid_to_name[0], self.target_data.seqid_to_name[-1])
+        #sys.stdout.flush()
 
         log_adds = self.stats[0]
         distributions = self.stats[1]

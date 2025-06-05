@@ -6,7 +6,15 @@
 #include "types.h"
 
 double log1mexp(double x) {
-  return (x > LOG_HALF) ? log(-expm1(x)) : log1p(-exp(x));
+  if (x >= 0.0) {
+    // log(1 - exp(x)) is undefined for x >= 0
+    return -INFINITY;
+  }
+  if (x < LOG_HALF) {
+    return log1p(-exp(x));     // safe when exp(x) is small
+  } else {
+    return log(-expm1(x));     // safe when exp(x) ≈ 1
+  }
 }
 
 double log_rook(double a, double b, double k) {
@@ -14,6 +22,12 @@ double log_rook(double a, double b, double k) {
          lgamma(b + 1.0) - lgamma(b - k + 1.0) -
          (2 * lgamma(k + 1.0));
 }
+
+double log_ch(double a, double k) {
+  // printf("%f %f %f\n", lgamma(a + 1.0), -lgamma(a - k + 1.0), -(1 * lgamma(k + 1.0)));
+  return lgamma(a + 1.0) - (lgamma(a - k + 1.0) + (1 * lgamma(k + 1.0)));
+}
+
 
 double log_poisson_tail(double log_lambda) {
   if (log_lambda <= LOG_LAM_SMALL) /* tiny lambda */

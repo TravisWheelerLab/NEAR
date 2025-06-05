@@ -17,7 +17,7 @@
 #define TID_TO_BIN(x) (x & 0x7F)
 #define TID_TO_POS(x) ((x & 0xFFFFFFFF) >> 7)
 
-#define LOG_LAM_SMALL (-10.0)
+#define LOG_LAM_SMALL -10.0
 #define LOG_LAM_LARGE 50.0
 #define LOG_HALF (-0.6931471805599453)
 
@@ -94,11 +94,6 @@ typedef struct {
 static inline int cmp_hit(const void *a, const void *b) {
   const Hit *pa = a;
   const Hit *pb = b;
-
-  if (pa->query_seq_id < pb->query_seq_id)
-    return -1;
-  if (pa->query_seq_id > pb->query_seq_id)
-    return 1;
 
   if (pa->target_seq_id < pb->target_seq_id)
     return -1;
