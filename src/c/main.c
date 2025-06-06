@@ -27,6 +27,7 @@ int main(int argc, const char **argv) {
       args.num_hits = num_hits;
       DPRINTF("Processing hits\n");
       process_hits(args);
+      fflush(args.out);
       free(hits);
     }
   } else {

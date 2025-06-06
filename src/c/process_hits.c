@@ -23,7 +23,7 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
       // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
       //log_pval, args->genpareto_locs[stat_bin], args->genpareto_scales[stat_bin], args->genpareto_shapes[stat_bin]);
 
-      return log_pval;
+      return log_pval;// - LOG_HALF;
     }
   }
   return 0;
@@ -85,27 +85,27 @@ double log_odds_transition(const ProcessHitArgs *args,
                            float *k)
 {
 
-  //printf("%i %i %i %i    ", first_hit->query_pos, second_hit->query_pos,
-  //first_hit->target_pos, second_hit->target_pos);
-  double expected_cosine_hit = args->expected_log_cosine_dvg[first_hit->query_bin] *
-                               (second_hit->query_pos - first_hit->query_pos);
-  //printf("%f %f ", args->expected_log_cosine_dvg[first_hit->query_bin], expected_cosine_hit);
+  double log_theta_q = args->expected_log_cosine_dvg[first_hit->query_bin];
+  double log_theta_t = args->expected_log_cosine_dvg[first_hit->target_bin];
 
-  expected_cosine_hit += args->expected_log_cosine_dvg[first_hit->target_bin] *
-                         (second_hit->target_pos - first_hit->target_pos);
-  expected_cosine_hit = exp(expected_cosine_hit);
+  double dist_q = second_hit->query_pos - first_hit->query_pos;
+  double dist_t = second_hit->target_pos - first_hit->target_pos;
 
-  //printf("%f\n", expected_cosine_hit);
+  double expected_cosine_dvg = (log_theta_q * dist_q) + (log_theta_t * dist_t);
+  expected_cosine_dvg = exp(expected_cosine_dvg);
 
-  *k = 1.0 - expected_cosine_hit;
-
+  *k += (1.0 - expected_cosine_dvg);
   Hit hit = {.query_pos=second_hit->query_pos,
              .target_pos=second_hit->target_pos,
              .query_bin=second_hit->query_bin,
              .target_bin=second_hit->target_bin,
-             .cosine_sim=expected_cosine_hit};
+             .cosine_sim=expected_cosine_dvg * first_hit->cosine_sim};
 
   double log_adjustment = log_pval_for_hit(&hit, args);
+
+  if (fabs(dist_q - dist_t) != 0) {
+    log_adjustment += log(0.1) * MIN(5.0, fabs(dist_q - dist_t));
+  }
 
   return -log_adjustment;
 }
@@ -135,8 +135,9 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   for (size_t i = 0; i < N; ++i) {
     const Hit *restrict hi = &hits[start + i];
 
-    double best_i = log_pval_for_hit(hi, args); /* path that starts at i */
-    float len_i = 1;
+    double hi_hit_p = log_pval_for_hit(hi, args);
+    double best_i = hi_hit_p; /* path that starts at i */
+    float len_i = 0;
 
     /* ---------- inner scan, backwards, branch-light ------------- */
     for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
@@ -148,13 +149,13 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       if (hj->query_pos >= hi->query_pos)
         continue; /* wrong col */
 
-      /* passed the two filters -> valid predecessor */
+      /* passed the two filters -> valid predecessor  */
       float ki = 0;
       double trans = log_odds_transition(args, hj, hi, &ki);
-      double cand = dp[j] + trans + log_pval_for_hit(hi, args);
+      double cand = dp[j] + trans + hi_hit_p;
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
-        len_i = plen[j] + ki;
+        len_i = plen[j] = ki;
       }
     }
 
@@ -168,23 +169,63 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   }
 
   /* convert path score to Poisson tail, same as Filter-1 */
-  double r = n_rows;
-  double c = n_cols;
-
-  // TODO maybe uncomment this:
-  /*
-  r = r * (1.0 - 0.9*0.9));
-  c = c * (1.0 - (0.9*0.9)^sparsity);
-  */
-
-r = r * (1.0 - (0.9*0.9));
-c = c * (1.0 - (pow(0.9*0.9, args->sparsity)));
+  double r = n_rows; // effective q length
+  double c = n_cols; // effective t length
 
 
-  double score_adjust = log_ch(r, best_len) + log_ch(c, best_len);
-
-  double log_lambda = best_score + score_adjust; // (best_len * (lgamma(k + 1) - lgamma()));
+  r = r * (1.0 - (0.967*0.967));
+  c = c* (1.0 - pow((0.967*0.967), args->sparsity));
+  //                    p(first hit)           p(effective q pick)       p (effective t pick)
+  double score_adjust = log(n_rows * n_cols) + log_ch(n_rows - 1, best_len) + log_ch(n_cols - 1, best_len);
+  double m = MIN(r, c);
+  double n = MAX(r, c);
+  score_adjust = log_ch(m + n, m);
+  //score_adjust = log(n_rows * n_cols);
+  double log_lambda = (best_score) + score_adjust; // (best_len * (lgamma(k + 1) - lgamma()));
   double log_pval = log_poisson_tail(log_lambda);
+  //printf("%.7f %.7f %.7f %.7f\n", score_adjust, best_score, log_lambda, log_pval);
+
+  if (log_pval <= -60.0) {
+    printf("Found: %f || %f %f %f %i %i\n", args->sparsity, r, c, best_len, n_rows, n_cols);
+    printf("|| %f %f %f %f ||\n", log_pval, log_lambda, score_adjust, best_score);
+    for (size_t i = 0; i < N; ++i) {
+    const Hit *restrict hi = &hits[start + i];
+
+    double hi_hit_p = log_pval_for_hit(hi, args);
+    double best_i = hi_hit_p; /* path that starts at i */
+    float len_i = 0;
+    printf("Starting new:%i: %i %i %f\n", i, hi->query_pos, hi->target_pos, hi_hit_p);
+    /* ---------- inner scan, backwards, branch-light ------------- */
+    for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
+      const Hit *restrict hj = &hits[start + j];
+
+      /* cheap rejection first */
+      if (hj->target_pos == hi->target_pos)
+        continue; /* same col */
+      if (hj->query_pos >= hi->query_pos)
+        continue; /* wrong col */
+
+      /* passed the two filters -> valid predecessor  */
+      float ki = 0;
+      double trans = log_odds_transition(args, hj, hi, &ki);
+      double cand = dp[j] + trans + hi_hit_p;
+      if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
+        best_i = cand;
+        len_i = plen[j] + ki;
+        printf("%i (%i %i): %f = %f %f %f \n", j, hj->query_pos, hj->target_pos, cand, trans, dp[j], hi_hit_p);
+      }
+    }
+
+    dp[i] = best_i;
+    plen[i] = len_i;
+
+    if (best_i < best_score) {
+      best_score = best_i;
+      best_len = len_i;
+    }
+  }
+  }
+  //log_pval = log(1.0 - exp(-c * r * exp(best_score)));
 
   if (dp != args->dp_st)
     free(dp);
@@ -213,12 +254,12 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
                                                             target_length,
                                                             &qt_sim.num_unique_hits);
 
-  if (qt_sim.log_pval_filter_1 < args->filter_1_logpval_threshold) {
+  if (qt_sim.log_pval_filter_1 <= args->filter_1_logpval_threshold) {
     // If it passes first filter, calculate second filter pval
     qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(
         args, starting_index, ending_index, query_length, target_length,
         &qt_sim.coherent_length);
-    if (qt_sim.log_pval_filter_2 < args->filter_2_logpval_threshold) {
+    if (qt_sim.log_pval_filter_2 <= args->filter_2_logpval_threshold) {
       // Output the query target pair it passes the second filter
       qt_sim.query_seq_id = args->hits[starting_index].query_seq_id;
       qt_sim.target_seq_id = args->hits[starting_index].target_seq_id;

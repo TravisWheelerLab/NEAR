@@ -77,8 +77,6 @@ def search_against_index(output_file_path: str,
     lengths = query_data.tokens_by_length.keys()
     if verbose:
         print(f"Searching sequences...")
-        lengths = tqdm(lengths)
-
     # Create the AsyncNearResultsProcessor
     if verbose:
         print("Creating NEAR search results processor...")
@@ -98,6 +96,8 @@ def search_against_index(output_file_path: str,
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
+    if verbose:
+        lengths = tqdm(lengths)
     try:
         for length in lengths:
             # Gather the data that we will be processing in this length bin

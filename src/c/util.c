@@ -28,6 +28,11 @@ double log_ch(double a, double k) {
   return lgamma(a + 1.0) - (lgamma(a - k + 1.0) + (1 * lgamma(k + 1.0)));
 }
 
+double log_sum_binom(double N) {
+    const double LOG2 = 0.6931471805599453; // precomputed log(2)
+    double x = N * LOG2;
+    return x + log1mexp(x);
+}
 
 double log_poisson_tail(double log_lambda) {
   if (log_lambda <= LOG_LAM_SMALL) /* tiny lambda */

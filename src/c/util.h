@@ -12,6 +12,7 @@ double log_ch(double a, double k);
 double log1mexp(double x);
 double log_rook(double a, double b, double k);
 double log_poisson_tail(double log_lambda);
+double log_sum_binom(double N);
 
 static inline double genpareto_logsf(double x, double loc, double scale,
                                      double shape) {

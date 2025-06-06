@@ -95,7 +95,7 @@ class AsyncNearResultsProcessor:
             raise FileNotFoundError(f"Could not find executable at {executable_path}")
         self.log_file1 = open('near_log1.txt', 'w')
         self.log_file2 = open('near_log2.txt', 'w')
-
+        print("sparsity: ", self.sparsity, str(self.sparsity))
         self.process = subprocess.Popen(
             [executable_path,
              self.output_file,
@@ -111,10 +111,6 @@ class AsyncNearResultsProcessor:
             stderr=self.log_file2,
             bufsize=0
         )
-
-        print(self.query_data.seqid_to_name[0], self.query_data.seqid_to_name[-1])
-        print(self.target_data.seqid_to_name[0], self.target_data.seqid_to_name[-1])
-        sys.stdout.flush()
 
         log_adds = self.stats[0]
         distributions = self.stats[1]

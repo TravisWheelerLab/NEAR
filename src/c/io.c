@@ -250,7 +250,9 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
 
   args.filter_1_logpval_threshold = atof(argv[3]);
   args.filter_2_logpval_threshold = atof(argv[4]);
-  args.sparsity = atoi(argv[5]);
+  args.sparsity = atof(argv[5]);
+
+  printf("Args sparsity: %f %s\n", args.sparsity, argv[5]);
 
   args.num_distributions = atoi(argv[6]);
   args.num_stat_bins = atoi(argv[7]);
