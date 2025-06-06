@@ -63,20 +63,20 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
   }
 
   double logpval_adjust = lgamma(n_cols + 1) + lgamma(n_rows + 1) -
-                     (lgamma(nhits + 1) +
-                      lgamma(n_cols + 1.0 - nhits) +
-                      lgamma(n_rows + 1.0 - nhits));
+                          (lgamma(nhits + 1) +
+                           lgamma(n_cols + 1.0 - nhits) +
+                           lgamma(n_rows + 1.0 - nhits));
 
-    double h = nhits;
-    double c = n_cols;
-    double r = n_rows;
+  double h = nhits;
+  double c = n_cols;
+  double r = n_rows;
 
-    double score_adjust = log_ch(r, h) + log_ch(c, h);
+  double score_adjust = log_ch(r, h) + log_ch(c, h);
 
-    double log_arg = logp_sum + score_adjust;
+  double log_arg = logp_sum + score_adjust;
 
-    double log_pval = log_poisson_tail(log_arg);
-    return log_pval;
+  double log_pval = log_poisson_tail(log_arg);
+  return log_pval;
 }
 
 double log_odds_transition(const ProcessHitArgs *args,
@@ -153,7 +153,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       /* passed the two filters -> valid predecessor  */
       float ki = 0;
       double trans = log_odds_transition(args, hj, hi, &ki);
-      double cand = dp[j] + trans + hi_hit_p;
+      double cand = dp[j] + hi_hit_p;
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
         len_i = plen[j] + 1;//ki;
@@ -169,44 +169,16 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     }
   }
 
-  //printf("%f\t%f\n", best_score, best_len);
+  double best_effective_len = 0;
+  double best_effective_score = 0;
 
-  /* convert path score to Poisson tail, same as Filter-1 */
-  double r = n_rows; // effective q length
-  double c = n_cols; // effective t length
-
-
-  double p = 0.967*0.967;
-  r = r * (1.0 - (p));
-  c = c * (1.0 - p);
-  best_len = best_len * (1.0 - p);//                    p(first hit)           p(effective q pick)       p (effective t pick)
-  double score_adjust = log_ch(n_rows, best_len) + log_ch(n_cols, best_len);
-  double m = MIN(n_rows, n_cols);
-  double n = MAX(n_rows, n_cols);
-  score_adjust = log_ch(r, best_len);// + log_ch(c, best_len);
-  //score_adjust = log_ch(n, N);
-  //score_adjust = log(n_rows * n_cols);
-  double log_lambda = (best_score) + score_adjust; // (best_len * (lgamma(k + 1) - lgamma()));
-  double log_pval = log_poisson_tail(best_score + (score_adjust * 1.0));
-  //printf("%.7f %.7f %.7f %.7f\n", score_adjust, best_score, log_lambda, log_pval);
-  double K = 0.25;
-
-  double L = 0.05;//0.0125;
-  double len_norm = best_len/best_sub_len;
-
-  //log_pval = log1mexp(-K*n*m*exp(L*best_score));
-
-
-  if (log_pval <= -60.0) {
-    printf("Found: %f || %f %f %f %i %i\n", args->sparsity, r, c, best_len, n_rows, n_cols);
-    printf("|| %f %f %f %f ||\n", log_pval, log_lambda, score_adjust, best_score);
-    for (size_t i = 0; i < N; ++i) {
+  for (size_t i = 0; i < N; ++i) {
     const Hit *restrict hi = &hits[start + i];
 
     double hi_hit_p = log_pval_for_hit(hi, args);
     double best_i = hi_hit_p; /* path that starts at i */
-    float len_i = 0;
-    printf("Starting new:%i: %i %i %f\n", i, hi->query_pos, hi->target_pos, hi_hit_p);
+    float len_i = 1;
+
     /* ---------- inner scan, backwards, branch-light ------------- */
     for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
       const Hit *restrict hj = &hits[start + j];
@@ -224,20 +196,26 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
         len_i = plen[j] + ki;
-        printf("%i (%i %i): %f = %f %f %f \n", j, hj->query_pos, hj->target_pos, cand, trans, dp[j], hi_hit_p);
       }
     }
 
     dp[i] = best_i;
     plen[i] = len_i;
 
-    if (best_i < best_score) {
-      best_score = best_i;
-      best_len = len_i;
+    if (best_i < best_effective_score) {
+      best_effective_score = best_i;
+      best_effective_len = len_i;
     }
   }
-  }
-  //log_pval = log(1.0 - exp(-c * r * exp(best_score)));
+
+  double query_length = args->query_lengths[hits[start].query_seq_id];
+  double target_length = args->target_lengths[hits[start].target_seq_id];
+  double total_hits = end - start;
+  fprintf(args->out, "%f %f %f %f %f %f %f\n", query_length, target_length,
+                                    total_hits,
+                                    best_score, best_len,
+                                    best_effective_score, best_effective_len);
+
 
   if (dp != args->dp_st)
     free(dp);
@@ -245,7 +223,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     free(plen);
   *nhits = best_len;
 
-  return log_pval;
+  return 0;
 }
 
 void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
