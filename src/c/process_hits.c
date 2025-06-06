@@ -7,7 +7,7 @@
 #include "util.h"
 
 double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
-
+  double def = 0;
   uint32_t stat_bin_start = (hit->query_bin * args->indices_per_stat_row) +
                             (hit->target_bin * args->num_distributions);
 
@@ -23,10 +23,10 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
       // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
       //log_pval, args->genpareto_locs[stat_bin], args->genpareto_scales[stat_bin], args->genpareto_shapes[stat_bin]);
 
-      return log_pval;// - LOG_HALF;
+      return log_pval + def;// - LOG_HALF;
     }
   }
-  return 0;
+  return def;
 }
 
 // Filter 1 treats hits as independent
@@ -131,13 +131,14 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   float *plen = (float *)tplen;
   double best_score = 1;
   double best_len = 1;
+  double best_sub_len = 1;
 
   for (size_t i = 0; i < N; ++i) {
     const Hit *restrict hi = &hits[start + i];
 
     double hi_hit_p = log_pval_for_hit(hi, args);
     double best_i = hi_hit_p; /* path that starts at i */
-    float len_i = 0;
+    float len_i = 1;
 
     /* ---------- inner scan, backwards, branch-light ------------- */
     for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
@@ -155,7 +156,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       double cand = dp[j] + trans + hi_hit_p;
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
-        len_i = plen[j] = ki;
+        len_i = plen[j] + 1;//ki;
       }
     }
 
@@ -168,22 +169,33 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     }
   }
 
+  //printf("%f\t%f\n", best_score, best_len);
+
   /* convert path score to Poisson tail, same as Filter-1 */
   double r = n_rows; // effective q length
   double c = n_cols; // effective t length
 
 
-  r = r * (1.0 - (0.967*0.967));
-  c = c* (1.0 - pow((0.967*0.967), args->sparsity));
-  //                    p(first hit)           p(effective q pick)       p (effective t pick)
-  double score_adjust = log(n_rows * n_cols) + log_ch(n_rows - 1, best_len) + log_ch(n_cols - 1, best_len);
-  double m = MIN(r, c);
-  double n = MAX(r, c);
-  score_adjust = log_ch(m + n, m);
+  double p = 0.967*0.967;
+  r = r * (1.0 - (p));
+  c = c * (1.0 - p);
+  best_len = best_len * (1.0 - p);//                    p(first hit)           p(effective q pick)       p (effective t pick)
+  double score_adjust = log_ch(n_rows, best_len) + log_ch(n_cols, best_len);
+  double m = MIN(n_rows, n_cols);
+  double n = MAX(n_rows, n_cols);
+  score_adjust = log_ch(r, best_len);// + log_ch(c, best_len);
+  //score_adjust = log_ch(n, N);
   //score_adjust = log(n_rows * n_cols);
   double log_lambda = (best_score) + score_adjust; // (best_len * (lgamma(k + 1) - lgamma()));
-  double log_pval = log_poisson_tail(log_lambda);
+  double log_pval = log_poisson_tail(best_score + (score_adjust * 1.0));
   //printf("%.7f %.7f %.7f %.7f\n", score_adjust, best_score, log_lambda, log_pval);
+  double K = 0.25;
+
+  double L = 0.05;//0.0125;
+  double len_norm = best_len/best_sub_len;
+
+  //log_pval = log1mexp(-K*n*m*exp(L*best_score));
+
 
   if (log_pval <= -60.0) {
     printf("Found: %f || %f %f %f %i %i\n", args->sparsity, r, c, best_len, n_rows, n_cols);
