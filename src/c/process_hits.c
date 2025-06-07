@@ -137,6 +137,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
 
   volatile double combined_score = 1000.0; // big bug if not volatile
+  volatile double remaining_area = 0;
   double best_len = 1;
 
   for (size_t i = 0; i < N; ++i) {
@@ -149,6 +150,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                                    hi->target_pos,
                                                    query_length,
                                                    target_length);
+
 
     double best_i = hi_hit_p + log(excluded_area); /* path that starts at i */
     float len_i = 1;
@@ -183,12 +185,13 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     if (best_i < combined_score) {
       combined_score = best_i;
       best_len = len_i;
+      remaining_area = (query_length - hi->query_pos + 1) * (target_length - hi->target_pos + 1);
     }
   }
 
-
-
-  double log_pval = log_poisson_tail(combined_score + log(query_length * target_length));;
+  double log_pval = log_poisson_tail(combined_score +
+                                     log(query_length * target_length) +
+                                     log(remaining_area));
   if (dp != args->dp_st)
     free(dp);
   if (plen != args->ln_st)
