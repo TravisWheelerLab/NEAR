@@ -16,10 +16,9 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       uint64_t end, double query_length,
                                       double target_length, uint32_t*nhits);
 
-double log_odds_transition(const ProcessHitArgs *args,
+double logp_hit_given_hit(const ProcessHitArgs *args,
                            const Hit *first_hit,
-                           const Hit *second_hit,
-                           float *k);
+                           const Hit *second_hit);
 
 double excluded_area_for_start(double start_q, double start_t, double q_len, double t_len);
 

@@ -81,10 +81,9 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
   return log_pval;
 }
 
-double log_odds_transition(const ProcessHitArgs *args,
+double logp_hit_given_hit(const ProcessHitArgs *args,
                            const Hit *first_hit,
-                           const Hit *second_hit,
-                           float *k)
+                           const Hit *second_hit)
 {
   double log_theta_q = args->expected_log_cosine_dvg[first_hit->query_bin];
   double log_theta_t = args->expected_log_cosine_dvg[first_hit->target_bin];
@@ -95,26 +94,13 @@ double log_odds_transition(const ProcessHitArgs *args,
   double expected_cosine_dvg = (log_theta_q * dist_q) + (log_theta_t * dist_t);
   expected_cosine_dvg = exp(expected_cosine_dvg);
 
-  if (fabs(dist_q - dist_t) != 0) {
-    return -(log(0.02) + (log(0.1) * MIN(5.0, fabs(dist_q - dist_t - 1.0)))); // gap penalty
-  }
-
-  *k += (1.0 - expected_cosine_dvg);
   Hit hit = {.query_pos=second_hit->query_pos,
              .target_pos=second_hit->target_pos,
              .query_bin=second_hit->query_bin,
              .target_bin=second_hit->target_bin,
              .cosine_sim=expected_cosine_dvg * first_hit->cosine_sim};
 
-  double log_adjustment = (log_pval_for_hit(&hit, args) * expected_cosine_dvg);
-
-  if (fabs(dist_q - dist_t) != 0) {
-    log_adjustment += log(0.02) + (log(0.1) * MIN(5.0, fabs(dist_q - dist_t - 1.0))); // gap penalty
-  }
-
-  log_adjustment += -log(dist_q*dist_t)*0.5; // sparsity penalty
-
-  return -log_adjustment;
+  return log_pval_for_hit(&hit, args);
 }
 
 /* --------------------------------------------------------------------------
@@ -126,6 +112,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
   const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
+  double inv_sparsity = 1.0 / args->sparsity;
 
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
@@ -140,16 +127,15 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   volatile double remaining_area = 0;
   double best_len = 1;
 
+
   for (size_t i = 0; i < N; ++i) {
     const Hit *hi = &hits[start + i];
-
-
 
     double hi_hit_p = log_pval_for_hit(hi, args);
     double excluded_area = excluded_area_for_start(hi->query_pos,
                                                    hi->target_pos,
                                                    query_length,
-                                                   target_length);
+                                                   target_length * inv_sparsity);
 
 
     double best_i = hi_hit_p + log(excluded_area); /* path that starts at i */
@@ -169,8 +155,10 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       double hj_excluded_area = excluded_area - excluded_area_for_start(hj->query_pos,
                                                                         hj->target_pos,
                                                                         query_length,
-                                                                        target_length);
-      double cand = dp[j] + hi_hit_p + log(hj_excluded_area);
+                                                                        target_length * inv_sparsity);
+
+      double conditional_hit_p = logp_hit_given_hit(args, hj, hi);
+      double cand = dp[j] + conditional_hit_p + log(hj_excluded_area);
       //  printf("%f %f %f %f %f\n", cand, dp[j], hi_hit_p, log(hj_excluded_area), hj_excluded_area);
 
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
@@ -185,12 +173,11 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     if (best_i < combined_score) {
       combined_score = best_i;
       best_len = len_i;
-      remaining_area = (query_length - hi->query_pos + 1) * (target_length - hi->target_pos + 1);
+      remaining_area = (query_length - hi->query_pos + 1) * ((target_length * inv_sparsity) - hi->target_pos + 1);
     }
   }
 
   double log_pval = log_poisson_tail(combined_score +
-                                     log(query_length * target_length) +
                                      log(remaining_area));
   if (dp != args->dp_st)
     free(dp);
