@@ -150,9 +150,11 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
 
   // Read the number of queries and calculate the number of hits
   uint64_t num_queries;
-  if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1) {
+  if (fread(&num_queries, sizeof(num_queries), 1, stdin) != 1)
     return 0;
-  }
+  if (num_queries == 0)
+    return 0;
+
   DPRINTF("num queries %llu %llx \n", num_queries, num_queries);
   uint64_t num_hits = hits_per_query * num_queries;
   DPRINTF("num hits %llu %llx \n", num_hits, num_hits);
@@ -270,8 +272,8 @@ ProcessHitArgs read_arguments(int argc, const char **argv) {
   args.n_threads = 1;
   args.thread_id = 0;
 
-  args.dp_st = (double *)malloc(sizeof(double) * DP_STACK_LIM);
-  args.ln_st = (int *)malloc(sizeof(int) * DP_STACK_LIM);
+  args.dp_st = (double *)malloc(sizeof(*args.dp_st) * DP_STACK_LIM);
+  args.ln_st = (int *)malloc(sizeof(*args.ln_st) * DP_STACK_LIM);
 
   if (!args.dp_st || !args.ln_st) {
     perror("malloc");

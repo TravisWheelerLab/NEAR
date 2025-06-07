@@ -14,6 +14,9 @@ import sys
 #
 #    rather than "near.process_near_results", which is what the old script did.
 # ─────────────────────────────────────────────────────────────────────────────
+
+debug_args = ["-O1", "-DDEBUG=1", "-fsanitize=address", "-fno-omit-frame-pointer", "-fno-optimize-sibling-calls"]
+normal_args = ['-O3', '-Wall', '-Wextra', '-Wuninitialized', '-Wmaybe-uninitialized', '-Wstrict-overflow=5']
 c_extension = Extension(
     name="near._process_near",
     sources=[
@@ -24,7 +27,7 @@ c_extension = Extension(
         "src/c/util.c",
     ],
     include_dirs=["src/c"],
-    extra_compile_args=["-O3", "-DDEBUG=1"],
+    extra_compile_args=normal_args,
     extra_link_args=["-lm"],
 )
 
@@ -62,7 +65,9 @@ class BuildExecutable(Command):
             "src/c/util.c",
         ]
         # Put "-I src/c" near the front; "-lm" near the end.
-        compile_cmd = [cc, "-O3", "-I", "src/c"] + c_sources + ["-o", os.path.join(build_exe_dir, "process_near_results"), "-lm"]
+        debug_args = ["-O3", "-g", "-DDEBUG=1", "-fsanitize=address", "-fno-omit-frame-pointer"]
+        normal_args = ['-O3', '-Wall', '-Wextra', '-Wuninitialized', '-Wmaybe-uninitialized', '-Wstrict-overflow=5']
+        compile_cmd = [cc] + normal_args + ["-I", "src/c"] + c_sources + ["-o", os.path.join(build_exe_dir, "process_near_results"), "-lm"]
 
         self.announce(f"Running: {' '.join(compile_cmd)}", level=3)
         subprocess.check_call(compile_cmd, shell=False)

@@ -20,8 +20,6 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
                                   args->genpareto_locs[stat_bin],
                                   args->genpareto_scales[stat_bin],
                                   args->genpareto_shapes[stat_bin]);
-      // printf("%i %i %i %i %i     %f %f %f %f \n", stat_bin_start, stat_bin, i, hit->query_bin, hit->target_bin,
-      //log_pval, args->genpareto_locs[stat_bin], args->genpareto_scales[stat_bin], args->genpareto_shapes[stat_bin]);
 
       return log_pval + def;// - LOG_HALF;
     }
@@ -31,6 +29,10 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args) {
 
 double excluded_area_for_start(double start_q, double start_t, double q_len, double t_len) {
   double total_area;
+  start_q += 1;
+  start_t += 1;
+  q_len += 1;
+  t_len += 1;
   total_area = total_area + (start_q * t_len);
   total_area = total_area + (start_t * q_len);
   total_area = total_area - (start_q * start_t);
@@ -39,10 +41,10 @@ double excluded_area_for_start(double start_q, double start_t, double q_len, dou
 
 // Filter 1 treats hits as independent
 double log_pval_from_independent_hits(const ProcessHitArgs *args,
-                                      const Hit *restrict hits, uint64_t start,
+                                      const Hit *hits, uint64_t start,
                                       uint64_t end, double query_length,
                                       double target_length,
-                                      int *nhits) {
+                                      uint32_t *nhits) {
   /* keep only the rarest hit per target */
   uint32_t last_tid = hits[start].target_pos;
   double tid_best_logp = log_pval_for_hit(&hits[start], args);
@@ -120,36 +122,40 @@ double log_odds_transition(const ProcessHitArgs *args,
  * --------------------------------------------------------------------------*/
 double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                    uint64_t end, double query_length,
-                                   double target_length, int*nhits) {
+                                   double target_length, uint32_t *nhits) {
 
-  const Hit *restrict hits = args->hits;
+  const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
+
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
 
   double *dp =
       (N <= DP_STACK_LIM) ? args->dp_st : (double *)malloc(N * sizeof(*dp));
-  int *tplen =
-      (N <= DP_STACK_LIM) ? args->ln_st : (int *)malloc(N * sizeof(int));
+  float *plen =
+      (N <= DP_STACK_LIM) ? args->ln_st : (float *)malloc(N * sizeof(float));
 
-  float *plen = (float *)tplen;
-  double best_score = 1;
+
+  volatile double combined_score = 1000.0; // big bug if not volatile
   double best_len = 1;
 
   for (size_t i = 0; i < N; ++i) {
-    const Hit *restrict hi = &hits[start + i];
+    const Hit *hi = &hits[start + i];
+
+
 
     double hi_hit_p = log_pval_for_hit(hi, args);
     double excluded_area = excluded_area_for_start(hi->query_pos,
                                                    hi->target_pos,
                                                    query_length,
                                                    target_length);
+
     double best_i = hi_hit_p + log(excluded_area); /* path that starts at i */
     float len_i = 1;
 
     /* ---------- inner scan, backwards, branch-light ------------- */
     for (ssize_t j = (ssize_t)i - 1; j >= 0; --j) {
-      const Hit *restrict hj = &hits[start + j];
+      const Hit *hj = &hits[start + j];
 
       /* cheap rejection first */
       if (hj->target_pos == hi->target_pos)
@@ -158,12 +164,12 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
         continue; /* wrong col */
 
       /* passed the two filters -> valid predecessor  */
-      //double trans = log_odds_transition(args, hj, hi, &ki);
       double hj_excluded_area = excluded_area - excluded_area_for_start(hj->query_pos,
                                                                         hj->target_pos,
                                                                         query_length,
                                                                         target_length);
-      double cand = dp[j] + hi_hit_p - log(hj_excluded_area);
+      double cand = dp[j] + hi_hit_p + log(hj_excluded_area);
+      //  printf("%f %f %f %f %f\n", cand, dp[j], hi_hit_p, log(hj_excluded_area), hj_excluded_area);
 
       if (cand < best_i) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_i = cand;
@@ -173,16 +179,16 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
     dp[i] = best_i;
     plen[i] = len_i;
-
-    if (best_i < best_score) {
-      best_score = best_i;
+   // printf("Checking if best_i better than combined score: %f %p\n", combined_score, (void*)&combined_score);
+    if (best_i < combined_score) {
+      combined_score = best_i;
       best_len = len_i;
     }
   }
 
-  double log_pval = log_poisson_tail(best_score);
 
- // log_pval = log_poisson_tail(log_pval);
+
+  double log_pval = log_poisson_tail(combined_score + log(query_length * target_length));;
   if (dp != args->dp_st)
     free(dp);
   if (plen != args->ln_st)
@@ -213,9 +219,11 @@ void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
 
   if (qt_sim.log_pval_filter_1 <= args->filter_1_logpval_threshold) {
     // If it passes first filter, calculate second filter pval
-    qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(
-        args, starting_index, ending_index, query_length, target_length,
-        &qt_sim.coherent_length);
+    qt_sim.log_pval_filter_2 = log_pval_from_coherent_hits(args,
+                                                           starting_index,
+                                                           ending_index, query_length,
+                                                           target_length,
+                                                           &qt_sim.coherent_length);
     if (qt_sim.log_pval_filter_2 <= args->filter_2_logpval_threshold) {
       // Output the query target pair it passes the second filter
       qt_sim.query_seq_id = args->hits[starting_index].query_seq_id;

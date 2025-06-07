@@ -59,7 +59,7 @@ typedef struct {
   const Hit *hits;
 
   double *dp_st;
-  int *ln_st;
+  float *ln_st;
 
   uint64_t num_query_seqs;
   const uint64_t *query_name_starts;

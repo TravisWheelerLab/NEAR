@@ -14,20 +14,21 @@ double log_pval_for_hit(const Hit *hit, const ProcessHitArgs *args);
 double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       const Hit *hits, uint64_t start,
                                       uint64_t end, double query_length,
-                                      double target_length, int*nhits);
+                                      double target_length, uint32_t*nhits);
 
 double log_odds_transition(const ProcessHitArgs *args,
                            const Hit *first_hit,
                            const Hit *second_hit,
                            float *k);
 
+double excluded_area_for_start(double start_q, double start_t, double q_len, double t_len);
+
 double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                    uint64_t end, double query_length,
-                                   double target_length, int*nhits);
+                                   double target_length, uint32_t *nhits);
 
 void process_hit_range(const ProcessHitArgs *args, uint64_t starting_index,
                        uint64_t ending_index);
-double excluded_area_for_start(double start_q, double start_t, double q_len, double t_len);
 
 void process_hits(ProcessHitArgs args);
 
