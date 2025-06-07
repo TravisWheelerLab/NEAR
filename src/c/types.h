@@ -20,8 +20,10 @@
 #define TID_TO_POS(x) ((x & 0xFFFFFFFF) >> 7)
 
 #define LOG_LAM_SMALL -10.0
+#define INDP_T_COST
 #define LOG_LAM_LARGE 50.0
 #define LOG_HALF (-0.6931471805599453)
+//#define START_PENALTY (7.0)
 
 typedef struct {
   uint32_t query_seq_id;

@@ -24,16 +24,16 @@ void output_similarity(const ProcessHitArgs *args,
   const char *target_name =
       &args->target_names[args->target_name_starts[qt_sim.target_seq_id]];
 
- /* fprintf(args->out, "%s\t%s\t%.7f\t%.7f\t%.5e\n", query_name, target_name,
+  fprintf(args->out, "%s\t%s\t%.7f\t%.7f\t%.5e\n", query_name, target_name,
           qt_sim.log_pval_filter_1, qt_sim.log_pval_filter_2,
-          exp(qt_sim.log_pval_filter_2 + log(args->num_target_seqs)));*/
+          exp(qt_sim.log_pval_filter_2 + log(args->num_target_seqs)));
 
-  fprintf(args->out, " %llu %llu %i %i\n",
-  args->query_lengths[qt_sim.query_seq_id],
-  args->target_lengths[qt_sim.target_seq_id],
-  qt_sim.num_unique_hits,
-  qt_sim.coherent_length
-  );
+//  fprintf(args->out, " %llu %llu %i %i\n",
+//  args->query_lengths[qt_sim.query_seq_id],
+//  args->target_lengths[qt_sim.target_seq_id],
+//  qt_sim.num_unique_hits,
+//  qt_sim.coherent_length
+//  );
 }
 
 void get_doubles_from_pipe(double *values, uint64_t num_values) {
