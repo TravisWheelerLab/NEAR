@@ -81,7 +81,7 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
   return log_pval;
 }
 
-double logp_hit_given_hit(const ProcessHitArgs *args,
+double expected_hit_logp(const ProcessHitArgs *args,
                            const Hit *first_hit,
                            const Hit *second_hit)
 {
@@ -135,7 +135,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     double excluded_area = excluded_area_for_start(hi->query_pos,
                                                    hi->target_pos,
                                                    query_length,
-                                                   target_length * inv_sparsity);
+                                                   target_length * inv_sparsity) * 0.5;
 
 
     double best_i = hi_hit_p + log(excluded_area); /* path that starts at i */
@@ -157,7 +157,8 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                                                         query_length,
                                                                         target_length * inv_sparsity);
 
-      double conditional_hit_p = logp_hit_given_hit(args, hj, hi);
+      double expected_hit = expected_hit_logp(args, hj, hi);
+      double conditional_hit_p = hi_hit_p - expected_hit;
       double cand = dp[j] + conditional_hit_p + log(hj_excluded_area);
       //  printf("%f %f %f %f %f\n", cand, dp[j], hi_hit_p, log(hj_excluded_area), hj_excluded_area);
 
@@ -177,8 +178,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     }
   }
 
-  double log_pval = log_poisson_tail(combined_score +
-                                     log(remaining_area));
+  double log_pval = combined_score + log(remaining_area * 0.5);
   if (dp != args->dp_st)
     free(dp);
   if (plen != args->ln_st)

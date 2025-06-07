@@ -16,7 +16,7 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       uint64_t end, double query_length,
                                       double target_length, uint32_t*nhits);
 
-double logp_hit_given_hit(const ProcessHitArgs *args,
+double expected_hit_logp(const ProcessHitArgs *args,
                            const Hit *first_hit,
                            const Hit *second_hit);
 
