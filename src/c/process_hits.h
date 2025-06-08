@@ -17,8 +17,11 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
                                       double target_length, uint32_t*nhits);
 
 double expected_hit_logp(const ProcessHitArgs *args,
-                           const Hit *first_hit,
-                           const Hit *second_hit);
+                         const Hit *first_hit,
+                         const Hit *second_hit,
+                         double *expected_cosine_dvg);
+
+double indel_cost(double q_start, double t_start, double q_end, double t_end);
 
 double excluded_area_for_start(double start_q, double start_t, double q_len, double t_len);
 

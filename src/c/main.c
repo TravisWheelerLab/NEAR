@@ -13,7 +13,6 @@ int main(int argc, const char **argv) {
   static char buffer[OUTPUT_BUF_SIZE];
   setvbuf(args.out, buffer, _IOFBF, sizeof(buffer));
 
-
   if (args.n_threads == 1) {
     while (1) {
       Hit *hits;

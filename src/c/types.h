@@ -29,6 +29,9 @@ typedef struct {
   uint32_t query_seq_id;
   uint32_t target_seq_id;
 
+  uint32_t query_seq_pos;
+  uint32_t target_seq_pos;
+
   uint32_t query_pos;
   uint32_t target_pos;
 
@@ -104,9 +107,9 @@ static inline int cmp_hit(const void *a, const void *b) {
   if (pa->target_seq_id > pb->target_seq_id)
     return 1;
 
-  if (pa->target_pos < pb->target_pos)
+  if (pa->target_seq_pos < pb->target_seq_pos)
     return -1;
-  if (pa->target_pos > pb->target_pos)
+  if (pa->target_seq_pos > pb->target_seq_pos)
     return 1;
 
   return 0;

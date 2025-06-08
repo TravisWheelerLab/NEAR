@@ -131,6 +131,7 @@ uint64_t get_seq_list_from_pipe(char **name_list_ptr, uint64_t **start_list_ptr,
             perror("malloc");
             exit(1);
         }
+
         *seq_lengths_ptr = seq_lengths;
 
         count = fread(seq_lengths, sizeof(uint64_t), num_names, stdin);
@@ -170,8 +171,8 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
   }
 
   *hit_list_ptr = hits;
-
   size_t count;
+
   /* read query‐labels (packed: high 32 bits = seq_id) */
   count = fread(buf, sizeof(uint64_t), num_queries, stdin);
   if (count != num_queries) {
@@ -184,8 +185,24 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
   for (size_t i = 0; i < num_queries; ++i) {
     for (size_t j = (i * hits_per_query); j < (i * hits_per_query) + hits_per_query; ++j) {
       hits[j].query_seq_id = TID_TO_SEQID((buf[i]));
-      hits[j].query_pos = TID_TO_POS((buf[i]));
+      hits[j].query_seq_pos = TID_TO_POS((buf[i]));
       hits[j].query_bin = TID_TO_BIN((buf[i]));
+    }
+  }
+
+  /* read query‐realpos */
+  count = fread(buf, sizeof(uint32_t), num_queries, stdin);
+  uint32_t *buf32 = (uint32_t *)buf;
+  if (count != num_queries) {
+    fprintf(stderr, "Expected %llu query labels, got %zu\n",
+            (unsigned long long)num_queries, count);
+    free(hits);
+    free(buf);
+    exit(1);
+  }
+  for (size_t i = 0; i < num_queries; ++i) {
+    for (size_t j = (i * hits_per_query); j < (i * hits_per_query) + hits_per_query; ++j) {
+      hits[j].query_pos = (buf32[i]);
     }
   }
 
@@ -201,8 +218,21 @@ uint64_t get_hits_from_pipe(Hit **hit_list_ptr, uint32_t hits_per_query) {
   for (size_t i = 0; i < num_hits; ++i) {
 
     hits[i].target_seq_id = TID_TO_SEQID((buf[i]));
-    hits[i].target_pos = TID_TO_POS((buf[i]));
+    hits[i].target_seq_pos = TID_TO_POS((buf[i]));
     hits[i].target_bin = TID_TO_BIN((buf[i]));
+  }
+
+  /* read target real pos */
+  count = fread(buf, sizeof(uint32_t), num_hits, stdin);
+  if (count != num_hits) {
+    fprintf(stderr, "Expected %llu target labels, got %zu\n",
+            (unsigned long long)num_hits, count);
+    free(hits);
+    free(buf);
+    exit(1);
+  }
+  for (size_t i = 0; i < num_hits; ++i) {
+    hits[i].target_pos = (buf32[i]);
   }
 
   /* read raw double scores into the same buffer */
