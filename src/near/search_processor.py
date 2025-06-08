@@ -48,8 +48,8 @@ class AsyncNearResultsProcessor:
         self.query_data = query_data
         self.target_data = target_data
 
-        self.query_lengths = query_lengths
-        self.target_lengths = target_lengths
+        self.query_lengths = query_lengths.astype(np.uint64)
+        self.target_lengths = target_lengths.astype(np.uint64)
 
         self.hits_per_emb = hits_per_emb
 
@@ -71,7 +71,11 @@ class AsyncNearResultsProcessor:
 
         self.process = None
 
-    def add_to_queue(self, query_ids: np.array, target_ids, scores: np.ndarray) -> None:
+    def add_to_queue(self, query_ids: np.array,
+                     target_ids,
+                     scores: np.ndarray,
+                     real_query_pos,
+                     real_target_pos) -> None:
         """Add a batch of scores, query_ids, and target_ids to the queue.
 
         Parameters
@@ -86,7 +90,7 @@ class AsyncNearResultsProcessor:
 
         if self.error:
             raise RuntimeError("Processor encountered an error") from self.error
-        self.queue.put((query_ids, target_ids, scores))
+        self.queue.put((query_ids, target_ids, scores, real_query_pos, real_target_pos))
 
     def _start_process(self) -> None:
         executable_path = str(files('near').joinpath('bin/process_near_results'))
@@ -95,7 +99,6 @@ class AsyncNearResultsProcessor:
             raise FileNotFoundError(f"Could not find executable at {executable_path}")
         self.log_file1 = open('near_log1.txt', 'w')
         self.log_file2 = open('near_log2.txt', 'w')
-        print("sparsity: ", self.sparsity, str(self.sparsity))
         self.process = subprocess.Popen(
             [executable_path,
              self.output_file,
@@ -171,7 +174,7 @@ class AsyncNearResultsProcessor:
                 except queue.Empty:
                     continue
 
-                query_ids, target_ids, scores = batch
+                query_ids, target_ids, scores, real_query_pos, real_target_pos = batch
                 if query_ids is None:
                     self.process.stdin.write(struct.pack('Q', 0))
                     self.process.stdin.flush()
@@ -179,13 +182,14 @@ class AsyncNearResultsProcessor:
                     return
 
                 query_ids, target_ids, scores = query_ids.flatten(), target_ids.flatten(), scores.flatten()
-                # Write batch data to process
-                #print(query_ids.shape, target_ids.shape, scores.shape)
-                #print(query_ids.dtype, target_ids.dtype, scores.dtype)
+                real_query_pos, real_target_pos = real_query_pos.astype(np.int32).flatten(), real_target_pos.astype(np.int32).flatten()
+
                 scores = scores.astype(np.float64)
                 self.process.stdin.write(struct.pack('Q', len(query_ids)))
                 self.process.stdin.write(query_ids)
+                self.process.stdin.write(real_query_pos)
                 self.process.stdin.write(target_ids)
+                self.process.stdin.write(real_target_pos.astype(np.int32))
                 self.process.stdin.write(scores)
                 self.process.stdin.flush()
 

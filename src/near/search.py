@@ -16,6 +16,7 @@ def search_against_index(output_file_path: str,
                          query_data: FASTAData,
                          target_data: FASTAData,
                          target_labels,
+                         target_realpos,
                          filter1,
                          filter2,
                          sparsity,
@@ -107,20 +108,29 @@ def search_against_index(output_file_path: str,
 
             batch_size = (residues_per_batch // length) + 2
 
-            with torch.no_grad():
+            with (torch.no_grad()):
                 for i in range(0, token_tensors.shape[1], batch_size):
                     batch_tokens = token_tensors[i:i + batch_size]
-                    batch_mask = mask[i:i + batch_size].flatten()
+
+                    batch_mask = mask[i:i + batch_size]
+                    real_query_pos = (batch_mask.cumsum(-1)[batch_mask] - 1).int().cpu().numpy()
+                    batch_mask = batch_mask.flatten()
+
                     embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=0, end_dim=-2)
                     embeddings = F.normalize(embeddings[batch_mask], dim=-1)
+
                     query_ids = token_ids[i:i+batch_size].flatten()[batch_mask]
                     if len(query_ids) == 0:
                         continue
                     embeddings = embeddings.cpu().numpy()
                     scores, indices = index.search(embeddings, k=top_k)
+
+                    real_target_pos = target_realpos[indices]
+
                     indices = target_labels[indices]
-                    near_processor.add_to_queue(query_ids, indices, scores)
-        near_processor.add_to_queue(None, None, None)
+
+                    near_processor.add_to_queue(query_ids, indices, scores, real_query_pos, real_target_pos)
+        near_processor.add_to_queue(None,None,None, None, None)
         if verbose:
             print("Search is complete.")
         if near_processor.not_done():

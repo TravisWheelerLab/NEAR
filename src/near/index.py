@@ -171,6 +171,7 @@ def embed_data_with_model(model: NEARResNet,
 
     embeddings = torch.zeros(total_embeddings, 256, device=device)
     labels = np.zeros(total_embeddings, dtype=np.uint64)
+    real_pos = np.zeros(total_embeddings, dtype=np.int32)
 
     if verbose:
         print("Pushing model to device...")
@@ -198,16 +199,20 @@ def embed_data_with_model(model: NEARResNet,
                 #Gather the tokens/masks
                 end = min(i+batch_size, token_tensors.shape[0])
                 batch_tokens = token_tensors[i:end]
-                batch_mask = mask[i:end].flatten()
 
+                batch_mask = mask[i:end]
+                rp = (batch_mask.cumsum(-1)[batch_mask] - 1).int().cpu().numpy()
+                batch_mask = batch_mask.flatten()
                 #Embed and transpose, then mask and normalize
                 batch_embeddings = model(batch_tokens).transpose(-1, -2).flatten(start_dim=0, end_dim=-2)[batch_mask]
+
                 batch_embeddings = F.normalize(batch_embeddings, dim=-1)
 
                 # Assign embeddings and continue
                 embeddings[num_embeddings:num_embeddings+len(batch_embeddings)] = batch_embeddings
+                real_pos[num_embeddings:num_embeddings + len(batch_embeddings)] = rp
                 num_embeddings += len(batch_embeddings)
     if verbose:
         print("Done.")
 
-    return embeddings, labels
+    return embeddings, labels, real_pos
