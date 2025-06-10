@@ -123,7 +123,8 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
   double inv_sparsity = 1.0 / args->sparsity;
-
+  double effective_db_chance = (double)args->hits_per_emb / (double)args->index_size;
+  double effective_log_db_chance = log(effective_db_chance);
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
 
@@ -141,9 +142,15 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     const Hit *hi = &hits[start + i];
 
     double hi_hit_p = log_pval_for_hit(hi, args);
-    double excluded_area = start;
+    double excluded_area = excluded_area_for_start(hi->query_pos,
+                                                   hi->target_pos,
+                                                   query_length,
+                                                   target_length
+                                                   );
 
-    double best_hij = hi_hit_p + (log(query_length * target_length) * 0.5); /* path that starts at i */
+    double best_hij = hi_hit_p +
+                      log(query_length * target_length) +
+                      effective_log_db_chance; /* path that starts at i */
     float len_i = 1;
 
     /* ---------- inner scan, backwards, branch-light ------------- */
@@ -166,12 +173,19 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                      hj->target_seq_pos,
                                      hi->query_seq_pos,
                                      hi->target_seq_pos);
-      double cand = dp[j] +
-                    hi_hit_p - expected_hijp +
-                    indel_logp;
-
       // Now we make the excluded_area adjustment
-      double cand_area = excluded_area_for_start(hj->query_pos, hj->target_pos, query_length, target_length);
+      double cand_area = excluded_area_for_start(hj->query_pos,
+                                                 hj->target_pos,
+                                                 query_length,
+                                                 target_length);
+
+      double cand = dp[j] + // P of current path
+                    hi_hit_p - expected_hijp + // P of hit given last hit
+                    indel_logp + // P of hit given potential indels
+                    log(cand_area + 1) + // P of hit given area to find hit
+                    effective_log_db_chance - expected_hijp; // P of this hit being found
+
+
 
       cand += log((cand_area + 1) * 0.5);
 
