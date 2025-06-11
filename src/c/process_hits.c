@@ -183,11 +183,11 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                     hi_hit_p - expected_hijp + // P of hit given last hit
                     indel_logp + // P of hit given potential indels
                     log(cand_area + 1) + // P of hit given area to find hit
-                    effective_log_db_chance - expected_hijp; // P of this hit being found
+                    effective_log_db_chance;// - expected_hijp; // P of this hit being found
 
 
 
-      cand += log((cand_area + 1) * 0.5);
+      //cand += log((cand_area + 1) * 0.5);
 
       if (cand < best_hij) { /* smaller -> rarer -> better -> faster ->stronger*/
         best_hij = cand;
