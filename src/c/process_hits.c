@@ -80,11 +80,16 @@ double expected_hit_logp(const ProcessHitArgs *args,
 {
   *expected_cosine_dvg = 0;
 
+  double dist_q = second_hit->query_seq_pos - first_hit->query_seq_pos;
+  double dist_t = second_hit->target_seq_pos - first_hit->target_seq_pos;
+
+  if (dist_q != dist_t)
+    return 0;
+
   double log_theta_q = args->expected_log_cosine_dvg[first_hit->query_bin];
   double log_theta_t = args->expected_log_cosine_dvg[first_hit->target_bin];
 
-  double dist_q = second_hit->query_seq_pos - first_hit->query_seq_pos;
-  double dist_t = second_hit->target_seq_pos - first_hit->target_seq_pos;
+
   //dist_q += 1.0;
   //dist_t += 1.0;
 
@@ -124,8 +129,8 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
 
   const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
-  double inv_sparsity = 1.0 / args->sparsity;
-  double effective_db_chance = 1.0;
+  double inv_sparsity = 1.0 / (args->sparsity*args->sparsity);
+  double effective_db_chance = 1.0 / 1;//(args->sparsity*args->sparsity);
   double effective_log_db_chance = log(effective_db_chance);
   double sparsity_effect = 1.0 - pow(0.92, args->sparsity);
   double log_sparsity_effect = log(sparsity_effect);
@@ -152,8 +157,8 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                                    target_length
                                                    );
 
-    double best_hij = hi_hit_p +
-                      log((hi->query_pos * hi->target_pos) + 1) +
+    double best_hij = hi_hit_p + log(query_length * target_length) +
+                     // log((hi->query_pos * hi->target_pos) + 1) +
                       effective_log_db_chance; /* path that starts at i */
     float len_i = 1;
 
@@ -179,7 +184,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                      hi->target_seq_pos);
       // Now we make the excluded_area adjustment
 
-      double diag_length = (double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0);
+      double diag_length = (double)MIN(hi->query_pos - hj->query_pos, hi->target_pos - hj->target_pos);
       double cand_area = 1.0;
       cand_area += (hi->query_pos - hj->query_pos) * (hi->target_pos - hj->target_pos);
       cand_area -= diag_length;
