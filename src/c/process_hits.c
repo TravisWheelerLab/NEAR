@@ -109,8 +109,10 @@ double expected_hit_logp(const ProcessHitArgs *args,
 double indel_cost(double q_start, double t_start, double q_end, double t_end) {
 
   double delta_p = fabs((q_end - q_start) - (t_end - t_start));
-  delta_p = MIN(delta_p, 1.0);
-  return -(delta_p * log(0.05)); // indel cost
+  if (delta_p == 0) {
+    return -log(0.95);
+  }
+  return -log(0.05); // indel cost
 }
 
 /* --------------------------------------------------------------------------
@@ -123,7 +125,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
   double inv_sparsity = 1.0 / args->sparsity;
-  double effective_db_chance = (double)args->hits_per_emb / (double)args->index_size;
+  double effective_db_chance = 1e-1;
   double effective_log_db_chance = log(effective_db_chance);
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
@@ -137,7 +139,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   volatile double combined_score = 1000.0; // big bug if not volatile
   volatile double remaining_area = 0;
   double best_area = 1;
-
+  Hit *best_end = NULL;
   for (size_t i = 0; i < N; ++i) {
     const Hit *hi = &hits[start + i];
 
@@ -149,7 +151,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                                    );
 
     double best_hij = hi_hit_p +
-                      log(query_length * target_length) +
+                      log((hi->query_pos * hi->target_pos) + 1) +
                       effective_log_db_chance; /* path that starts at i */
     float len_i = 1;
 
@@ -174,15 +176,19 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                      hi->query_seq_pos,
                                      hi->target_seq_pos);
       // Now we make the excluded_area adjustment
-      double cand_area = excluded_area_for_start(hj->query_pos,
-                                                 hj->target_pos,
-                                                 query_length,
-                                                 target_length);
+
+
+      double cand_area = 1.0;
+      cand_area += (hi->query_pos - hj->query_pos) * (hi->target_pos - hj->target_pos);
+      cand_area -= (double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0);
+      cand_area *= 0.05;
+      cand_area += ((double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0) * 0.95);
+
 
       double cand = dp[j] + // P of current path
                     hi_hit_p - expected_hijp + // P of hit given last hit
                     indel_logp + // P of hit given potential indels
-                    log(cand_area + 1) + // P of hit given area to find hit
+                    log(cand_area) + // P of hit given area to find hit
                     effective_log_db_chance;// - expected_hijp; // P of this hit being found
 
 
@@ -201,13 +207,14 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
     if (best_hij < combined_score) {
       combined_score = best_hij;
       best_area = excluded_area;
+      best_end = hi;
     }
   }
 
   double hits_per_emb = args->hits_per_emb;
   double expected_hits_per_emb = hits_per_emb * target_length / args->index_size;
 
-  double lambda = combined_score;
+  double lambda = combined_score + log(1 + ((query_length - best_end->query_pos) * (target_length - best_end->target_pos)));
   double log_pval = lambda;
 
   if (dp != args->dp_st)
