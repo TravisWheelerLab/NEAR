@@ -125,8 +125,10 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   const Hit *hits = args->hits;
   const size_t N = (size_t)(end - start);
   double inv_sparsity = 1.0 / args->sparsity;
-  double effective_db_chance = 1e-1;
+  double effective_db_chance = 1.0;
   double effective_log_db_chance = log(effective_db_chance);
+  double sparsity_effect = 1.0 - pow(0.92, args->sparsity);
+  double log_sparsity_effect = log(sparsity_effect);
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
 
@@ -177,12 +179,14 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
                                      hi->target_seq_pos);
       // Now we make the excluded_area adjustment
 
-
+      double diag_length = (double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0);
       double cand_area = 1.0;
       cand_area += (hi->query_pos - hj->query_pos) * (hi->target_pos - hj->target_pos);
-      cand_area -= (double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0);
+      cand_area -= diag_length;
       cand_area *= 0.05;
-      cand_area += ((double)((hi->query_pos - hj->query_pos + hi->target_pos - hj->target_pos) / 2.0) * 0.95);
+
+      diag_length = diag_length - sparsity_effect * ((1.0 - pow(sparsity_effect, diag_length)) / (1.0 - sparsity_effect));
+      cand_area += diag_length * 0.95;
 
 
       double cand = dp[j] + // P of current path
