@@ -80,8 +80,8 @@ double expected_hit_logp(const ProcessHitArgs *args,
 {
   *expected_cosine_dvg = 0;
 
-  double dist_q = second_hit->query_seq_pos - first_hit->query_seq_pos;
-  double dist_t = second_hit->target_seq_pos - first_hit->target_seq_pos;
+  double dist_q = fabs(second_hit->query_seq_pos - first_hit->query_seq_pos);
+  double dist_t = fabs(second_hit->target_seq_pos - first_hit->target_seq_pos);
 
   if (dist_q != dist_t)
     return 0;
@@ -100,13 +100,15 @@ double expected_hit_logp(const ProcessHitArgs *args,
 
   Hit hit = {.query_seq_pos =second_hit->query_seq_pos,
              .target_seq_pos =second_hit->target_seq_pos,
-             .query_bin=second_hit->query_bin,
-             .target_bin=second_hit->target_bin,
+             .query_bin=first_hit->query_bin,
+             .target_bin=first_hit->target_bin,
              .cosine_sim=first_hit->cosine_sim * (*expected_cosine_dvg)};
 
   double log_p = log_pval_for_hit(&hit, args);
-  if (log_p == 0) {
+  //printf("%f %f\n", *expected_cosine_dvg, log_p);
+  if (log_p >= 0) {
     *expected_cosine_dvg = 0;
+    log_p = 0;
   }
   return  log_p;
 }
@@ -132,7 +134,7 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
   double inv_sparsity = 1.0 / (args->sparsity*args->sparsity);
   double effective_db_chance = 1.0 / 1;//(args->sparsity*args->sparsity);
   double effective_log_db_chance = log(effective_db_chance);
-  double sparsity_effect = 1.0 - pow(0.92, args->sparsity);
+  double sparsity_effect = 1.0 - pow(0.9, args->sparsity);
   double log_sparsity_effect = log(sparsity_effect);
   if (N == 0)
     return 0.0; /* empty slice → p = 1 */
@@ -189,13 +191,13 @@ double log_pval_from_coherent_hits(const ProcessHitArgs *args, uint64_t start,
       cand_area += (hi->query_pos - hj->query_pos) * (hi->target_pos - hj->target_pos);
       cand_area -= diag_length;
       cand_area *= 0.05;
-
       diag_length = diag_length - sparsity_effect * ((1.0 - pow(sparsity_effect, diag_length)) / (1.0 - sparsity_effect));
       cand_area += diag_length * 0.95;
 
 
+
       double cand = dp[j] + // P of current path
-                    hi_hit_p - expected_hijp + // P of hit given last hit
+                    (hi_hit_p - expected_hijp) + // P of hit given last hit
                     indel_logp + // P of hit given potential indels
                     log(cand_area) + // P of hit given area to find hit
                     effective_log_db_chance;// - expected_hijp; // P of this hit being found
