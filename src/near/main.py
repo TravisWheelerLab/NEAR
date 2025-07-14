@@ -4,7 +4,7 @@ import torch
 import yaml
 from pathlib import Path
 from .models import NEARResNet
-
+from .index_program import run_index_program
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -48,14 +48,6 @@ def parse_args():
                                     'Searches for local installation if unspecified.'
                                     'Searches online if no local installation is found')
     search_parser.add_argument('-d', '--device', type=str, default="cuda", help='Device to use for embedding')
-
-
-
-    embed_parser = subparsers.add_parser('embed', help='Generate embeddings for sequences')
-    embed_parser.add_argument('-o', '--output', type=str, default=None, required=True, help='Output file path')
-    embed_parser.add_argument('-i', '--input', type=str, default=None, required=True, help='Path to the input fasta file')
-    embed_parser.add_argument('-m', '--model', type=str, default=None, help='Path to the model json file')
-    embed_parser.add_argument('-d', '--device', type=str, default="cuda", help='Device to use for embedding')
 
     index_parser = subparsers.add_parser('index', help='Build search index')
     index_parser.add_argument('-o', '--out_path', type=str, default=None, required=True, help='Output file path')
