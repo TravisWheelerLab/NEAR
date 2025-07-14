@@ -1,5 +1,6 @@
 from .fasta_data import FASTAData
 from .models import NEARResNet
+from .search import search_against_index
 
 import torch
 import torch.nn.functional as F
@@ -277,6 +278,117 @@ class NEARIndex:
 
         del embeddings
 
+    def search_with_query(self,  query_data: FASTAData,
+                                 model: NEARResNet,
+                                 output_file_path: str,
+                                 angle_deviation_data: np.ndarray,
+                                 distribution_params: np.ndarray,
+                                 filter1: float,
+                                 filter2: float,
+                                 top_k: int = 64,
+                                 query_sparsity: float = 0.0,
+                                 residues_per_batch: int = 512 * 1024,
+                                 device: str = "cuda",
+                                 verbose: bool = False) -> bool:
+        """
+        Performs a search using the provided query data against the built index.
+        
+        Parameters
+        ----------
+        query_data : FASTAData
+            The query sequences to search with
+        model : NEARResNet
+            The model used for embedding query sequences
+        output_file_path : str
+            Path where search results will be saved
+        angle_deviation_data : np.ndarray
+            Data related to angle deviations for filtering
+        distribution_params : np.ndarray
+            Statistical parameters for result filtering
+        filter1 : float
+            First filter threshold value
+        filter2 : float
+            Second filter threshold value
+        top_k : int
+            Number of nearest neighbors to return for each query
+        query_sparsity : float
+            Sparsity level for query embeddings
+        residues_per_batch : int
+            The (approximate) number of residues in a single batch
+        device : str
+            The device being used for embedding data
+        verbose : bool
+            If true progress will be output and a progress bar will be displayed
+        
+        Returns
+        -------
+        bool
+            True if search was successful, False otherwise
+        """
+        # Parameter validation
+        if self.index is None:
+            if verbose:
+                print("Error: No index has been created or loaded")
+            return False
+        
+        if query_data is None:
+            if verbose:
+                print("Error: No query data provided")
+            return False
+        
+        if model is None:
+            if verbose:
+                print("Error: No model provided")
+            return False
+        
+        if output_file_path is None or not isinstance(output_file_path, str):
+            if verbose:
+                print("Error: Invalid output file path")
+            return False
+        
+        # Check if top_k exceeds the graph degree (important constraint for FAISS)
+        if top_k > self.graph_degree:
+            if verbose:
+                print(f"Warning: top_k ({top_k}) cannot be larger than graph degree ({self.graph_degree})")
+                print(f"Reducing top_k to {self.graph_degree}")
+            top_k = self.graph_degree
+        
+        # Provide strong warning if both index and query use sparsity
+        if query_sparsity > 0 and self.stride > 0:
+            print("⚠️ WARNING: BOTH QUERY AND INDEX HAVE SPARSITY ENABLED ⚠️")
+            print("This will significantly reduce search quality and recall as embeddings from")
+            print("both query and index are being subsampled. Consider disabling one of them.")
+            print(f"Current settings: query_sparsity={query_sparsity}, index_stride={self.stride}")
+            print("==============================================================================")
+        
+        try:
+            stride = self.stride
+            if query_sparsity > 0:
+                stride = query_sparsity
+            # Perform the search by calling search_against_index
+            search_against_index(output_file_path=output_file_path,
+                                 model=model,
+                                 index=self.index,
+                                 query_data=query_data,
+                                 target_data=self.fasta_data,
+                                 target_labels=self.labels,
+                                 target_realpos=self.real_pos,
+                                 filter1=filter1,
+                                 filter2=filter2,
+                                 sparsity=stride,
+                                 angle_deviation_data=angle_deviation_data,
+                                 stats=distribution_params,
+                                 query_sparsity=(query_sparsity > 0),
+                                 device=device,
+                                 residues_per_batch=residues_per_batch,
+                                 verbose=verbose,
+                                 top_k=top_k)
+            return True
+        except Exception as e:
+            if verbose:
+                print(f"Error during search: {str(e)}")
+            return False
+
 def embed_data_with_model(model: NEARResNet,
                           data: FASTAData,
                           selection_frequency: int = 16,
@@ -284,7 +396,7 @@ def embed_data_with_model(model: NEARResNet,
                           discard_masked : bool = True,
                           device: str = "cuda",
                           residues_per_batch: int = 512*1024,
-                          verbose=True) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                          verbose=False) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Embeds `data` with `model` with some (optional) level of sparsity.
     By default, masked embeddings will be discarded.
@@ -399,6 +511,7 @@ def embed_data_with_model(model: NEARResNet,
                 embeddings[num_embeddings:num_embeddings+len(batch_embeddings)] = batch_embeddings
                 real_pos[num_embeddings:num_embeddings + len(batch_embeddings)] = rp
                 num_embeddings += len(batch_embeddings)
+
     if verbose:
         print("Done.")
 
