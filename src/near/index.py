@@ -10,6 +10,11 @@ from typing import Literal
 from tqdm import tqdm
 import time
 
+import os
+import pickle
+from typing import Optional, Tuple, Dict, Any, Union
+
+
 class NEARIndex:
     def __init__(self):
         self.fasta_data                 = None
@@ -24,13 +29,185 @@ class NEARIndex:
         self.labels                     = None
         self.real_pos                   = None
 
-    def load_from_path(self, path: str):
-        pass
+    def save_to_path(self, path: str) -> bool:
+        """
+        Save the NEARIndex instance to a single file, including the FAISS index and all metadata.
 
-    def save_to_path(self, path:str):
-        pass
+        Parameters
+        ----------
+        path : str
+            Path where the index and metadata should be saved
 
-    def create_index(self,  stride: int = 8,
+        Returns
+        -------
+        bool
+            True if save was successful, False otherwise
+        """
+        try:
+            # Verify that all necessary components are present
+            if self.index is None:
+                print("Error: No index to save")
+                return False
+
+            if self.labels is None:
+                print("Error: No labels to save")
+                return False
+
+            if self.real_pos is None:
+                print("Error: No real_pos data to save")
+                return False
+
+            # Required configuration parameters
+            required_params = [
+                'index_build_algo', 'model_dims', 'graph_degree',
+                'intermediate_graph_degree', 'nn_descent_niter',
+                'itopk_size', 'stride'
+            ]
+
+            for param in required_params:
+                if getattr(self, param) is None:
+                    print(f"Error: Missing required parameter '{param}'")
+                    return False
+
+            # Convert FAISS index to bytes
+            index_bytes = faiss.serialize_index(self.index)
+
+            # Prepare data dictionary
+            save_data = {
+                'index_bytes': index_bytes,
+                'index_build_algo': self.index_build_algo,
+                'model_dims': self.model_dims,
+                'graph_degree': self.graph_degree,
+                'intermediate_graph_degree': self.intermediate_graph_degree,
+                'nn_descent_niter': self.nn_descent_niter,
+                'itopk_size': self.itopk_size,
+                'stride': self.stride,
+                'labels': self.labels,
+                'real_pos': self.real_pos,
+                'format_version': 1  # For future compatibility checks
+            }
+
+            # Save the fasta_data reference separately if it exists
+            # We don't include it in the main dictionary to avoid large serializations
+            if self.fasta_data is not None:
+                save_data['has_fasta_data'] = True
+            else:
+                save_data['has_fasta_data'] = False
+
+            # Save everything to a single file
+            with open(path, 'wb') as f:
+                pickle.dump(save_data, f)
+
+            # If we have FASTA data and it has a save method, save it separately
+            if self.fasta_data is not None and hasattr(self.fasta_data, 'save'):
+                fasta_path = f"{path}.fasta_data"
+                self.fasta_data.save(fasta_path)
+
+            return True
+
+        except Exception as e:
+            print(f"Error saving index: {str(e)}")
+            return False
+
+    def load_from_path(self, path: str) -> bool:
+        """
+        Load a NEARIndex instance from a file, with type checking and validation.
+
+        Parameters
+        ----------
+        path : str
+            Path where the index and metadata are saved
+
+        Returns
+        -------
+        bool
+            True if load was successful, False otherwise
+        """
+        try:
+            if not os.path.exists(path):
+                print(f"Error: File not found: {path}")
+                return False
+
+            # Load the data dictionary
+            with open(path, 'rb') as f:
+                save_data = pickle.load(f)
+
+            # Validate format version for compatibility
+            if 'format_version' not in save_data or save_data['format_version'] != 1:
+                print("Error: Incompatible save format or corrupted file")
+                return False
+
+            # Required keys
+            required_keys = [
+                'index_bytes', 'index_build_algo', 'model_dims', 'graph_degree',
+                'intermediate_graph_degree', 'nn_descent_niter', 'itopk_size',
+                'stride', 'labels', 'real_pos'
+            ]
+
+            # Verify all required keys exist
+            for key in required_keys:
+                if key not in save_data:
+                    print(f"Error: Missing required data '{key}'")
+                    return False
+
+            # Type checking
+            type_checks = {
+                'index_build_algo': (str,),
+                'model_dims': (int,),
+                'graph_degree': (int,),
+                'intermediate_graph_degree': (int,),
+                'nn_descent_niter': (int,),
+                'itopk_size': (int,),
+                'stride': (int,),
+                'labels': (np.ndarray,),
+                'real_pos': (np.ndarray,),
+                'index_bytes': (bytes,),
+            }
+
+            for key, expected_types in type_checks.items():
+                if not isinstance(save_data[key], expected_types):
+                    print(f"Error: Invalid type for '{key}'. Expected {expected_types}, got {type(save_data[key])}")
+                    return False
+
+            # Deserialize the FAISS index
+            try:
+                self.index = faiss.deserialize_index(save_data['index_bytes'])
+            except Exception as e:
+                print(f"Error deserializing FAISS index: {str(e)}")
+                return False
+
+            # Load other attributes
+            self.index_build_algo = save_data['index_build_algo']
+            self.model_dims = save_data['model_dims']
+            self.graph_degree = save_data['graph_degree']
+            self.intermediate_graph_degree = save_data['intermediate_graph_degree']
+            self.nn_descent_niter = save_data['nn_descent_niter']
+            self.itopk_size = save_data['itopk_size']
+            self.stride = save_data['stride']
+            self.labels = save_data['labels']
+            self.real_pos = save_data['real_pos']
+
+            # Load FASTA data if it exists
+            if save_data.get('has_fasta_data', False):
+                fasta_path = f"{path}.fasta_data"
+                if os.path.exists(fasta_path) and hasattr(self.fasta_data.__class__, 'load'):
+                    try:
+                        self.fasta_data = self.fasta_data.__class__.load(fasta_path)
+                    except Exception as e:
+                        print(f"Warning: Could not load FASTA data: {str(e)}")
+                        self.fasta_data = None
+                else:
+                    print("Warning: FASTA data was marked as saved but could not be loaded")
+                    self.fasta_data = None
+
+            return True
+
+        except Exception as e:
+            print(f"Error loading index: {str(e)}")
+            return False
+
+    def create_index(self,  model,
+                            stride: int = 8,
                             index_build_algo: str = "Default",
                             graph_degree: int = 256,
                             intermediate_graph_degree: int = 512,
@@ -75,7 +252,8 @@ class NEARIndex:
         if verbose:
             print(f"Creating embeddings (using device={device})...")
         start_time = time.time()
-        embeddings, labels, real_pos = embed_data_with_model(self.fasta_data,
+        embeddings, labels, real_pos = embed_data_with_model(model,
+                                                             self.fasta_data,
                                                              selection_frequency= self.stride,
                                                              random_selection_rate=1.0,
                                                              device=device,
@@ -98,48 +276,6 @@ class NEARIndex:
             print(f"Time to add embeddings to index: {time.time() - start_time}")
 
         del embeddings
-
-
-
-
-
-def load_index(file_path: str) -> faiss.Index:
-    """
-    Load a search index from file
-
-    Parameters
-    ----------
-    file_path : str
-        The saved index file
-
-    Notes
-    ----------
-    For now this just calls `faiss.read_index`, but it may perform additional
-    actions in the future. This function should be used instead of manually loading
-    the faiss index.
-    """
-
-    return faiss.read_index(file_path)
-
-
-def save_index(index: faiss.Index, file_path: str):
-    """
-    Saves a FAISS index to a file
-
-    Parameters
-    ----------
-    file_path : str
-        Path where the index/metadata should be saved
-
-    Notes
-    ----------
-
-    """
-
-
-
-
-IndexType = Literal["Default", "GPU_CAGRA", "GPU_CAGRA_NN_DESCENT"]
 
 def embed_data_with_model(model: NEARResNet,
                           data: FASTAData,
