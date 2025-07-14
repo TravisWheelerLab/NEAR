@@ -75,11 +75,6 @@ def parse_args():
                                default=16,
                                help="The discard frequency for the index")
 
-    train_parser = subparsers.add_parser('train', help='Train a NEAR model')
-    index_parser.add_argument('-i', '--input', type=str, default=None, required=True,
-                              help='training json file')
-    index_parser.add_argument('--print_example_json', action='store_true', default=False,
-                              help='Print an example json training file and exit')
     return parser.parse_args()
 
 
