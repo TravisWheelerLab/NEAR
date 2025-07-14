@@ -58,22 +58,33 @@ def parse_args():
     embed_parser.add_argument('-d', '--device', type=str, default="cuda", help='Device to use for embedding')
 
     index_parser = subparsers.add_parser('index', help='Build search index')
-    index_parser.add_argument('-o', '--output', type=str, default=None, required=True, help='Output file path')
-    index_parser.add_argument('-i', '--input', type=str, default=None, required=True, help='Path to the input fasta file')
-    index_parser.add_argument('-m', '--model', type=str, default=None, help='Path to the model json file')
+    index_parser.add_argument('-o', '--out_path', type=str, default=None, required=True, help='Output file path')
+    index_parser.add_argument('-i', '--input_path', type=str, default=None, required=True, help='Path to the input fasta file')
+    index_parser.add_argument('-m', '--model_path', type=str, default=None, help='Path to the model json file')
     index_parser.add_argument('-d', '--device', type=str, default="cuda", help='Device to use for embedding')
-    index_parser.add_argument("--index_type", choices=["Default", "GPUCagra", "GPUCagraNN"],
+    index_parser.add_argument("--index_build_algo", choices=["Default", "GPU_CAGRA_NN_DESCENT", "GPU_CAGRA"],
         default="Default",
-        help="Which backend to use (Default=GPUCagraNN, Cagra, or GPUCagraNN)")
-    index_parser.add_argument("--index_degree", type=int,
-                               default=64,
+        help="Which backend to use (Default=GPU_CAGRA_NN_DESCENT, GPU_CAGRA_NN_DESCENT, or GPU_CAGRA)")
+
+    index_parser.add_argument("--graph_degree", type=int,
+                               default=128,
                                help="The degree of graph used by the index")
-    index_parser.add_argument("--save_path", type=str,
-                               default=None,
-                               help="Where to save the index")
-    index_parser.add_argument("--discard_freq", type=int,
-                               default=16,
-                               help="The discard frequency for the index")
+
+    index_parser.add_argument("--intermediate_graph_degree", type=int,
+                              default=256,
+                              help="The intermediate degree of graph used by the index")
+
+    index_parser.add_argument("--nn_descent_niter", type=int,
+                              default=100,
+                              help="The number of NN descent iterations when using GPU_CAGRA_NN_DESCENT")
+
+    index_parser.add_argument("--itopk_size",
+                              default=64,
+                              help="Internal topk size list used by CAGRA")
+
+    index_parser.add_argument("--stride", type=int,
+                               default=8,
+                               help="The stride used by the target index")
 
     return parser.parse_args()
 

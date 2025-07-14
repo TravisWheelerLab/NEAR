@@ -212,7 +212,7 @@ class NEARIndex:
                             index_build_algo: str = "Default",
                             graph_degree: int = 256,
                             intermediate_graph_degree: int = 512,
-                            nn_descent_niter: int = 20,
+                            nn_descent_niter: int = 100,
                             itopk_size:int =64,
                             model_dims: int = 256,
                             verbose: bool = False,
