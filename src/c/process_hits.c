@@ -65,8 +65,7 @@ double log_pval_from_independent_hits(const ProcessHitArgs *args,
     num_hits = query_length;
   }
 
-  double log_arg = logp_sum + log(query_length * target_length);
-  double log_pval = log_poisson_tail(log_arg);
+  double log_pval = logp_sum + log(query_length * target_length);
 
   if (nhits != NULL)
     *nhits = num_hits;

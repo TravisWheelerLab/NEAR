@@ -22,6 +22,7 @@ def search_against_index(output_file_path: str,
                          sparsity,
                          angle_deviation_data,
                          stats,
+                         query_sparsity=False,
                          device: str = "cuda",
                          residues_per_batch: int = 512*1024,
                          verbose=False,
@@ -104,6 +105,15 @@ def search_against_index(output_file_path: str,
             # Gather the data that we will be processing in this length bin
             token_tensors = query_data.tokens_by_length[length].to(device)
             mask = query_data.masks_by_length[length].clone()
+            if query_sparsity and sparsity > 0:
+                half_freq = (sparsity + 1) // 2
+
+                num_emb = (length - sparsity) // sparsity
+                included_pos = torch.linspace(half_freq, length - half_freq, num_emb, dtype=torch.long, device=mask.device)
+                discard_mask = torch.zeros(mask.shape[1], dtype=bool, device=mask.device)
+                discard_mask[included_pos] = True
+
+                mask = torch.logical_and(mask, discard_mask.unsqueeze(0))
             token_ids = query_data.tokenids_by_length[length]
 
             batch_size = (residues_per_batch // length) + 2
@@ -123,10 +133,17 @@ def search_against_index(output_file_path: str,
                     if len(query_ids) == 0:
                         continue
                     embeddings = embeddings.cpu().numpy()
-                    scores, indices = index.search(embeddings, k=top_k)
+                    if embeddings.shape[0] > 512:
+                        scores, indices = index.search(embeddings, k=top_k)
+                    else:
+
+                        num_embeddings = embeddings.shape[0]
+                        embeddings = np.pad(embeddings, pad_width=((0, 513 - num_embeddings), (0, 0)), mode='constant')
+                        scores, indices = index.search(embeddings, k=top_k)
+                        scores = scores[:num_embeddings]
+                        indices = indices[:num_embeddings]
 
                     real_target_pos = target_realpos[indices]
-
                     indices = target_labels[indices]
 
                     near_processor.add_to_queue(query_ids, indices, scores, real_query_pos, real_target_pos)

@@ -8,6 +8,100 @@ import numpy as np
 
 from typing import Literal
 from tqdm import tqdm
+import time
+
+class NEARIndex:
+    def __init__(self):
+        self.fasta_data                 = None
+        self.index                      = None
+        self.index_build_algo           = None
+        self.model_dims                 = None
+        self.graph_degree               = None
+        self.intermediate_graph_degree  = None
+        self.nn_descent_niter           = None
+        self.itopk_size                 = None
+        self.stride                     = None
+        self.labels                     = None
+        self.real_pos                   = None
+
+    def load_from_path(self, path: str):
+        pass
+
+    def save_to_path(self, path:str):
+        pass
+
+    def create_index(self,  stride: int = 8,
+                            index_build_algo: str = "Default",
+                            graph_degree: int = 256,
+                            intermediate_graph_degree: int = 512,
+                            nn_descent_niter: int = 20,
+                            itopk_size:int =64,
+                            model_dims: int = 256,
+                            verbose: bool = False,
+                            device: str = "cuda",
+                            residues_per_batch: int = 512*1024,):
+
+        if self.fasta_data is None:
+            raise ValueError("FASTA data has not been loaded")
+
+        self.index_build_algo = index_build_algo
+        self.model_dims = model_dims
+        self.graph_degree = graph_degree
+        self.intermediate_graph_degree = intermediate_graph_degree
+        self.nn_descent_niter = nn_descent_niter
+        self.stride = stride
+        self.itopk_size = itopk_size
+
+        # Build the index and initialize the config
+        if verbose:
+            print("Initializing index...")
+        match index_build_algo:
+            case "Default" | "GPU_CAGRA_NN_DESCENT":
+
+
+
+                config = faiss.GpuIndexCagraConfig()
+                config.itopk_size = itopk_size
+                config.build_algo = faiss.graph_build_algo_NN_DESCENT
+                self.index = faiss.GpuIndexCagra(faiss.StandardGpuResources(), model_dims, faiss.METRIC_INNER_PRODUCT, config)
+
+
+            case "GPU_CAGRA":
+                self.index = faiss.GpuIndexCagra(faiss.StandardGpuResources(), 256, faiss.METRIC_INNER_PRODUCT)
+
+            case _:
+                raise ValueError(f"Invalid index type: {index_build_algo}")
+
+        if verbose:
+            print(f"Creating embeddings (using device={device})...")
+        start_time = time.time()
+        embeddings, labels, real_pos = embed_data_with_model(self.fasta_data,
+                                                             selection_frequency= self.stride,
+                                                             random_selection_rate=1.0,
+                                                             device=device,
+                                                             verbose=verbose,
+                                                             residues_per_batch=residues_per_batch,
+                                                             discard_masked=True)
+        self.labels = labels
+        self.real_pos = real_pos
+
+        if verbose:
+            print(f"Time to create embeddings: {time.time() - start_time}")
+            print("Adding embeddings to index. This may take a while...")
+
+        start_time = time.time()
+
+        self.index.train(embeddings)
+        self.index.add(embeddings)
+
+        if verbose:
+            print(f"Time to add embeddings to index: {time.time() - start_time}")
+
+        del embeddings
+
+
+
+
 
 def load_index(file_path: str) -> faiss.Index:
     """
@@ -35,60 +129,17 @@ def save_index(index: faiss.Index, file_path: str):
     Parameters
     ----------
     file_path : str
-        Path where the index should be saved
+        Path where the index/metadata should be saved
 
     Notes
     ----------
-    For now this just calls `faiss.write_index`, but it may perform additional
-    actions in the future. This function should be used instead of manually saving
-    the faiss index.
+
     """
 
-    faiss.write_index(index, file_path)
+
 
 
 IndexType = Literal["Default", "GPU_CAGRA", "GPU_CAGRA_NN_DESCENT"]
-
-
-def create_index(index_type: IndexType = "Default",
-                 topk: int = 64,
-                 nn_descent_niter: int = 20) -> faiss.Index:
-    """
-    Creates a search index without filling it.
-
-    Parameters
-    ----------
-    index_type : IndexType
-        The type of index to create. Must be one of:
-        - "Default": Currently defaults to GPU_CAGRA_NN_DESCENT
-        - "GPU_CAGRA": GPU-based Cagra index with default configuration
-        - "GPU_CAGRA_NN_DESCENT": GPU-based Cagra index trained with NN descent
-    topk : int
-        The degree of the graph for the final Cagra index
-        Increasing the degree will increase accuracy, but also increase size/build-time
-        Note that the top-k search parameter cannot be larger than the graph degree
-    nn_descent_niter : int
-        The number of NN descent iterations to use when building the graph with GPU_CAGRA_NN_DESCENT
-    """
-
-    match index_type:
-        case "Default" | "GPU_CAGRA_NN_DESCENT":
-            config = faiss.GpuIndexCagraConfig()
-            config.itopk_size=topk
-            config.build_algo = faiss.graph_build_algo_NN_DESCENT
-            index = faiss.GpuIndexCagra(faiss.StandardGpuResources(), 256, faiss.METRIC_INNER_PRODUCT, config)
-
-        case "GPU_CAGRA":
-            index = faiss.GpuIndexCagra(faiss.StandardGpuResources(), 256, faiss.METRIC_INNER_PRODUCT)
-
-        case _:
-            raise ValueError(f"Invalid index type: {index_type}")
-
-    return index
-
-def fill_index(index: faiss.Index, embeddings: torch.tensor):
-    index.train(embeddings)
-    index.add(embeddings)
 
 def embed_data_with_model(model: NEARResNet,
                           data: FASTAData,
@@ -97,7 +148,7 @@ def embed_data_with_model(model: NEARResNet,
                           discard_masked : bool = True,
                           device: str = "cuda",
                           residues_per_batch: int = 512*1024,
-                          verbose=True) -> tuple[torch.Tensor, torch.Tensor]:
+                          verbose=True) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Embeds `data` with `model` with some (optional) level of sparsity.
     By default, masked embeddings will be discarded.
