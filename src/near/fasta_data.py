@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 class FASTAData:
-    def __init__(self, file_path: str, min_seq_length: int=128, max_seq_length: int=99999999):
+    def __init__(self, file_path: str, min_seq_length: int=256, max_seq_length: int=99999999):
         self.tokens_by_length = {}
         self.masks_by_length = {}
         self.seqids_by_length = {}

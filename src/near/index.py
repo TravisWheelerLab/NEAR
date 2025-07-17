@@ -17,8 +17,8 @@ from typing import Optional, Tuple, Dict, Any, Union
 
 
 class NEARIndex:
-    def __init__(self):
-        self.fasta_data                 = None
+    def __init__(self, fasta_data = None):
+        self.fasta_data                 = fasta_data
         self.index                      = None
         self.index_build_algo           = None
         self.model_dims                 = None
@@ -270,6 +270,7 @@ class NEARIndex:
 
         start_time = time.time()
 
+        embeddings = embeddings.to('cpu').to(float).numpy()
         self.index.train(embeddings)
         self.index.add(embeddings)
 

@@ -85,7 +85,43 @@ class BuildExecutable(Command):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3) Subclass build_py so that we run our BuildExecutable command
+# 3) Command to copy models directory to package directory
+# ─────────────────────────────────────────────────────────────────────────────
+class CopyModels(Command):
+    description = "copy models directory to the package directory"
+    user_options = []  # no command-line options.
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        # Copy models directory to src/near/models
+        src_models_dir = "models"
+        dst_models_dir = os.path.join("src", "near", "models")
+
+        # Ensure the destination directory exists
+        os.makedirs(dst_models_dir, exist_ok=True)
+
+        # Copy each model file
+        for item in os.listdir(src_models_dir):
+            src_path = os.path.join(src_models_dir, item)
+            dst_path = os.path.join(dst_models_dir, item)
+
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dst_path)
+                self.announce(f"Copied model file {item} to {dst_path}", level=3)
+            elif os.path.isdir(src_path):
+                if os.path.exists(dst_path):
+                    shutil.rmtree(dst_path)
+                shutil.copytree(src_path, dst_path)
+                self.announce(f"Copied model directory {item} to {dst_path}", level=3)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4) Subclass build_py so that we run our BuildExecutable command
 #    *before* setuptools copies any pure-Python modules into build/lib/.
 # ─────────────────────────────────────────────────────────────────────────────
 class build_py(_build_py):
@@ -93,11 +129,13 @@ class build_py(_build_py):
         # First: compile+copy the C executable
         self.run_command("build_executable")
         # Then do the normal build_py steps (copying .py files, etc.)
+        self.run_command("copy_models")
+
         super().run()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4) Finally, call setup().  We register both the extension and our new commands.
+# 5) Finally, call setup().  We register both the extension and our new commands.
 # ─────────────────────────────────────────────────────────────────────────────
 setup(
     name="near",
@@ -105,22 +143,23 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
 
-    # 4a) C-extension module (accessible as near._process_near)
+    # 5a) C-extension module (accessible as near._process_near)
     ext_modules=[c_extension],
 
-    # 4b) cmdclass: tie "build_py" to our subclass, and register "build_executable"
+    # 5b) cmdclass: tie "build_py" to our subclass, and register custom commands
     cmdclass={
         "build_py": build_py,
         "build_executable": BuildExecutable,
+        "copy_models": CopyModels,
     },
 
-    # 4c) ensure that "near/bin/process_near_results" ends up in the installed package
+    # 5c) ensure that "near/bin/process_near_results" and models end up in the installed package
     package_data={
-        "near": ["bin/process_near_results"],
+        "near": ["bin/process_near_results", "models/*"],
     },
     include_package_data=True,  # in case you have other data files
 
-    # 4d) runtime dependencies
+    # 5d) runtime dependencies
     install_requires=[
         "numpy",
         "torch",
@@ -129,7 +168,7 @@ setup(
         "pyyaml",
     ],
 
-    # 4e) if you want a console‐script entrypoint for your python code:
+    # 5e) if you want a console‐script entrypoint for your python code:
     entry_points={
         "console_scripts": [
             "near=near.main:main",

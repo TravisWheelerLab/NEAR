@@ -49,9 +49,9 @@ conda deactivate
 ```bash
 conda activate near_env
 
-python src/near_embed.py resnet.yaml models/resnet_877_256.pt sparse_benchmark/sparse_query_softmask.fa queries.npz
+python src/near_embed.py resnet_877_256.yaml models/resnet_877_256.pt sparse_benchmark/sparse_query_softmask.fa queries.npz
 
-python src/near_embed.py resnet.yaml models/resnet_877_256.pt sparse_benchmark/sparse_target_hardmask_mixed.fa targets.npz
+python src/near_embed.py resnet_877_256.yaml models/resnet_877_256.pt sparse_benchmark/sparse_target_hardmask_mixed.fa targets.npz
 
 python src/search.py -g -q queries.npz -t targets.npz -o hits.csv
 

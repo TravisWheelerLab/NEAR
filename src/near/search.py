@@ -136,7 +136,6 @@ def search_against_index(output_file_path: str,
                     if embeddings.shape[0] > 512:
                         scores, indices = index.search(embeddings, k=top_k)
                     else:
-
                         num_embeddings = embeddings.shape[0]
                         embeddings = np.pad(embeddings, pad_width=((0, 513 - num_embeddings), (0, 0)), mode='constant')
                         scores, indices = index.search(embeddings, k=top_k)
