@@ -52,7 +52,6 @@ def parse_args():
     index_parser = subparsers.add_parser('index', help='Build search index')
     index_parser.add_argument('-o', '--out_path', type=str, default=None, required=True, help='Output file path')
     index_parser.add_argument('-i', '--input_path', type=str, default=None, required=True, help='Path to the input fasta file')
-    index_parser.add_argument('-m', '--model_path', type=str, default=None, help='Path to the model')
     index_parser.add_argument('-d', '--device', type=str, default="cuda", help='Device to use for embedding')
     index_parser.add_argument("--index_build_algo", choices=["Default", "GPU_CAGRA_NN_DESCENT", "GPU_CAGRA"],
         default="Default",

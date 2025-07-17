@@ -95,7 +95,7 @@ class NEARResNet(nn.Module):
                """
 
         if len(x.shape) == 2:
-            x = F.one_hot(x, num_classes=self.in_symbols.item()).float()
+            x = F.one_hot(x, num_classes=self.in_symbols.item()).half()
 
         assert(len(x.shape) == 3)
 

@@ -20,20 +20,13 @@ def run_index_program(args):
     print(f"Using device: {args.device}")
     device = torch.device(args.device)
 
+    # Look for default model in installation directory
+    package_dir = Path(__file__).parent.absolute()
+    model_path = package_dir / "models" / "resnet_877_256.pt"
+    config_path = package_dir / "models" / "resnet_877_256.yaml"
 
-    # Find model path if not specified
-    model_path = args.model_path
-    if model_path is None:
-        # Look for default model in installation directory
-        package_dir = Path(__file__).parent.absolute()
-        model_path = package_dir / "models" / "resnet_877_256.pt"
-        config_path = package_dir / "models" / "resnet_877_256.yaml"
-
-        if not model_path.exists():
-            raise FileNotFoundError(f"Could not find model at {model_path}. Please specify a model path.")
-    else:
-        model_dir = Path(model_path).parent
-        config_path = model_dir / "config.yaml"
+    if not model_path.exists():
+        raise FileNotFoundError(f"Could not find model at {model_path}. Please specify a model path.")
 
     # Load configuration and model
     with open(config_path) as f:
@@ -43,8 +36,9 @@ def run_index_program(args):
     model = NEARResNet( **config['model_args'])
 
     # Load model weights
-    model.load_state_dict(torch.load(model_path, map_location=device)['model_state_dict'])
-    model = model.to(device)
+    model_state_dict = torch.load(model_path, map_location='cpu', weights_only=True)['model_state_dict']
+    model.load_state_dict(model_state_dict)
+    model.to(device)
     model.half()
     model.eval()
 

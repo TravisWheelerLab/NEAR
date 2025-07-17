@@ -71,11 +71,11 @@ class NEARIndex:
                     return False
 
             # Convert FAISS index to bytes
-            index_bytes = faiss.serialize_index(self.index)
-
+            #index_bytes = faiss.serialize_index(self.index)
+            faiss.write_index(self.index, path)
             # Prepare data dictionary
             save_data = {
-                'index_bytes': index_bytes,
+               # 'index_bytes': index_bytes,
                 'index_build_algo': self.index_build_algo,
                 'model_dims': self.model_dims,
                 'graph_degree': self.graph_degree,
@@ -96,7 +96,7 @@ class NEARIndex:
                 save_data['has_fasta_data'] = False
 
             # Save everything to a single file
-            with open(path, 'wb') as f:
+            with open(path + '.dat', 'wb') as f:
                 pickle.dump(save_data, f)
 
             # If we have FASTA data and it has a save method, save it separately
@@ -392,7 +392,7 @@ class NEARIndex:
 
 def embed_data_with_model(model: NEARResNet,
                           data: FASTAData,
-                          selection_frequency: int = 16,
+                          selection_frequency: int = 8,
                           random_selection_rate: float = 1.0,
                           discard_masked : bool = True,
                           device: str = "cuda",
