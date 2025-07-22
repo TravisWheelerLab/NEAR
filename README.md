@@ -1,5 +1,5 @@
 # Paper
-See https://www.biorxiv.org/content/10.1101/2024.01.25.577287
+See [https://www.biorxiv.org/content/10.1101/2024.01.25.577287](https://academic.oup.com/bioinformatics/article/41/Supplement_1/i449/8199346)
 Instructions and scripts needed to train NEAR and recreate the results from the NEAR paper can be found at https://github.com/TravisWheelerLab/NEAR/blob/2025_paper_evaluation
 
 # Prefilter
